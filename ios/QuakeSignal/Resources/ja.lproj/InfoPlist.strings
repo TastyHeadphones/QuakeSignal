@@ -1,0 +1,2 @@
+"CFBundleDisplayName" = "震息";
+"NSLocationWhenInUseUsageDescription" = "震息は、地震までの距離をお知らせし、近くの地震情報を通知するために位置情報を使用します。";

@@ -1,0 +1,270 @@
+/* Tabs */
+"tab.home" = "ホーム";
+"tab.map" = "地図";
+"tab.settings" = "設定";
+
+/* Onboarding */
+"onboarding.title1" = "揺れが始まる前に警告";
+"onboarding.body1" = "QuakeSignalは発表された緊急地震速報を即座に転送し、揺れが到達する前の貴重な数秒をお届けします。";
+"onboarding.title2" = "複数の公式情報源";
+"onboarding.body2" = "気象庁、中国地震台网中心、四川省・福建省・重慶市地震局の情報を、Wolfx Open API経由でリアルタイムに配信します。";
+"onboarding.title3" = "通知を有効にする";
+"onboarding.body3" = "警告の発表と同時にお知らせできるよう、通知の許可が必要です。ロック中やサイレントモードでも届きます。";
+"onboarding.continue" = "次へ";
+"onboarding.enableNotifications" = "通知を許可";
+"onboarding.skip" = "後で";
+
+/* Home */
+"home.status.monitoring" = "監視中";
+"home.status.sources" = "%1$d件の情報源が有効";
+"home.status.lastUpdated" = "更新: %1$@";
+"home.section.recent" = "最近の情報";
+"home.empty.title" = "最近の情報はありません";
+"home.empty.body" = "緊急地震速報や地震情報が発表されると、ここに表示されます。";
+
+/* Shared quake vocabulary */
+"quake.hypocenter.label" = "震源地";
+"quake.intensity.label" = "最大震度 %1$@";
+"quake.depth.label" = "深さ %1$@ km";
+"quake.source.jma" = "気象庁";
+"quake.source.cenc" = "中国地震台网中心";
+"quake.source.sc" = "四川省地震局";
+"quake.source.fj" = "福建省地震局";
+"quake.source.cq" = "重慶市地震局";
+
+/* Full-screen alert */
+"alert.badge.new" = "緊急地震速報";
+"alert.badge.updated" = "速報が更新されました";
+"alert.badge.final" = "最終報";
+"alert.badge.cancelled" = "速報はキャンセルされました";
+"alert.dismiss" = "閉じる";
+"alert.viewDetails" = "詳細を見る";
+"alert.magnitudeLabel" = "マグニチュード";
+"alert.intensityLabel" = "最大震度";
+
+/* Detail */
+"detail.title" = "詳細情報";
+"detail.section.overview" = "概要";
+"detail.section.location" = "位置情報";
+"detail.field.eventId" = "イベントID";
+"detail.field.reportNumber" = "報番号";
+"detail.field.status" = "状況";
+"detail.field.source" = "情報源";
+"detail.status.warning" = "警報発表中";
+"detail.status.final" = "最終報";
+"detail.status.cancelled" = "キャンセル済み";
+"detail.tsunami" = "津波情報";
+
+/* Map */
+"map.title" = "地図";
+"map.empty" = "表示できる震源がありません";
+
+/* Settings */
+"settings.title" = "設定";
+"settings.section.language" = "言語";
+"settings.language.systemNote" = "QuakeSignalはiPhoneの「言語と地域」設定に従います。English、日本語、简体中文に対応しています。";
+"settings.openSystemSettings" = "設定を開く";
+"settings.section.sources" = "警報の情報源";
+"settings.source.jma_eew" = "気象庁 — 緊急地震速報";
+"settings.source.jma_eqlist" = "気象庁 — 地震情報";
+"settings.source.cenc_eew" = "中国地震台网中心 — 緊急地震速報";
+"settings.source.cenc_eqlist" = "中国地震台网中心 — 地震情報";
+"settings.source.sc_eew" = "四川省地震局 — 緊急地震速報";
+"settings.source.fj_eew" = "福建省地震局 — 緊急地震速報";
+"settings.source.cq_eew" = "重慶市地震局 — 緊急地震速報";
+"settings.section.threshold" = "最小マグニチュード";
+"settings.section.notifications" = "通知";
+"settings.criticalAlerts.title" = "緊急通知（クリティカルアラート）";
+"settings.criticalAlerts.body" = "重大な警報の際、マナーモードやおやすみモードを突破して通知します。Appleの承認が必要な機能で、未承認の場合は「時間的制約のある通知」として届きます。";
+"settings.testAlert" = "テスト通知を送信";
+"settings.testAlert.success" = "テスト通知を送信しました。";
+"settings.testAlert.failure" = "テスト通知を送信できませんでした: %1$@";
+"settings.section.about" = "このアプリについて";
+"settings.about.dataSource" = "地震データは気象庁・中国地震台网中心・各省地震局の情報を、Wolfx Open API経由で転送しています。";
+"settings.about.version" = "バージョン %1$@";
+"settings.about.disclaimer" = "QuakeSignalは独立系アプリであり、気象庁・中国地震台网中心その他の政府機関とは関係ありません。";
+
+/* Push notification loc-key pairs -- MUST stay in sync with
+   backend/src/push/payload.ts LOC_KEYS. */
+"eew.push.new.title" = "%1$@ 緊急地震速報";
+"eew.push.new.body" = "%1$@ ・M%2$@ ・最大震度%3$@";
+"eew.push.updated.title" = "%1$@ 続報";
+"eew.push.updated.body" = "%1$@ ・M%2$@ ・最大震度%3$@";
+"eew.push.final.title" = "%1$@ 最終報";
+"eew.push.final.body" = "%1$@ ・M%2$@ ・最大震度%3$@";
+"eew.push.cancelled.title" = "%1$@ 速報キャンセル";
+"eew.push.cancelled.body" = "%1$@ の速報はキャンセルされました。";
+"quake.push.report.title" = "%1$@ 地震情報";
+"quake.push.report.body" = "%1$@ ・M%2$@ ・最大震度%3$@";
+"eew.push.training.title" = "%1$@ 緊急地震速報（訓練）";
+"eew.push.training.body" = "%1$@ ・これは訓練情報です。実際の地震ではありません。";
+
+/* ===== 元の claude.ai/design デザイン案に合わせた再設計 ===== */
+
+/* App */
+"app.name" = "震息";
+
+/* オンボーディング ステップ4 + 免責事項カード */
+"onboarding.title4" = "位置情報を選択";
+"onboarding.body4" = "都市を登録するか現在地を使うと、震息が地震までの距離をお知らせできます。";
+"onboarding.chooseLocation" = "位置情報を選択";
+"onboarding.disclaimer" = "震息は公式の警報プラットフォームではありません。情報は第三者の集約サービスによるもので、遅延や誤差が生じる場合があります。";
+
+/* ホーム */
+"home.status.normal" = "近くに地震情報はありません";
+"home.status.normal.detail" = "%1$d km 圏内で過去24時間、大きな地震はありません";
+"home.status.caution" = "近くで地震情報があります";
+"home.status.caution.detail" = "%1$d km 圏内で M%2$@ の地震が発生 ・タップして確認";
+"home.status.alert" = "緊急地震速報を受信しました";
+"home.status.alert.detail" = "近くで M%1$@ ・直ちに身を守ってください";
+"home.section.latest" = "最新の地震";
+"home.section.latestNearby" = "最新の地震 ・近隣";
+"home.field.originTime" = "発生時刻";
+"home.field.reportTime" = "発表時刻";
+"home.action.nearby" = "近くの情報";
+"home.action.notify" = "通知";
+"home.distance" = "%1$d km";
+"home.loading" = "地震データを更新中…";
+"home.banner.offline" = "ネットワークに接続できません";
+"home.banner.retry" = "再試行";
+"home.banner.locationOff" = "位置情報がオフです";
+"home.banner.locationOff.detail" = "位置情報が利用できないため、距離を計算できません。位置情報を有効にするか、都市登録に切り替えてください。";
+
+/* 方位 */
+"compass.n" = "北";
+"compass.ne" = "北東";
+"compass.e" = "東";
+"compass.se" = "南東";
+"compass.s" = "南";
+"compass.sw" = "南西";
+"compass.w" = "西";
+"compass.nw" = "北西";
+
+/* 共通 */
+"shared.disclaimer" = "データは第三者の集約サービスに基づいています。正式な情報は公式発表をご確認ください。";
+"quake.depth.label.plain" = "深さ";
+
+/* 全画面警報の再設計 */
+"alert.header.final" = "地震報告";
+"alert.header.cancelled" = "速報キャンセル";
+"alert.header.training" = "緊急地震速報（訓練）";
+"alert.countdown.label" = "主要動まで";
+"alert.step.drop" = "姿勢を低く";
+"alert.step.cover" = "頭を守る";
+"alert.step.holdOn" = "動かない";
+"alert.warning.windows" = "窓やガラスから離れてください";
+"alert.warning.elevator" = "エレベーターは使用しないでください";
+"alert.checklist.title" = "揺れがおさまったら";
+"alert.checklist.item1" = "自分と家族にけがが無いか確認してください";
+"alert.checklist.item2" = "ガス・電気を止め、余震に注意してください";
+"alert.checklist.item3" = "落ち着いて避難し、エレベーターは使用しないでください";
+"alert.cancelled.note" = "この速報はキャンセルされました。誤検知だった可能性、または情報が修正された可能性があります。";
+"alert.training.note" = "これは訓練情報であり、実際の地震ではありません。対応の練習用です。「設定」で訓練情報の受信をオフにできます。";
+"alert.endTest" = "テストを終了";
+
+/* 詳細: 更新履歴タイムライン */
+"detail.field.coordinates" = "座標";
+"detail.section.timeline" = "速報更新履歴";
+"detail.timeline.first" = "第一報";
+"detail.timeline.updated" = "続報";
+"detail.timeline.final" = "最終報";
+"detail.timeline.cancelled" = "キャンセル";
+"detail.timeline.meta" = "%1$@ ・第%2$d報";
+
+/* 状況バッジ */
+"status.preliminary" = "予報";
+"status.final" = "確定";
+"status.cancelled" = "キャンセル";
+"status.training" = "訓練";
+
+/* タブ */
+"tab.list" = "一覧";
+"tab.guide" = "ガイド";
+
+/* 一覧タブ */
+"map.title.list" = "地震一覧";
+"list.region.all" = "全部";
+"list.empty.title" = "該当する地震がありません";
+"list.empty.detail" = "選択した範囲と条件に一致する地震記録がありません。条件を調整してください。";
+"list.empty.adjustFilters" = "条件を調整";
+
+/* 地図タブ */
+"map.window.day" = "24時間";
+"map.window.week" = "7日間";
+"map.window.month" = "30日間";
+"map.share" = "共有";
+
+/* 都市・位置情報の選択 */
+"city.pickerTitle" = "位置情報";
+"city.useCurrentLocation" = "現在地を使用";
+"city.section.radius" = "近隣半径";
+"city.section.pick" = "都市を登録";
+"city.none" = "未設定";
+
+/* 設定: 新しい購読・通知セクション */
+"settings.section.subscription" = "購読設定";
+"settings.subscribedCity" = "登録都市";
+"settings.notifyAtNight" = "夜間も通知する";
+"settings.includeTestAlerts" = "テスト・訓練情報を受信";
+"settings.includeTestAlerts.detail" = "デフォルトはオフ";
+"settings.section.disclaimer" = "情報源と免責事項";
+
+/* 情報源・免責事項 画面 */
+"disclaimer.badge" = "公式の警報プラットフォームではありません";
+"disclaimer.summary" = "データは第三者の集約サービスによるものです。正式な情報は公式発表をご確認ください。データには遅延・欠落・誤差が生じる場合があります。";
+"disclaimer.section.sources" = "データソース";
+"disclaimer.source.wolfx" = "Wolfx Open API（集約）";
+"disclaimer.source.cenc" = "中国地震台网中心 公開速報（集約）";
+"disclaimer.source.jma" = "気象庁 公開速報（集約）";
+"disclaimer.notOfficial" = "震息は公式の政府地震警報プラットフォームではなく、公式情報の代わりにはなりません。";
+"disclaimer.mayBeDelayed" = "情報には遅延・欠落・誤差が生じる場合があります。必ず公式発表と地域の防災指示に従ってください。";
+"disclaimer.deliveryNotGuaranteed" = "通知の到達は iOS、ネットワーク状況、端末設定に左右され、秒単位での到達を保証するものではありません。";
+
+/* 防災ガイド タブ */
+"guide.offlineBadge" = "オフラインで利用可能";
+"guide.section.duringQuake" = "地震発生時";
+"guide.section.afterQuake" = "揺れがおさまったら";
+"guide.section.kit" = "非常持ち出し袋 ・家族の安否確認";
+"guide.after.item1" = "自分と家族にけがが無いか確認してください";
+"guide.after.item2" = "ガス・電気を止め、余震に注意してください";
+"guide.after.item3" = "指示に従い落ち着いて避難し、エレベーターは使用しないでください";
+"guide.detail.steps" = "行動のポイント";
+
+"guide.topic.indoor.title" = "屋内にいるとき";
+"guide.topic.indoor.summary" = "姿勢を低く、頭を守り、動かない ・窓から離れる";
+"guide.topic.indoor.detail1" = "倒れる前に低い姿勢を取ってください";
+"guide.topic.indoor.detail2" = "丈夫な机やテーブルの下に隠れてください";
+"guide.topic.indoor.detail3" = "揺れがおさまるまで家具につかまってください";
+"guide.topic.indoor.detail4" = "窓、鏡、落下しそうな物から離れてください";
+
+"guide.topic.outdoor.title" = "屋外にいるとき";
+"guide.topic.outdoor.summary" = "建物、電線、看板から離れてください";
+"guide.topic.outdoor.detail1" = "建物や樹木から離れた開けた場所へ移動してください";
+"guide.topic.outdoor.detail2" = "倒れてくる電線、ガラス、看板に注意してください";
+"guide.topic.outdoor.detail3" = "橋や高架、トンネルは避けてください";
+
+"guide.topic.elevator.title" = "エレベーター内にいるとき";
+"guide.topic.elevator.summary" = "全ての階のボタンを押し、できるだけ早く降りてください";
+"guide.topic.elevator.detail1" = "全ての階のボタンを押してください";
+"guide.topic.elevator.detail2" = "最初に扉が開いた階で降りてください";
+"guide.topic.elevator.detail3" = "揺れている間・直後はエレベーターを使用しないでください";
+
+"guide.topic.car.title" = "車を運転中";
+"guide.topic.car.summary" = "橋やトンネルを避け、ゆっくり路肩に停車してください";
+"guide.topic.car.detail1" = "徐々に速度を落とし、路肩に停車してください";
+"guide.topic.car.detail2" = "橋、高架、トンネル内での停車は避けてください";
+"guide.topic.car.detail3" = "揺れがおさまるまで車内で待機し、その後慎重に移動してください";
+
+"guide.kit.water" = "飲料水";
+"guide.kit.firstAid" = "救急用品";
+"guide.kit.flashlight" = "懐中電灯・ホイッスル";
+"guide.kit.powerBank" = "モバイルバッテリー";
+"guide.kit.documents" = "身分証明書のコピー";
+"guide.kit.familyContact.add" = "家族の安否確認を設定";
+"guide.kit.familyContact.edit" = "家族の安否確認を編集";
+
+"guide.familyCheckIn.title" = "家族の安否確認";
+"guide.familyCheckIn.explanation" = "緊急連絡先をこの端末内にローカルで保存します。災害時にすぐ確認できます。どこにも送信されません。";
+"guide.familyCheckIn.contact" = "連絡先";
+"guide.familyCheckIn.name" = "氏名";
+"guide.familyCheckIn.phone" = "電話番号";

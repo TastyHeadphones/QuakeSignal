@@ -1,0 +1,270 @@
+/* Tabs */
+"tab.home" = "首页";
+"tab.map" = "地图";
+"tab.settings" = "设置";
+
+/* Onboarding */
+"onboarding.title1" = "在震动开始前收到预警";
+"onboarding.body1" = "QuakeSignal 会在官方地震预警发布的瞬间转发给你，让你在震动到达前获得宝贵的几秒钟。";
+"onboarding.title2" = "多个官方数据源";
+"onboarding.body2" = "整合日本气象厅、中国地震台网中心，以及四川、福建、重庆地震局的数据，通过 Wolfx Open API 实时转发。";
+"onboarding.title3" = "开启通知";
+"onboarding.body3" = "QuakeSignal 需要通知权限，才能在预警发布的瞬间提醒你——即使手机处于锁屏或静音状态。";
+"onboarding.continue" = "继续";
+"onboarding.enableNotifications" = "允许通知";
+"onboarding.skip" = "暂不开启";
+
+/* Home */
+"home.status.monitoring" = "监测中";
+"home.status.sources" = "已启用 %1$d 个数据源";
+"home.status.lastUpdated" = "更新于 %1$@";
+"home.section.recent" = "最近事件";
+"home.empty.title" = "暂无最新动态";
+"home.empty.body" = "地震预警和速报发布后会显示在这里。";
+
+/* Shared quake vocabulary */
+"quake.hypocenter.label" = "震中";
+"quake.intensity.label" = "最大烈度 %1$@";
+"quake.depth.label" = "深度 %1$@ 公里";
+"quake.source.jma" = "日本气象厅";
+"quake.source.cenc" = "中国地震台网中心";
+"quake.source.sc" = "四川省地震局";
+"quake.source.fj" = "福建省地震局";
+"quake.source.cq" = "重庆市地震局";
+
+/* Full-screen alert */
+"alert.badge.new" = "地震预警";
+"alert.badge.updated" = "预警已更新";
+"alert.badge.final" = "最终报告";
+"alert.badge.cancelled" = "预警已取消";
+"alert.dismiss" = "关闭";
+"alert.viewDetails" = "查看详情";
+"alert.magnitudeLabel" = "震级";
+"alert.intensityLabel" = "最大烈度";
+
+/* Detail */
+"detail.title" = "事件详情";
+"detail.section.overview" = "概览";
+"detail.section.location" = "位置信息";
+"detail.field.eventId" = "事件编号";
+"detail.field.reportNumber" = "报告编号";
+"detail.field.status" = "状态";
+"detail.field.source" = "数据源";
+"detail.status.warning" = "预警生效中";
+"detail.status.final" = "最终报告";
+"detail.status.cancelled" = "已取消";
+"detail.tsunami" = "海啸信息";
+
+/* Map */
+"map.title" = "地图";
+"map.empty" = "暂无可显示的震中";
+
+/* Settings */
+"settings.title" = "设置";
+"settings.section.language" = "语言";
+"settings.language.systemNote" = "QuakeSignal 会跟随 iPhone 的「语言与地区」设置。支持 English、日本語、简体中文。";
+"settings.openSystemSettings" = "打开系统设置";
+"settings.section.sources" = "预警数据源";
+"settings.source.jma_eew" = "日本气象厅 — 地震预警";
+"settings.source.jma_eqlist" = "日本气象厅 — 地震速报";
+"settings.source.cenc_eew" = "中国地震台网中心 — 地震预警";
+"settings.source.cenc_eqlist" = "中国地震台网中心 — 地震速报";
+"settings.source.sc_eew" = "四川省地震局 — 地震预警";
+"settings.source.fj_eew" = "福建省地震局 — 地震预警";
+"settings.source.cq_eew" = "重庆市地震局 — 地震预警";
+"settings.section.threshold" = "最小震级";
+"settings.section.notifications" = "通知";
+"settings.criticalAlerts.title" = "关键警报";
+"settings.criticalAlerts.body" = "在严重预警时突破静音和勿扰模式。此功能需要苹果批准，未获批准时将退回为「时效性通知」。";
+"settings.testAlert" = "发送测试预警";
+"settings.testAlert.success" = "测试预警已发送。";
+"settings.testAlert.failure" = "测试预警发送失败：%1$@";
+"settings.section.about" = "关于";
+"settings.about.dataSource" = "地震数据通过 Wolfx Open API，转发自日本气象厅、中国地震台网中心及各省地震局。";
+"settings.about.version" = "版本 %1$@";
+"settings.about.disclaimer" = "QuakeSignal 为独立应用，与日本气象厅、中国地震台网中心及其他政府机构均无官方关联。";
+
+/* Push notification loc-key pairs -- MUST stay in sync with
+   backend/src/push/payload.ts LOC_KEYS. */
+"eew.push.new.title" = "%1$@ 地震预警";
+"eew.push.new.body" = "%1$@ · M%2$@ · 最大烈度%3$@";
+"eew.push.updated.title" = "%1$@ 预警更新";
+"eew.push.updated.body" = "%1$@ · M%2$@ · 最大烈度%3$@";
+"eew.push.final.title" = "%1$@ 最终报告";
+"eew.push.final.body" = "%1$@ · M%2$@ · 最大烈度%3$@";
+"eew.push.cancelled.title" = "%1$@ 预警取消";
+"eew.push.cancelled.body" = "%1$@ 的预警已被取消。";
+"quake.push.report.title" = "%1$@ 地震速报";
+"quake.push.report.body" = "%1$@ · M%2$@ · 最大烈度%3$@";
+"eew.push.training.title" = "%1$@ 地震预警（测试）";
+"eew.push.training.body" = "%1$@ · 这是一条训练/演习信息，并非真实地震。";
+
+/* ===== 按 claude.ai/design 原始设计稿重做 ===== */
+
+/* App */
+"app.name" = "震息";
+
+/* 引导流程第4步 + 免责声明卡片 */
+"onboarding.title4" = "选择你的位置";
+"onboarding.body4" = "订阅一个城市，或使用当前位置，震息就能告诉你地震距离你有多远。";
+"onboarding.chooseLocation" = "选择位置";
+"onboarding.disclaimer" = "震息不是官方预警平台。信息来自第三方聚合服务，可能存在延迟或误差。";
+
+/* 首页 */
+"home.status.normal" = "当前暂无附近地震";
+"home.status.normal.detail" = "%1$d km 内 24 小时无显著事件";
+"home.status.caution" = "附近有地震信息";
+"home.status.caution.detail" = "%1$d km 处发生 M%2$@ 地震，点击查看";
+"home.status.alert" = "收到地震预警信息";
+"home.status.alert.detail" = "附近 M%1$@ · 请立即采取防护";
+"home.section.latest" = "最新地震";
+"home.section.latestNearby" = "最新地震 · 附近";
+"home.field.originTime" = "发震时间";
+"home.field.reportTime" = "发报时间";
+"home.action.nearby" = "附近";
+"home.action.notify" = "通知";
+"home.distance" = "距%1$d公里";
+"home.loading" = "正在更新地震数据…";
+"home.banner.offline" = "网络不可用";
+"home.banner.retry" = "重试";
+"home.banner.locationOff" = "定位已关闭";
+"home.banner.locationOff.detail" = "未获得定位权限，无法计算与你的距离。可开启定位权限，或改为按城市订阅。";
+
+/* 方位 */
+"compass.n" = "北";
+"compass.ne" = "东北";
+"compass.e" = "东";
+"compass.se" = "东南";
+"compass.s" = "南";
+"compass.sw" = "西南";
+"compass.w" = "西";
+"compass.nw" = "西北";
+
+/* 通用 */
+"shared.disclaimer" = "数据来源于第三方聚合服务，实际信息请以官方发布为准。";
+"quake.depth.label.plain" = "震源深度";
+
+/* 全屏预警重做 */
+"alert.header.final" = "地震报告";
+"alert.header.cancelled" = "预警已取消";
+"alert.header.training" = "地震预警（测试）";
+"alert.countdown.label" = "预计还有主要震动";
+"alert.step.drop" = "趴下";
+"alert.step.cover" = "掩护";
+"alert.step.holdOn" = "抓牢";
+"alert.warning.windows" = "远离窗户与玻璃";
+"alert.warning.elevator" = "切勿使用电梯";
+"alert.checklist.title" = "震动停止后";
+"alert.checklist.item1" = "确认自身与家人是否受伤";
+"alert.checklist.item2" = "关闭燃气、电源，谨防余震";
+"alert.checklist.item3" = "按指示有序疏散，勿乘电梯";
+"alert.cancelled.note" = "此前的预警信息已被取消，该事件可能为误报或已被修正。";
+"alert.training.note" = "这是一条训练/演习信息，并非真实地震，用于演练应对流程。可在「设置」中关闭测试信息的接收。";
+"alert.endTest" = "结束测试";
+
+/* 详情：速报更新时间线 */
+"detail.field.coordinates" = "经纬度";
+"detail.section.timeline" = "速报更新时间线";
+"detail.timeline.first" = "首次预报";
+"detail.timeline.updated" = "预警更新";
+"detail.timeline.final" = "正式报告";
+"detail.timeline.cancelled" = "已取消";
+"detail.timeline.meta" = "%1$@ · 第%2$d报";
+
+/* 状态徽标 */
+"status.preliminary" = "预报";
+"status.final" = "正式";
+"status.cancelled" = "取消";
+"status.training" = "测试";
+
+/* 标签栏 */
+"tab.list" = "列表";
+"tab.guide" = "指南";
+
+/* 列表 tab */
+"map.title.list" = "地震列表";
+"list.region.all" = "全部";
+"list.empty.title" = "暂无符合条件的地震";
+"list.empty.detail" = "所选范围与筛选条件内没有符合条件的地震记录，可以调整筛选条件试试。";
+"list.empty.adjustFilters" = "调整筛选";
+
+/* 地图 tab */
+"map.window.day" = "24 小时";
+"map.window.week" = "7 天";
+"map.window.month" = "30 天";
+"map.share" = "分享";
+
+/* 城市/位置选择 */
+"city.pickerTitle" = "位置";
+"city.useCurrentLocation" = "使用当前位置";
+"city.section.radius" = "附近半径";
+"city.section.pick" = "订阅城市";
+"city.none" = "未设置";
+
+/* 设置：新增订阅与通知分区 */
+"settings.section.subscription" = "订阅与提醒";
+"settings.subscribedCity" = "订阅城市";
+"settings.notifyAtNight" = "接收夜间通知";
+"settings.includeTestAlerts" = "接收测试/演练信息";
+"settings.includeTestAlerts.detail" = "默认关闭";
+"settings.section.disclaimer" = "来源与免责声明";
+
+/* 来源与免责声明 页面 */
+"disclaimer.badge" = "本应用非官方预警平台";
+"disclaimer.summary" = "数据来源于第三方聚合服务，实际信息请以官方发布为准。信息可能存在延迟、缺失或误差。";
+"disclaimer.section.sources" = "数据来源";
+"disclaimer.source.wolfx" = "Wolfx Open API（聚合）";
+"disclaimer.source.cenc" = "中国地震台网中心 公开速报（聚合）";
+"disclaimer.source.jma" = "日本气象厅 公开速报（聚合）";
+"disclaimer.notOfficial" = "本应用不是官方政府地震预警平台，不替代官方权威信息。";
+"disclaimer.mayBeDelayed" = "信息可能延迟、不完整或不准确，请以官方发布与当地应急指示为准。";
+"disclaimer.deliveryNotGuaranteed" = "通知送达取决于 iOS、网络状况与设备设置，无法保证秒级到达。";
+
+/* 防灾指南 tab */
+"guide.offlineBadge" = "可离线使用";
+"guide.section.duringQuake" = "地震发生时";
+"guide.section.afterQuake" = "震动停止后";
+"guide.section.kit" = "应急包清单 · 家庭报平安";
+"guide.after.item1" = "确认自身与家人是否受伤";
+"guide.after.item2" = "关闭燃气、电源，谨防余震";
+"guide.after.item3" = "按指示有序疏散，勿乘电梯";
+"guide.detail.steps" = "应对要点";
+
+"guide.topic.indoor.title" = "在室内";
+"guide.topic.indoor.summary" = "趴下、掩护、抓牢，远离窗户";
+"guide.topic.indoor.detail1" = "在被晃倒之前尽快趴下";
+"guide.topic.indoor.detail2" = "躲到坚固的桌子或书桌下方";
+"guide.topic.indoor.detail3" = "抓牢家具，直到震动停止";
+"guide.topic.indoor.detail4" = "远离窗户、镜子及可能坠落的物品";
+
+"guide.topic.outdoor.title" = "在室外";
+"guide.topic.outdoor.summary" = "远离建筑物、电线与广告牌";
+"guide.topic.outdoor.detail1" = "转移到远离建筑物和树木的开阔地带";
+"guide.topic.outdoor.detail2" = "留意坠落的电线、玻璃与广告牌";
+"guide.topic.outdoor.detail3" = "避开桥梁、高架桥与隧道";
+
+"guide.topic.elevator.title" = "在电梯中";
+"guide.topic.elevator.summary" = "按下每层楼层按钮，尽快就近撤离";
+"guide.topic.elevator.detail1" = "按下所有楼层的按钮";
+"guide.topic.elevator.detail2" = "在电梯门打开的第一层立即出去";
+"guide.topic.elevator.detail3" = "震动期间及刚结束时切勿使用电梯";
+
+"guide.topic.car.title" = "在车内";
+"guide.topic.car.summary" = "缓慢靠边停车，避开桥梁与隧道";
+"guide.topic.car.detail1" = "逐渐减速并靠边停车";
+"guide.topic.car.detail2" = "避免在桥梁、高架桥或隧道内停车";
+"guide.topic.car.detail3" = "留在车内直到震动停止，随后谨慎行驶";
+
+"guide.kit.water" = "饮用水";
+"guide.kit.firstAid" = "急救包";
+"guide.kit.flashlight" = "手电筒 / 哨子";
+"guide.kit.powerBank" = "充电宝";
+"guide.kit.documents" = "证件副本";
+"guide.kit.familyContact.add" = "设置家庭报平安";
+"guide.kit.familyContact.edit" = "编辑家庭报平安";
+
+"guide.familyCheckIn.title" = "家庭报平安";
+"guide.familyCheckIn.explanation" = "在本机本地保存一个紧急联系人，灾害发生时可以随时查看。此信息不会被发送到任何地方。";
+"guide.familyCheckIn.contact" = "联系人";
+"guide.familyCheckIn.name" = "姓名";
+"guide.familyCheckIn.phone" = "电话号码";

@@ -1,0 +1,601 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		00CBA3F9A30565BBA1B7E842 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5CDC5F5361A20005A34BCD0 /* APIClient.swift */; };
+		0B8CEB3509599E4BA3BB5CD2 /* QuakeSignalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A0053EFB595D59068829B2 /* QuakeSignalApp.swift */; };
+		0C3EC0B633E26287A449E3EC /* SourceDisclaimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CF66A4956C46CA1A148C070 /* SourceDisclaimerView.swift */; };
+		0EA04CC2D8769B4D1119146E /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401F05AD76497DD2ACB64C7F /* LocationManager.swift */; };
+		1931BFD99782ED3DA8A6E288 /* EEWEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */; };
+		1FE00A80B0B13AA6832583E5 /* EEWAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C53C8F8BFB7156840BCDD1 /* EEWAlertView.swift */; };
+		300716B6C8AD2C38974ED1C8 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = DA0B489340F90173C681EA84 /* InfoPlist.strings */; };
+		30787BE285C2AF3865685D31 /* PushPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54ADAFC4D778C958BC996871 /* PushPayload.swift */; };
+		3578006137ABBE79E0A5B06F /* FamilyCheckInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB33C47F86F32C61F4CC83CB /* FamilyCheckInView.swift */; };
+		401D81C61074F8E0B821A0DC /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */; };
+		4BF03EE23D5F476E518295C2 /* QuakeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2145117E4D6B0221B490C9F4 /* QuakeStore.swift */; };
+		4CFC59C9E1BF37D668AD4138 /* GuideStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC4C4FFC783F65DB874CB2CD /* GuideStore.swift */; };
+		6221D8ADA6A6A44E45C2C5EE /* EventRevision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BEC24C83F9F7FEB6C1D8F41 /* EventRevision.swift */; };
+		6279092DC98DB8233CEEE8B8 /* BackendConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DADE472DF1F2B627818A5F8 /* BackendConfig.swift */; };
+		662850A82C0C42CC36161123 /* DeviceRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C54A7070352BEB382AD32B /* DeviceRegistration.swift */; };
+		6B6E89AB5EE885007554F98A /* DisasterGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0542F5FDBF2D0122F19F2A88 /* DisasterGuideView.swift */; };
+		76F53C375C6AC0FF550804A5 /* LiveSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BD11E3C4D40F7F456CAF5AA /* LiveSocketClient.swift */; };
+		7E008E58665F263BDC9DDD08 /* GuideTopicDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FFEE58B247EFABCA2FBF98 /* GuideTopicDetailView.swift */; };
+		8A44BDC71084D4D1C2E223D5 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48820A9D89E7DA9CE7EEECA1 /* HomeView.swift */; };
+		8AB603839990610758AFC649 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5AAEBB21DA806680D87F2BE /* AppSettings.swift */; };
+		8FB6DF50DFD1FE9B637469F8 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57E54B5E816643F7401A58F /* RootView.swift */; };
+		99912A9F35669522264D1A56 /* EpicenterMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E59ED0E3F738AC6AE4FF165 /* EpicenterMapView.swift */; };
+		9AAC1CF8B2A760F00E998C16 /* QuakeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5CC2AF0389FFB5D223C0DD /* QuakeDetailView.swift */; };
+		C95674FB61B4A12788753D96 /* City.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFBDB4E5BC222EB32F6ACEA /* City.swift */; };
+		CB398BC7708A86279C3BF6D4 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67D5A0D955C6D9F0A33F738C /* AppDelegate.swift */; };
+		CF0E4A95DE46CC7A146650EA /* GuideContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9399D7DEA2638CABE5AFF970 /* GuideContent.swift */; };
+		CF7C4292C7DB9E8F943D7B2B /* QuakeRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4C630D4060DEC1DA1AC5EB /* QuakeRowView.swift */; };
+		D0ECDC45A65C41E446EE8134 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16B1C64A6D002370B927BF7 /* NotificationManager.swift */; };
+		D107043DF51F2F071D1E3AA2 /* QuakeListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B58B74D54691C905E32B3BE /* QuakeListView.swift */; };
+		D4E255D3E4F76C2C602276B9 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B0692F2F796B70A77314C23B /* Localizable.strings */; };
+		D9B498E119DDF0A3145A54BD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33AFA4921875AD86CEB86D47 /* Assets.xcassets */; };
+		DA9722C2E131BBE0CFCC8DF0 /* IntensityScale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662358026FACAB4DA608E630 /* IntensityScale.swift */; };
+		DFBD32451B2D74367698EFC2 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D224641E8F2E766BEF1FA2E /* SettingsView.swift */; };
+		EB68B0A59F9F99DA6D274C91 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E397F876EB72C79A9710C4 /* OnboardingView.swift */; };
+		F44520F00F5256BBB9FE6F39 /* CityPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FD76A1C9FFB9929722BA327 /* CityPickerView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		041E5AA38657BA9C30BAC034 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		0542F5FDBF2D0122F19F2A88 /* DisasterGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisasterGuideView.swift; sourceTree = "<group>"; };
+		0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
+		0B4C630D4060DEC1DA1AC5EB /* QuakeRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeRowView.swift; sourceTree = "<group>"; };
+		1BD11E3C4D40F7F456CAF5AA /* LiveSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSocketClient.swift; sourceTree = "<group>"; };
+		1E5CC2AF0389FFB5D223C0DD /* QuakeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeDetailView.swift; sourceTree = "<group>"; };
+		1FD76A1C9FFB9929722BA327 /* CityPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityPickerView.swift; sourceTree = "<group>"; };
+		2145117E4D6B0221B490C9F4 /* QuakeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeStore.swift; sourceTree = "<group>"; };
+		2372157BA03FB135F30D085A /* QuakeSignal.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = QuakeSignal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2BEC24C83F9F7FEB6C1D8F41 /* EventRevision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventRevision.swift; sourceTree = "<group>"; };
+		33AFA4921875AD86CEB86D47 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		3CF66A4956C46CA1A148C070 /* SourceDisclaimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceDisclaimerView.swift; sourceTree = "<group>"; };
+		3D224641E8F2E766BEF1FA2E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		3DADE472DF1F2B627818A5F8 /* BackendConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendConfig.swift; sourceTree = "<group>"; };
+		3E59ED0E3F738AC6AE4FF165 /* EpicenterMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpicenterMapView.swift; sourceTree = "<group>"; };
+		401F05AD76497DD2ACB64C7F /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
+		41E397F876EB72C79A9710C4 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		48820A9D89E7DA9CE7EEECA1 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		54ADAFC4D778C958BC996871 /* PushPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushPayload.swift; sourceTree = "<group>"; };
+		662358026FACAB4DA608E630 /* IntensityScale.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntensityScale.swift; sourceTree = "<group>"; };
+		6789081D324684ACBB76D43A /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		67D5A0D955C6D9F0A33F738C /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		759EAC4A90329D3CD0F82833 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
+		7B58B74D54691C905E32B3BE /* QuakeListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeListView.swift; sourceTree = "<group>"; };
+		80C54A7070352BEB382AD32B /* DeviceRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRegistration.swift; sourceTree = "<group>"; };
+		8ECF89FDF3F2879D09784FE3 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		9399D7DEA2638CABE5AFF970 /* GuideContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideContent.swift; sourceTree = "<group>"; };
+		A16B1C64A6D002370B927BF7 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		A2A0053EFB595D59068829B2 /* QuakeSignalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeSignalApp.swift; sourceTree = "<group>"; };
+		A3FFEE58B247EFABCA2FBF98 /* GuideTopicDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideTopicDetailView.swift; sourceTree = "<group>"; };
+		A437B2F17AB38AB6F39F7CFE /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		A5AAEBB21DA806680D87F2BE /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		B5C53C8F8BFB7156840BCDD1 /* EEWAlertView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EEWAlertView.swift; sourceTree = "<group>"; };
+		B5CDC5F5361A20005A34BCD0 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		C57E54B5E816643F7401A58F /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		CB33C47F86F32C61F4CC83CB /* FamilyCheckInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyCheckInView.swift; sourceTree = "<group>"; };
+		DCFBDB4E5BC222EB32F6ACEA /* City.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = City.swift; sourceTree = "<group>"; };
+		EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EEWEvent.swift; sourceTree = "<group>"; };
+		FC4C4FFC783F65DB874CB2CD /* GuideStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideStore.swift; sourceTree = "<group>"; };
+		FCD28BDF2FD8950F9FCF83BE /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		01C72AF1F3337BDE9EA7E857 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2372157BA03FB135F30D085A /* QuakeSignal.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		473DDD1B8C41FFA667D097F3 /* Map */ = {
+			isa = PBXGroup;
+			children = (
+				3E59ED0E3F738AC6AE4FF165 /* EpicenterMapView.swift */,
+			);
+			path = Map;
+			sourceTree = "<group>";
+		};
+		51766CBDCF0B576612D4808F /* App */ = {
+			isa = PBXGroup;
+			children = (
+				67D5A0D955C6D9F0A33F738C /* AppDelegate.swift */,
+				0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */,
+				A2A0053EFB595D59068829B2 /* QuakeSignalApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		5427C5D3A1A90F8F76C96307 /* List */ = {
+			isa = PBXGroup;
+			children = (
+				7B58B74D54691C905E32B3BE /* QuakeListView.swift */,
+			);
+			path = List;
+			sourceTree = "<group>";
+		};
+		773E13E1F78CAE4B66C26A08 /* AlertDetail */ = {
+			isa = PBXGroup;
+			children = (
+				B5C53C8F8BFB7156840BCDD1 /* EEWAlertView.swift */,
+			);
+			path = AlertDetail;
+			sourceTree = "<group>";
+		};
+		89A3F8796DCD9CE7D201410F /* Root */ = {
+			isa = PBXGroup;
+			children = (
+				C57E54B5E816643F7401A58F /* RootView.swift */,
+			);
+			path = Root;
+			sourceTree = "<group>";
+		};
+		89FE9E305A9E4708C49B126E /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				1FD76A1C9FFB9929722BA327 /* CityPickerView.swift */,
+				3D224641E8F2E766BEF1FA2E /* SettingsView.swift */,
+				3CF66A4956C46CA1A148C070 /* SourceDisclaimerView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		9BF1EDCC90F64A6C8FFCCBFC /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				DCFBDB4E5BC222EB32F6ACEA /* City.swift */,
+				80C54A7070352BEB382AD32B /* DeviceRegistration.swift */,
+				EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */,
+				2BEC24C83F9F7FEB6C1D8F41 /* EventRevision.swift */,
+				9399D7DEA2638CABE5AFF970 /* GuideContent.swift */,
+				662358026FACAB4DA608E630 /* IntensityScale.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		A0E7479084A6C9D1D7FEDA4B = {
+			isa = PBXGroup;
+			children = (
+				EADDBB474D5569AA3B351EC9 /* QuakeSignal */,
+				01C72AF1F3337BDE9EA7E857 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A6381A24F2A297864EF7166D /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				DA0B489340F90173C681EA84 /* InfoPlist.strings */,
+				B0692F2F796B70A77314C23B /* Localizable.strings */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		B2B449C08A5F36D8906A6087 /* Guide */ = {
+			isa = PBXGroup;
+			children = (
+				0542F5FDBF2D0122F19F2A88 /* DisasterGuideView.swift */,
+				CB33C47F86F32C61F4CC83CB /* FamilyCheckInView.swift */,
+				A3FFEE58B247EFABCA2FBF98 /* GuideTopicDetailView.swift */,
+			);
+			path = Guide;
+			sourceTree = "<group>";
+		};
+		B460EA671763616FE39828E1 /* Detail */ = {
+			isa = PBXGroup;
+			children = (
+				1E5CC2AF0389FFB5D223C0DD /* QuakeDetailView.swift */,
+			);
+			path = Detail;
+			sourceTree = "<group>";
+		};
+		B9C41AF8B19BE7E480C8308B /* Notifications */ = {
+			isa = PBXGroup;
+			children = (
+				A16B1C64A6D002370B927BF7 /* NotificationManager.swift */,
+				54ADAFC4D778C958BC996871 /* PushPayload.swift */,
+			);
+			path = Notifications;
+			sourceTree = "<group>";
+		};
+		C63708C9F35685C280097777 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				41E397F876EB72C79A9710C4 /* OnboardingView.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		DD5697597B2CC2FA561F3400 /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				48820A9D89E7DA9CE7EEECA1 /* HomeView.swift */,
+				0B4C630D4060DEC1DA1AC5EB /* QuakeRowView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		DE26824C9839E1D53856C8B9 /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				B5CDC5F5361A20005A34BCD0 /* APIClient.swift */,
+				3DADE472DF1F2B627818A5F8 /* BackendConfig.swift */,
+				1BD11E3C4D40F7F456CAF5AA /* LiveSocketClient.swift */,
+			);
+			path = Networking;
+			sourceTree = "<group>";
+		};
+		E24C392BBA7B752BAD18B95F /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				773E13E1F78CAE4B66C26A08 /* AlertDetail */,
+				B460EA671763616FE39828E1 /* Detail */,
+				B2B449C08A5F36D8906A6087 /* Guide */,
+				DD5697597B2CC2FA561F3400 /* Home */,
+				5427C5D3A1A90F8F76C96307 /* List */,
+				473DDD1B8C41FFA667D097F3 /* Map */,
+				C63708C9F35685C280097777 /* Onboarding */,
+				89A3F8796DCD9CE7D201410F /* Root */,
+				89FE9E305A9E4708C49B126E /* Settings */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		EADDBB474D5569AA3B351EC9 /* QuakeSignal */ = {
+			isa = PBXGroup;
+			children = (
+				33AFA4921875AD86CEB86D47 /* Assets.xcassets */,
+				51766CBDCF0B576612D4808F /* App */,
+				E24C392BBA7B752BAD18B95F /* Features */,
+				9BF1EDCC90F64A6C8FFCCBFC /* Models */,
+				DE26824C9839E1D53856C8B9 /* Networking */,
+				B9C41AF8B19BE7E480C8308B /* Notifications */,
+				A6381A24F2A297864EF7166D /* Resources */,
+				F0A0A11FFA4D31B54D40C650 /* State */,
+			);
+			path = QuakeSignal;
+			sourceTree = "<group>";
+		};
+		F0A0A11FFA4D31B54D40C650 /* State */ = {
+			isa = PBXGroup;
+			children = (
+				A5AAEBB21DA806680D87F2BE /* AppSettings.swift */,
+				FC4C4FFC783F65DB874CB2CD /* GuideStore.swift */,
+				401F05AD76497DD2ACB64C7F /* LocationManager.swift */,
+				2145117E4D6B0221B490C9F4 /* QuakeStore.swift */,
+			);
+			path = State;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0C571730824BD0FE25517524 /* QuakeSignal */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 81CF6D2CABCB1F4AABC71A1C /* Build configuration list for PBXNativeTarget "QuakeSignal" */;
+			buildPhases = (
+				0A028E8F3F9F59AD41E1A55C /* Sources */,
+				3BA91CA2FBB6D5449679C782 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = QuakeSignal;
+			packageProductDependencies = (
+			);
+			productName = QuakeSignal;
+			productReference = 2372157BA03FB135F30D085A /* QuakeSignal.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		935E44C805D7E6B9A9B590BC /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					0C571730824BD0FE25517524 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 10CE014BA446075A07BA0924 /* Build configuration list for PBXProject "QuakeSignal" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+				ja,
+				"zh-Hans",
+			);
+			mainGroup = A0E7479084A6C9D1D7FEDA4B;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 01C72AF1F3337BDE9EA7E857 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0C571730824BD0FE25517524 /* QuakeSignal */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		3BA91CA2FBB6D5449679C782 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D9B498E119DDF0A3145A54BD /* Assets.xcassets in Resources */,
+				300716B6C8AD2C38974ED1C8 /* InfoPlist.strings in Resources */,
+				D4E255D3E4F76C2C602276B9 /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0A028E8F3F9F59AD41E1A55C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				00CBA3F9A30565BBA1B7E842 /* APIClient.swift in Sources */,
+				CB398BC7708A86279C3BF6D4 /* AppDelegate.swift in Sources */,
+				8AB603839990610758AFC649 /* AppSettings.swift in Sources */,
+				6279092DC98DB8233CEEE8B8 /* BackendConfig.swift in Sources */,
+				C95674FB61B4A12788753D96 /* City.swift in Sources */,
+				F44520F00F5256BBB9FE6F39 /* CityPickerView.swift in Sources */,
+				662850A82C0C42CC36161123 /* DeviceRegistration.swift in Sources */,
+				6B6E89AB5EE885007554F98A /* DisasterGuideView.swift in Sources */,
+				1FE00A80B0B13AA6832583E5 /* EEWAlertView.swift in Sources */,
+				1931BFD99782ED3DA8A6E288 /* EEWEvent.swift in Sources */,
+				99912A9F35669522264D1A56 /* EpicenterMapView.swift in Sources */,
+				6221D8ADA6A6A44E45C2C5EE /* EventRevision.swift in Sources */,
+				3578006137ABBE79E0A5B06F /* FamilyCheckInView.swift in Sources */,
+				CF0E4A95DE46CC7A146650EA /* GuideContent.swift in Sources */,
+				4CFC59C9E1BF37D668AD4138 /* GuideStore.swift in Sources */,
+				7E008E58665F263BDC9DDD08 /* GuideTopicDetailView.swift in Sources */,
+				8A44BDC71084D4D1C2E223D5 /* HomeView.swift in Sources */,
+				DA9722C2E131BBE0CFCC8DF0 /* IntensityScale.swift in Sources */,
+				76F53C375C6AC0FF550804A5 /* LiveSocketClient.swift in Sources */,
+				401D81C61074F8E0B821A0DC /* Localization.swift in Sources */,
+				0EA04CC2D8769B4D1119146E /* LocationManager.swift in Sources */,
+				D0ECDC45A65C41E446EE8134 /* NotificationManager.swift in Sources */,
+				EB68B0A59F9F99DA6D274C91 /* OnboardingView.swift in Sources */,
+				30787BE285C2AF3865685D31 /* PushPayload.swift in Sources */,
+				9AAC1CF8B2A760F00E998C16 /* QuakeDetailView.swift in Sources */,
+				D107043DF51F2F071D1E3AA2 /* QuakeListView.swift in Sources */,
+				CF7C4292C7DB9E8F943D7B2B /* QuakeRowView.swift in Sources */,
+				0B8CEB3509599E4BA3BB5CD2 /* QuakeSignalApp.swift in Sources */,
+				4BF03EE23D5F476E518295C2 /* QuakeStore.swift in Sources */,
+				8FB6DF50DFD1FE9B637469F8 /* RootView.swift in Sources */,
+				DFBD32451B2D74367698EFC2 /* SettingsView.swift in Sources */,
+				0C3EC0B633E26287A449E3EC /* SourceDisclaimerView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		B0692F2F796B70A77314C23B /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				A437B2F17AB38AB6F39F7CFE /* en */,
+				759EAC4A90329D3CD0F82833 /* ja */,
+				FCD28BDF2FD8950F9FCF83BE /* zh-Hans */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+		DA0B489340F90173C681EA84 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				041E5AA38657BA9C30BAC034 /* en */,
+				8ECF89FDF3F2879D09784FE3 /* ja */,
+				6789081D324684ACBB76D43A /* zh-Hans */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		050C13D6BEC425AF923AACD7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		A42E66C5407563B633D16E48 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = QuakeSignal/Supporting/QuakeSignal.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = QuakeSignal/Supporting/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E4F7239BE210D1F4F6F7A6C2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = QuakeSignal/Supporting/QuakeSignal.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = QuakeSignal/Supporting/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		F8AF886BA0A01B695061E973 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		10CE014BA446075A07BA0924 /* Build configuration list for PBXProject "QuakeSignal" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				050C13D6BEC425AF923AACD7 /* Debug */,
+				F8AF886BA0A01B695061E973 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		81CF6D2CABCB1F4AABC71A1C /* Build configuration list for PBXNativeTarget "QuakeSignal" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A42E66C5407563B633D16E48 /* Debug */,
+				E4F7239BE210D1F4F6F7A6C2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 935E44C805D7E6B9A9B590BC /* Project object */;
+}

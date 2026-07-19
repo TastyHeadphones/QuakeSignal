@@ -1,0 +1,13 @@
+services:
+  quakesignal-backend:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - DB_PATH=/app/data/quakesignal.sqlite
+      - APNS_KEY_PATH=/app/secrets/${APNS_KEY_FILENAME:-AuthKey.p8}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+      - ./secrets:/app/secrets

@@ -1,0 +1,17 @@
+# Node / backend
+node_modules/
+backend/dist/
+backend/data/
+backend/secrets/
+backend/.env
+npm-debug.log*
+
+# iOS / Xcode
+ios/**/xcuserdata/
+ios/**/*.xcodeproj/project.xcworkspace/xcuserdata/
+ios/DerivedData/
+ios/build/
+ios/.build/
+
+# macOS
+.DS_Store

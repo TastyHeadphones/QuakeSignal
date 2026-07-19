@@ -1,0 +1,271 @@
+/* Tabs */
+"tab.home" = "Home";
+"tab.map" = "Map";
+"tab.settings" = "Settings";
+
+/* Onboarding */
+"onboarding.title1" = "Get warned before the shaking starts";
+"onboarding.body1" = "QuakeSignal relays official earthquake early warnings the instant they're issued, giving you precious seconds of advance notice.";
+"onboarding.title2" = "Multiple official sources";
+"onboarding.body2" = "Japan Meteorological Agency, China Earthquake Networks Center, and the Sichuan, Fujian, and Chongqing earthquake authorities — relayed in real time via the Wolfx Open API.";
+"onboarding.title3" = "Turn on notifications";
+"onboarding.body3" = "QuakeSignal needs permission to alert you the moment a warning is issued, even if your phone is locked or silenced.";
+"onboarding.continue" = "Continue";
+"onboarding.enableNotifications" = "Enable Notifications";
+"onboarding.skip" = "Not Now";
+
+/* Home */
+"home.status.monitoring" = "Monitoring active";
+"home.status.sources" = "%1$d sources enabled";
+"home.status.lastUpdated" = "Updated %1$@";
+"home.section.recent" = "Recent";
+"home.empty.title" = "No recent activity";
+"home.empty.body" = "Earthquake early warnings and reports will appear here as they're published.";
+
+/* Shared quake vocabulary */
+"quake.hypocenter.label" = "Hypocenter";
+"quake.intensity.label" = "Max intensity %1$@";
+"quake.depth.label" = "Depth %1$@ km";
+"quake.source.jma" = "JMA";
+"quake.source.cenc" = "CENC";
+"quake.source.sc" = "Sichuan EQA";
+"quake.source.fj" = "Fujian EQA";
+"quake.source.cq" = "Chongqing EQA";
+
+/* Full-screen alert */
+"alert.badge.new" = "EARTHQUAKE EARLY WARNING";
+"alert.badge.updated" = "WARNING UPDATED";
+"alert.badge.final" = "FINAL REPORT";
+"alert.badge.cancelled" = "WARNING CANCELLED";
+"alert.dismiss" = "Dismiss";
+"alert.viewDetails" = "View Details";
+"alert.magnitudeLabel" = "Magnitude";
+"alert.intensityLabel" = "Max Intensity";
+
+/* Detail */
+"detail.title" = "Event Details";
+"detail.section.overview" = "Overview";
+"detail.section.location" = "Location";
+"detail.field.eventId" = "Event ID";
+"detail.field.reportNumber" = "Report No.";
+"detail.field.status" = "Status";
+"detail.field.source" = "Source";
+"detail.status.warning" = "Active Warning";
+"detail.status.final" = "Final Report";
+"detail.status.cancelled" = "Cancelled";
+"detail.tsunami" = "Tsunami Advisory";
+
+/* Map */
+"map.title" = "Map";
+"map.empty" = "No recent epicenters to show";
+
+/* Settings */
+"settings.title" = "Settings";
+"settings.section.language" = "Language";
+"settings.language.systemNote" = "QuakeSignal follows your iPhone's Language & Region setting. English, 日本語, and 简体中文 are supported.";
+"settings.openSystemSettings" = "Open Settings";
+"settings.section.sources" = "Alert Sources";
+"settings.source.jma_eew" = "JMA — Early Warning";
+"settings.source.jma_eqlist" = "JMA — Earthquake Reports";
+"settings.source.cenc_eew" = "CENC — Early Warning";
+"settings.source.cenc_eqlist" = "CENC — Earthquake Reports";
+"settings.source.sc_eew" = "Sichuan EQA — Early Warning";
+"settings.source.fj_eew" = "Fujian EQA — Early Warning";
+"settings.source.cq_eew" = "Chongqing EQA — Early Warning";
+"settings.section.threshold" = "Minimum Magnitude";
+"settings.section.notifications" = "Notifications";
+"settings.criticalAlerts.title" = "Critical Alerts";
+"settings.criticalAlerts.body" = "Break through Silent mode and Do Not Disturb for severe warnings. Requires Apple's approval for this app; falls back to Time Sensitive otherwise.";
+"settings.testAlert" = "Send Test Alert";
+"settings.testAlert.success" = "Test alert sent.";
+"settings.testAlert.failure" = "Couldn't send test alert: %1$@";
+"settings.section.about" = "About";
+"settings.about.dataSource" = "Earthquake data is relayed via the Wolfx Open API from JMA, CENC, and provincial earthquake authorities.";
+"settings.about.version" = "Version %1$@";
+"settings.about.disclaimer" = "QuakeSignal is an independent app and is not affiliated with JMA, CENC, or any government agency.";
+
+/* Push notification loc-key pairs -- MUST stay in sync with
+   backend/src/push/payload.ts LOC_KEYS. title-loc-args passes [sourceLabel];
+   loc-args passes [hypocenter, magnitude, maxIntensity]. */
+"eew.push.new.title" = "%1$@ Earthquake Early Warning";
+"eew.push.new.body" = "%1$@ · M%2$@ · Max intensity %3$@";
+"eew.push.updated.title" = "%1$@ Warning Updated";
+"eew.push.updated.body" = "%1$@ · M%2$@ · Max intensity %3$@";
+"eew.push.final.title" = "%1$@ Final Report";
+"eew.push.final.body" = "%1$@ · M%2$@ · Max intensity %3$@";
+"eew.push.cancelled.title" = "%1$@ Warning Cancelled";
+"eew.push.cancelled.body" = "The earlier warning for %1$@ has been cancelled.";
+"quake.push.report.title" = "%1$@ Earthquake Reported";
+"quake.push.report.body" = "%1$@ · M%2$@ · Max intensity %3$@";
+"eew.push.training.title" = "%1$@ Earthquake Warning (Test)";
+"eew.push.training.body" = "%1$@ · This is a training/drill message, not a real earthquake.";
+
+/* ===== Redesign to match the source claude.ai/design mockup ===== */
+
+/* App */
+"app.name" = "QuakeSignal";
+
+/* Onboarding step 4 + disclaimer card */
+"onboarding.title4" = "Choose your location";
+"onboarding.body4" = "Subscribe to a city or use your current location so QuakeSignal can tell you how far away an earthquake is.";
+"onboarding.chooseLocation" = "Choose Location";
+"onboarding.disclaimer" = "QuakeSignal is not an official warning platform. Information comes from third-party aggregated sources and may be delayed or inaccurate.";
+
+/* Home */
+"home.status.normal" = "No nearby activity";
+"home.status.normal.detail" = "Nothing significant within %1$d km in the last 24 hours";
+"home.status.caution" = "Nearby earthquake information";
+"home.status.caution.detail" = "M%2$@ earthquake %1$d km away — tap to view";
+"home.status.alert" = "Earthquake warning received";
+"home.status.alert.detail" = "Nearby M%1$@ — take protective action now";
+"home.section.latest" = "Latest Earthquake";
+"home.section.latestNearby" = "Latest Earthquake · Nearby";
+"home.field.originTime" = "Origin time";
+"home.field.reportTime" = "Report time";
+"home.action.nearby" = "Nearby";
+"home.action.notify" = "Notify";
+"home.distance" = "%1$d km away";
+"home.loading" = "Updating earthquake data…";
+"home.banner.offline" = "No network connection";
+"home.banner.retry" = "Retry";
+"home.banner.locationOff" = "Location is off";
+"home.banner.locationOff.detail" = "Location access isn't available, so distance can't be calculated. Enable it, or subscribe to a city instead.";
+
+/* Compass directions */
+"compass.n" = "N";
+"compass.ne" = "NE";
+"compass.e" = "E";
+"compass.se" = "SE";
+"compass.s" = "S";
+"compass.sw" = "SW";
+"compass.w" = "W";
+"compass.nw" = "NW";
+
+/* Shared */
+"shared.disclaimer" = "Data is relayed from third-party aggregated sources. Refer to official announcements for authoritative information.";
+"quake.depth.label.plain" = "Depth";
+
+/* Full-screen alert rebuild */
+"alert.header.final" = "Earthquake Report";
+"alert.header.cancelled" = "Warning Cancelled";
+"alert.header.training" = "Earthquake Warning (Test)";
+"alert.countdown.label" = "until strong shaking";
+"alert.step.drop" = "Drop";
+"alert.step.cover" = "Cover";
+"alert.step.holdOn" = "Hold On";
+"alert.warning.windows" = "Stay away from windows and glass";
+"alert.warning.elevator" = "Do not use elevators";
+"alert.checklist.title" = "After the shaking stops";
+"alert.checklist.item1" = "Check yourself and your family for injuries";
+"alert.checklist.item2" = "Turn off gas and electricity; watch for aftershocks";
+"alert.checklist.item3" = "Evacuate calmly by the stairs, not the elevator";
+"alert.cancelled.note" = "The earlier warning for this event has been cancelled. It may have been a false detection, or has since been corrected.";
+"alert.training.note" = "This is a training/drill message, not a real earthquake. It's used to practice your response. You can turn drill messages off in Settings.";
+"alert.endTest" = "End Test";
+
+/* Detail: revision timeline */
+"detail.field.coordinates" = "Coordinates";
+"detail.section.timeline" = "Report Timeline";
+"detail.timeline.first" = "First Report";
+"detail.timeline.updated" = "Updated";
+"detail.timeline.final" = "Final Report";
+"detail.timeline.cancelled" = "Cancelled";
+"detail.timeline.meta" = "%1$@ · Report No. %2$d";
+
+/* Report status badge */
+"status.preliminary" = "Preliminary";
+"status.final" = "Final";
+"status.cancelled" = "Cancelled";
+"status.training" = "Training";
+
+/* Tabs */
+"tab.list" = "List";
+"tab.guide" = "Guide";
+
+/* List tab */
+"map.title.list" = "Earthquake List";
+"list.region.all" = "All";
+"list.empty.title" = "No matching earthquakes";
+"list.empty.detail" = "No earthquake records match the selected range and filters. Try adjusting them.";
+"list.empty.adjustFilters" = "Adjust Filters";
+
+/* Map tab */
+"map.window.day" = "24 hours";
+"map.window.week" = "7 days";
+"map.window.month" = "30 days";
+"map.share" = "Share";
+
+/* City / location picker */
+"city.pickerTitle" = "Location";
+"city.useCurrentLocation" = "Use Current Location";
+"city.section.radius" = "Nearby Radius";
+"city.section.pick" = "Subscribe to a City";
+"city.none" = "Not set";
+
+/* Settings: new subscription + notification sections */
+"settings.section.subscription" = "Subscription";
+"settings.subscribedCity" = "Subscribed City";
+"settings.notifyAtNight" = "Notify at Night";
+"settings.includeTestAlerts" = "Receive Test/Drill Alerts";
+"settings.includeTestAlerts.detail" = "Off by default";
+"settings.section.disclaimer" = "Sources & Disclaimer";
+
+/* Source & Disclaimer screen */
+"disclaimer.badge" = "Not an official warning platform";
+"disclaimer.summary" = "Data comes from third-party aggregated services. Refer to official announcements for authoritative information. Data may be delayed, incomplete, or inaccurate.";
+"disclaimer.section.sources" = "Data Sources";
+"disclaimer.source.wolfx" = "Wolfx Open API (aggregated)";
+"disclaimer.source.cenc" = "CENC public reports (aggregated)";
+"disclaimer.source.jma" = "JMA public reports (aggregated)";
+"disclaimer.notOfficial" = "QuakeSignal is not an official government earthquake warning platform and does not replace official authoritative information.";
+"disclaimer.mayBeDelayed" = "Information may be delayed, incomplete, or inaccurate — always follow official announcements and local emergency instructions.";
+"disclaimer.deliveryNotGuaranteed" = "Notification delivery depends on iOS, network conditions, and device settings, and cannot be guaranteed to arrive within seconds.";
+
+/* Disaster Guide tab */
+"guide.offlineBadge" = "Available offline";
+"guide.section.duringQuake" = "When an Earthquake Strikes";
+"guide.section.afterQuake" = "After the Shaking Stops";
+"guide.section.kit" = "Emergency Kit · Family Check-In";
+"guide.after.item1" = "Check yourself and your family for injuries";
+"guide.after.item2" = "Turn off gas and electricity; watch for aftershocks";
+"guide.after.item3" = "Evacuate calmly as directed — don't use the elevator";
+"guide.detail.steps" = "What to do";
+
+"guide.topic.indoor.title" = "Indoors";
+"guide.topic.indoor.summary" = "Drop, cover, and hold on — stay away from windows";
+"guide.topic.indoor.detail1" = "Drop to the floor before you're knocked down";
+"guide.topic.indoor.detail2" = "Take cover under a sturdy table or desk";
+"guide.topic.indoor.detail3" = "Hold on to the furniture until the shaking stops";
+"guide.topic.indoor.detail4" = "Stay away from windows, mirrors, and anything that could fall";
+
+"guide.topic.outdoor.title" = "Outdoors";
+"guide.topic.outdoor.summary" = "Move away from buildings, power lines, and signage";
+"guide.topic.outdoor.detail1" = "Move to an open area away from buildings and trees";
+"guide.topic.outdoor.detail2" = "Watch for falling power lines, glass, and signage";
+"guide.topic.outdoor.detail3" = "Avoid bridges, overpasses, and tunnels";
+
+"guide.topic.elevator.title" = "In an Elevator";
+"guide.topic.elevator.summary" = "Press every floor button and get out as soon as you can";
+"guide.topic.elevator.detail1" = "Press the buttons for every floor";
+"guide.topic.elevator.detail2" = "Get out at the first floor the doors open on";
+"guide.topic.elevator.detail3" = "Never use the elevator during or right after shaking";
+
+"guide.topic.car.title" = "In a Vehicle";
+"guide.topic.car.summary" = "Pull over slowly, away from bridges and tunnels";
+"guide.topic.car.detail1" = "Slow down gradually and pull over to the side";
+"guide.topic.car.detail2" = "Avoid stopping on bridges, overpasses, or in tunnels";
+"guide.topic.car.detail3" = "Stay in the vehicle until the shaking stops, then proceed carefully";
+
+"guide.kit.water" = "Drinking water";
+"guide.kit.firstAid" = "First aid kit";
+"guide.kit.flashlight" = "Flashlight / whistle";
+"guide.kit.powerBank" = "Power bank";
+"guide.kit.documents" = "Copies of ID documents";
+"guide.kit.familyContact.add" = "Set Up Family Check-In";
+"guide.kit.familyContact.edit" = "Edit Family Check-In";
+
+"guide.familyCheckIn.title" = "Family Check-In";
+"guide.familyCheckIn.explanation" = "Save one emergency contact locally on this device, so it's ready to hand if you need it during a disaster. This is never sent anywhere.";
+"guide.familyCheckIn.contact" = "Contact";
+"guide.familyCheckIn.name" = "Name";
+"guide.familyCheckIn.phone" = "Phone Number";
