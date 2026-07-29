@@ -6,104 +6,158 @@
 
 <div align="center">
 
-# 震息 · QuakeSignal
+<img src="ios/QuakeSignal/Assets.xcassets/AppIcon.appiconset/icon-1024.png" width="112" alt="QuakeSignal app icon" />
 
-**A native iOS earthquake early-warning app — English, 日本語, 简体中文.**
-Relays official warnings from JMA, CENC, and the Sichuan / Fujian / Chongqing
-earthquake authorities via the [Wolfx Open API](https://wolfx.jp), and gets
-an alert in front of the user within seconds — even if the app is closed.
+# QuakeSignal
+
+### Earthquake reports, nearby alerts, and preparedness—built natively for iPhone.
+
+[![iOS 17+](https://img.shields.io/badge/iOS-17%2B-0E63C4?logo=apple&logoColor=white)](ios/)
+[![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](ios/QuakeSignal/)
+[![Cloudflare Workers](https://img.shields.io/badge/backend-Cloudflare_Workers-F38020?logo=cloudflare&logoColor=white)](backend/cloudflare/)
+[![Languages](https://img.shields.io/badge/languages-English_·_日本語_·_简体中文-0A3D73)](#localization)
+[![MIT License](https://img.shields.io/badge/license-MIT-30B14F)](LICENSE)
+
+QuakeSignal turns aggregated public seismic data into a focused, accessible iOS experience: a live event feed, location-aware context, full-screen warning states, push notifications, and an offline disaster guide.
+
+<br />
+
+<img src="docs/screenshots/app-home-en.png" width="210" alt="QuakeSignal home screen in English" />
+&nbsp;&nbsp;
+<img src="docs/screenshots/app-home-ja.png" width="210" alt="QuakeSignal home screen in Japanese" />
+&nbsp;&nbsp;
+<img src="docs/screenshots/app-home-zh.png" width="210" alt="QuakeSignal home screen in Simplified Chinese" />
+
+<sub>Real iOS Simulator captures from the same SwiftUI build in English, Japanese, and Simplified Chinese.</sub>
 
 </div>
 
-<p align="center">
-  <img src="docs/screenshots/app-home-en.png" width="200" alt="Home feed, English" />
-  <img src="docs/screenshots/app-home-ja.png" width="200" alt="Home feed, Japanese" />
-  <img src="docs/screenshots/app-home-zh.png" width="200" alt="Home feed, Simplified Chinese" />
-</p>
+> [!IMPORTANT]
+> QuakeSignal is an independent, non-official app. Earthquake information comes from third-party aggregated sources and may be delayed, incomplete, revised, or inaccurate. Always follow official announcements and local emergency instructions.
 
-<p align="center"><sub>Actual Simulator screenshots — built with <code>xcodebuild</code>, running against the live backend and live Wolfx data, same build in all three languages.</sub></p>
+## What it does
+
+| | Capability | Details |
+|---|---|---|
+| 📡 | Live earthquake data | Normalizes seven Wolfx feeds covering JMA, CENC, Sichuan, Fujian, and Chongqing data. |
+| 📍 | Nearby context | Frames events by a selected city or current location, with distance, direction, radius, and magnitude controls. |
+| ⚠️ | Clear alert states | Separates preliminary, updated, final, cancelled, and training messages so color is never the only signal. |
+| 🔔 | Background delivery | Uses APNs for notifications when the app is backgrounded, locked, or terminated. |
+| 🗺️ | Explore events | Includes a filterable list, epicenter map, event detail, and report-revision timeline. |
+| 🧰 | Offline preparedness | Provides drop-cover-hold-on guidance, situation-specific actions, an emergency checklist, and family check-in notes. |
+| ♿ | Accessible by design | Supports Dynamic Type, VoiceOver-friendly labels, 44pt targets, system appearance, and high-contrast status treatments. |
+
+## Designed for the moment that matters
+
+The interface follows the [QuakeSignal design artifact](https://claude.ai/code/artifact/f209373f-ec4d-41ee-9c7a-ec315e4861e0): calm blue for normal information, escalating orange and red for severity, and a deliberately distinct purple treatment for drills.
+
+| Normal | Caution | Warning | Training |
+|:---:|:---:|:---:|:---:|
+| `#30B14F` | `#FF9500` | `#FF3B30` | `#8E5BE0` |
+| No significant nearby event | Recent nearby activity | Active protective action | Clearly marked test content |
+
+The complete design notes—including tokens, components, onboarding, empty/error states, dark mode, and localized screen copy—are captured in [`docs/DESIGN_PROMPT.md`](docs/DESIGN_PROMPT.md).
 
 ## Architecture
 
-iOS does not allow an app to hold a WebSocket connection open while
-backgrounded or terminated — there is no way to get a life-safety alert to a
-locked or closed phone without a server relaying through Apple Push
-Notification service (APNs). So the app never talks to Wolfx directly; it
-only ever talks to its own backend.
+iOS cannot keep an arbitrary WebSocket alive after an app is backgrounded or terminated. QuakeSignal therefore uses its own relay: REST and WebSockets keep the foreground app current, while APNs handles background delivery.
 
 ```mermaid
 flowchart LR
-    subgraph wolfx["Wolfx Open API — 7 WebSocket feeds"]
-        direction TB
-        jma["JMA EEW"]
-        cenc["CENC EEW"]
-        sc["Sichuan / Fujian / Chongqing EEW"]
-        eq["CENC + JMA earthquake lists"]
+    subgraph Sources["Wolfx Open API"]
+        JMA["JMA feeds"]
+        CENC["CENC feeds"]
+        Regional["Sichuan · Fujian · Chongqing"]
     end
 
-    subgraph backend["backend/ — always-on Node.js relay"]
-        direction TB
-        relay["reconnecting WS clients"] --> norm["normalize + dedupe\n(per-source field quirks handled once)"]
-        norm --> db[("SQLite")]
+    subgraph Edge["Cloudflare free-tier backend"]
+        Relay["Durable Object<br/>live WebSocket relay"]
+        Normalize["Normalize · deduplicate<br/>track revisions"]
+        DB[("D1")]
     end
 
-    subgraph ios["ios/ — SwiftUI app"]
-        direction TB
-        fg["Foreground: REST history\n+ live WebSocket"]
-        bg["Background / locked / killed:\nAPNs push, on-device loc-key i18n"]
+    subgraph App["QuakeSignal · SwiftUI"]
+        Foreground["REST history + live socket"]
+        Background["APNs notifications"]
+        Guide["Offline safety guide"]
     end
 
-    wolfx -- "WebSocket" --> relay
-    db -- "REST /v1/quakes" --> fg
-    backend -- "WebSocket /v1/live" --> fg
-    backend -- "APNs" --> bg
+    Sources --> Relay --> Normalize --> DB
+    DB --> Foreground
+    Normalize --> Background
+    Guide --- App
 ```
 
-- [`ios/`](ios/) — SwiftUI app (iOS 17+, Swift 6), Xcode project generated via XcodeGen and committed
-- [`backend/`](backend/) — the relay + push server, see [backend/README.md](backend/README.md) for APNs setup
-- [`docs/WOLFX_API.md`](docs/WOLFX_API.md) — field-level reference for the Wolfx feeds, verified against live responses
-- [`docs/DESIGN_PROMPT.md`](docs/DESIGN_PROMPT.md) — the English product/design spec
+### Repository map
+
+- [`ios/`](ios/) — native SwiftUI app for iOS 17+, built with Swift 6
+- [`backend/cloudflare/`](backend/cloudflare/) — production Worker, Durable Object relay, D1 migration, APNs delivery, and smoke test
+- [`backend/`](backend/) — local Node.js relay for backend development
+- [`docs/WOLFX_API.md`](docs/WOLFX_API.md) — field-level upstream data reference verified against live responses
+- [`docs/DESIGN_PROMPT.md`](docs/DESIGN_PROMPT.md) — product and visual design specification
 
 ## Quick start
 
-**Backend** (needed first — the app has nothing to show without it):
+### 1. Start the local backend
+
 ```bash
 cd backend
-cp .env.example .env   # APNs keys can wait; the server runs fine without them for local dev
+cp .env.example .env
 npm install
 npm run dev
 ```
 
-**iOS** — open `ios/QuakeSignal.xcodeproj` in Xcode and run on a Simulator.
-It talks to `http://localhost:8080` by default (Simulator always reaches
-your Mac's own localhost), see
-[`ios/QuakeSignal/Networking/BackendConfig.swift`](ios/QuakeSignal/Networking/BackendConfig.swift).
-Push notifications need a real device and real APNs credentials — see
-[backend/README.md](backend/README.md).
+APNs credentials are optional for local REST/WebSocket development. The server listens on `http://localhost:8080`.
 
-## Status
+### 2. Run the iOS app
 
-| Piece | State |
-|---|---|
-| Backend | All 7 Wolfx sources relayed with reconnect/backoff, dedup + update tracking, per-event report-revision history, distance/radius + quiet-hours + drill-alert push filtering, SQLite storage, REST API, live WebSocket fan-out, APNs push with on-device `loc-key` localization. Smoke-tested against live Wolfx data. |
-| iOS | 5 tabs (Home / List / Map / Guide / Settings) matching the source design: city/GPS-based subscription with distance framing throughout, 3-state Home banner, full-screen alert with a live countdown and a drop-cover-hold-on illustration (plus distinct final/cancelled/training-drill states), event detail with a report-revision timeline, filterable list and map, a disaster-prep guide (safety steps, checklist, local family check-in), a dedicated source/disclaimer screen, and the design's exact color tokens and app icon concept. Full en / ja / zh-Hans localization. Builds clean with `xcodebuild` under Swift 6 strict concurrency, verified running on Simulator in all three languages against live data. |
+Open [`ios/QuakeSignal.xcodeproj`](ios/QuakeSignal.xcodeproj) in Xcode, choose an iPhone Simulator, and run the `QuakeSignal` scheme.
 
-## About the source design
+The app uses the production Cloudflare deployment by default. Set the `QUAKESIGNAL_API_BASE_URL` launch environment variable to `http://localhost:8080` when developing against the local backend. Push notifications require a physical device, an Apple Developer team, and APNs credentials.
 
-The design lives at a `claude.ai/design` project ("震息 · QuakeSignal iOS App
-Design") that needed the owner's own login to reach. Once granted, it turned
-out to be a full design system: app icon concepts, color/type/spacing
-tokens, a component sheet, and high-fidelity mockups for onboarding, home
-(normal/caution/alert/dark states), the full-screen EEW alert, event detail
-with a report-revision timeline, a filterable list and map, settings, a
-disaster-prep guide, empty/loading/error states, and en/ja/zh-Hans
-localization of the key screens — see `docs/DESIGN_PROMPT.md` for the note
-on how the build evolved once it was reachable. The app above now follows
-it closely; a still-open gap is pixel-level layout fidelity, since the
-mockup is HTML/CSS and the app is native SwiftUI — the structure, copy,
-color tokens, and flows match, but spacing and typography were adapted to
-platform conventions rather than measured pixel-for-pixel.
+### 3. Verify
+
+```bash
+cd backend
+npm run typecheck
+npm run build
+
+cd cloudflare
+npm run check
+npm run test:remote -- https://quakesignal-api.hopeso.workers.dev
+```
+
+The remote smoke test checks production health, normalized live data, event detail/revisions, and the public WebSocket upgrade.
+
+## Production backend
+
+The production API is live at [`quakesignal-api.hopeso.workers.dev`](https://quakesignal-api.hopeso.workers.dev). It uses services available on Cloudflare's free plan for a small public launch:
+
+- Workers provides the HTTPS API.
+- A Durable Object maintains the upstream relay and fans out live updates.
+- D1 stores device subscriptions, normalized events, and revision history.
+- APNs uses token-based authentication stored as encrypted Worker secrets.
+- A one-minute alarm reseeds HTTP data and repairs disconnected upstream sockets.
+
+Deployment and APNs setup are documented in [`backend/README.md`](backend/README.md).
+
+## Localization
+
+Every user-facing flow is localized in:
+
+- English (`en`)
+- Japanese (`ja`)
+- Simplified Chinese (`zh-Hans`)
+
+Push notification text is localized on-device with APNs `loc-key` values, so a single event can be delivered in each user’s chosen language without storing translated notification copy on the server.
+
+## Safety and delivery limits
+
+- QuakeSignal aggregates data; it is not affiliated with JMA, CENC, Wolfx, or a government emergency agency.
+- Mobile push delivery is best-effort and depends on the upstream provider, network, Cloudflare, APNs, iOS settings, Focus modes, and device state.
+- The countdown is an estimate based on event time, distance, and a simplified S-wave velocity—not a seismological guarantee.
+- Critical Alerts require a separate entitlement granted by Apple. Without it, QuakeSignal uses standard or time-sensitive notifications.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+QuakeSignal is available under the [MIT License](LICENSE).

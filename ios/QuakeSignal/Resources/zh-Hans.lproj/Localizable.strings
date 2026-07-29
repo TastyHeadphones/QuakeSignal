@@ -4,12 +4,12 @@
 "tab.settings" = "设置";
 
 /* Onboarding */
-"onboarding.title1" = "在震动开始前收到预警";
-"onboarding.body1" = "QuakeSignal 会在官方地震预警发布的瞬间转发给你，让你在震动到达前获得宝贵的几秒钟。";
-"onboarding.title2" = "多个官方数据源";
-"onboarding.body2" = "整合日本气象厅、中国地震台网中心，以及四川、福建、重庆地震局的数据，通过 Wolfx Open API 实时转发。";
+"onboarding.title1" = "欢迎使用震息";
+"onboarding.body1" = "在一个简洁的应用中查看地震速报、附近提醒与防灾指南。";
+"onboarding.title2" = "第三方聚合数据";
+"onboarding.body2" = "震息整理来自 Wolfx Open API 的第三方数据。信息可能延迟、修订或存在误差。";
 "onboarding.title3" = "开启通知";
-"onboarding.body3" = "QuakeSignal 需要通知权限，才能在预警发布的瞬间提醒你——即使手机处于锁屏或静音状态。";
+"onboarding.body3" = "允许通知后，应用在后台时也可发送符合条件的地震信息。通知送达无法保证。";
 "onboarding.continue" = "继续";
 "onboarding.enableNotifications" = "允许通知";
 "onboarding.skip" = "暂不开启";
@@ -115,6 +115,7 @@
 "home.status.normal.detail" = "%1$d km 内 24 小时无显著事件";
 "home.status.caution" = "附近有地震信息";
 "home.status.caution.detail" = "%1$d km 处发生 M%2$@ 地震，点击查看";
+"home.status.caution.detail.noDistance" = "最近有 M%1$@ 地震信息，点击查看";
 "home.status.alert" = "收到地震预警信息";
 "home.status.alert.detail" = "附近 M%1$@ · 请立即采取防护";
 "home.section.latest" = "最新地震";

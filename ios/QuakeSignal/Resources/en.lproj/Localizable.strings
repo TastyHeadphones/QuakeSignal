@@ -4,12 +4,12 @@
 "tab.settings" = "Settings";
 
 /* Onboarding */
-"onboarding.title1" = "Get warned before the shaking starts";
-"onboarding.body1" = "QuakeSignal relays official earthquake early warnings the instant they're issued, giving you precious seconds of advance notice.";
-"onboarding.title2" = "Multiple official sources";
-"onboarding.body2" = "Japan Meteorological Agency, China Earthquake Networks Center, and the Sichuan, Fujian, and Chongqing earthquake authorities — relayed in real time via the Wolfx Open API.";
+"onboarding.title1" = "Welcome to QuakeSignal";
+"onboarding.body1" = "Earthquake reports, nearby reminders, and preparedness guidance in one focused app.";
+"onboarding.title2" = "Aggregated public data";
+"onboarding.body2" = "QuakeSignal organizes third-party data from the Wolfx Open API. Information may be delayed, revised, or inaccurate.";
 "onboarding.title3" = "Turn on notifications";
-"onboarding.body3" = "QuakeSignal needs permission to alert you the moment a warning is issued, even if your phone is locked or silenced.";
+"onboarding.body3" = "Allow notifications to receive matching earthquake information while the app is in the background. Delivery is not guaranteed.";
 "onboarding.continue" = "Continue";
 "onboarding.enableNotifications" = "Enable Notifications";
 "onboarding.skip" = "Not Now";
@@ -116,6 +116,7 @@
 "home.status.normal.detail" = "Nothing significant within %1$d km in the last 24 hours";
 "home.status.caution" = "Nearby earthquake information";
 "home.status.caution.detail" = "M%2$@ earthquake %1$d km away — tap to view";
+"home.status.caution.detail.noDistance" = "A recent M%1$@ earthquake was reported — tap to view";
 "home.status.alert" = "Earthquake warning received";
 "home.status.alert.detail" = "Nearby M%1$@ — take protective action now";
 "home.section.latest" = "Latest Earthquake";

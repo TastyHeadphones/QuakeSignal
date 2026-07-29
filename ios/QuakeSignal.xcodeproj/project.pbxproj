@@ -31,6 +31,7 @@
 		99912A9F35669522264D1A56 /* EpicenterMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E59ED0E3F738AC6AE4FF165 /* EpicenterMapView.swift */; };
 		9AAC1CF8B2A760F00E998C16 /* QuakeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5CC2AF0389FFB5D223C0DD /* QuakeDetailView.swift */; };
 		C95674FB61B4A12788753D96 /* City.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFBDB4E5BC222EB32F6ACEA /* City.swift */; };
+		CADFF98599F67B0638D53EEA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FB035B0C75FC4309B8A80D43 /* PrivacyInfo.xcprivacy */; };
 		CB398BC7708A86279C3BF6D4 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67D5A0D955C6D9F0A33F738C /* AppDelegate.swift */; };
 		CF0E4A95DE46CC7A146650EA /* GuideContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9399D7DEA2638CABE5AFF970 /* GuideContent.swift */; };
 		CF7C4292C7DB9E8F943D7B2B /* QuakeRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4C630D4060DEC1DA1AC5EB /* QuakeRowView.swift */; };
@@ -83,6 +84,7 @@
 		CB33C47F86F32C61F4CC83CB /* FamilyCheckInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyCheckInView.swift; sourceTree = "<group>"; };
 		DCFBDB4E5BC222EB32F6ACEA /* City.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = City.swift; sourceTree = "<group>"; };
 		EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EEWEvent.swift; sourceTree = "<group>"; };
+		FB035B0C75FC4309B8A80D43 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		FC4C4FFC783F65DB874CB2CD /* GuideStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideStore.swift; sourceTree = "<group>"; };
 		FCD28BDF2FD8950F9FCF83BE /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -172,6 +174,7 @@
 		A6381A24F2A297864EF7166D /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				FB035B0C75FC4309B8A80D43 /* PrivacyInfo.xcprivacy */,
 				DA0B489340F90173C681EA84 /* InfoPlist.strings */,
 				B0692F2F796B70A77314C23B /* Localizable.strings */,
 			);
@@ -305,6 +308,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					0C571730824BD0FE25517524 = {
+						DevelopmentTeam = 5TT564H883;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -338,6 +342,7 @@
 				D9B498E119DDF0A3145A54BD /* Assets.xcassets in Resources */,
 				300716B6C8AD2C38974ED1C8 /* InfoPlist.strings in Resources */,
 				D4E255D3E4F76C2C602276B9 /* Localizable.strings in Resources */,
+				CADFF98599F67B0638D53EEA /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -483,6 +488,7 @@
 				CODE_SIGN_ENTITLEMENTS = QuakeSignal/Supporting/QuakeSignal.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5TT564H883;
 				INFOPLIST_FILE = QuakeSignal/Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -491,7 +497,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -503,6 +509,7 @@
 				CODE_SIGN_ENTITLEMENTS = QuakeSignal/Supporting/QuakeSignal.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5TT564H883;
 				INFOPLIST_FILE = QuakeSignal/Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -511,7 +518,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};

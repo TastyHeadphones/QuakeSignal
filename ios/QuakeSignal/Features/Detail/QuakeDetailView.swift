@@ -16,7 +16,7 @@ struct QuakeDetailView: View {
                     LabeledContent("alert.intensityLabel", value: maxIntensity)
                 }
                 if let depth = event.depth {
-                    LabeledContent("quake.depth.label", value: String(format: "%.0f", depth))
+                    LabeledContent("quake.depth.label.plain", value: String(format: "%.0f km", depth))
                 }
                 LabeledContent("detail.field.status") { Text(event.reportStatus.labelKey).foregroundStyle(event.reportStatus.color) }
                 LabeledContent("detail.field.reportNumber", value: String(event.serial))

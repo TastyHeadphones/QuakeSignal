@@ -54,7 +54,10 @@ final class QuakeStore {
             locale: Locale.current.identifier,
             sources: Array(settings.enabledSources),
             minMagnitude: settings.minMagnitude,
-            criticalAlertsEnabled: settings.criticalAlertsOptIn,
+            // Critical Alerts require a separate Apple-granted entitlement.
+            // The public build deliberately uses time-sensitive notifications
+            // until that entitlement is approved for this bundle identifier.
+            criticalAlertsEnabled: false,
             cityName: settings.selectedCity?.localizedName,
             latitude: coordinate?.latitude,
             longitude: coordinate?.longitude,
@@ -112,7 +115,17 @@ final class QuakeStore {
     }
 
     var activeWarning: EEWEvent? {
-        nearbyEvents.first { $0.isActiveWarning }
+        let now = Date()
+        return nearbyEvents.first { event in
+            guard event.isActiveWarning, let timestamp = event.reportDate ?? event.originDate else {
+                return false
+            }
+            // Some upstream EEW endpoints retain their last message while idle.
+            // A preliminary message is only actionable for a short window; an
+            // old retained payload must never look like a current warning.
+            let age = now.timeIntervalSince(timestamp)
+            return age >= -60 && age <= 10 * 60
+        }
     }
 
     /// A recent (last 24h), non-warning event nearby -- drives the "caution" banner state.

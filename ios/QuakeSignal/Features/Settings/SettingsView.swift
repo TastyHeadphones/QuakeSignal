@@ -50,7 +50,7 @@ struct SettingsView: View {
                 Section("settings.section.sources") {
                     ForEach(AppSettings.allSources, id: \.self) { source in
                         Toggle(isOn: sourceBinding(source)) {
-                            Text(LocalizedStringKey("settings.source.\(source)"))
+                            Text(NSLocalizedString("settings.source.\(source)", comment: "Earthquake data source"))
                         }
                     }
                 }
@@ -73,11 +73,6 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-
-                    Toggle("settings.criticalAlerts.title", isOn: $settings.criticalAlertsOptIn)
-                    Text("settings.criticalAlerts.body")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
 
                     Button {
                         Task { await sendTestAlert() }
@@ -112,7 +107,6 @@ struct SettingsView: View {
             }
             .navigationTitle("settings.title")
             .onChange(of: settings.minMagnitude) { _, _ in resyncPushPreferences() }
-            .onChange(of: settings.criticalAlertsOptIn) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.notifyAtNight) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.includeTestAlerts) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.radiusKm) { _, _ in resyncPushPreferences() }

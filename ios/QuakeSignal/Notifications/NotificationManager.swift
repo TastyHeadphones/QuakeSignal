@@ -19,13 +19,11 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         refreshAuthorizationStatus()
     }
 
-    /// Requesting `.criticalAlert` when the app lacks the entitlement is safe --
-    /// iOS just ignores that one option rather than failing the whole request.
     @discardableResult
     func requestAuthorization() async -> Bool {
         let center = UNUserNotificationCenter.current()
         do {
-            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge, .criticalAlert])
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
             await refreshAuthorizationStatusAsync()
             if granted {
                 UIApplication.shared.registerForRemoteNotifications()

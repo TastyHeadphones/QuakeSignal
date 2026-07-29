@@ -69,12 +69,21 @@ extension EEWEvent {
 
     var originDate: Date? {
         guard let originTimeUtc else { return nil }
-        return ISO8601DateFormatter().date(from: originTimeUtc)
+        return Self.parseISO8601(originTimeUtc)
     }
 
     var reportDate: Date? {
         guard let reportTimeUtc else { return nil }
-        return ISO8601DateFormatter().date(from: reportTimeUtc)
+        return Self.parseISO8601(reportTimeUtc)
+    }
+
+    private static func parseISO8601(_ value: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: value) {
+            return date
+        }
+        return ISO8601DateFormatter().date(from: value)
     }
 
     var coordinate: CLLocationCoordinate2D? {

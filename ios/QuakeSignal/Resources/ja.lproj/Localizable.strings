@@ -4,12 +4,12 @@
 "tab.settings" = "設定";
 
 /* Onboarding */
-"onboarding.title1" = "揺れが始まる前に警告";
-"onboarding.body1" = "QuakeSignalは発表された緊急地震速報を即座に転送し、揺れが到達する前の貴重な数秒をお届けします。";
-"onboarding.title2" = "複数の公式情報源";
-"onboarding.body2" = "気象庁、中国地震台网中心、四川省・福建省・重慶市地震局の情報を、Wolfx Open API経由でリアルタイムに配信します。";
+"onboarding.title1" = "QuakeSignal へようこそ";
+"onboarding.body1" = "地震情報、近くの地震通知、防災ガイドをひとつのアプリにまとめました。";
+"onboarding.title2" = "第三者の集約データ";
+"onboarding.body2" = "Wolfx Open API の第三者データを整理して表示します。情報に遅延・更新・誤差が生じる場合があります。";
 "onboarding.title3" = "通知を有効にする";
-"onboarding.body3" = "警告の発表と同時にお知らせできるよう、通知の許可が必要です。ロック中やサイレントモードでも届きます。";
+"onboarding.body3" = "アプリがバックグラウンドのときも、条件に合う地震情報を受け取るには通知を許可してください。配信は保証されません。";
 "onboarding.continue" = "次へ";
 "onboarding.enableNotifications" = "通知を許可";
 "onboarding.skip" = "後で";
@@ -115,6 +115,7 @@
 "home.status.normal.detail" = "%1$d km 圏内で過去24時間、大きな地震はありません";
 "home.status.caution" = "近くで地震情報があります";
 "home.status.caution.detail" = "%1$d km 圏内で M%2$@ の地震が発生 ・タップして確認";
+"home.status.caution.detail.noDistance" = "最近 M%1$@ の地震情報があります・タップして確認";
 "home.status.alert" = "緊急地震速報を受信しました";
 "home.status.alert.detail" = "近くで M%1$@ ・直ちに身を守ってください";
 "home.section.latest" = "最新の地震";

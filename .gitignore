@@ -1,5 +1,6 @@
 # Node / backend
 node_modules/
+.wrangler/
 backend/dist/
 backend/data/
 backend/secrets/

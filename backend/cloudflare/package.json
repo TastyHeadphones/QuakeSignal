@@ -1,0 +1,17 @@
+{
+  "name": "quakesignal-cloudflare",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test:remote": "node scripts/smoke-test.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260722.1",
+    "typescript": "^5.9.2",
+    "wrangler": "^4.115.0"
+  }
+}

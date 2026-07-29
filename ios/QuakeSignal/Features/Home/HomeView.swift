@@ -130,8 +130,11 @@ private struct StatusCardView: View {
         case .normal:
             return L("home.status.normal.detail", Int(radiusKm))
         case .caution:
-            guard let recentReport, let coordinate, let distance = recentReport.distanceKm(from: coordinate) else {
-                return String(localized: "home.status.normal.detail")
+            guard let recentReport else {
+                return ""
+            }
+            guard let coordinate, let distance = recentReport.distanceKm(from: coordinate) else {
+                return L("home.status.caution.detail.noDistance", recentReport.magnitudeText)
             }
             return L("home.status.caution.detail", Int(distance.rounded()), recentReport.magnitudeText)
         case .alert:

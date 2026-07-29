@@ -44,6 +44,54 @@ Wolfx WebSockets  --->  wolfx/manager.ts  --->  alerts/normalize.ts
 - An Apple Developer Program membership (for APNs + Push Notifications
   capability + optionally the Critical Alerts entitlement)
 
+## Cloudflare production deployment
+
+The production implementation is deployed at
+[`quakesignal-api.hopeso.workers.dev`](https://quakesignal-api.hopeso.workers.dev).
+It lives in [`cloudflare/`](cloudflare/) and uses
+only services available on Cloudflare's free plan for a small launch:
+
+- a Worker for the HTTPS REST API;
+- one Durable Object for upstream WebSocket connections and live fan-out;
+- D1 for device subscriptions, normalized events, and revision history;
+- Worker secrets for APNs token-based authentication.
+
+```bash
+cd backend/cloudflare
+npm install
+npx wrangler login
+npx wrangler d1 create quakesignal-production
+# Put the returned database_id in wrangler.jsonc.
+npx wrangler d1 migrations apply quakesignal-production --remote
+npx wrangler deploy
+```
+
+Verify the public deployment:
+
+```bash
+npm run test:remote -- https://quakesignal-api.hopeso.workers.dev
+```
+
+The smoke test requires a healthy service, at least one normalized live Wolfx
+event, a working event-detail query, and a successful WebSocket upgrade.
+
+### Cloudflare APNs secrets
+
+APNs is optional for REST/WebSocket testing, but required before publishing a
+notification-capable iOS build:
+
+```bash
+npx wrangler secret put APNS_PRIVATE_KEY
+npx wrangler secret put APNS_KEY_ID
+npx wrangler secret put APNS_TEAM_ID
+npx wrangler secret put APNS_BUNDLE_ID
+```
+
+Paste the complete contents of the Apple `.p8` key for
+`APNS_PRIVATE_KEY`. The other values are the associated key ID, Apple
+Developer team ID, and iOS bundle identifier. Secrets are never stored in
+`wrangler.jsonc` or committed to git.
+
 ## Setup
 
 ```bash
