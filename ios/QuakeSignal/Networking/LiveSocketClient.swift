@@ -1,79 +1,155 @@
 import Foundation
 
-private struct LiveEnvelope: Decodable {
-    let type: String
-    let reason: String
-    let event: EEWEvent
+private enum WolfxRoute: Hashable {
+    case combinedEEW
+    case source(String)
+
+    var endpoint: String {
+        switch self {
+        case .combinedEEW: return "all_eew"
+        case .source(let source): return source
+        }
+    }
+
+    var initialQueries: [String] {
+        switch self {
+        case .combinedEEW:
+            return [
+                "query_jmaeew", "query_sceew", "query_cenceew",
+                "query_fjeew", "query_cqeew",
+            ]
+        case .source("cenc_eqlist"):
+            return ["query_cenceqlist"]
+        case .source("jma_eqlist"):
+            return ["query_jmaeqlist"]
+        case .source:
+            return []
+        }
+    }
 }
 
-/// Persistent connection to the backend's `/v1/live` fan-out socket, so the
-/// foreground app gets sub-second updates without polling. Reconnects with
-/// exponential backoff on drop. Background delivery is handled separately by
-/// APNs -- this socket is a foreground-only latency optimization.
+/// Foreground-only direct connections to Wolfx. APNs remains the background
+/// path, but Cloudflare is never used as a data relay.
 @Observable
 @MainActor
 final class LiveSocketClient {
-    private(set) var isConnected = false
-    var onEvent: ((EEWEvent, String) -> Void)?
+    private static let routes: [WolfxRoute] = [
+        .combinedEEW,
+        .source("cenc_eqlist"),
+        .source("jma_eqlist"),
+    ]
 
-    private var task: URLSessionWebSocketTask?
-    private var reconnectDelay: TimeInterval = 1
+    private(set) var isConnected = false
+    var onEvents: (([EEWEvent], Bool) -> Void)?
+
+    private var tasks: [WolfxRoute: URLSessionWebSocketTask] = [:]
+    private var connectedRoutes: Set<WolfxRoute> = []
+    private var seededSources: Set<String> = []
+    private var reconnectDelays: [WolfxRoute: TimeInterval] = [:]
     private var shouldReconnect = true
 
     func start() {
+        stop()
         shouldReconnect = true
-        connect()
+        seededSources.removeAll()
+        for route in Self.routes {
+            connect(route)
+        }
     }
 
     func stop() {
         shouldReconnect = false
-        task?.cancel(with: .goingAway, reason: nil)
-        task = nil
+        for task in tasks.values {
+            task.cancel(with: .goingAway, reason: nil)
+        }
+        tasks.removeAll()
+        connectedRoutes.removeAll()
         isConnected = false
     }
 
-    private func connect() {
-        let socketTask = URLSession.shared.webSocketTask(with: BackendConfig.liveSocketURL)
-        task = socketTask
-        socketTask.resume()
-        isConnected = true
-        reconnectDelay = 1
-        receiveNext()
+    private func connect(_ route: WolfxRoute) {
+        guard shouldReconnect,
+              let url = URL(string: "wss://ws-api.wolfx.jp/\(route.endpoint)") else { return }
+
+        let task = URLSession.shared.webSocketTask(with: url)
+        tasks[route] = task
+        task.resume()
+        receiveNext(route, task: task)
+
+        Task {
+            for query in route.initialQueries {
+                try? await task.send(.string(query))
+            }
+        }
     }
 
-    private func receiveNext() {
-        guard let task else { return }
-        task.receive { [weak self] result in
+    private func receiveNext(_ route: WolfxRoute, task: URLSessionWebSocketTask) {
+        task.receive { [weak self, weak task] result in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, let task, self.tasks[route] === task else { return }
                 switch result {
                 case .success(let message):
-                    if case .string(let text) = message {
-                        self.handle(text)
+                    self.connectedRoutes.insert(route)
+                    self.reconnectDelays[route] = 1
+                    self.isConnected = self.connectedRoutes.count == Self.routes.count
+
+                    switch message {
+                    case .string(let text):
+                        self.handle(text, route: route)
+                    case .data(let data):
+                        self.handle(data, route: route)
+                    @unknown default:
+                        break
                     }
-                    self.receiveNext()
+                    self.receiveNext(route, task: task)
+
                 case .failure:
+                    self.tasks[route] = nil
+                    self.connectedRoutes.remove(route)
                     self.isConnected = false
-                    self.scheduleReconnect()
+                    self.scheduleReconnect(route)
                 }
             }
         }
     }
 
-    private func handle(_ text: String) {
+    private func handle(_ text: String, route: WolfxRoute) {
         guard let data = text.data(using: .utf8) else { return }
-        guard let envelope = try? JSONDecoder().decode(LiveEnvelope.self, from: data), envelope.type == "quake" else { return }
-        onEvent?(envelope.event, envelope.reason)
+        handle(data, route: route)
     }
 
-    private func scheduleReconnect() {
+    private func handle(_ data: Data, route: WolfxRoute) {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? WolfxNormalizer.Object else {
+            return
+        }
+        if let type = object["type"] as? String, type == "heartbeat" || type == "pong" {
+            return
+        }
+
+        let source: String?
+        switch route {
+        case .combinedEEW:
+            source = object["type"] as? String
+        case .source(let sourceID):
+            source = sourceID
+        }
+
+        guard let source, WolfxClient.sources.contains(source) else { return }
+        let events = WolfxNormalizer.events(source: source, object: object)
+        guard !events.isEmpty else { return }
+
+        let isBackfill = seededSources.insert(source).inserted
+        onEvents?(events, isBackfill)
+    }
+
+    private func scheduleReconnect(_ route: WolfxRoute) {
         guard shouldReconnect else { return }
-        let delay = reconnectDelay
-        reconnectDelay = min(reconnectDelay * 2, 30)
+        let delay = reconnectDelays[route] ?? 1
+        reconnectDelays[route] = min(delay * 2, 30)
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(delay))
-            guard let self, self.shouldReconnect else { return }
-            self.connect()
+            guard let self, self.shouldReconnect, self.tasks[route] == nil else { return }
+            self.connect(route)
         }
     }
 }

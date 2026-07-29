@@ -1,7 +1,6 @@
 import Foundation
 
-/// Mirrors the backend's `EventRevision` (backend/src/types/domain.ts) --
-/// one snapshot in an event's report-update timeline.
+/// One in-memory snapshot in an event's report-update timeline.
 struct EventRevision: Codable, Identifiable, Equatable {
     let eventRef: String
     let serial: Int
@@ -19,10 +18,4 @@ struct EventRevision: Codable, Identifiable, Equatable {
         guard let reportTimeUtc else { return nil }
         return ISO8601DateFormatter().date(from: reportTimeUtc)
     }
-}
-
-/// The `/v1/quakes/:id` response shape: the event plus its oldest-first revision history.
-struct QuakeDetailResponse: Decodable {
-    let event: EEWEvent
-    let revisions: [EventRevision]
 }

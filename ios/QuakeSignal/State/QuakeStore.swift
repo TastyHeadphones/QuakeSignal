@@ -19,12 +19,16 @@ final class QuakeStore {
 
     private let liveSocket = LiveSocketClient()
     private let api = APIClient.shared
+    private let wolfx = WolfxClient.shared
+    private var revisionsByEvent: [String: [EventRevision]] = [:]
 
     var isConnected: Bool { liveSocket.isConnected }
 
     private init() {
-        liveSocket.onEvent = { [weak self] event, reason in
-            self?.ingest(event: event, reason: reason)
+        liveSocket.onEvents = { [weak self] events, isBackfill in
+            for event in events {
+                self?.ingestDirect(event: event, isBackfill: isBackfill)
+            }
         }
     }
 
@@ -37,8 +41,11 @@ final class QuakeStore {
         isLoading = true
         loadError = nil
         do {
-            events = try await api.fetchRecentQuakes()
+            events = try await wolfx.fetchRecentQuakes()
                 .sorted { ($0.reportTimeUtc ?? "") > ($1.reportTimeUtc ?? "") }
+            for event in events {
+                recordRevision(for: event)
+            }
         } catch {
             loadError = error.localizedDescription
         }
@@ -71,6 +78,7 @@ final class QuakeStore {
 
     /// Applies an update from either the live socket or a tapped push notification.
     func ingest(event: EEWEvent, reason: String) {
+        recordRevision(for: event)
         if let index = events.firstIndex(where: { $0.id == event.id }) {
             events[index] = event
         } else {
@@ -80,6 +88,65 @@ final class QuakeStore {
         if event.isEew {
             presentedAlert = PresentedAlert(event: event, reason: reason)
         }
+    }
+
+    func revisions(for eventID: String) -> [EventRevision] {
+        revisionsByEvent[eventID] ?? []
+    }
+
+    private func ingestDirect(event: EEWEvent, isBackfill: Bool) {
+        let previous = events.first(where: { $0.id == event.id })
+        let reason: String
+        if event.isTraining {
+            reason = "training"
+        } else if event.isCancel {
+            reason = "cancel"
+        } else if previous == nil {
+            reason = "new"
+        } else if event.isFinal && previous?.isFinal == false {
+            reason = "final"
+        } else {
+            reason = "update"
+        }
+
+        recordRevision(for: event)
+        if let index = events.firstIndex(where: { $0.id == event.id }) {
+            events[index] = event
+        } else {
+            events.append(event)
+        }
+        events.sort { ($0.reportTimeUtc ?? $0.originTimeUtc ?? "") > ($1.reportTimeUtc ?? $1.originTimeUtc ?? "") }
+
+        if !isBackfill, event.isEew {
+            presentedAlert = PresentedAlert(event: event, reason: reason)
+        }
+    }
+
+    private func recordRevision(for event: EEWEvent) {
+        let revision = EventRevision(
+            eventRef: event.id,
+            serial: event.serial,
+            magnitude: event.magnitude,
+            maxIntensity: event.maxIntensity,
+            isWarn: event.isWarn,
+            isFinal: event.isFinal,
+            isCancel: event.isCancel,
+            reportTimeUtc: event.reportTimeUtc,
+            recordedAtUtc: ISO8601DateFormatter().string(from: Date())
+        )
+        var revisions = revisionsByEvent[event.id] ?? []
+        if let last = revisions.last,
+           last.serial == revision.serial,
+           last.magnitude == revision.magnitude,
+           last.maxIntensity == revision.maxIntensity,
+           last.isWarn == revision.isWarn,
+           last.isFinal == revision.isFinal,
+           last.isCancel == revision.isCancel,
+           last.reportTimeUtc == revision.reportTimeUtc {
+            return
+        }
+        revisions.append(revision)
+        revisionsByEvent[event.id] = revisions
     }
 
     // MARK: - Location-aware derived state (drives the Home banner)

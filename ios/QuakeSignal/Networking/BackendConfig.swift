@@ -1,8 +1,8 @@
 import Foundation
 
-/// Points at the production QuakeSignal backend (see /backend). Local
-/// development and CI can override it with the
-/// `QUAKESIGNAL_API_BASE_URL` launch environment variable.
+/// Points at the notification-only Cloudflare service. Earthquake data never
+/// uses this URL; iOS fetches it directly from Wolfx. Local development and CI
+/// can override notification registration with `QUAKESIGNAL_API_BASE_URL`.
 enum BackendConfig {
     private static let defaultBaseURL = "https://quakesignal-api.hopeso.workers.dev"
 
@@ -12,14 +12,5 @@ enum BackendConfig {
             preconditionFailure("QUAKESIGNAL_API_BASE_URL must be an absolute HTTP(S) URL")
         }
         return url
-    }()
-
-    static let liveSocketURL: URL = {
-        var components = URLComponents(url: httpBaseURL, resolvingAgainstBaseURL: false)!
-        components.scheme = components.scheme == "https" ? "wss" : "ws"
-        components.path = "/v1/live"
-        components.query = nil
-        components.fragment = nil
-        return components.url!
     }()
 }

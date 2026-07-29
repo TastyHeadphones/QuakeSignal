@@ -8,7 +8,6 @@ import {
 } from "../../src/alerts/normalize";
 import type {
   DeviceRecord,
-  EventRevision,
   NormalizedEvent,
   NotifyReason,
 } from "../../src/types/domain";
@@ -56,18 +55,6 @@ interface EventRow {
   raw_json: string | null;
 }
 
-interface RevisionRow {
-  event_ref: string;
-  serial: number;
-  magnitude: number | null;
-  max_intensity: string | null;
-  is_warn: number;
-  is_final: number;
-  is_cancel: number;
-  report_time_utc: string | null;
-  recorded_at_utc: string;
-}
-
 interface DeviceRow {
   token: string;
   environment: "sandbox" | "production";
@@ -95,6 +82,8 @@ const EEW_SOURCES: WolfxSourceId[] = [
   "fj_eew",
   "cq_eew",
 ];
+const UPSTREAM_ROUTES = ["all_eew", "cenc_eqlist", "jma_eqlist"] as const;
+type UpstreamRoute = (typeof UPSTREAM_ROUTES)[number];
 const SOURCE_LABEL: Record<string, string> = {
   jma_eew: "JMA",
   sc_eew: "Sichuan EQA",
@@ -209,20 +198,6 @@ function rowToEvent(row: EventRow): NormalizedEvent {
   };
 }
 
-function rowToRevision(row: RevisionRow): EventRevision {
-  return {
-    eventRef: row.event_ref,
-    serial: row.serial,
-    magnitude: row.magnitude,
-    maxIntensity: row.max_intensity,
-    isWarn: !!row.is_warn,
-    isFinal: !!row.is_final,
-    isCancel: !!row.is_cancel,
-    reportTimeUtc: row.report_time_utc,
-    recordedAtUtc: row.recorded_at_utc,
-  };
-}
-
 function rowToDevice(row: DeviceRow): DeviceRecord {
   return {
     token: row.token,
@@ -280,6 +255,17 @@ function normalizeMessages(
         message as WolfxEqlistMessage,
       ).map(({ entry }) => normalizeJmaEqlistEntry(entry));
   }
+}
+
+function sourceFromMessage(message: unknown): WolfxSourceId | null {
+  if (!message || typeof message !== "object" || !("type" in message)) {
+    return null;
+  }
+  const type = (message as { type?: unknown }).type;
+  return typeof type === "string" &&
+    EEW_SOURCES.includes(type as WolfxSourceId)
+    ? (type as WolfxSourceId)
+    : null;
 }
 
 function determineReason(
@@ -357,42 +343,11 @@ async function upsertEvent(
       event.isCancel ? 1 : 0,
       event.isTraining ? 1 : 0,
       event.tsunami,
-      JSON.stringify(event.raw ?? null),
+      null,
       now,
       now,
     );
-
-  const isRevision =
-    previous === null ||
-    (event.isCancel && !previous.isCancel) ||
-    (event.isFinal && !previous.isFinal) ||
-    event.serial > previous.serial;
-
-  if (isRevision) {
-    await db.batch([
-      eventWrite,
-      db
-        .prepare(
-          `INSERT INTO event_revisions (
-            event_ref, serial, magnitude, max_intensity, is_warn, is_final,
-            is_cancel, report_time_utc, recorded_at_utc
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          event.id,
-          event.serial,
-          event.magnitude,
-          event.maxIntensity,
-          event.isWarn ? 1 : 0,
-          event.isFinal ? 1 : 0,
-          event.isCancel ? 1 : 0,
-          event.reportTimeUtc,
-          now,
-        ),
-    ]);
-  } else {
-    await eventWrite.run();
-  }
+  await eventWrite.run();
   return previous;
 }
 
@@ -618,7 +573,7 @@ async function dispatchPushes(
 export class QuakeRelay {
   private readonly state: DurableObjectState;
   private readonly env: Env;
-  private readonly upstreams = new Map<WolfxSourceId, WebSocket>();
+  private readonly upstreams = new Map<UpstreamRoute, WebSocket>();
   private readonly statuses = new Map<WolfxSourceId, string>();
 
   constructor(state: DurableObjectState, env: Env) {
@@ -633,8 +588,7 @@ export class QuakeRelay {
     if (url.pathname === "/status") {
       return Response.json({
         ok: true,
-        mode: "cloudflare-durable-object",
-        clients: this.state.getWebSockets().length,
+        mode: "notification-only",
         upstreams: Object.fromEntries(
           ALL_WOLFX_SOURCES.map((source) => [
             source,
@@ -643,15 +597,7 @@ export class QuakeRelay {
         ),
       });
     }
-
-    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
-      return new Response("Expected WebSocket upgrade", { status: 426 });
-    }
-    const pair = new WebSocketPair();
-    const [client, server] = Object.values(pair);
-    this.state.acceptWebSocket(server);
-    server.serializeAttachment({ kind: "client" });
-    return new Response(null, { status: 101, webSocket: client });
+    return Response.json({ error: "not found" }, { status: 404 });
   }
 
   async alarm(): Promise<void> {
@@ -663,14 +609,6 @@ export class QuakeRelay {
     }
   }
 
-  webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {
-    if (message === "ping") socket.send("pong");
-  }
-
-  webSocketClose(): void {}
-
-  webSocketError(): void {}
-
   private async ensureStarted(): Promise<void> {
     this.ensureUpstreams();
     const alarm = await this.state.storage.getAlarm();
@@ -681,42 +619,67 @@ export class QuakeRelay {
   }
 
   private ensureUpstreams(): void {
-    for (const source of ALL_WOLFX_SOURCES) {
-      const current = this.upstreams.get(source);
+    for (const route of UPSTREAM_ROUTES) {
+      const current = this.upstreams.get(route);
       if (current && (current.readyState === 0 || current.readyState === 1)) {
         continue;
       }
-      this.connect(source);
+      this.connect(route);
     }
   }
 
-  private connect(source: WolfxSourceId): void {
-    this.statuses.set(source, "connecting");
-    const socket = new WebSocket(`${WS_BASE}/${source}`);
-    this.upstreams.set(source, socket);
+  private connect(route: UpstreamRoute): void {
+    this.setRouteStatus(route, "connecting");
+    const socket = new WebSocket(`${WS_BASE}/${route}`);
+    this.upstreams.set(route, socket);
 
     socket.addEventListener("open", () => {
-      this.statuses.set(source, "open");
+      this.setRouteStatus(route, "open");
+      const queries =
+        route === "all_eew"
+          ? [
+              "query_jmaeew",
+              "query_sceew",
+              "query_cenceew",
+              "query_fjeew",
+              "query_cqeew",
+            ]
+          : route === "cenc_eqlist"
+            ? ["query_cenceqlist"]
+            : ["query_jmaeqlist"];
+      for (const query of queries) socket.send(query);
     });
     socket.addEventListener("message", (event) => {
       if (typeof event.data !== "string") return;
       try {
         const message: unknown = JSON.parse(event.data);
+        if (isHeartbeat(message) || isPong(message)) return;
+        const source =
+          route === "all_eew"
+            ? sourceFromMessage(message)
+            : route;
+        if (!source) return;
         for (const normalized of normalizeMessages(source, message)) {
           void this.ingest(normalized, false);
         }
       } catch (error) {
-        console.warn(`Unable to handle ${source} message`, error);
+        console.warn(`Unable to handle ${route} message`, error);
       }
     });
     socket.addEventListener("close", () => {
-      this.statuses.set(source, "closed");
-      this.upstreams.delete(source);
+      this.setRouteStatus(route, "closed");
+      this.upstreams.delete(route);
       void this.state.storage.setAlarm(Date.now() + 1_000);
     });
     socket.addEventListener("error", () => {
-      this.statuses.set(source, "error");
+      this.setRouteStatus(route, "error");
     });
+  }
+
+  private setRouteStatus(route: UpstreamRoute, status: string): void {
+    const sources: WolfxSourceId[] =
+      route === "all_eew" ? EEW_SOURCES : [route];
+    for (const source of sources) this.statuses.set(source, status);
   }
 
   private async seedFromHttp(): Promise<void> {
@@ -745,14 +708,6 @@ export class QuakeRelay {
     const reason = determineReason(event, previous);
     if (!reason) return;
 
-    const envelope = JSON.stringify({ type: "quake", reason, event });
-    for (const client of this.state.getWebSockets()) {
-      try {
-        client.send(envelope);
-      } catch {
-        client.close(1011, "Unable to deliver update");
-      }
-    }
     await dispatchPushes(this.env, event, reason);
   }
 }
@@ -832,14 +787,15 @@ async function handleRequest(
   if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   const url = new URL(request.url);
   const relay = env.RELAY.get(env.RELAY.idFromName("global"));
+  context.waitUntil(relay.fetch("https://relay.internal/status"));
 
   if (url.pathname === "/") {
     return json({
-      name: "QuakeSignal API",
+      name: "QuakeSignal Notification Service",
       runtime: "Cloudflare Workers + Durable Objects + D1",
+      purpose: "APNs alert delivery only",
+      earthquakeData: "Clients fetch directly from Wolfx",
       health: "/healthz",
-      recent: "/v1/quakes/recent",
-      live: "/v1/live",
     });
   }
   if (url.pathname === "/privacy" && request.method === "GET") {
@@ -861,7 +817,7 @@ async function handleRequest(
         },
         {
           heading: "Third-party services",
-          body: "Earthquake information is aggregated from the Wolfx Open API. Delivery uses Apple Push Notification service and backend infrastructure runs on Cloudflare. Their handling of network metadata is governed by their own policies.",
+          body: "The app fetches earthquake information directly from the Wolfx Open API. Cloudflare is used only to store notification subscriptions, watch upstream alerts, and request delivery through Apple Push Notification service. Their handling of network metadata is governed by their own policies.",
         },
         {
           heading: "Safety notice",
@@ -914,42 +870,14 @@ async function handleRequest(
     const response = await relay.fetch("https://relay.internal/status");
     return json(await response.json());
   }
-  if (url.pathname === "/v1/live") {
-    return relay.fetch(request);
-  }
-  if (url.pathname === "/v1/quakes/recent" && request.method === "GET") {
-    const rawLimit = Number(url.searchParams.get("limit") ?? 50);
-    const limit = Math.min(
-      Math.max(Number.isFinite(rawLimit) ? Math.trunc(rawLimit) : 50, 1),
-      200,
-    );
-    const source = url.searchParams.get("source");
-    const query = source
-      ? env.DB.prepare(
-          "SELECT * FROM events WHERE source_id = ? ORDER BY last_updated_utc DESC LIMIT ?",
-        ).bind(source, limit)
-      : env.DB.prepare(
-          "SELECT * FROM events ORDER BY last_updated_utc DESC LIMIT ?",
-        ).bind(limit);
-    const rows = await query.all<EventRow>();
-    return json(rows.results.map(rowToEvent));
-  }
   if (
-    url.pathname.startsWith("/v1/quakes/") &&
-    request.method === "GET"
+    url.pathname === "/v1/live" ||
+    url.pathname === "/v1/quakes/recent" ||
+    url.pathname.startsWith("/v1/quakes/")
   ) {
-    const id = decodeURIComponent(url.pathname.slice("/v1/quakes/".length));
-    const event = await getEvent(env.DB, id);
-    if (!event) return json({ error: "not found" }, 404);
-    const rows = await env.DB.prepare(
-      "SELECT * FROM event_revisions WHERE event_ref = ? ORDER BY serial ASC, id ASC",
-    )
-      .bind(id)
-      .all<RevisionRow>();
     return json({
-      event,
-      revisions: rows.results.map(rowToRevision),
-    });
+      error: "earthquake data endpoints are disabled; fetch directly from Wolfx",
+    }, 410);
   }
   if (url.pathname === "/v1/devices" && request.method === "POST") {
     return handleDeviceRegistration(request, env);
@@ -1006,8 +934,6 @@ async function handleRequest(
     await sendPush(env, rowToDevice(row), event, "new");
     return json({ ok: true });
   }
-
-  context.waitUntil(relay.fetch("https://relay.internal/status"));
   return json({ error: "not found" }, 404);
 }
 

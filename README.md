@@ -64,7 +64,7 @@ The complete design notes—including tokens, components, onboarding, empty/erro
 
 ## Architecture
 
-iOS cannot keep an arbitrary WebSocket alive after an app is backgrounded or terminated, so it uses a Cloudflare relay and APNs. The macOS and Windows app stays local-first and connects directly to the upstream feeds.
+iOS, macOS, and Windows fetch all earthquake data directly from Wolfx. Cloudflare has one narrowly scoped job: keep watching alerts while iOS is backgrounded or terminated and deliver matching APNs notifications.
 
 ```mermaid
 flowchart LR
@@ -75,13 +75,13 @@ flowchart LR
     end
 
     subgraph Edge["Cloudflare free-tier backend"]
-        Relay["Durable Object<br/>live WebSocket relay"]
-        Normalize["Normalize · deduplicate<br/>track revisions"]
-        DB[("D1")]
+        Watcher["Durable Object<br/>notification watcher"]
+        Filter["Deduplicate · filter<br/>notification rules"]
+        DB[("D1 subscriptions")]
     end
 
     subgraph App["QuakeSignal · SwiftUI"]
-        Foreground["REST history + live socket"]
+        Foreground["Direct HTTP history<br/>+ direct WebSockets"]
         Background["APNs notifications"]
         Guide["Offline safety guide"]
     end
@@ -92,9 +92,9 @@ flowchart LR
         NativeAlarm["Native alarm + notification"]
     end
 
-    Sources --> Relay --> Normalize --> DB
-    DB --> Foreground
-    Normalize --> Background
+    Sources --> Foreground
+    Sources --> Watcher --> Filter
+    DB --> Filter --> Background
     Guide --- App
     Sources --> Direct --> Local
     Direct --> NativeAlarm
@@ -104,31 +104,20 @@ flowchart LR
 
 - [`ios/`](ios/) — native SwiftUI app for iOS 17+, built with Swift 6
 - [`desktop/`](desktop/) — local-first Tauri app for macOS and Windows, with direct feeds, SQLite, and native alarms
-- [`backend/cloudflare/`](backend/cloudflare/) — production Worker, Durable Object relay, D1 migration, APNs delivery, and smoke test
-- [`backend/`](backend/) — local Node.js relay for backend development
+- [`backend/cloudflare/`](backend/cloudflare/) — notification-only Worker, Durable Object watcher, D1 migration, APNs delivery, and smoke test
+- [`backend/`](backend/) — local Node.js notification-pipeline development tools
 - [`docs/WOLFX_API.md`](docs/WOLFX_API.md) — field-level upstream data reference verified against live responses
 - [`docs/DESIGN_PROMPT.md`](docs/DESIGN_PROMPT.md) — product and visual design specification
 
 ## Quick start
 
-### 1. Start the local backend
-
-```bash
-cd backend
-cp .env.example .env
-npm install
-npm run dev
-```
-
-APNs credentials are optional for local REST/WebSocket development. The server listens on `http://localhost:8080`.
-
-### 2. Run the iOS app
+### 1. Run the iOS app
 
 Open [`ios/QuakeSignal.xcodeproj`](ios/QuakeSignal.xcodeproj) in Xcode, choose an iPhone Simulator, and run the `QuakeSignal` scheme.
 
-The app uses the production Cloudflare deployment by default. Set the `QUAKESIGNAL_API_BASE_URL` launch environment variable to `http://localhost:8080` when developing against the local backend. Push notifications require a physical device, an Apple Developer team, and APNs credentials.
+Earthquake history and foreground updates go straight to Wolfx. The app uses the production Cloudflare service only to register for notifications; `QUAKESIGNAL_API_BASE_URL` overrides that notification service during development. Push notifications require a physical device, an Apple Developer team, and APNs credentials.
 
-### 3. Run the desktop app
+### 2. Run the desktop app
 
 The desktop edition connects directly to Wolfx and does not require either
 backend:
@@ -142,7 +131,7 @@ npm run tauri dev
 Use **Settings → Test Alarm & Notification** to verify native sound and
 notification permissions on the current computer.
 
-### 4. Verify
+### 3. Verify
 
 ```bash
 cd backend
@@ -158,17 +147,19 @@ npm run build
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 
-The remote smoke test checks production health, normalized live data, event detail/revisions, and the public WebSocket upgrade.
+The remote smoke test checks notification-watcher health, device-registration validation, and verifies that public earthquake history/detail/live-relay endpoints stay disabled.
 
 ## Production backend
 
-The production API is live at [`quakesignal-api.hopeso.workers.dev`](https://quakesignal-api.hopeso.workers.dev). It uses services available on Cloudflare's free plan for a small public launch:
+The production notification service is live at [`quakesignal-api.hopeso.workers.dev`](https://quakesignal-api.hopeso.workers.dev). It uses services available on Cloudflare's free plan for a small public launch:
 
-- Workers provides the HTTPS API.
-- A Durable Object maintains the upstream relay and fans out live updates.
-- D1 stores device subscriptions, normalized events, and revision history.
+- Workers provides device registration, removal, test-alert, legal, and health endpoints.
+- A Durable Object maintains three upstream watcher sockets solely to detect push-worthy events.
+- D1 stores notification subscriptions and internal deduplication state.
 - APNs uses token-based authentication stored as encrypted Worker secrets.
 - A one-minute alarm reseeds HTTP data and repairs disconnected upstream sockets.
+
+The service deliberately returns `410 Gone` for `/v1/quakes/*` and `/v1/live`; application data belongs on the direct client-to-Wolfx path.
 
 Deployment and APNs setup are documented in [`backend/README.md`](backend/README.md).
 

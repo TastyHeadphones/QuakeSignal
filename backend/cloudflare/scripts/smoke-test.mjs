@@ -10,61 +10,52 @@ const health = await fetch(`${baseURL}/healthz`);
 assert.equal(health.status, 200, "health endpoint must return 200");
 const healthBody = await health.json();
 assert.equal(healthBody.ok, true, "health response must report ok");
+assert.equal(
+  healthBody.mode,
+  "notification-only",
+  "health endpoint must identify the notification-only service",
+);
+
+const root = await fetch(baseURL);
+assert.equal(root.status, 200, "service metadata must return 200");
+const rootBody = await root.json();
+assert.equal(rootBody.purpose, "APNs alert delivery only");
+assert.equal(rootBody.earthquakeData, "Clients fetch directly from Wolfx");
+assert.equal(rootBody.recent, undefined, "metadata must not advertise data APIs");
+assert.equal(rootBody.live, undefined, "metadata must not advertise a live relay");
 
 const recent = await fetch(`${baseURL}/v1/quakes/recent?limit=5`);
-assert.equal(recent.status, 200, "recent endpoint must return 200");
-const events = await recent.json();
-assert.ok(Array.isArray(events), "recent response must be an array");
-assert.ok(events.length > 0, "production backend must contain live Wolfx events");
-for (const event of events) {
-  assert.equal(typeof event.id, "string");
-  assert.equal(typeof event.sourceId, "string");
-  assert.equal(typeof event.hypocenter, "string");
-}
+assert.equal(recent.status, 410, "recent data endpoint must stay disabled");
 
-const detail = await fetch(
-  `${baseURL}/v1/quakes/${encodeURIComponent(events[0].id)}`,
-);
-assert.equal(detail.status, 200, "detail endpoint must return 200");
-const detailBody = await detail.json();
-assert.equal(detailBody.event.id, events[0].id);
-assert.ok(Array.isArray(detailBody.revisions));
+const detail = await fetch(`${baseURL}/v1/quakes/jma_eew%3Atest`);
+assert.equal(detail.status, 410, "detail data endpoint must stay disabled");
 
-const socketURL = new URL("/v1/live", baseURL);
-socketURL.protocol = socketURL.protocol === "https:" ? "wss:" : "ws:";
-await new Promise((resolve, reject) => {
-  const socket = new WebSocket(socketURL);
-  const timeout = setTimeout(() => {
-    socket.close();
-    reject(new Error("live WebSocket did not open within 10 seconds"));
-  }, 10_000);
-  socket.addEventListener("open", () => {
-    clearTimeout(timeout);
-    socket.close();
-    resolve();
-  });
-  socket.addEventListener("error", () => {
-    clearTimeout(timeout);
-    reject(new Error("live WebSocket failed to connect"));
-  });
+const live = await fetch(`${baseURL}/v1/live`);
+assert.equal(live.status, 410, "live relay endpoint must stay disabled");
+
+const invalidRegistration = await fetch(`${baseURL}/v1/devices`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ token: "short" }),
 });
+assert.equal(
+  invalidRegistration.status,
+  400,
+  "notification registration endpoint must validate input",
+);
 
 console.log(
   JSON.stringify(
     {
       ok: true,
       baseURL,
-      eventCount: events.length,
-      sampleEvent: events[0].id,
       upstreams: healthBody.upstreams,
-      liveWebSocket: "connected"
+      notificationRegistration: "validated",
+      earthquakeDataEndpoints: "disabled",
     },
     null,
     2,
   ),
 );
 
-// Node's built-in WebSocket can keep the event loop alive while the close
-// handshake completes. This is a one-shot release check, so exit after every
-// assertion and the connection test have succeeded.
 process.exit(0);

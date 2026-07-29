@@ -49,9 +49,9 @@ struct RootView: View {
         }
     }
 
-    /// A tapped push only carries eventId/sourceId/reason (see PushPayload) --
-    /// use whatever's already in memory, otherwise fetch the full event so the
-    /// alert screen has real data instead of guessing from the notification alone.
+    /// A tapped push only carries eventId/sourceId/reason (see PushPayload).
+    /// Resolve it from memory or refresh directly from Wolfx; Cloudflare never
+    /// serves earthquake data.
     private func handleTap(_ payload: PushPayload) async {
         guard let compositeId = payload.compositeEventId else { return }
         let reason = payload.reason ?? "new"
@@ -61,8 +61,9 @@ struct RootView: View {
             return
         }
 
-        if let fetched = try? await APIClient.shared.fetchQuakeDetail(id: compositeId) {
-            store.ingest(event: fetched.event, reason: reason)
+        await store.refresh()
+        if let fetched = store.events.first(where: { $0.id == compositeId }) {
+            store.ingest(event: fetched, reason: reason)
         }
     }
 }

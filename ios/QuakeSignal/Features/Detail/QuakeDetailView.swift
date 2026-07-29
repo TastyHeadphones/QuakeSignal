@@ -4,7 +4,7 @@ import MapKit
 struct QuakeDetailView: View {
     let event: EEWEvent
 
-    @State private var revisions: [EventRevision] = []
+    @State private var store = QuakeStore.shared
 
     var body: some View {
         List {
@@ -59,11 +59,10 @@ struct QuakeDetailView: View {
         }
         .navigationTitle("detail.title")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            if let detail = try? await APIClient.shared.fetchQuakeDetail(id: event.id) {
-                revisions = detail.revisions
-            }
-        }
+    }
+
+    private var revisions: [EventRevision] {
+        store.revisions(for: event.id)
     }
 
     private var timelineEntries: [(revision: EventRevision, labelKey: LocalizedStringKey)] {

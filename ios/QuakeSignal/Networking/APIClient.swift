@@ -41,22 +41,6 @@ final class APIClient: Sendable {
         try Self.validate(response, data: data)
     }
 
-    func fetchRecentQuakes(limit: Int = 50) async throws -> [EEWEvent] {
-        let url = BackendConfig.httpBaseURL
-            .appending(path: "/v1/quakes/recent")
-            .appending(queryItems: [URLQueryItem(name: "limit", value: String(limit))])
-        let (data, response) = try await session.data(from: url)
-        try Self.validate(response, data: data)
-        return try JSONDecoder().decode([EEWEvent].self, from: data)
-    }
-
-    func fetchQuakeDetail(id: String) async throws -> QuakeDetailResponse {
-        let url = BackendConfig.httpBaseURL.appending(path: "/v1/quakes/\(id)")
-        let (data, response) = try await session.data(from: url)
-        try Self.validate(response, data: data)
-        return try JSONDecoder().decode(QuakeDetailResponse.self, from: data)
-    }
-
     private static func validate(_ response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {

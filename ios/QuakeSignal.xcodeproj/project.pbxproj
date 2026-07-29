@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00CBA3F9A30565BBA1B7E842 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5CDC5F5361A20005A34BCD0 /* APIClient.swift */; };
+		079822277E33C23AC7363D72 /* WolfxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6815129F2447CE72E122CE0 /* WolfxClient.swift */; };
 		0B8CEB3509599E4BA3BB5CD2 /* QuakeSignalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A0053EFB595D59068829B2 /* QuakeSignalApp.swift */; };
 		0C3EC0B633E26287A449E3EC /* SourceDisclaimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CF66A4956C46CA1A148C070 /* SourceDisclaimerView.swift */; };
 		0EA04CC2D8769B4D1119146E /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401F05AD76497DD2ACB64C7F /* LocationManager.swift */; };
@@ -82,6 +83,7 @@
 		B5CDC5F5361A20005A34BCD0 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		C57E54B5E816643F7401A58F /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		CB33C47F86F32C61F4CC83CB /* FamilyCheckInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyCheckInView.swift; sourceTree = "<group>"; };
+		D6815129F2447CE72E122CE0 /* WolfxClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WolfxClient.swift; sourceTree = "<group>"; };
 		DCFBDB4E5BC222EB32F6ACEA /* City.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = City.swift; sourceTree = "<group>"; };
 		EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EEWEvent.swift; sourceTree = "<group>"; };
 		FB035B0C75FC4309B8A80D43 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -231,6 +233,7 @@
 				B5CDC5F5361A20005A34BCD0 /* APIClient.swift */,
 				3DADE472DF1F2B627818A5F8 /* BackendConfig.swift */,
 				1BD11E3C4D40F7F456CAF5AA /* LiveSocketClient.swift */,
+				D6815129F2447CE72E122CE0 /* WolfxClient.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -385,6 +388,7 @@
 				8FB6DF50DFD1FE9B637469F8 /* RootView.swift in Sources */,
 				DFBD32451B2D74367698EFC2 /* SettingsView.swift in Sources */,
 				0C3EC0B633E26287A449E3EC /* SourceDisclaimerView.swift in Sources */,
+				079822277E33C23AC7363D72 /* WolfxClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

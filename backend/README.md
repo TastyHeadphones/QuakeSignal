@@ -1,41 +1,33 @@
-# QuakeSignal Backend
+# QuakeSignal Notification Service
 
-An always-on relay: it holds persistent WebSocket connections to the [Wolfx
+An always-on notification watcher: it holds persistent WebSocket connections to the [Wolfx
 Open API](https://wolfx.jp) (JMA / CENC / Sichuan / Fujian / Chongqing
 earthquake early-warning + earthquake-list feeds), normalizes whatever comes
 in, and pushes life-safety alerts to registered iOS devices via Apple Push
 Notification service (APNs).
 
+It is not an application-data backend. iOS and desktop clients fetch history
+and foreground live updates directly from Wolfx. Cloudflare only stores
+notification preferences, evaluates alert rules, and sends APNs notifications.
+
 **Why this exists at all:** iOS does not allow an app to keep a WebSocket
 connection open while backgrounded or terminated. There is no way to get a
 "the ground is about to shake" alert to a phone that isn't in the foreground
-without a server-side relay pushing through APNs. This service is that relay.
+without a server-side watcher pushing through APNs. This service is that watcher.
 See [`docs/WOLFX_API.md`](../docs/WOLFX_API.md) for the upstream data
 contracts it depends on.
 
 ## Architecture
 
-```
-Wolfx WebSockets  --->  wolfx/manager.ts  --->  alerts/normalize.ts
-(7 endpoints,               (reconnecting            (per-source -> unified
- one socket each)            WS clients)               NormalizedEvent)
-                                                             |
-                                                             v
-                                                     alerts/pipeline.ts
-                                                (dedupe by EventID+Serial,
-                                                 decide push-worthy or not)
-                                                        |          |
-                                                        v          v
-                                                     db.ts     push/dispatch.ts
-                                               (SQLite store,   (APNs, loc-key
-                                                REST history)    localized payload)
-                                                        ^
-                                                        |
-                                              api/server.ts (Express)
-                                          /v1/devices  /v1/quakes  /healthz
-                                                        ^
-                                                        |
-                                                  QuakeSignal iOS app
+```text
+Wolfx HTTP + WebSockets ---> normalize + deduplicate ---> notification rules
+                                                             |          |
+                                                      D1 preferences    APNs
+                                                                        |
+                                                               background iOS
+
+Wolfx HTTP + WebSockets --------------------------------> foreground iOS
+                                                   (direct client access)
 ```
 
 ## Prerequisites
@@ -51,9 +43,9 @@ The production implementation is deployed at
 It lives in [`cloudflare/`](cloudflare/) and uses
 only services available on Cloudflare's free plan for a small launch:
 
-- a Worker for the HTTPS REST API;
-- one Durable Object for upstream WebSocket connections and live fan-out;
-- D1 for device subscriptions, normalized events, and revision history;
+- a Worker for notification registration, legal pages, and health checks;
+- one Durable Object with three upstream watcher connections;
+- D1 for device subscriptions and internal alert deduplication state;
 - Worker secrets for APNs token-based authentication.
 
 ```bash
@@ -72,12 +64,13 @@ Verify the public deployment:
 npm run test:remote -- https://quakesignal-api.hopeso.workers.dev
 ```
 
-The smoke test requires a healthy service, at least one normalized live Wolfx
-event, a working event-detail query, and a successful WebSocket upgrade.
+The smoke test requires a healthy notification watcher, validates registration
+input, and confirms that history, detail, and public live-relay routes return
+`410 Gone`.
 
 ### Cloudflare APNs secrets
 
-APNs is optional for REST/WebSocket testing, but required before publishing a
+APNs is optional for watcher health testing, but required before publishing a
 notification-capable iOS build:
 
 ```bash
@@ -149,17 +142,18 @@ docker compose up --build
 ```
 Mounts `./data` (SQLite file) and `./secrets` (the .p8 key) as volumes.
 
-## REST API
+## Production HTTP surface
 
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/v1/devices` | Register/update a device: `{ token, environment, locale, sources[], minMagnitude, criticalAlertsEnabled, cityName?, latitude?, longitude?, radiusKm?, includeTestAlerts?, utcOffsetMinutes?, notifyAtNight? }` |
 | `DELETE` | `/v1/devices/:token` | Unregister a device |
 | `POST` | `/v1/devices/:token/test` | Send one real push through APNs to this device (Settings screen "send test alert") |
-| `GET` | `/v1/quakes/recent?limit=&source=` | Recent normalized events, newest first |
-| `GET` | `/v1/quakes/:id` | `{ event, revisions[] }` for one event id (`${sourceId}:${eventId}`) -- `revisions` is the oldest-first report-update timeline (1st report, updates, final) |
-| `WS` | `/v1/live` | Live fan-out socket -- every push-worthy event is broadcast here too, as `{"type":"quake","reason":...,"event":{...}}`, so a foregrounded app gets sub-second updates without polling |
-| `GET` | `/healthz` | Process + per-source WebSocket connection status |
+| `GET` | `/healthz` | Notification watcher + per-source connection status |
+| `GET` | `/privacy`, `/terms`, `/support` | App Store legal and support pages |
+
+`/v1/quakes/recent`, `/v1/quakes/:id`, and `/v1/live` are intentionally
+disabled in production. Clients use Wolfx directly.
 
 `sources` values are any of: `jma_eew`, `sc_eew`, `cenc_eew`, `fj_eew`,
 `cq_eew`, `cenc_eqlist`, `jma_eqlist`.

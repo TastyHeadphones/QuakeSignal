@@ -1,9 +1,8 @@
 import SwiftUI
 import CoreLocation
 
-/// Mirrors the backend's `NormalizedEvent` JSON shape exactly (see
-/// backend/src/types/domain.ts) -- the app never talks to Wolfx directly, so
-/// this is the only earthquake-event model it needs.
+/// Client-side normalized Wolfx event shared by the app's direct HTTP and
+/// WebSocket data paths.
 struct EEWEvent: Codable, Identifiable, Equatable, Hashable {
     let id: String
     let sourceId: String
