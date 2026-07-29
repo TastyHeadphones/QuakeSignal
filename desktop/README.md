@@ -64,6 +64,8 @@ npm run tauri build
 Native packages are written below `desktop/src-tauri/target/*/release/bundle`.
 The GitHub Actions workflow builds a universal macOS application/DMG and a
 Windows x64 MSI/NSIS installer, then uploads them as workflow artifacts.
+Pushing a version tag such as `v0.1.0` also creates a GitHub Release, generates
+release notes, and attaches every native installer to that release.
 
 CI applies an ad-hoc macOS signature so downloaded test builds remain
 launchable. Public distribution should replace it with an Apple Developer ID

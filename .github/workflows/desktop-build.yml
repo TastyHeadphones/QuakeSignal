@@ -5,6 +5,8 @@ on:
     branches:
       - main
       - "codex/**"
+    tags:
+      - "v*"
     paths:
       - "desktop/**"
       - ".github/workflows/desktop-build.yml"
@@ -14,12 +16,11 @@ on:
       - ".github/workflows/desktop-build.yml"
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   build:
     name: ${{ matrix.name }}
+    permissions:
+      contents: write
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -79,3 +80,7 @@ jobs:
           args: ${{ matrix.tauri_args }}
           uploadWorkflowArtifacts: true
           workflowArtifactNamePattern: quakesignal-[platform]-[arch]-[bundle]
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: ${{ github.ref_type == 'tag' && format('QuakeSignal {0}', github.ref_name) || '' }}
+          generateReleaseNotes: true
+          releaseDraft: false

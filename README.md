@@ -104,6 +104,7 @@ flowchart LR
 
 - [`ios/`](ios/) — native SwiftUI app for iOS 17+, built with Swift 6
 - [`desktop/`](desktop/) — local-first Tauri app for macOS and Windows, with direct feeds, SQLite, and native alarms
+- [`assets/app-icon.svg`](assets/app-icon.svg) — resolution-independent source for the design artifact's Epicenter ripples app icon
 - [`backend/cloudflare/`](backend/cloudflare/) — notification-only Worker, Durable Object watcher, D1 migration, APNs delivery, and smoke test
 - [`backend/`](backend/) — local Node.js notification-pipeline development tools
 - [`docs/WOLFX_API.md`](docs/WOLFX_API.md) — field-level upstream data reference verified against live responses
