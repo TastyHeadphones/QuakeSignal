@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QuakeSignal</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <div id="app">
+      <div class="topbar"><h1 id="app-title">QuakeSignal</h1></div>
+
+      <div class="panels">
+        <section class="panel active" id="panel-home">
+          <div class="status-banner" id="status-banner">
+            <div class="title" id="status-title"></div>
+            <div class="detail" id="status-detail"></div>
+          </div>
+          <div class="sources-line">
+            <div id="sources-dots" style="display: flex; gap: 4px"></div>
+            <span id="sources-label"></span>
+          </div>
+          <button class="btn" id="test-alert-btn"></button>
+          <div class="section-title" id="recent-title"></div>
+          <div id="home-recent-list"></div>
+        </section>
+
+        <section class="panel" id="panel-events">
+          <div id="events-list"></div>
+        </section>
+
+        <section class="panel" id="panel-settings">
+          <form id="settings-form">
+            <div class="section-title" id="s-title-language"></div>
+            <div class="field">
+              <select id="f-language">
+                <option value="system"></option>
+                <option value="en"></option>
+                <option value="ja"></option>
+                <option value="zh-Hans"></option>
+              </select>
+            </div>
+
+            <div class="section-title" id="s-title-location"></div>
+            <div class="field">
+              <label id="l-city"></label>
+              <select id="f-city"></select>
+            </div>
+            <div class="field">
+              <label id="l-lat"></label>
+              <input type="number" step="0.0001" id="f-lat" />
+            </div>
+            <div class="field">
+              <label id="l-lon"></label>
+              <input type="number" step="0.0001" id="f-lon" />
+            </div>
+            <div class="field">
+              <label id="l-radius"></label>
+              <input type="number" step="1" min="0" id="f-radius" />
+              <div class="hint" id="hint-radius"></div>
+            </div>
+
+            <div class="section-title" id="s-title-threshold"></div>
+            <div class="field">
+              <input type="number" step="0.1" min="0" max="9" id="f-min-magnitude" />
+              <div class="hint" id="hint-threshold"></div>
+            </div>
+
+            <div class="section-title" id="s-title-sources"></div>
+            <div class="field">
+              <div class="hint" id="label-sources-eew" style="margin-bottom: 4px"></div>
+              <div id="sources-eew-list"></div>
+              <div class="hint" id="label-sources-reports" style="margin: 10px 0 4px"></div>
+              <div id="sources-reports-list"></div>
+            </div>
+
+            <div class="section-title" id="s-title-notifications"></div>
+            <div class="row-toggle">
+              <div>
+                <div class="label" id="l-alarm-enabled"></div>
+                <div class="detail" id="d-alarm-enabled"></div>
+              </div>
+              <input type="checkbox" id="f-alarm-enabled" />
+            </div>
+            <div class="field alarm-volume-field">
+              <label id="l-alarm-volume"></label>
+              <input type="range" min="0" max="1" step="0.05" id="f-alarm-volume" />
+              <div class="hint" id="d-alarm-volume"></div>
+            </div>
+            <div class="row-toggle">
+              <div>
+                <div class="label" id="l-test-alerts"></div>
+                <div class="detail" id="d-test-alerts"></div>
+              </div>
+              <input type="checkbox" id="f-include-test-alerts" />
+            </div>
+            <div class="row-toggle">
+              <div>
+                <div class="label" id="l-notify-night"></div>
+                <div class="detail" id="d-notify-night"></div>
+              </div>
+              <input type="checkbox" id="f-notify-at-night" />
+            </div>
+            <div class="row-toggle">
+              <div>
+                <div class="label" id="l-launch-login"></div>
+                <div class="detail" id="d-launch-login"></div>
+              </div>
+              <input type="checkbox" id="f-launch-at-login" />
+            </div>
+
+            <div class="section-title" id="s-title-about"></div>
+            <div class="about-text" id="about-data-source"></div>
+            <div class="about-text" id="about-disclaimer"></div>
+            <p><a class="link" id="about-repo-link" href="https://github.com/TastyHeadphones/QuakeSignal" target="_blank" rel="noopener"></a></p>
+
+            <div class="save-row">
+              <button type="submit" class="btn primary" id="save-btn"></button>
+            </div>
+          </form>
+        </section>
+      </div>
+
+      <nav class="tabbar">
+        <button data-tab="home" class="active">
+          <span class="icon">🏠</span><span id="tab-home-label"></span>
+        </button>
+        <button data-tab="events">
+          <span class="icon">📋</span><span id="tab-events-label"></span>
+        </button>
+        <button data-tab="settings">
+          <span class="icon">⚙️</span><span id="tab-settings-label"></span>
+        </button>
+      </nav>
+    </div>
+    <div class="toast" id="toast"></div>
+  </body>
+</html>

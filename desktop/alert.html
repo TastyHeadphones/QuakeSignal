@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QuakeSignal Alert</title>
+    <link rel="stylesheet" href="/src/alert.css" />
+    <script type="module" src="/src/alert.ts" defer></script>
+  </head>
+  <body>
+    <div id="alert">
+      <div>
+        <span class="badge" id="badge"></span>
+        <div class="hypocenter" id="hypocenter"></div>
+        <div class="meta" id="meta"></div>
+      </div>
+      <div class="countdown">
+        <div class="num" id="countdown-num"></div>
+        <div class="label" id="countdown-label"></div>
+      </div>
+      <div>
+        <div class="tip" id="tip"></div>
+        <div class="footer" style="margin-top: 12px">
+          <button class="dismiss" id="dismiss"></button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

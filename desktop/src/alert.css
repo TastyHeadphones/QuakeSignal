@@ -1,0 +1,103 @@
+:root {
+  --caution: #ff9500;
+  --strong: #ff6a00;
+  --severe: #ff3b30;
+  --test: #8e5be0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, "Hiragino Sans", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#alert {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 22px 24px;
+  color: #fff;
+  background: linear-gradient(155deg, var(--strong), var(--severe));
+}
+
+#alert.training {
+  background: linear-gradient(155deg, var(--test), #5b3a99);
+}
+#alert.cancelled {
+  background: linear-gradient(155deg, #6b6b70, #3a3a3c);
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.22);
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-bottom: 10px;
+}
+
+.hypocenter {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.meta {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.countdown {
+  text-align: center;
+  margin: 6px 0;
+}
+.countdown .num {
+  font-size: 44px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.countdown .label {
+  font-size: 11px;
+  opacity: 0.85;
+  margin-top: 4px;
+}
+
+.tip {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.dismiss {
+  border: none;
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dismiss:hover {
+  background: rgba(255, 255, 255, 0.3);
+}

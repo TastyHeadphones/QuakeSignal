@@ -1,0 +1,92 @@
+// Reuses the exact terminology already established in
+// ios/QuakeSignal/Resources/en.lproj/Localizable.strings (e.g. "Earthquake
+// Early Warning", "Notify at Night") so the two apps read as one product.
+export const en = {
+  "app.name": "QuakeSignal",
+  "tab.home": "Home",
+  "tab.events": "Events",
+  "tab.settings": "Settings",
+
+  "home.status.normal.title": "All Clear",
+  "home.status.normal.detail": "No active warnings near you",
+  "home.status.caution.title": "Recent Activity",
+  "home.status.caution.detail": "M{mag} earthquake near {hypocenter}",
+  "home.status.alert.title": "Earthquake Early Warning",
+  "home.status.alert.detail": "M{mag} near {hypocenter} — take cover now",
+  "home.sources.label": "Monitoring {connected}/{total} sources",
+  "home.testAlert.button": "Test Alarm & Notification",
+  "home.lastEvent.none": "Nothing to report yet.",
+  "home.viewAll": "View all events",
+
+  "events.empty": "No earthquakes recorded yet.",
+  "events.magnitudeShort": "M",
+  "events.depth": "Depth {depth} km",
+  "events.revisions.title": "Report history",
+  "events.detail.hide": "Hide",
+
+  "alert.badge.new": "EARTHQUAKE EARLY WARNING",
+  "alert.badge.updated": "UPDATED",
+  "alert.badge.final": "FINAL REPORT",
+  "alert.badge.cancelled": "CANCELLED",
+  "alert.badge.report": "EARTHQUAKE REPORT",
+  "alert.badge.training": "TRAINING — NOT REAL",
+
+  "settings.section.language": "Language",
+  "settings.language.system": "Follow System",
+  "settings.language.en": "English",
+  "settings.language.ja": "日本語",
+  "settings.language.zh-Hans": "简体中文",
+
+  "settings.section.location": "Location",
+  "settings.location.city": "City",
+  "settings.location.none": "Not set (magnitude filter only)",
+  "settings.location.customLat": "Latitude",
+  "settings.location.customLon": "Longitude",
+  "settings.location.radius": "Alert radius (km)",
+  "settings.location.radius.hint": "Only notify for quakes within this distance. Leave blank to ignore distance.",
+
+  "settings.section.sources": "Data Sources",
+  "settings.sources.eew": "Early Warnings",
+  "settings.sources.reports": "Routine Earthquake Reports",
+  "settings.source.jma_eew": "Japan (JMA)",
+  "settings.source.sc_eew": "Sichuan, China",
+  "settings.source.cenc_eew": "China (CENC, nationwide)",
+  "settings.source.fj_eew": "Fujian, China",
+  "settings.source.cq_eew": "Chongqing, China",
+  "settings.source.cenc_eqlist": "China (CENC bulletins)",
+  "settings.source.jma_eqlist": "Japan (JMA bulletins)",
+
+  "settings.section.threshold": "Minimum Magnitude",
+  "settings.threshold.hint": "Only notify for quakes at or above this magnitude.",
+
+  "settings.section.notifications": "Notifications",
+  "settings.alarmEnabled": "Automatic Alarm Sound",
+  "settings.alarmEnabled.detail": "Play a native alarm automatically for real earthquakes that pass your filters.",
+  "settings.alarmVolume": "Alarm Volume",
+  "settings.alarmVolume.detail": "{volume}% — use Test Alarm to verify your speakers.",
+  "settings.includeTestAlerts": "Receive Test/Drill Alerts",
+  "settings.includeTestAlerts.detail": "Occasionally JMA and other agencies broadcast training alerts to test the system.",
+  "settings.notifyAtNight": "Notify at Night",
+  "settings.notifyAtNight.detail": "When off, routine reports are held back 22:00–07:00 local time. Active warnings are never held back.",
+  "settings.launchAtLogin": "Launch at Login",
+  "settings.launchAtLogin.detail": "Start monitoring automatically when you sign in.",
+
+  "settings.section.about": "About",
+  "settings.about.dataSource": "Earthquake data is provided by the Wolfx Open API, aggregating Japan's Meteorological Agency (JMA) and China's national and regional earthquake networks (CENC, Sichuan, Fujian, Chongqing).",
+  "disclaimer.notOfficial": "QuakeSignal is an independent app and is not affiliated with JMA, CENC, or any government agency. Always follow official guidance during an actual earthquake.",
+  "settings.about.repo": "View source on GitHub",
+  "settings.save": "Save",
+  "settings.saved": "Saved",
+
+  "alert.countdown.label": "Estimated time until shaking",
+  "alert.countdown.unknown": "Distance unknown",
+  "alert.countdown.arrived": "Shaking may have started",
+  "alert.dropCoverHoldOn": "Drop, Cover, and Hold On",
+  "alert.training.note": "This is a training broadcast, not a real earthquake.",
+  "alert.dismiss": "Dismiss",
+
+  "status.connected": "Connected",
+  "status.disconnected": "Reconnecting…",
+} as const;
+
+export type LocaleKey = keyof typeof en;

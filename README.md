@@ -10,15 +10,18 @@
 
 # QuakeSignal
 
-### Earthquake reports, nearby alerts, and preparedness—built natively for iPhone.
+### Earthquake reports, nearby alerts, and preparedness for iPhone, macOS, and Windows.
 
 [![iOS 17+](https://img.shields.io/badge/iOS-17%2B-0E63C4?logo=apple&logoColor=white)](ios/)
 [![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](ios/QuakeSignal/)
+[![Tauri 2](https://img.shields.io/badge/desktop-Tauri_2-24C8DB?logo=tauri&logoColor=white)](desktop/)
 [![Cloudflare Workers](https://img.shields.io/badge/backend-Cloudflare_Workers-F38020?logo=cloudflare&logoColor=white)](backend/cloudflare/)
 [![Languages](https://img.shields.io/badge/languages-English_·_日本語_·_简体中文-0A3D73)](#localization)
 [![MIT License](https://img.shields.io/badge/license-MIT-30B14F)](LICENSE)
 
-QuakeSignal turns aggregated public seismic data into a focused, accessible iOS experience: a live event feed, location-aware context, full-screen warning states, push notifications, and an offline disaster guide.
+QuakeSignal turns aggregated public seismic data into focused native apps: an
+iOS experience with location-aware push alerts and preparedness guidance, plus
+a local-first macOS and Windows monitor with direct feeds and audible alarms.
 
 <br />
 
@@ -43,6 +46,7 @@ QuakeSignal turns aggregated public seismic data into a focused, accessible iOS 
 | 📍 | Nearby context | Frames events by a selected city or current location, with distance, direction, radius, and magnitude controls. |
 | ⚠️ | Clear alert states | Separates preliminary, updated, final, cancelled, and training messages so color is never the only signal. |
 | 🔔 | Background delivery | Uses APNs for notifications when the app is backgrounded, locked, or terminated. |
+| 🖥️ | Local-first desktop | Connects directly to upstream WebSockets, stores data locally, and can sound a native alarm from the tray—without the QuakeSignal backend. |
 | 🗺️ | Explore events | Includes a filterable list, epicenter map, event detail, and report-revision timeline. |
 | 🧰 | Offline preparedness | Provides drop-cover-hold-on guidance, situation-specific actions, an emergency checklist, and family check-in notes. |
 | ♿ | Accessible by design | Supports Dynamic Type, VoiceOver-friendly labels, 44pt targets, system appearance, and high-contrast status treatments. |
@@ -60,7 +64,7 @@ The complete design notes—including tokens, components, onboarding, empty/erro
 
 ## Architecture
 
-iOS cannot keep an arbitrary WebSocket alive after an app is backgrounded or terminated. QuakeSignal therefore uses its own relay: REST and WebSockets keep the foreground app current, while APNs handles background delivery.
+iOS cannot keep an arbitrary WebSocket alive after an app is backgrounded or terminated, so it uses a Cloudflare relay and APNs. The macOS and Windows app stays local-first and connects directly to the upstream feeds.
 
 ```mermaid
 flowchart LR
@@ -82,15 +86,24 @@ flowchart LR
         Guide["Offline safety guide"]
     end
 
+    subgraph Desktop["QuakeSignal · Tauri desktop"]
+        Direct["Direct WebSockets"]
+        Local[("Local SQLite")]
+        NativeAlarm["Native alarm + notification"]
+    end
+
     Sources --> Relay --> Normalize --> DB
     DB --> Foreground
     Normalize --> Background
     Guide --- App
+    Sources --> Direct --> Local
+    Direct --> NativeAlarm
 ```
 
 ### Repository map
 
 - [`ios/`](ios/) — native SwiftUI app for iOS 17+, built with Swift 6
+- [`desktop/`](desktop/) — local-first Tauri app for macOS and Windows, with direct feeds, SQLite, and native alarms
 - [`backend/cloudflare/`](backend/cloudflare/) — production Worker, Durable Object relay, D1 migration, APNs delivery, and smoke test
 - [`backend/`](backend/) — local Node.js relay for backend development
 - [`docs/WOLFX_API.md`](docs/WOLFX_API.md) — field-level upstream data reference verified against live responses
@@ -115,7 +128,21 @@ Open [`ios/QuakeSignal.xcodeproj`](ios/QuakeSignal.xcodeproj) in Xcode, choose a
 
 The app uses the production Cloudflare deployment by default. Set the `QUAKESIGNAL_API_BASE_URL` launch environment variable to `http://localhost:8080` when developing against the local backend. Push notifications require a physical device, an Apple Developer team, and APNs credentials.
 
-### 3. Verify
+### 3. Run the desktop app
+
+The desktop edition connects directly to Wolfx and does not require either
+backend:
+
+```bash
+cd desktop
+npm ci
+npm run tauri dev
+```
+
+Use **Settings → Test Alarm & Notification** to verify native sound and
+notification permissions on the current computer.
+
+### 4. Verify
 
 ```bash
 cd backend
@@ -125,6 +152,10 @@ npm run build
 cd cloudflare
 npm run check
 npm run test:remote -- https://quakesignal-api.hopeso.workers.dev
+
+cd ../../desktop
+npm run build
+cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 
 The remote smoke test checks production health, normalized live data, event detail/revisions, and the public WebSocket upgrade.

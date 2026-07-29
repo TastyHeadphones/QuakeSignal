@@ -1,0 +1,92 @@
+import type { LocaleKey } from "./en";
+
+// Reuses the exact terminology from
+// ios/QuakeSignal/Resources/ja.lproj/Localizable.strings (e.g. "緊急地震速報",
+// "夜間も通知する") so the two apps read as one product.
+export const ja: Record<LocaleKey, string> = {
+  "app.name": "震息",
+  "tab.home": "ホーム",
+  "tab.events": "履歴",
+  "tab.settings": "設定",
+
+  "home.status.normal.title": "異常なし",
+  "home.status.normal.detail": "現在、近隣に警報はありません",
+  "home.status.caution.title": "最近の地震",
+  "home.status.caution.detail": "{hypocenter} M{mag}",
+  "home.status.alert.title": "緊急地震速報",
+  "home.status.alert.detail": "{hypocenter} M{mag} — 直ちに身を守ってください",
+  "home.sources.label": "{connected}/{total} ソースを監視中",
+  "home.testAlert.button": "警報音と通知をテスト",
+  "home.lastEvent.none": "まだ記録はありません。",
+  "home.viewAll": "すべての履歴を見る",
+
+  "events.empty": "地震の記録はまだありません。",
+  "events.magnitudeShort": "M",
+  "events.depth": "深さ {depth} km",
+  "events.revisions.title": "続報履歴",
+  "events.detail.hide": "閉じる",
+
+  "alert.badge.new": "緊急地震速報",
+  "alert.badge.updated": "続報",
+  "alert.badge.final": "最終報",
+  "alert.badge.cancelled": "取消",
+  "alert.badge.report": "地震情報",
+  "alert.badge.training": "訓練配信・実際の地震ではありません",
+
+  "settings.section.language": "言語",
+  "settings.language.system": "システムに従う",
+  "settings.language.en": "English",
+  "settings.language.ja": "日本語",
+  "settings.language.zh-Hans": "简体中文",
+
+  "settings.section.location": "位置情報",
+  "settings.location.city": "都市",
+  "settings.location.none": "未設定（震度のみでフィルタ）",
+  "settings.location.customLat": "緯度",
+  "settings.location.customLon": "経度",
+  "settings.location.radius": "通知半径（km）",
+  "settings.location.radius.hint": "この距離内の地震のみ通知します。空欄で距離を無視。",
+
+  "settings.section.sources": "データソース",
+  "settings.sources.eew": "緊急地震速報",
+  "settings.sources.reports": "通常の地震情報",
+  "settings.source.jma_eew": "日本（気象庁）",
+  "settings.source.sc_eew": "中国・四川省",
+  "settings.source.cenc_eew": "中国（全国・CENC）",
+  "settings.source.fj_eew": "中国・福建省",
+  "settings.source.cq_eew": "中国・重慶市",
+  "settings.source.cenc_eqlist": "中国（CENC 地震情報）",
+  "settings.source.jma_eqlist": "日本（気象庁 地震情報）",
+
+  "settings.section.threshold": "最小マグニチュード",
+  "settings.threshold.hint": "この震度以上の地震のみ通知します。",
+
+  "settings.section.notifications": "通知",
+  "settings.alarmEnabled": "警報音を自動再生",
+  "settings.alarmEnabled.detail": "フィルター条件に一致した実際の地震を受信すると、警報音を自動で再生します。",
+  "settings.alarmVolume": "警報音の音量",
+  "settings.alarmVolume.detail": "{volume}% — テスト警報でスピーカーを確認できます。",
+  "settings.includeTestAlerts": "訓練・テスト配信を受信する",
+  "settings.includeTestAlerts.detail": "気象庁などが動作確認のために訓練配信を行うことがあります。",
+  "settings.notifyAtNight": "夜間も通知する",
+  "settings.notifyAtNight.detail": "オフにすると、通常の地震情報は現地時間22:00〜07:00の間は届きません。緊急地震速報は常に届きます。",
+  "settings.launchAtLogin": "ログイン時に自動起動",
+  "settings.launchAtLogin.detail": "サインイン時に自動で監視を開始します。",
+
+  "settings.section.about": "このアプリについて",
+  "settings.about.dataSource": "地震データは Wolfx Open API 経由で提供されており、気象庁（JMA）および中国の地震ネットワーク（CENC・四川・福建・重慶）の情報を集約しています。",
+  "disclaimer.notOfficial": "QuakeSignal は独立したアプリであり、気象庁・CENC・その他の政府機関とは一切関係ありません。実際の地震の際は必ず公式の情報に従ってください。",
+  "settings.about.repo": "GitHub でソースコードを見る",
+  "settings.save": "保存",
+  "settings.saved": "保存しました",
+
+  "alert.countdown.label": "推定到達時間",
+  "alert.countdown.unknown": "距離不明",
+  "alert.countdown.arrived": "揺れが始まっている可能性があります",
+  "alert.dropCoverHoldOn": "姿勢を低く、頭を守り、動かない",
+  "alert.training.note": "これは訓練配信です。実際の地震ではありません。",
+  "alert.dismiss": "閉じる",
+
+  "status.connected": "接続中",
+  "status.disconnected": "再接続中…",
+};
