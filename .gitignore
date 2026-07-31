@@ -6,6 +6,7 @@ backend/data/
 backend/secrets/
 backend/.env
 npm-debug.log*
+extension/dist/
 
 # iOS / Xcode
 ios/**/xcuserdata/

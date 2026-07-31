@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QuakeSignal</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <img src="icons/48.png" alt="" />
+      <div><h1>QuakeSignal</h1><p data-i18n="extensionLabel"></p></div>
+      <span id="connection" class="connection"></span>
+    </header>
+    <main>
+      <section id="status-card" class="status-card">
+        <div class="status-icon">✓</div>
+        <div><h2 id="status-title"></h2><p id="status-detail"></p></div>
+      </section>
+
+      <div class="section-heading">
+        <h2 data-i18n="recentEvents"></h2>
+        <button id="refresh" class="icon-button" data-i18n-title="refresh" aria-label="Refresh">↻</button>
+      </div>
+      <section id="events" class="events"></section>
+
+      <section class="settings-card">
+        <h2 data-i18n="alerts"></h2>
+        <label><span data-i18n="desktopNotifications"></span><input id="notifications" type="checkbox" /></label>
+        <label><span data-i18n="alarmSound"></span><input id="alarm" type="checkbox" /></label>
+        <label class="magnitude-row">
+          <span data-i18n="minimumMagnitude"></span>
+          <select id="magnitude">
+            <option value="3">M3.0+</option><option value="4">M4.0+</option>
+            <option value="4.5">M4.5+</option><option value="5">M5.0+</option>
+            <option value="6">M6.0+</option>
+          </select>
+        </label>
+        <button id="test-alert" class="secondary" data-i18n="testAlert"></button>
+      </section>
+
+      <p class="disclaimer" data-i18n="disclaimer"></p>
+      <nav>
+        <a href="https://github.com/TastyHeadphones/QuakeSignal/releases/tag/v0.1.0" target="_blank" data-i18n="desktopApps"></a>
+        <a href="https://github.com/TastyHeadphones/QuakeSignal" target="_blank" data-i18n="sourceCode"></a>
+      </nav>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

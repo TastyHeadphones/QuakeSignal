@@ -1,0 +1,23 @@
+{
+  "appName": { "message": "QuakeSignal – 地震モニター" },
+  "appDescription": { "message": "無料・オープンソース。地震情報へ直接接続し、ブラウザ通知と警報音でお知らせします。" },
+  "extensionLabel": { "message": "ブラウザ地震モニター" },
+  "recentEvents": { "message": "最近の地震" },
+  "refresh": { "message": "更新" },
+  "alerts": { "message": "通知設定" },
+  "desktopNotifications": { "message": "ブラウザ通知" },
+  "alarmSound": { "message": "警報音" },
+  "minimumMagnitude": { "message": "通知する最小マグニチュード" },
+  "testAlert": { "message": "警報音と通知をテスト" },
+  "testSent": { "message": "テストを送信しました" },
+  "testLocation": { "message": "テスト地震" },
+  "desktopApps": { "message": "デスクトップ版" },
+  "sourceCode": { "message": "ソースコード" },
+  "noActiveWarning": { "message": "現在、警報はありません" },
+  "activeWarning": { "message": "緊急地震速報" },
+  "monitoringSources": { "message": "地震情報を直接監視しています。" },
+  "eventSummary": { "message": "$1 · M$2" },
+  "sourcesConnected": { "message": "$1/$2 接続" },
+  "waitingForData": { "message": "地震情報へ接続しています…" },
+  "disclaimer": { "message": "本サービスは非公式です。情報は遅延・欠落・訂正・誤りを含む場合があります。防災・避難判断は必ず公的機関の情報に従ってください。" }
+}

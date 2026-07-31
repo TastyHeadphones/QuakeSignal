@@ -10,11 +10,12 @@
 
 # QuakeSignal
 
-### Earthquake reports, nearby alerts, and preparedness for iPhone, macOS, and Windows.
+### Earthquake reports, nearby alerts, and preparedness for iPhone, Chrome, macOS, and Windows.
 
 [![iOS 17+](https://img.shields.io/badge/iOS-17%2B-0E63C4?logo=apple&logoColor=white)](ios/)
 [![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](ios/QuakeSignal/)
 [![Tauri 2](https://img.shields.io/badge/desktop-Tauri_2-24C8DB?logo=tauri&logoColor=white)](desktop/)
+[![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest_V3-4285F4?logo=googlechrome&logoColor=white)](extension/)
 [![Cloudflare Workers](https://img.shields.io/badge/backend-Cloudflare_Workers-F38020?logo=cloudflare&logoColor=white)](backend/cloudflare/)
 [![Languages](https://img.shields.io/badge/languages-English_·_日本語_·_简体中文-0A3D73)](#localization)
 [![MIT License](https://img.shields.io/badge/license-MIT-30B14F)](LICENSE)
@@ -47,6 +48,7 @@ a local-first macOS and Windows monitor with direct feeds and audible alarms.
 | ⚠️ | Clear alert states | Separates preliminary, updated, final, cancelled, and training messages so color is never the only signal. |
 | 🔔 | Background delivery | Uses APNs for notifications when the app is backgrounded, locked, or terminated. |
 | 🖥️ | Local-first desktop | Connects directly to upstream WebSockets, stores data locally, and can sound a native alarm from the tray—without the QuakeSignal backend. |
+| 🌐 | Chrome extension | Monitors the same direct feeds from Chrome, stores history locally, and supports browser notifications and an optional alarm sound. |
 | 🗺️ | Explore events | Includes a filterable list, epicenter map, event detail, and report-revision timeline. |
 | 🧰 | Offline preparedness | Provides drop-cover-hold-on guidance, situation-specific actions, an emergency checklist, and family check-in notes. |
 | ♿ | Accessible by design | Supports Dynamic Type, VoiceOver-friendly labels, 44pt targets, system appearance, and high-contrast status treatments. |
@@ -92,18 +94,27 @@ flowchart LR
         NativeAlarm["Native alarm + notification"]
     end
 
+    subgraph Chrome["QuakeSignal · Chrome extension"]
+        BrowserDirect["Direct WebSockets"]
+        BrowserLocal[("Local browser storage")]
+        BrowserAlarm["Notification + alarm"]
+    end
+
     Sources --> Foreground
     Sources --> Watcher --> Filter
     DB --> Filter --> Background
     Guide --- App
     Sources --> Direct --> Local
     Direct --> NativeAlarm
+    Sources --> BrowserDirect --> BrowserLocal
+    BrowserDirect --> BrowserAlarm
 ```
 
 ### Repository map
 
 - [`ios/`](ios/) — native SwiftUI app for iOS 17+, built with Swift 6
 - [`desktop/`](desktop/) — local-first Tauri app for macOS and Windows, with direct feeds, SQLite, and native alarms
+- [`extension/`](extension/) — Manifest V3 Chrome extension with direct feeds, local history, browser notifications, and alarm sound
 - [`assets/app-icon.svg`](assets/app-icon.svg) — resolution-independent source for the design artifact's Epicenter ripples app icon
 - [`backend/cloudflare/`](backend/cloudflare/) — notification-only Worker, Durable Object watcher, D1 migration, APNs delivery, and smoke test
 - [`backend/`](backend/) — local Node.js notification-pipeline development tools
@@ -146,6 +157,10 @@ npm run test:remote -- https://quakesignal-api.hopeso.workers.dev
 cd ../../desktop
 npm run build
 cargo test --locked --manifest-path src-tauri/Cargo.toml
+
+cd ../extension
+npm test
+npm run package
 ```
 
 The remote smoke test checks notification-watcher health, device-registration validation, and verifies that public earthquake history/detail/live-relay endpoints stay disabled.

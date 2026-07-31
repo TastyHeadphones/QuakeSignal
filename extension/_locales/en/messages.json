@@ -1,0 +1,23 @@
+{
+  "appName": { "message": "QuakeSignal – Earthquake Monitor" },
+  "appDescription": { "message": "Free, open-source earthquake reports and browser alerts with direct local-first data feeds." },
+  "extensionLabel": { "message": "Browser earthquake monitor" },
+  "recentEvents": { "message": "Recent events" },
+  "refresh": { "message": "Refresh" },
+  "alerts": { "message": "Alert settings" },
+  "desktopNotifications": { "message": "Browser notifications" },
+  "alarmSound": { "message": "Alarm sound" },
+  "minimumMagnitude": { "message": "Minimum magnitude" },
+  "testAlert": { "message": "Test alarm & notification" },
+  "testSent": { "message": "Test sent" },
+  "testLocation": { "message": "Test earthquake" },
+  "desktopApps": { "message": "Desktop apps" },
+  "sourceCode": { "message": "Source code" },
+  "noActiveWarning": { "message": "No active warning" },
+  "activeWarning": { "message": "Active earthquake warning" },
+  "monitoringSources": { "message": "Monitoring direct earthquake feeds." },
+  "eventSummary": { "message": "$1 · M$2" },
+  "sourcesConnected": { "message": "$1/$2 live" },
+  "waitingForData": { "message": "Connecting to earthquake feeds…" },
+  "disclaimer": { "message": "Independent, unofficial service. Data may be delayed, incomplete, revised, or inaccurate. Always follow official emergency information." }
+}

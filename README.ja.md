@@ -25,19 +25,21 @@
 
 ## アーキテクチャ
 
-iOS・macOS・Windows は、地震履歴とフォアグラウンド更新を Wolfx から直接取得します。
+iOS・Chrome・macOS・Windows は、地震履歴とフォアグラウンド更新を Wolfx から直接取得します。
 Cloudflare の役割は通知だけです。iOS がバックグラウンドまたは終了中でも警報を検知し、
 条件に合う端末へ APNs を送信します。
 
 ```mermaid
 flowchart LR
-    wolfx["Wolfx Open API"] --> direct["iOS / Desktop\n直接 HTTP + WebSocket"]
+    wolfx["Wolfx Open API"] --> direct["iOS / Chrome / Desktop\n直接 HTTP + WebSocket"]
     wolfx --> watcher["Cloudflare\n通知専用ウォッチャー"]
     prefs[("D1 通知設定")] --> watcher
     watcher --> apns["APNs"] --> ios["バックグラウンドの iOS"]
 ```
 
 - [`ios/`](ios/) —— SwiftUI アプリ（iOS 17+、Swift 6）。Xcode プロジェクトは XcodeGen で生成しコミット済み
+- [`desktop/`](desktop/) —— macOS / Windows 向け Tauri アプリ。直接接続、端末内履歴、ネイティブ警報に対応
+- [`extension/`](extension/) —— Manifest V3 Chrome 拡張。直接接続、ブラウザ内履歴、通知、警報音に対応
 - [`backend/cloudflare/`](backend/cloudflare/) —— 通知専用サービス。APNs 設定は [backend/README.md](backend/README.md) を参照
 - [`docs/WOLFX_API.md`](docs/WOLFX_API.md) —— 実際のレスポンスで検証した Wolfx API のフィールドリファレンス
 - [`docs/DESIGN_PROMPT.md`](docs/DESIGN_PROMPT.md) —— 英語のプロダクト/デザイン仕様書
@@ -48,6 +50,9 @@ flowchart LR
 い。地震データは Wolfx から直接取得します。Cloudflare は通知登録にのみ使用されます。
 プッシュ通知には実機と実際の APNs 認証情報が必要です —— 詳細は
 [backend/README.md](backend/README.md)。
+
+**Chrome** —— `chrome://extensions` でデベロッパーモードを有効にし、
+**パッケージ化されていない拡張機能を読み込む**から `extension/` を選択します。
 
 ## 現在の状況
 

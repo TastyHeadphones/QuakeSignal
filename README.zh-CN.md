@@ -25,19 +25,21 @@
 
 ## 整体架构
 
-iOS、macOS 和 Windows 的地震历史与前台实时数据都直接从 Wolfx 获取。
+iOS、Chrome、macOS 和 Windows 的地震历史与前台实时数据都直接从 Wolfx 获取。
 Cloudflare 只负责通知：当 iOS 在后台或已退出时继续监测警报，并通过 APNs
 向符合订阅条件的设备发送推送。
 
 ```mermaid
 flowchart LR
-    wolfx["Wolfx Open API"] --> direct["iOS / Desktop\n直接 HTTP + WebSocket"]
+    wolfx["Wolfx Open API"] --> direct["iOS / Chrome / Desktop\n直接 HTTP + WebSocket"]
     wolfx --> watcher["Cloudflare\n通知专用监测器"]
     prefs[("D1 通知设置")] --> watcher
     watcher --> apns["APNs"] --> ios["后台 iOS"]
 ```
 
 - [`ios/`](ios/) —— SwiftUI 应用（iOS 17+，Swift 6），Xcode 工程通过 XcodeGen 生成并已提交
+- [`desktop/`](desktop/) —— macOS / Windows Tauri 应用，支持直连、本地历史和原生警报
+- [`extension/`](extension/) —— Manifest V3 Chrome 扩展，支持直连、浏览器本地历史、通知和警报声
 - [`backend/cloudflare/`](backend/cloudflare/) —— 通知专用服务，APNs 配置见 [backend/README.md](backend/README.md)
 - [`docs/WOLFX_API.md`](docs/WOLFX_API.md) —— 对照真实返回数据核实过的 Wolfx 接口字段文档
 - [`docs/DESIGN_PROMPT.md`](docs/DESIGN_PROMPT.md) —— 英文产品/设计说明书
@@ -47,6 +49,8 @@ flowchart LR
 **iOS** —— 用 Xcode 打开 `ios/QuakeSignal.xcodeproj`，选 Simulator 运行即可。
 地震数据直接从 Wolfx 获取；Cloudflare 仅用于通知注册。
 推送通知需要真机 + 真实 APNs 凭证，见 [backend/README.md](backend/README.md)。
+
+**Chrome** —— 打开 `chrome://extensions`，启用开发者模式，点击“加载已解压的扩展程序”并选择 `extension/`。
 
 ## 当前状态
 

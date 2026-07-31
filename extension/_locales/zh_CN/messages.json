@@ -1,0 +1,23 @@
+{
+  "appName": { "message": "QuakeSignal – 地震监测" },
+  "appDescription": { "message": "免费开源，直接连接地震数据源，通过浏览器通知和警报声提醒。" },
+  "extensionLabel": { "message": "浏览器地震监测" },
+  "recentEvents": { "message": "近期地震" },
+  "refresh": { "message": "刷新" },
+  "alerts": { "message": "提醒设置" },
+  "desktopNotifications": { "message": "浏览器通知" },
+  "alarmSound": { "message": "警报声" },
+  "minimumMagnitude": { "message": "最低震级" },
+  "testAlert": { "message": "测试警报和通知" },
+  "testSent": { "message": "测试已发送" },
+  "testLocation": { "message": "测试地震" },
+  "desktopApps": { "message": "桌面版" },
+  "sourceCode": { "message": "源代码" },
+  "noActiveWarning": { "message": "当前无预警" },
+  "activeWarning": { "message": "地震预警" },
+  "monitoringSources": { "message": "正在直接监测地震数据源。" },
+  "eventSummary": { "message": "$1 · M$2" },
+  "sourcesConnected": { "message": "$1/$2 已连接" },
+  "waitingForData": { "message": "正在连接地震数据源…" },
+  "disclaimer": { "message": "本服务并非官方服务。数据可能延迟、缺失、修订或不准确。防灾和避险请务必遵循官方信息。" }
+}
