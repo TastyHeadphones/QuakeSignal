@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="280" viewBox="0 0 440 280">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071a31"/><stop offset="1" stop-color="#1768b5"/>
+    </linearGradient>
+  </defs>
+  <rect width="440" height="280" fill="url(#tile)"/>
+  <g fill="none" stroke="#63b7ff" stroke-opacity=".2" stroke-width="2">
+    <circle cx="82" cy="230" r="80"/><circle cx="82" cy="230" r="145"/><circle cx="82" cy="230" r="210"/>
+  </g>
+  <path d="M0 220H52l12-27 15 56 17-42 18 27 17-14h52l16-34 17 67 18-47 22 25h186" fill="none" stroke="#55b8ff" stroke-width="4" opacity=".75"/>
+  <g transform="translate(50 50)">
+    <rect width="112" height="112" rx="27" fill="#1768b5" stroke="#69adf0" stroke-width="2"/>
+    <path d="M23 70a33 33 0 0 1 66 0M12 70a44 44 0 0 1 88 0" fill="none" stroke="#dceeff" stroke-width="8"/>
+    <circle cx="56" cy="70" r="8" fill="white"/>
+  </g>
+  <text x="188" y="105" fill="white" font-family="Arial, sans-serif" font-size="31" font-weight="700">QuakeSignal</text>
+  <text x="190" y="140" fill="#9ed2ff" font-family="Arial, sans-serif" font-size="18">Earthquake monitor</text>
+  <text x="190" y="171" fill="#d8ebff" font-family="Arial, sans-serif" font-size="14">Free · Local · Open source</text>
+</svg>

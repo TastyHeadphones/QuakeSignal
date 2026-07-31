@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071a31"/>
+      <stop offset="0.55" stop-color="#0a3d73"/>
+      <stop offset="1" stop-color="#1768b5"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#00152c" flood-opacity=".42"/>
+    </filter>
+  </defs>
+  <rect width="1280" height="800" fill="url(#bg)"/>
+  <g fill="none" stroke="#48a5ff" stroke-opacity=".14" stroke-width="2">
+    <circle cx="180" cy="655" r="150"/><circle cx="180" cy="655" r="250"/><circle cx="180" cy="655" r="350"/>
+  </g>
+  <path d="M0 652 L72 652 88 620 104 690 124 630 142 665 160 650 215 650 234 616 251 686 270 642 292 652 520 652" fill="none" stroke="#55b8ff" stroke-width="4" opacity=".72"/>
+
+  <g transform="translate(74 76)">
+    <rect width="96" height="96" rx="23" fill="#1768b5" stroke="#69adf0" stroke-width="2"/>
+    <path d="M20 58a28 28 0 0 1 56 0M10 58a38 38 0 0 1 76 0" fill="none" stroke="#dceeff" stroke-width="7"/>
+    <circle cx="48" cy="58" r="7" fill="white"/>
+  </g>
+  <text x="194" y="123" fill="white" font-family="Arial, sans-serif" font-size="44" font-weight="700">QuakeSignal for Chrome</text>
+  <text x="76" y="228" fill="white" font-family="Arial, sans-serif" font-size="52" font-weight="700">Earthquake alerts.</text>
+  <text x="76" y="290" fill="#8fc9ff" font-family="Arial, sans-serif" font-size="52" font-weight="700">Direct, local, open.</text>
+  <text x="78" y="350" fill="#d8ebff" font-family="Arial, sans-serif" font-size="22">Free and open source · No account · No tracking</text>
+
+  <g transform="translate(78 408)" font-family="Arial, sans-serif">
+    <g><rect width="220" height="54" rx="27" fill="#ffffff18" stroke="#76baf733"/><text x="28" y="35" fill="white" font-size="18">◉  Direct feeds</text></g>
+    <g transform="translate(0 70)"><rect width="220" height="54" rx="27" fill="#ffffff18" stroke="#76baf733"/><text x="28" y="35" fill="white" font-size="18">◷  Local history</text></g>
+    <g transform="translate(0 140)"><rect width="220" height="54" rx="27" fill="#ffffff18" stroke="#76baf733"/><text x="28" y="35" fill="white" font-size="18">♢  Native alerts</text></g>
+  </g>
+  <text x="78" y="746" fill="#afcbe6" font-family="Arial, sans-serif" font-size="15">Independent, unofficial service. Always follow official emergency information.</text>
+
+  <g transform="translate(750 54)" filter="url(#shadow)" font-family="Arial, sans-serif">
+    <rect width="454" height="692" rx="24" fill="#f4f7fb"/>
+    <path d="M0 24Q0 0 24 0H430Q454 0 454 24V104H0Z" fill="#0e5699"/>
+    <g transform="translate(24 22)">
+      <rect width="56" height="56" rx="14" fill="#1768b5"/>
+      <path d="M12 35a16 16 0 0 1 32 0M7 35a21 21 0 0 1 42 0" fill="none" stroke="white" stroke-width="4"/>
+      <circle cx="28" cy="35" r="4" fill="white"/>
+    </g>
+    <text x="96" y="48" fill="white" font-size="23" font-weight="700">QuakeSignal</text>
+    <text x="96" y="72" fill="#d8ebff" font-size="13">Browser earthquake monitor</text>
+    <rect x="353" y="33" width="76" height="28" rx="14" fill="#2bb85a" fill-opacity=".22"/>
+    <text x="366" y="52" fill="#caffd7" font-size="12">7/7 live</text>
+
+    <g transform="translate(18 124)">
+      <rect width="418" height="92" rx="16" fill="white" stroke="#dfe8f2"/>
+      <rect width="5" height="92" rx="3" fill="#30b14f"/>
+      <circle cx="40" cy="46" r="18" fill="#e8f8ed"/>
+      <text x="33" y="54" fill="#219345" font-size="22" font-weight="700">✓</text>
+      <text x="70" y="39" fill="#10243e" font-size="16" font-weight="700">No active warning</text>
+      <text x="70" y="64" fill="#66788d" font-size="13">Monitoring direct earthquake feeds.</text>
+    </g>
+    <text x="23" y="253" fill="#10243e" font-size="16" font-weight="700">Recent events</text>
+    <text x="356" y="253" fill="#71869b" font-size="11">SAMPLE DATA</text>
+    <g transform="translate(18 271)">
+      <rect width="418" height="214" rx="16" fill="white" stroke="#dfe8f2"/>
+      <g transform="translate(14 15)"><rect width="56" height="34" rx="9" fill="#f59b23"/><text x="12" y="23" fill="white" font-size="13" font-weight="700">M5.2</text><text x="84" y="17" fill="#10243e" font-size="14" font-weight="700">Amami Oshima offshore</text><text x="84" y="37" fill="#75869a" font-size="11">Today, 10:42 · 20 km · jma_eqlist</text></g>
+      <line x1="14" y1="68" x2="404" y2="68" stroke="#edf1f6"/>
+      <g transform="translate(14 84)"><rect width="56" height="34" rx="9" fill="#1f74c9"/><text x="12" y="23" fill="white" font-size="13" font-weight="700">M4.8</text><text x="84" y="17" fill="#10243e" font-size="14" font-weight="700">Noto Peninsula</text><text x="84" y="37" fill="#75869a" font-size="11">Today, 09:16 · 10 km · jma_eqlist</text></g>
+      <line x1="14" y1="137" x2="404" y2="137" stroke="#edf1f6"/>
+      <g transform="translate(14 153)"><rect width="56" height="34" rx="9" fill="#f59b23"/><text x="12" y="23" fill="white" font-size="13" font-weight="700">M5.6</text><text x="84" y="17" fill="#10243e" font-size="14" font-weight="700">Eastern Taiwan</text><text x="84" y="37" fill="#75869a" font-size="11">Yesterday · 36 km · cenc_eqlist</text></g>
+    </g>
+    <g transform="translate(18 504)">
+      <rect width="418" height="142" rx="16" fill="white" stroke="#dfe8f2"/>
+      <text x="14" y="28" fill="#10243e" font-size="15" font-weight="700">Alert settings</text>
+      <line x1="14" y1="40" x2="404" y2="40" stroke="#edf1f6"/>
+      <text x="14" y="68" fill="#30475f" font-size="13">Browser notifications</text><rect x="367" y="52" width="36" height="20" rx="10" fill="#1768b5"/><circle cx="393" cy="62" r="8" fill="white"/>
+      <text x="14" y="100" fill="#30475f" font-size="13">Alarm sound</text><rect x="367" y="84" width="36" height="20" rx="10" fill="#1768b5"/><circle cx="393" cy="94" r="8" fill="white"/>
+      <text x="14" y="128" fill="#30475f" font-size="13">Minimum magnitude</text><text x="362" y="128" fill="#1768b5" font-size="13" font-weight="700">M4.5+</text>
+    </g>
+  </g>
+</svg>
