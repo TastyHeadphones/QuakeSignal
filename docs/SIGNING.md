@@ -249,12 +249,28 @@ These values are supplied to CI. None of them is a private key.
 | Variable | `SIGNPATH_ARTIFACT_CONFIG_APP` | Artifact configuration for `QuakeSignal.exe` |
 | Variable | `SIGNPATH_ARTIFACT_CONFIG_INSTALLERS` | Artifact configuration for the NSIS and MSI installers |
 
-Both artifact configurations have a `<zip-file>` root element, because
-`actions/upload-artifact` uploads a ZIP archive.
-
 If `SIGNPATH_API_TOKEN` is present but any of the variables is missing, the
 release workflow fails immediately with the names of the missing variables,
 before the Rust build runs — rather than failing later inside the signing step.
+
+### Artifact configurations
+
+The two artifact configurations are versioned in this repository:
+
+| File | Variable | Signing pass |
+|---|---|---|
+| [`.signpath/artifact-configurations/windows-app.xml`](../.signpath/artifact-configurations/windows-app.xml) | `SIGNPATH_ARTIFACT_CONFIG_APP` | 1 — application binary |
+| [`.signpath/artifact-configurations/windows-installers.xml`](../.signpath/artifact-configurations/windows-installers.xml) | `SIGNPATH_ARTIFACT_CONFIG_INSTALLERS` | 2 — NSIS installer and MSI |
+
+SignPath does **not** read these from the repository — only the signing policy
+under `.signpath/policies/` is read from the repo. Paste each file's contents
+into the SignPath web UI under *Project → Artifact Configurations → Add →
+Enter XML*, and give each the slug named in the table above.
+
+Both use a `<zip-file>` root element, because `actions/upload-artifact` uploads
+a ZIP archive. The installer configuration wildcards the version segment so it
+survives version bumps. `QuakeSignal.exe` inside the installers is deliberately
+not re-signed, because pass 1 already signed it.
 
 ---
 

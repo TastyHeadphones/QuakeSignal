@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration — QuakeSignal Windows application binary.
+
+  Referenced by the repository variable SIGNPATH_ARTIFACT_CONFIG_APP.
+  Used by the FIRST signing pass in .github/workflows/desktop-release.yml.
+
+  SignPath does not read this file from the repository. It is kept here as the
+  versioned source of truth; paste its contents into the SignPath web UI under
+  Project > Artifact Configurations > Add > Enter XML, and give that
+  configuration a slug matching SIGNPATH_ARTIFACT_CONFIG_APP.
+
+  Root element is <zip-file> because actions/upload-artifact uploads the staged
+  directory as a ZIP archive.
+
+  The workflow normalises the staged file name to QuakeSignal.exe regardless of
+  whether the compiler emitted QuakeSignal.exe or desktop.exe, so this path is
+  stable across builds and needs no wildcard.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="QuakeSignal.exe">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration — QuakeSignal Windows installers.
+
+  Referenced by the repository variable SIGNPATH_ARTIFACT_CONFIG_INSTALLERS.
+  Used by the SECOND signing pass in .github/workflows/desktop-release.yml.
+
+  SignPath does not read this file from the repository. It is kept here as the
+  versioned source of truth; paste its contents into the SignPath web UI under
+  Project > Artifact Configurations > Add > Enter XML, and give that
+  configuration a slug matching SIGNPATH_ARTIFACT_CONFIG_INSTALLERS.
+
+  Root element is <zip-file> because actions/upload-artifact uploads the staged
+  directory as a ZIP archive.
+
+  The version segment is wildcarded so this configuration survives version
+  bumps. Real file names for v0.1.0 were:
+    QuakeSignal_0.1.0_x64-setup.exe   (NSIS)
+    QuakeSignal_0.1.0_x64_en-US.msi   (MSI)
+
+  QuakeSignal.exe inside both installers was already signed by the first pass,
+  so it is deliberately not re-signed here.
+
+  Optional hardening: an <authenticode-verify /> on the embedded binary inside
+  <msi-file> would prove the first pass succeeded. It is omitted because it
+  requires the exact internal WiX directory path, which should be read off a
+  real MSI rather than guessed — the SignPath UI can generate it for you via
+  Add > Upload an artifact sample.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="QuakeSignal_*_x64-setup.exe">
+      <authenticode-sign />
+    </pe-file>
+    <msi-file path="QuakeSignal_*_x64_en-US.msi">
+      <authenticode-sign />
+    </msi-file>
+  </zip-file>
+</artifact-configuration>
