@@ -252,6 +252,10 @@ These values are supplied to CI. None of them is a private key.
 Both artifact configurations have a `<zip-file>` root element, because
 `actions/upload-artifact` uploads a ZIP archive.
 
+If `SIGNPATH_API_TOKEN` is present but any of the variables is missing, the
+release workflow fails immediately with the names of the missing variables,
+before the Rust build runs — rather than failing later inside the signing step.
+
 ---
 
 ## Attribution

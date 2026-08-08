@@ -100,6 +100,36 @@ jobs:
           echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
           echo "Windows code signing enabled: $enabled"
 
+      - name: Validate SignPath configuration
+        if: env.SIGN_ENABLED == 'true'
+        shell: bash
+        env:
+          ORG_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          CONFIG_APP: ${{ vars.SIGNPATH_ARTIFACT_CONFIG_APP }}
+          CONFIG_INSTALLERS: ${{ vars.SIGNPATH_ARTIFACT_CONFIG_INSTALLERS }}
+        run: |
+          # The API token alone is not enough. Fail here with a list of what is
+          # missing, rather than deep inside the signing action with an opaque
+          # error after a full Rust build has already run.
+          missing=()
+          [ -n "$ORG_ID" ]            || missing+=("SIGNPATH_ORGANIZATION_ID")
+          [ -n "$PROJECT_SLUG" ]      || missing+=("SIGNPATH_PROJECT_SLUG")
+          [ -n "$POLICY_SLUG" ]       || missing+=("SIGNPATH_SIGNING_POLICY_SLUG")
+          [ -n "$CONFIG_APP" ]        || missing+=("SIGNPATH_ARTIFACT_CONFIG_APP")
+          [ -n "$CONFIG_INSTALLERS" ] || missing+=("SIGNPATH_ARTIFACT_CONFIG_INSTALLERS")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::SIGNPATH_API_TOKEN is set, but these repository variables are missing: ${missing[*]}"
+            echo "::error::Add them under Settings > Secrets and variables > Actions > Variables. See docs/SIGNING.md."
+            exit 1
+          fi
+          echo "SignPath configuration is complete:"
+          echo "  project-slug:                 $PROJECT_SLUG"
+          echo "  signing-policy-slug:          $POLICY_SLUG"
+          echo "  artifact-config (app):        $CONFIG_APP"
+          echo "  artifact-config (installers): $CONFIG_INSTALLERS"
+
       - name: Install frontend dependencies
         working-directory: desktop
         run: npm ci
