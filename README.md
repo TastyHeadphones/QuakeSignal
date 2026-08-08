@@ -262,16 +262,17 @@ Every release publishes a `SHA256SUMS.txt` covering all of its artifacts.
 Desktop binaries are built only by GitHub Actions from a version tag; nothing is
 ever uploaded from a maintainer's machine.
 
-Windows signing through SignPath Foundation is configured but not yet active,
-and macOS builds are not yet notarized. Each release states its signing status.
+QuakeSignal uses the SignPath Foundation for Windows code signing. The signing
+key is held in SignPath's hardware security module and is never present in this
+repository, in CI, or on a maintainer's machine.
 
-<!--
-TODO(signpath): uncomment once the SignPath Foundation application is approved
-and the first signed release has shipped. SignPath requires this attribution to
-appear on the project home page and download pages.
+Free code signing provided by [SignPath.io](https://signpath.io?utm_source=foundation&utm_medium=github&utm_campaign=quakesignal),
+certificate by [SignPath Foundation](https://signpath.org/).
 
-Free code signing provided by [SignPath.io](https://signpath.io?utm_source=foundation&utm_medium=github&utm_campaign=quakesignal), certificate by [SignPath Foundation](https://signpath.org/).
--->
+> [!NOTE]
+> The SignPath Foundation application is still pending, so Windows signing is
+> configured but not yet active, and macOS builds are not yet notarized. Every
+> release states its own signing status.
 
 ## License
 
