@@ -13,26 +13,46 @@
   Root element is <zip-file> because actions/upload-artifact uploads the staged
   directory as a ZIP archive.
 
-  The version segment is wildcarded so this configuration survives version
-  bumps. Real file names for v0.1.0 were:
-    QuakeSignal_0.1.0_x64-setup.exe   (NSIS)
-    QuakeSignal_0.1.0_x64_en-US.msi   (MSI)
+  METADATA RESTRICTIONS
+  SignPath Foundation requires that all signed binaries have metadata
+  attributes set and enforced, with the product name equal to the project name
+  and the product version identical across a build. The attributes below are
+  enforced by SignPath: signing fails if a submitted file does not match.
+
+  Verified against a real CI build of v0.1.0:
+    NSIS  ProductName = QuakeSignal, ProductVersion = 0.1.0, FileVersion = 0.1.0
+    MSI   Subject     = QuakeSignal, Author = UniSphereco LLC
+
+  company-name is NOT enforced on the NSIS installer: unlike the application
+  binary, it carries no CompanyName field.
+
+  CAUTION: the MSI author attribute below is the WiX Manufacturer property,
+  which Tauri takes from bundle.publisher in desktop/src-tauri/tauri.conf.json.
+  If that publisher value is ever changed, this attribute must change with it
+  or every release will fail signing. See docs/SIGNING.md.
+
+  File names embed ${version} rather than a wildcard so the artifact names and
+  the enforced metadata version are guaranteed to agree.
 
   QuakeSignal.exe inside both installers was already signed by the first pass,
   so it is deliberately not re-signed here.
-
-  Optional hardening: an <authenticode-verify /> on the embedded binary inside
-  <msi-file> would prove the first pass succeeded. It is omitted because it
-  requires the exact internal WiX directory path, which should be read off a
-  real MSI rather than guessed — the SignPath UI can generate it for you via
-  Add > Upload an artifact sample.
 -->
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <!-- Supplied by the release workflow from tauri.conf.json, so the version
+         cannot drift between the two signing passes. -->
+    <parameter name="version" required="true" />
+  </parameters>
   <zip-file>
-    <pe-file path="QuakeSignal_*_x64-setup.exe">
+    <pe-file path="QuakeSignal_${version}_x64-setup.exe"
+             product-name="QuakeSignal"
+             product-version="${version}"
+             file-version="${version}">
       <authenticode-sign />
     </pe-file>
-    <msi-file path="QuakeSignal_*_x64_en-US.msi">
+    <msi-file path="QuakeSignal_${version}_x64_en-US.msi"
+              subject="QuakeSignal"
+              author="UniSphereco LLC">
       <authenticode-sign />
     </msi-file>
   </zip-file>

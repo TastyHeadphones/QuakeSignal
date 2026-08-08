@@ -6,72 +6,180 @@
 
 <div align="center">
 
+<img src="ios/QuakeSignal/Assets.xcassets/AppIcon.appiconset/icon-1024.png" width="112" alt="QuakeSignal 应用图标" />
+
 # 震息 · QuakeSignal
 
-**原生 iOS 地震预警应用 —— 支持英语、日本語、简体中文。**
-通过 [Wolfx Open API](https://wolfx.jp) 转发日本气象厅（JMA）、中国地震台网中心
-（CENC）以及四川、福建、重庆地震局的官方预警，在预警发布后的几秒内把警报送到用户
-面前——哪怕应用已经被关闭。
+### 面向 iPhone、Chrome、macOS 与 Windows 的地震速报、附近预警与防灾指南。
+
+[![iOS 17+](https://img.shields.io/badge/iOS-17%2B-0E63C4?logo=apple&logoColor=white)](ios/)
+[![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](ios/QuakeSignal/)
+[![Tauri 2](https://img.shields.io/badge/desktop-Tauri_2-24C8DB?logo=tauri&logoColor=white)](desktop/)
+[![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest_V3-4285F4?logo=googlechrome&logoColor=white)](extension/)
+[![MIT License](https://img.shields.io/badge/license-MIT-30B14F)](LICENSE)
+[![代码签名政策](https://img.shields.io/badge/code_signing-policy-6E56CF)](docs/SIGNING.md)
+[![隐私政策](https://img.shields.io/badge/privacy-policy-0A3D73)](docs/PRIVACY.md)
+
+**[下载](https://github.com/TastyHeadphones/QuakeSignal/releases/latest)** ·
+[在 macOS 上安装](#在-macos-上安装) ·
+[卸载](#卸载) ·
+[代码签名政策](#代码签名政策) ·
+[隐私政策](docs/PRIVACY.md)
 
 </div>
 
-<p align="center">
-  <img src="docs/screenshots/app-home-en.png" width="200" alt="首页 - 英文" />
-  <img src="docs/screenshots/app-home-ja.png" width="200" alt="首页 - 日文" />
-  <img src="docs/screenshots/app-home-zh.png" width="200" alt="首页 - 简体中文" />
-</p>
+> [!IMPORTANT]
+> QuakeSignal 是独立的非官方应用。地震信息来自第三方聚合数据源，可能出现延迟、
+> 缺失、修订或不准确的情况。请始终以官方公告和当地应急指示为准。
 
-<p align="center"><sub>真实的 Simulator 截图 —— 用 <code>xcodebuild</code> 编译并直连 Wolfx 真实数据，同一份构建切换三种语言。</sub></p>
+## 功能
 
-## 整体架构
+| | 能力 | 说明 |
+|---|---|---|
+| 📡 | 实时地震数据 | 归一化 Wolfx 的七路数据源，覆盖 JMA、CENC 以及四川、福建、重庆。 |
+| 📍 | 附近情境 | 以所选城市或当前位置为基准，提供距离、方位、半径与震级筛选。 |
+| ⚠️ | 清晰的警报状态 | 区分预警、更新、最终报、取消与训练报，颜色绝不是唯一的提示手段。 |
+| 🖥️ | 本地优先的桌面端 | 直连上游 WebSocket，数据存在本地，可从托盘发出原生警报，无需 QuakeSignal 后端。 |
+| 🌐 | Chrome 扩展 | 在浏览器中监测同样的直连数据源，本地保存历史，支持通知与警报声。 |
+| ♿ | 无障碍设计 | 支持动态字体、VoiceOver 友好标签、44pt 触控目标与高对比度状态呈现。 |
 
-iOS、Chrome、macOS 和 Windows 的地震历史与前台实时数据都直接从 Wolfx 获取。
-Cloudflare 只负责通知：当 iOS 在后台或已退出时继续监测警报，并通过 APNs
-向符合订阅条件的设备发送推送。
+## 架构
 
-```mermaid
-flowchart LR
-    wolfx["Wolfx Open API"] --> direct["iOS / Chrome / Desktop\n直接 HTTP + WebSocket"]
-    wolfx --> watcher["Cloudflare\n通知专用监测器"]
-    prefs[("D1 通知设置")] --> watcher
-    watcher --> apns["APNs"] --> ios["后台 iOS"]
+iOS、macOS 与 Windows 都直接从 Wolfx 获取地震数据。Cloudflare 只负责一件事：
+在 iOS 处于后台或已退出时继续监测警报，并通过 APNs 推送匹配的通知。
+
+- [`ios/`](ios/) —— 面向 iOS 17+ 的原生 SwiftUI 应用，使用 Swift 6
+- [`desktop/`](desktop/) —— 面向 macOS 与 Windows 的本地优先 Tauri 应用
+- [`extension/`](extension/) —— Manifest V3 Chrome 扩展
+- [`backend/cloudflare/`](backend/cloudflare/) —— 仅负责通知的 Worker 与 D1
+- [`docs/WOLFX_API.md`](docs/WOLFX_API.md) —— 对照真实响应核实过的上游字段文档
+- [`docs/DESIGN_PROMPT.md`](docs/DESIGN_PROMPT.md) —— 产品与视觉设计规范
+
+## 在 macOS 上安装
+
+从[最新发行版](https://github.com/TastyHeadphones/QuakeSignal/releases/latest)
+下载 `QuakeSignal_<版本>_universal.dmg`，打开后把 **QuakeSignal** 拖入
+“应用程序”文件夹。也可以使用本项目的 Homebrew tap：
+
+```bash
+brew tap TastyHeadphones/tap
+brew install --cask quakesignal
 ```
 
-- [`ios/`](ios/) —— SwiftUI 应用（iOS 17+，Swift 6），Xcode 工程通过 XcodeGen 生成并已提交
-- [`desktop/`](desktop/) —— macOS / Windows Tauri 应用，支持直连、本地历史和原生警报
-- [`extension/`](extension/) —— Manifest V3 Chrome 扩展，支持直连、浏览器本地历史、通知和警报声
-- [`backend/cloudflare/`](backend/cloudflare/) —— 通知专用服务，APNs 配置见 [backend/README.md](backend/README.md)
-- [`docs/WOLFX_API.md`](docs/WOLFX_API.md) —— 对照真实返回数据核实过的 Wolfx 接口字段文档
-- [`docs/DESIGN_PROMPT.md`](docs/DESIGN_PROMPT.md) —— 英文产品/设计说明书
+### 如果 macOS 提示“已损坏”或“无法验证开发者”
+
+首次打开时，macOS 很可能拒绝启动，并提示
+*“QuakeSignal 已损坏，无法打开。您应该将它移到废纸篓。”*
+或 *“无法打开 QuakeSignal，因为无法验证开发者。”*
+
+**应用并没有损坏，你的下载也没有问题。** Apple 只为经过*公证*（notarization）
+的应用背书，而公证需要付费的 Apple Developer Program 会员资格，本项目目前还没有。
+macOS 会给所有从网上下载的文件加上“隔离”标记，并拒绝打开无法追溯到注册开发者的
+隔离应用。这个警告说的是缺少 Apple 注册，而不是文件损坏。如果想确认下载完整，
+可以核对发行版中公布的 SHA256 校验值。
+
+以下**任选其一**即可，每个安装版本只需操作一次。
+
+**方式一 —— 清除隔离标记（一条命令）。**
+打开**终端**（按 ⌘ + 空格，输入 `Terminal` 后回车），原样粘贴并回车：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/QuakeSignal.app"
+```
+
+成功时不会有任何输出。之后正常打开 QuakeSignal 即可。
+
+**方式二 —— 在“系统设置”中放行。**
+
+1. 双击 **QuakeSignal**，关掉警告弹窗。
+2. 打开苹果菜单 → **系统设置** → **隐私与安全性**。
+3. 向下找到**安全性**一节，会看到“已阻止 QuakeSignal 以保护 Mac”。
+4. 点击**仍要打开**，确认**打开**，然后输入 Mac 密码。
+
+> [!NOTE]
+> 右键（或按住 Control 点按）→**打开**已经不再适用。Apple 在 macOS 15 Sequoia
+> 中移除了该快捷方式，现在只能通过“系统设置”里的**仍要打开**放行未公证的应用。
+
+Windows 版本不受上述影响。公证已在计划中，详见
+[`docs/SIGNING.md`](docs/SIGNING.md)。
+
+## 卸载
+
+QuakeSignal 只写入自身的安装位置和数据目录，删除这两处即可清理干净。
+
+### Windows
+
+可以使用标准卸载方式 —— **设置 → 应用 → 已安装的应用 → QuakeSignal → 卸载**，
+也可以运行安装目录内的卸载程序；`.exe` 与 `.msi` 两种安装包都会注册卸载项。
+
+如需一并删除设置与历史记录，请删除：
+
+```
+%APPDATA%\com.quakesignal.desktop\
+```
+
+### macOS
+
+若通过 Homebrew tap 安装：
+
+```bash
+brew uninstall --cask quakesignal
+```
+
+否则把“应用程序”文件夹中的 **QuakeSignal** 拖到废纸篓。
+
+如需一并删除设置与历史记录，请删除：
+
+```bash
+rm -rf ~/Library/Application\ Support/com.quakesignal.desktop
+```
+
+使用 `brew uninstall --cask --zap quakesignal` 可一步完成应用与该目录的删除。
 
 ## 快速开始
 
-**iOS** —— 用 Xcode 打开 `ios/QuakeSignal.xcodeproj`，选 Simulator 运行即可。
-地震数据直接从 Wolfx 获取；Cloudflare 仅用于通知注册。
-推送通知需要真机 + 真实 APNs 凭证，见 [backend/README.md](backend/README.md)。
+**iOS** —— 用 Xcode 打开 `ios/QuakeSignal.xcodeproj`，选择模拟器运行 `QuakeSignal` scheme。
+地震数据直接来自 Wolfx；Cloudflare 仅用于通知注册。推送通知需要真机、
+Apple 开发者团队与 APNs 凭证。
+
+**桌面端** —— 桌面版直连 Wolfx，两个后端都不需要：
+
+```bash
+cd desktop
+npm ci
+npm run tauri dev
+```
 
 **Chrome** —— 打开 `chrome://extensions`，启用开发者模式，点击“加载已解压的扩展程序”并选择 `extension/`。
 
-## 当前状态
+## 本地化
 
-| 部分 | 状态 |
-|---|---|
-| Cloudflare | 仅负责通知：上游监测、去重、距离/半径与夜间/演习过滤、D1 通知设置、基于 `loc-key` 的 APNs。公开历史 API 与实时中转已禁用。 |
-| iOS | 5 个 tab（首页/列表/地图/指南/设置），已对齐设计稿：基于城市/GPS 的订阅与"距你多远"的位置化叙事贯穿全app、三态首页状态卡、带实时倒计时和"趴下-掩护-抓牢"插画的全屏预警（以及正式/取消/演习测试等独立状态）、带速报更新时间线的事件详情、可筛选的列表和地图、防灾指南（应对步骤、应急清单、本地家庭报平安）、独立的来源与免责声明页面，以及设计稿的精确配色 token 和 App 图标概念。完整的 en / ja / zh-Hans 三语本地化。在 Swift 6 严格并发模式下 `xcodebuild` 编译通过，已在 Simulator 上用三种语言、连真实数据实测跑通。 |
+所有面向用户的流程均提供英语（`en`）、日语（`ja`）与简体中文（`zh-Hans`）。
 
-## 关于源设计稿
+## 代码签名政策
 
-设计稿在一个 `claude.ai/design` 项目里（"震息 · QuakeSignal iOS App
-Design"），一开始需要你自己的登录态才能访问。拿到授权之后发现这其实是一整套设计
-系统：App 图标概念、颜色/字体/间距 token、组件表，以及引导页、首页（正常/注意/预
-警/深色四种状态）、全屏地震预警、带速报更新时间线的事件详情、可筛选的列表和地
-图、设置、防灾指南、空/加载/错误状态，以及关键页面的 en/ja/zh-Hans 本地化的高保
-真页面——拿到访问权限之后这个项目是如何演进的，见 `docs/DESIGN_PROMPT.md` 里的
-说明。上面这个 app 现在已经和设计稿高度一致；仍然存在的差距主要是像素级的布局还
-原度，因为设计稿是用 HTML/CSS 做的，而 app 是原生 SwiftUI —— 结构、文案、配色
-token 和交互流程都对齐了，但间距和排版是按平台习惯调整过的，不是逐像素测量还原
-的。
+QuakeSignal 的代码签名政策 —— 签名对象、发行版的构建方式、以及谁有权批准签名 ——
+记录在 [`docs/SIGNING.md`](docs/SIGNING.md)。隐私相关内容单独记录在
+[`docs/PRIVACY.md`](docs/PRIVACY.md)。
+
+**团队角色。** QuakeSignal 由单一维护者维护。
+[@TastyHeadphones](https://github.com/TastyHeadphones) 同时担任
+Author、Reviewer 与 Approver 三种角色。所有外部 Pull Request 都由维护者审阅后
+才能合并；每一次签名请求都必须由维护者手动批准，仅推送标签并不会产生签名。
+
+每个发行版都会发布覆盖全部构建产物的 `SHA256SUMS.txt`。桌面端二进制文件仅由
+GitHub Actions 从版本标签构建，绝不会从维护者的机器上传。
+
+QuakeSignal 使用 SignPath Foundation 为 Windows 进行代码签名。签名私钥保存在
+SignPath 的硬件安全模块中，绝不出现在本仓库、CI 或维护者的机器上。
+
+Free code signing provided by [SignPath.io](https://signpath.io?utm_source=foundation&utm_medium=github&utm_campaign=quakesignal),
+certificate by [SignPath Foundation](https://signpath.org/)。
+
+> [!NOTE]
+> SignPath Foundation 的申请仍在审核中，因此 Windows 签名虽已配置但尚未启用，
+> macOS 版本也尚未公证。每个发行版都会说明其自身的签名状态。
 
 ## 许可证
 
-MIT —— 见 [LICENSE](LICENSE)。
+QuakeSignal 基于 [MIT License](LICENSE) 发布。

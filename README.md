@@ -19,6 +19,14 @@
 [![Cloudflare Workers](https://img.shields.io/badge/backend-Cloudflare_Workers-F38020?logo=cloudflare&logoColor=white)](backend/cloudflare/)
 [![Languages](https://img.shields.io/badge/languages-English_·_日本語_·_简体中文-0A3D73)](#localization)
 [![MIT License](https://img.shields.io/badge/license-MIT-30B14F)](LICENSE)
+[![Code signing policy](https://img.shields.io/badge/code_signing-policy-6E56CF)](docs/SIGNING.md)
+[![Privacy](https://img.shields.io/badge/privacy-policy-0A3D73)](docs/PRIVACY.md)
+
+**[Download](https://github.com/TastyHeadphones/QuakeSignal/releases/latest)** ·
+[Install on macOS](#installation-on-macos) ·
+[Uninstall](#uninstalling) ·
+[Code signing policy](#code-signing-policy) ·
+[Privacy policy](docs/PRIVACY.md)
 
 QuakeSignal turns aggregated public seismic data into focused native apps: an
 iOS experience with location-aware push alerts and preparedness guidance, plus
@@ -55,14 +63,14 @@ a local-first macOS and Windows monitor with direct feeds and audible alarms.
 
 ## Designed for the moment that matters
 
-The interface follows the [QuakeSignal design artifact](https://claude.ai/code/artifact/f209373f-ec4d-41ee-9c7a-ec315e4861e0): calm blue for normal information, escalating orange and red for severity, and a deliberately distinct purple treatment for drills.
+The interface uses calm blue for normal information, escalating orange and red for severity, and a deliberately distinct purple treatment for drills. The complete specification lives in this repository at [`docs/DESIGN_PROMPT.md`](docs/DESIGN_PROMPT.md).
 
 | Normal | Caution | Warning | Training |
 |:---:|:---:|:---:|:---:|
 | `#30B14F` | `#FF9500` | `#FF3B30` | `#8E5BE0` |
 | No significant nearby event | Recent nearby activity | Active protective action | Clearly marked test content |
 
-The complete design notes—including tokens, components, onboarding, empty/error states, dark mode, and localized screen copy—are captured in [`docs/DESIGN_PROMPT.md`](docs/DESIGN_PROMPT.md).
+Those notes cover tokens, components, onboarding, empty and error states, dark mode, and localized screen copy.
 
 ## Architecture
 
@@ -177,6 +185,42 @@ Nothing is printed if it worked. Open QuakeSignal normally afterwards.
 Windows builds are unaffected by any of the above. Notarization is planned; see
 [`docs/SIGNING.md`](docs/SIGNING.md).
 
+## Uninstalling
+
+QuakeSignal installs only into its own application location and its own data
+directory. Removing both leaves nothing behind.
+
+### Windows
+
+Either use the standard uninstaller — **Settings → Apps → Installed apps →
+QuakeSignal → Uninstall** — or run the uninstaller that ships inside the
+install folder. Both the `.exe` and `.msi` packages register one.
+
+To also remove stored settings and event history, delete:
+
+```
+%APPDATA%\com.quakesignal.desktop\
+```
+
+### macOS
+
+If you installed from the Homebrew tap:
+
+```bash
+brew uninstall --cask quakesignal
+```
+
+Otherwise drag **QuakeSignal** from your Applications folder to the Trash.
+
+To also remove stored settings and event history, delete:
+
+```bash
+rm -rf ~/Library/Application\ Support/com.quakesignal.desktop
+```
+
+`brew uninstall --cask --zap quakesignal` removes the app and that directory in
+one step.
+
 ## Quick start
 
 ### 1. Run the iOS app
@@ -254,9 +298,16 @@ Push notification text is localized on-device with APNs `loc-key` values, so a s
 
 ## Code signing policy
 
-QuakeSignal's code signing policy — what is signed, how releases are built,
-who may approve a signature, and what the desktop app does with your data — is
-documented in [`docs/SIGNING.md`](docs/SIGNING.md).
+QuakeSignal's code signing policy — what is signed, how releases are built, and
+who may approve a signature — is documented in
+[`docs/SIGNING.md`](docs/SIGNING.md). Privacy is documented separately in
+[`docs/PRIVACY.md`](docs/PRIVACY.md).
+
+**Team roles.** QuakeSignal is a single-maintainer project.
+[@TastyHeadphones](https://github.com/TastyHeadphones) holds all three signing
+roles — Author, Reviewer and Approver. Every external pull request is reviewed
+by the maintainer before merge, and every signing request requires explicit
+manual approval by the maintainer; a tag push alone cannot produce a signature.
 
 Every release publishes a `SHA256SUMS.txt` covering all of its artifacts.
 Desktop binaries are built only by GitHub Actions from a version tag; nothing is

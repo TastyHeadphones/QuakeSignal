@@ -126,9 +126,13 @@ they are granted any SignPath role.
 
 ## Privacy
 
-QuakeSignal for desktop is a local-first application. It does not create
-accounts, does not register devices, and contains no telemetry, analytics,
-advertising, or crash-reporting service.
+The full privacy policy for every QuakeSignal client lives in one document:
+**[`docs/PRIVACY.md`](PRIVACY.md)**.
+
+For the signed Windows artifacts specifically: QuakeSignal for desktop is a
+local-first application. It does not create accounts, does not register
+devices, and contains no telemetry, analytics, advertising, or crash-reporting
+service.
 
 **Network access.** The application connects directly to the public Wolfx
 earthquake data service, and to nothing else:
@@ -148,15 +152,11 @@ own computer, under the application data directory for
 - macOS — `~/Library/Application Support/com.quakesignal.desktop/`
 - Windows — `%APPDATA%\com.quakesignal.desktop\`
 
-Uninstalling the application and deleting that directory removes all stored
-data.
-
-**Installation.** The installers make no changes outside the application's own
-install location and data directory, and both the NSIS and MSI packages provide
-a standard uninstaller.
-
-The related privacy policy for the Chrome extension is at
-[`extension/PRIVACY.md`](../extension/PRIVACY.md).
+**Installation and uninstallation.** The installers make no changes outside the
+application's own install location and data directory, and both the NSIS and
+MSI packages provide a standard uninstaller. End-user uninstall instructions
+for both platforms are in the [README](../README.md#uninstalling); removing the
+application and the data directory above deletes everything QuakeSignal stored.
 
 ---
 
@@ -268,9 +268,35 @@ into the SignPath web UI under *Project → Artifact Configurations → Add →
 Enter XML*, and give each the slug named in the table above.
 
 Both use a `<zip-file>` root element, because `actions/upload-artifact` uploads
-a ZIP archive. The installer configuration wildcards the version segment so it
-survives version bumps. `QuakeSignal.exe` inside the installers is deliberately
-not re-signed, because pass 1 already signed it.
+a ZIP archive. `QuakeSignal.exe` inside the installers is deliberately not
+re-signed, because pass 1 already signed it.
+
+#### Enforced metadata
+
+SignPath Foundation requires signed binaries to carry enforced metadata, with
+the product name equal to the project name and the product version identical
+across a build. Both configurations declare these as restrictions, so SignPath
+refuses to sign a file whose metadata does not match:
+
+| Artifact | Enforced attributes |
+|---|---|
+| `QuakeSignal.exe` | `product-name="QuakeSignal"`, `product-version`, `file-version` |
+| NSIS `*-setup.exe` | `product-name="QuakeSignal"`, `product-version`, `file-version` |
+| `*.msi` | `subject="QuakeSignal"`, `author="UniSphereco LLC"` |
+
+The version is a declared parameter, supplied by the release workflow from
+`version` in `desktop/src-tauri/tauri.conf.json` and passed identically to both
+signing passes, so it cannot drift between them.
+
+These values were verified against a real CI build of v0.1.0. Two consequences
+worth knowing:
+
+- `company-name` is **not** enforced. The application binary carries
+  `UniSphereco LLC` but the NSIS installer carries no `CompanyName` at all, so
+  a shared restriction would fail one of the two passes.
+- The MSI `author` attribute is the WiX *Manufacturer* property, which Tauri
+  takes from `bundle.publisher` in `tauri.conf.json`. **Changing that publisher
+  value without updating `windows-installers.xml` will fail every release.**
 
 ---
 

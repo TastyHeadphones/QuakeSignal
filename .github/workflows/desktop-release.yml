@@ -74,17 +74,31 @@ jobs:
         with:
           workspaces: desktop/src-tauri -> target
 
+      - name: Resolve application version
+        id: version
+        shell: bash
+        run: |
+          # Single source of truth for the version, used for the tag check and
+          # for the enforced product-version metadata in both signing passes.
+          config_version="$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")"
+          if [ -z "$config_version" ] || [ "$config_version" = "undefined" ]; then
+            echo "::error::Could not read version from desktop/src-tauri/tauri.conf.json"
+            exit 1
+          fi
+          echo "APP_VERSION=$config_version" >> "$GITHUB_ENV"
+          echo "version=$config_version" >> "$GITHUB_OUTPUT"
+          echo "Application version: $config_version"
+
       - name: Verify tag matches tauri.conf.json version
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
-          config_version="$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")"
           tag_version="${GITHUB_REF_NAME#v}"
-          if [ "$config_version" != "$tag_version" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match tauri.conf.json version $config_version"
+          if [ "$APP_VERSION" != "$tag_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match tauri.conf.json version $APP_VERSION"
             exit 1
           fi
-          echo "Releasing version $config_version"
+          echo "Releasing version $APP_VERSION"
 
       - name: Determine signing mode
         id: signing-mode
@@ -193,6 +207,10 @@ jobs:
           # QuakeSignal.exe (upload-artifact zips the directory).
           artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIG_APP }}
           github-artifact-id: ${{ steps.upload-unsigned-app.outputs.artifact-id }}
+          # Satisfies the enforced product-version / file-version metadata
+          # restriction declared in the artifact configuration.
+          parameters: |
+            version: "${{ steps.version.outputs.version }}"
           wait-for-completion: true
           output-artifact-directory: artifacts/windows/signed-app
 
@@ -248,6 +266,10 @@ jobs:
           # NSIS *-setup.exe and the *.msi.
           artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIG_INSTALLERS }}
           github-artifact-id: ${{ steps.upload-unsigned-installers.outputs.artifact-id }}
+          # Same version parameter as the first pass, so the enforced metadata
+          # and the artifact file names cannot drift between the two.
+          parameters: |
+            version: "${{ steps.version.outputs.version }}"
           wait-for-completion: true
           output-artifact-directory: artifacts/windows/signed-installers
 
@@ -443,34 +465,11 @@ jobs:
             ${previous:+-f previous_tag_name="$previous"} \
             --jq '.body' > generated-notes.md || : > generated-notes.md
 
-          {
-            if [ "$WINDOWS_SIGNED" = "true" ]; then
-              echo "Windows installers are Authenticode signed with an RFC 3161 timestamp."
-              echo "Free code signing provided by [SignPath.io](https://signpath.io?utm_source=foundation&utm_medium=github&utm_campaign=quakesignal), certificate by [SignPath Foundation](https://signpath.org/)."
-            else
-              echo "> [!WARNING]"
-              echo "> Windows installers in this release are **not** code signed."
-            fi
-            echo
-            echo "> [!IMPORTANT]"
-            echo "> The macOS build is **not notarized**. macOS will report it as damaged or"
-            echo "> unverified on first launch. See [Installation on macOS](https://github.com/$GITHUB_REPOSITORY#installation-on-macos)."
-            echo
-            echo "### Checksums (SHA256)"
-            echo
-            echo '```'
-            cat dist/SHA256SUMS.txt
-            echo '```'
-            echo
-            echo "Verify with \`sha256sum -c SHA256SUMS.txt\` (Linux), \`shasum -a 256 -c SHA256SUMS.txt\` (macOS),"
-            echo "or \`Get-FileHash <file> -Algorithm SHA256\` (Windows)."
-            echo
-            echo "See [docs/SIGNING.md](https://github.com/$GITHUB_REPOSITORY/blob/$tag/docs/SIGNING.md) for the code signing policy."
-            echo
-            echo "---"
-            echo
-            cat generated-notes.md
-          } > release-notes.md
+          # Render .github/release-notes-template.md. The template carries the
+          # functional description, download/verification instructions, the
+          # "Code signing policy" heading and the SignPath attribution that the
+          # SignPath Foundation terms require on every download page.
+          python3 .github/scripts/render-release-notes.py
 
           cat release-notes.md
 

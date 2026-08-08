@@ -1,22 +1,15 @@
 # QuakeSignal — English Design/Build Prompt
 
-> **Note on source design (superseded):** this prompt was originally written
-> when the linked Claude design canvas (`claude.ai/design/p/78c53605-...`)
-> wasn't reachable without the owner's login. Access has since been granted,
-> and the real design project ("震息 · QuakeSignal iOS App Design") turned out
-> to be a full design system — icon concepts, color/type/spacing tokens, a
-> component sheet, and high-fidelity mockups for onboarding, a 5-tab
-> home/list/map/guide/settings structure, a full-screen alert with a
-> drop-cover-hold-on illustration and countdown, a report-revision timeline,
-> a disaster-prep guide, empty/error states, and en/ja/zh-Hans localization
-> of the key screens. That real design is richer than — and in places
-> different from — the spec below (e.g. it adds a List tab and a Disaster
-> Guide tab, and frames everything around distance from the user's
-> subscribed city). This document is kept as-is for reference/history. The
-> app has since been rebuilt to follow the real design closely (5 tabs,
-> location/distance framing, the drop-cover-hold-on alert, the report
-> timeline, the disaster guide, the exact color tokens) — see the root
-> [README](../README.md) for current status.
+> **Status: historical.** This document is the original build prompt, kept for
+> reference. The shipped design went further than the spec below: five tabs
+> (home, list, map, guide, settings), everything framed around distance from
+> the user's chosen city, a full-screen alert with a drop-cover-hold-on
+> illustration and countdown, a report-revision timeline, a disaster-prep
+> guide, empty and error states, and en/ja/zh-Hans localization throughout.
+>
+> The color tokens and the current state of each platform are documented in the
+> root [README](../README.md). The app follows the shipped design; this file
+> records where it started.
 
 ---
 

@@ -13,13 +13,38 @@
   Root element is <zip-file> because actions/upload-artifact uploads the staged
   directory as a ZIP archive.
 
+  METADATA RESTRICTIONS
+  SignPath Foundation requires that all signed binaries have metadata
+  attributes set and enforced, with the product name equal to the project name
+  and the product version identical across a build. The attributes below are
+  enforced by SignPath: signing fails if the submitted binary does not match.
+
+  These values were verified against a real CI build of v0.1.0:
+    ProductName    = QuakeSignal
+    ProductVersion = 0.1.0
+    FileVersion    = 0.1.0
+  Tauri derives all three from productName and version in
+  desktop/src-tauri/tauri.conf.json.
+
+  company-name is deliberately NOT enforced here. The application binary
+  carries "UniSphereco LLC" but the NSIS installer carries no CompanyName at
+  all, so a shared restriction would fail one of the two passes.
+
   The workflow normalises the staged file name to QuakeSignal.exe regardless of
   whether the compiler emitted QuakeSignal.exe or desktop.exe, so this path is
-  stable across builds and needs no wildcard.
+  stable across builds.
 -->
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <!-- Supplied by the release workflow from tauri.conf.json, so the version
+         cannot drift between the two signing passes. -->
+    <parameter name="version" required="true" />
+  </parameters>
   <zip-file>
-    <pe-file path="QuakeSignal.exe">
+    <pe-file path="QuakeSignal.exe"
+             product-name="QuakeSignal"
+             product-version="${version}"
+             file-version="${version}">
       <authenticode-sign />
     </pe-file>
   </zip-file>
