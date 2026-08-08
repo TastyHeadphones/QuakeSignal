@@ -57,6 +57,12 @@ public repository, by
   be exported, and it is not present in this repository, in CI, or on any
   maintainer's machine. GitHub Actions holds only an API token that can *submit*
   a signing request; every request is subject to the approval rules below.
+- **The certificate belongs to SignPath Foundation.** It is an OV code signing
+  certificate issued by Sectigo to SignPath Foundation, not to this project and
+  not to any individual or company. SignPath Foundation vouches for the fact
+  that the binary was built from this public repository. Consequently the
+  publisher shown by Windows SmartScreen and UAC reads **SignPath Foundation** —
+  not "QuakeSignal". That is expected, not a misconfiguration.
 - **Reproducible inputs.** All third-party GitHub Actions are pinned by commit
   SHA. Rust and npm dependencies are resolved from committed lockfiles
   (`Cargo.lock`, `package-lock.json`), and the Rust test suite runs with
@@ -216,7 +222,10 @@ What changes:
 Get-AuthenticodeSignature .\QuakeSignal_0.1.0_x64-setup.exe | Format-List Status, SignerCertificate, TimeStamperCertificate
 ```
 
-Status must be `Valid` and `TimeStamperCertificate` must not be empty.
+Status must be `Valid`, `TimeStamperCertificate` must not be empty, and
+`SignerCertificate` must be the SignPath Foundation certificate — the publisher
+Windows displays is `SignPath Foundation`, for the reason given under
+[Build and signing process](#build-and-signing-process).
 
 **Checksums** (any platform), against the `SHA256SUMS.txt` published with each
 release:
