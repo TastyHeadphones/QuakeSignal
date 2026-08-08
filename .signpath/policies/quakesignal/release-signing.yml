@@ -1,0 +1,35 @@
+# SignPath origin verification policy for the release signing policy.
+#
+# SignPath reads this file from the repository at signing time and refuses the
+# signing request if the run does not satisfy it. It is the repository-side
+# half of the approval rules described in docs/SIGNING.md.
+#
+# TODO(signpath): the directory name MUST match the SignPath project slug, and
+# the file name MUST match the signing policy slug. Both are assigned when the
+# SignPath Foundation application is approved. If the assigned slugs differ
+# from `quakesignal` / `release-signing`, rename this path accordingly and
+# update SIGNPATH_PROJECT_SLUG / SIGNPATH_SIGNING_POLICY_SLUG to match.
+# Verify the policy is being picked up on the first signing request.
+
+github-policies:
+  build:
+    # A workflow re-run can replay a previously approved build with different
+    # repository state. Require a fresh run for every signing request.
+    disallow_reruns: true
+
+  # QuakeSignal is a single-maintainer project, so a rule requiring pull
+  # request approvals is deliberately NOT enabled: GitHub does not allow an
+  # author to approve their own pull request, which would make every release
+  # unsignable. External contributions are gated by the maintainer's review
+  # before merge instead — see docs/SIGNING.md § Team roles.
+  #
+  # Enable the block below only after configuring a matching branch ruleset in
+  # the repository settings; SignPath rejects requests when a declared rule is
+  # not actually enforced on GitHub.
+  #
+  # branch_rulesets:
+  #   - condition:
+  #       rules:
+  #         - block_force_pushes:
+  #     allow_bypass_actors: false
+  #     enforced_from: EARLIEST

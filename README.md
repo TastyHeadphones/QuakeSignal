@@ -121,6 +121,62 @@ flowchart LR
 - [`docs/WOLFX_API.md`](docs/WOLFX_API.md) — field-level upstream data reference verified against live responses
 - [`docs/DESIGN_PROMPT.md`](docs/DESIGN_PROMPT.md) — product and visual design specification
 
+## Installation on macOS
+
+Download `QuakeSignal_<version>_universal.dmg` from the
+[latest release](https://github.com/TastyHeadphones/QuakeSignal/releases/latest),
+open it, and drag **QuakeSignal** into your Applications folder. Or install it
+from the project's Homebrew tap:
+
+```bash
+brew tap TastyHeadphones/tap
+brew install --cask quakesignal
+```
+
+### If macOS says QuakeSignal is damaged or cannot be verified
+
+The first time you open it, macOS will most likely refuse, with either
+*"QuakeSignal is damaged and can't be opened. You should move it to the Trash"*
+or *"QuakeSignal cannot be opened because the developer cannot be verified."*
+
+**The app is not damaged, and nothing has gone wrong with your download.**
+Apple only vouches for apps that have been *notarized*, which requires a paid
+Apple Developer Program membership that this project does not have yet. macOS
+tags everything downloaded from the internet with a "quarantine" flag and
+refuses to open quarantined apps it cannot trace to a registered developer. The
+warning is about that missing Apple registration — not about a corrupt file. If
+you want to confirm the download is intact, compare it against the SHA256
+checksum published with every release.
+
+To open the app, use **either** option below. You only need to do this once per
+installed version.
+
+**Option 1 — clear the quarantine flag (one command).**
+Open **Terminal** (press ⌘ + Space, type `Terminal`, press Return), then paste
+this line exactly and press Return:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/QuakeSignal.app"
+```
+
+Nothing is printed if it worked. Open QuakeSignal normally afterwards.
+
+**Option 2 — approve it in System Settings.**
+
+1. Double-click **QuakeSignal** and dismiss the warning.
+2. Open the Apple menu → **System Settings** → **Privacy & Security**.
+3. Scroll down to the **Security** section, where you will see
+   *"QuakeSignal was blocked to protect your Mac."*
+4. Click **Open Anyway**, confirm with **Open**, and enter your Mac password.
+
+> [!NOTE]
+> Right-click (or Control-click) → **Open** no longer works for this. Apple
+> removed that shortcut in macOS 15 Sequoia, so **Open Anyway** in System
+> Settings is now the only way to approve an unnotarized app from the interface.
+
+Windows builds are unaffected by any of the above. Notarization is planned; see
+[`docs/SIGNING.md`](docs/SIGNING.md).
+
 ## Quick start
 
 ### 1. Run the iOS app
@@ -195,6 +251,27 @@ Push notification text is localized on-device with APNs `loc-key` values, so a s
 - Mobile push delivery is best-effort and depends on the upstream provider, network, Cloudflare, APNs, iOS settings, Focus modes, and device state.
 - The countdown is an estimate based on event time, distance, and a simplified S-wave velocity—not a seismological guarantee.
 - Critical Alerts require a separate entitlement granted by Apple. Without it, QuakeSignal uses standard or time-sensitive notifications.
+
+## Code signing policy
+
+QuakeSignal's code signing policy — what is signed, how releases are built,
+who may approve a signature, and what the desktop app does with your data — is
+documented in [`docs/SIGNING.md`](docs/SIGNING.md).
+
+Every release publishes a `SHA256SUMS.txt` covering all of its artifacts.
+Desktop binaries are built only by GitHub Actions from a version tag; nothing is
+ever uploaded from a maintainer's machine.
+
+Windows signing through SignPath Foundation is configured but not yet active,
+and macOS builds are not yet notarized. Each release states its signing status.
+
+<!--
+TODO(signpath): uncomment once the SignPath Foundation application is approved
+and the first signed release has shipped. SignPath requires this attribution to
+appear on the project home page and download pages.
+
+Free code signing provided by [SignPath.io](https://signpath.io?utm_source=foundation&utm_medium=github&utm_campaign=quakesignal), certificate by [SignPath Foundation](https://signpath.org/).
+-->
 
 ## License
 

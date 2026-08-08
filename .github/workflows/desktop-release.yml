@@ -1,0 +1,464 @@
+name: Desktop release
+
+# Tag-triggered release pipeline for the QuakeSignal desktop app.
+#
+# Every published artifact is produced by this workflow and nowhere else.
+# Nothing is ever uploaded from a maintainer's machine.
+#
+#   Windows  build (no bundle) -> SignPath sign app .exe -> bundle NSIS + MSI
+#            -> SignPath sign installers -> release
+#   macOS    universal build (ad-hoc signature only, not yet notarized) -> release
+#   release  SHA256SUMS for every artifact -> GitHub Release
+#
+# Signing runs only for tag pushes on this repository. The workflow has no
+# `pull_request` trigger at all, so a fork can never reach the signing steps.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    # Manual runs build and verify the full pipeline but never sign and never
+    # publish a release. Use this to smoke-test changes to this workflow.
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  # Upstream repository. Signing is refused anywhere else (forks, mirrors).
+  UPSTREAM_REPOSITORY: TastyHeadphones/QuakeSignal
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Windows: SignPath-signed NSIS installer, MSI, and main application binary.
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      # Required by the SignPath action to read job details and download the
+      # workflow artifact it submits for signing.
+      actions: read
+    outputs:
+      signed: ${{ steps.signing-mode.outputs.enabled }}
+    env:
+      # Mapped here so steps can test for presence without exposing the value.
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+      RUST_TARGET: x86_64-pc-windows-msvc
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable @ 2026-08-05
+        with:
+          toolchain: stable
+          targets: ${{ env.RUST_TARGET }}
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: desktop/src-tauri -> target
+
+      - name: Verify tag matches tauri.conf.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          config_version="$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "$config_version" != "$tag_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match tauri.conf.json version $config_version"
+            exit 1
+          fi
+          echo "Releasing version $config_version"
+
+      - name: Determine signing mode
+        id: signing-mode
+        shell: bash
+        run: |
+          enabled=false
+          if [ "${{ startsWith(github.ref, 'refs/tags/v') }}" = "true" ] \
+            && [ "${{ github.repository }}" = "$UPSTREAM_REPOSITORY" ] \
+            && [ -n "$SIGNPATH_API_TOKEN" ]; then
+            enabled=true
+          fi
+          echo "SIGN_ENABLED=$enabled" >> "$GITHUB_ENV"
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+          echo "Windows code signing enabled: $enabled"
+
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Test Rust core
+        working-directory: desktop/src-tauri
+        run: cargo test --locked
+
+      # -- Pass 1: compile the application binary, sign it, then bundle around it.
+      #
+      # The NSIS and MSI installers embed QuakeSignal.exe, so the binary has to
+      # carry its Authenticode signature *before* the installers are built.
+      # `tauri build --no-bundle` compiles without packaging; `tauri bundle`
+      # packages the already-compiled binary.
+      - name: Build application binary (no bundle)
+        working-directory: desktop
+        run: npm run tauri -- build --no-bundle --target ${{ env.RUST_TARGET }}
+
+      - name: Stage unsigned application binary
+        shell: pwsh
+        run: |
+          $releaseDir = "desktop/src-tauri/target/${env:RUST_TARGET}/release"
+          # The compiled binary is named after either the product or the crate
+          # depending on Tauri's rename behaviour (the macOS bundle currently
+          # ships Contents/MacOS/desktop, i.e. the crate name). Accept both and
+          # fail loudly if neither is present, rather than guessing.
+          $exe = $null
+          foreach ($name in @("QuakeSignal.exe", "desktop.exe")) {
+            $candidate = Join-Path $releaseDir $name
+            if (Test-Path $candidate) { $exe = Get-Item $candidate; break }
+          }
+          if (-not $exe) {
+            throw "Main application binary not found under $releaseDir"
+          }
+          Write-Host "Main binary: $($exe.FullName)"
+          # Normalise the staged name so the SignPath artifact configuration has
+          # one stable file name to match, whichever name the build produced.
+          New-Item -ItemType Directory -Force -Path artifacts/windows/unsigned-app | Out-Null
+          Copy-Item $exe.FullName artifacts/windows/unsigned-app/QuakeSignal.exe -Force
+          "MAIN_BINARY_PATH=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Upload unsigned application binary
+        id: upload-unsigned-app
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: windows-unsigned-app
+          path: artifacts/windows/unsigned-app
+          if-no-files-found: error
+
+      - name: Sign application binary (SignPath)
+        if: env.SIGN_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2.2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          # TODO(signpath): create these repository variables after the
+          # SignPath Foundation application is approved. See docs/SIGNING.md.
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          # Artifact configuration whose root is <zip-file> containing
+          # QuakeSignal.exe (upload-artifact zips the directory).
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIG_APP }}
+          github-artifact-id: ${{ steps.upload-unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: artifacts/windows/signed-app
+
+      - name: Install signed application binary
+        if: env.SIGN_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          $signed = "artifacts/windows/signed-app/QuakeSignal.exe"
+          if (-not (Test-Path $signed)) {
+            throw "SignPath did not return a signed QuakeSignal.exe"
+          }
+          Copy-Item $signed $env:MAIN_BINARY_PATH -Force
+          Write-Host "Replaced $env:MAIN_BINARY_PATH with the signed binary"
+
+      # -- Pass 2: bundle the installers around the signed binary, then sign them.
+      - name: Bundle NSIS installer and MSI
+        working-directory: desktop
+        run: npm run tauri -- bundle --target ${{ env.RUST_TARGET }} --bundles nsis,msi
+
+      - name: Stage unsigned installers
+        shell: pwsh
+        run: |
+          $bundleDir = "desktop/src-tauri/target/${env:RUST_TARGET}/release/bundle"
+          New-Item -ItemType Directory -Force -Path artifacts/windows/unsigned-installers | Out-Null
+          $installers = @()
+          $installers += Get-ChildItem -Path (Join-Path $bundleDir "nsis") -Filter *.exe -File -ErrorAction SilentlyContinue
+          $installers += Get-ChildItem -Path (Join-Path $bundleDir "msi")  -Filter *.msi -File -ErrorAction SilentlyContinue
+          if ($installers.Count -lt 2) {
+            throw "Expected an NSIS .exe and an .msi under $bundleDir, found $($installers.Count) file(s)"
+          }
+          foreach ($file in $installers) {
+            Write-Host "Staging $($file.Name)"
+            Copy-Item $file.FullName artifacts/windows/unsigned-installers -Force
+          }
+
+      - name: Upload unsigned installers
+        id: upload-unsigned-installers
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: windows-unsigned-installers
+          path: artifacts/windows/unsigned-installers
+          if-no-files-found: error
+
+      - name: Sign installers (SignPath)
+        if: env.SIGN_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2.2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          # Artifact configuration whose root is <zip-file> containing the
+          # NSIS *-setup.exe and the *.msi.
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIG_INSTALLERS }}
+          github-artifact-id: ${{ steps.upload-unsigned-installers.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: artifacts/windows/signed-installers
+
+      - name: Collect release artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $source = if ($env:SIGN_ENABLED -eq "true") {
+            "artifacts/windows/signed-installers"
+          } else {
+            "artifacts/windows/unsigned-installers"
+          }
+          Write-Host "Publishing Windows artifacts from $source"
+          Get-ChildItem -Path $source -File | ForEach-Object {
+            Copy-Item $_.FullName dist -Force
+          }
+          Get-ChildItem dist
+
+      - name: Verify Authenticode signatures
+        if: env.SIGN_ENABLED == 'true'
+        shell: pwsh
+        run: |
+          $failed = $false
+          foreach ($file in Get-ChildItem dist -File) {
+            $sig = Get-AuthenticodeSignature $file.FullName
+            Write-Host "== $($file.Name)"
+            Write-Host "   Status:      $($sig.Status)"
+            Write-Host "   Publisher:   $($sig.SignerCertificate.Subject)"
+            Write-Host "   Timestamp:   $($sig.TimeStamperCertificate.Subject)"
+            if ($sig.Status -ne "Valid") {
+              Write-Host "::error::$($file.Name) signature status is $($sig.Status)"
+              $failed = $true
+            }
+            if (-not $sig.TimeStamperCertificate) {
+              Write-Host "::error::$($file.Name) has no RFC 3161 timestamp"
+              $failed = $true
+            }
+          }
+          if ($failed) { exit 1 }
+
+      - name: Upload Windows release artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-windows
+          path: dist
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # macOS: universal .dmg. Ad-hoc signed only — not yet Developer ID signed or
+  # notarized. See docs/SIGNING.md for the migration path.
+  # ---------------------------------------------------------------------------
+  macos:
+    name: macOS universal
+    runs-on: macos-latest
+    env:
+      RUST_TARGET: universal-apple-darwin
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable @ 2026-08-05
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: desktop/src-tauri -> target
+
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Test Rust core
+        working-directory: desktop/src-tauri
+        run: cargo test --locked
+
+      - name: Build universal macOS bundles
+        working-directory: desktop
+        env:
+          # Ad-hoc signature ("-"). Required so the universal build launches at
+          # all on Apple silicon, which refuses unsigned native arm64 code.
+          # It is NOT a Developer ID signature and does NOT satisfy Gatekeeper.
+          APPLE_SIGNING_IDENTITY: "-"
+          #
+          # TODO(apple): once an Apple Developer Program membership exists,
+          # delete the ad-hoc identity above and supply these instead. No other
+          # change to this workflow is required — Tauri picks all of them up
+          # from the environment and performs signing + notarization itself.
+          #
+          # APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY:     ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # APPLE_API_ISSUER:           ${{ secrets.APPLE_API_ISSUER }}
+          # APPLE_API_KEY:              ${{ secrets.APPLE_API_KEY }}
+          # APPLE_API_KEY_PATH:         ${{ secrets.APPLE_API_KEY_PATH }}
+          #
+          # A keychain step is also needed to import APPLE_CERTIFICATE before
+          # this step runs; see docs/SIGNING.md § "Adding Apple signing later".
+        run: npm run tauri -- build --target ${{ env.RUST_TARGET }} --bundles app,dmg
+
+      - name: Collect release artifacts
+        run: |
+          set -euo pipefail
+          bundle_dir="desktop/src-tauri/target/${RUST_TARGET}/release/bundle"
+          mkdir -p dist
+          shopt -s nullglob
+          dmgs=("$bundle_dir"/dmg/*.dmg)
+          if [ ${#dmgs[@]} -eq 0 ]; then
+            echo "::error::No .dmg produced under $bundle_dir/dmg"
+            exit 1
+          fi
+          for dmg in "${dmgs[@]}"; do
+            echo "Staging $(basename "$dmg")"
+            cp "$dmg" dist/
+          done
+          ls -la dist
+
+      - name: Report macOS signature state
+        run: |
+          set -euo pipefail
+          app_dir="desktop/src-tauri/target/${RUST_TARGET}/release/bundle/macos"
+          app="$app_dir/QuakeSignal.app"
+          if [ -d "$app" ]; then
+            echo "== codesign"
+            codesign --verify --verbose=2 "$app" 2>&1 || true
+            codesign --display --verbose=2 "$app" 2>&1 || true
+            echo "== Gatekeeper assessment (expected to FAIL until notarized)"
+            spctl --assess --type execute --verbose=4 "$app" 2>&1 || true
+          else
+            echo "::warning::$app not found; skipping signature report"
+          fi
+
+      - name: Upload macOS release artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-macos
+          path: dist
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Publish: checksums + GitHub Release. Tag builds only.
+  # ---------------------------------------------------------------------------
+  release:
+    name: Publish release
+    needs: [windows, macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+
+      - name: Generate SHA256 checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum -- * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Compose release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WINDOWS_SIGNED: ${{ needs.windows.outputs.signed }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          previous="$(gh release list --limit 1 --json tagName --jq '.[0].tagName // empty' || true)"
+          # A sibling workflow may already have created this tag's release.
+          if [ "$previous" = "$tag" ]; then previous=""; fi
+
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$tag" \
+            ${previous:+-f previous_tag_name="$previous"} \
+            --jq '.body' > generated-notes.md || : > generated-notes.md
+
+          {
+            if [ "$WINDOWS_SIGNED" = "true" ]; then
+              echo "Windows installers are Authenticode signed with an RFC 3161 timestamp."
+              echo "Free code signing provided by [SignPath.io](https://signpath.io?utm_source=foundation&utm_medium=github&utm_campaign=quakesignal), certificate by [SignPath Foundation](https://signpath.org/)."
+            else
+              echo "> [!WARNING]"
+              echo "> Windows installers in this release are **not** code signed."
+            fi
+            echo
+            echo "> [!IMPORTANT]"
+            echo "> The macOS build is **not notarized**. macOS will report it as damaged or"
+            echo "> unverified on first launch. See [Installation on macOS](https://github.com/$GITHUB_REPOSITORY#installation-on-macos)."
+            echo
+            echo "### Checksums (SHA256)"
+            echo
+            echo '```'
+            cat dist/SHA256SUMS.txt
+            echo '```'
+            echo
+            echo "Verify with \`sha256sum -c SHA256SUMS.txt\` (Linux), \`shasum -a 256 -c SHA256SUMS.txt\` (macOS),"
+            echo "or \`Get-FileHash <file> -Algorithm SHA256\` (Windows)."
+            echo
+            echo "See [docs/SIGNING.md](https://github.com/$GITHUB_REPOSITORY/blob/$tag/docs/SIGNING.md) for the code signing policy."
+            echo
+            echo "---"
+            echo
+            cat generated-notes.md
+          } > release-notes.md
+
+          cat release-notes.md
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          # The Chrome extension workflow also publishes to v* releases, so the
+          # release may already exist or be created concurrently. Try to create
+          # it, and fall back to updating it in place.
+          if gh release create "$tag" dist/* \
+              --title "QuakeSignal $tag" \
+              --notes-file release-notes.md; then
+            echo "Created release $tag"
+          else
+            echo "Release $tag already exists; updating in place"
+            gh release upload "$tag" dist/* --clobber
+            gh release edit "$tag" --notes-file release-notes.md
+          fi
