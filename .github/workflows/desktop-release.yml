@@ -9,8 +9,12 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    # Builds an MSIX artifact for the initial manual Store submission. Store
-    # publishing runs only for a version tag, after the app is live.
+    inputs:
+      publish_to_store:
+        description: Submit the built MSIX to Microsoft Store
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: desktop-release-${{ github.ref }}
@@ -295,7 +299,7 @@ jobs:
     name: Submit MSIX to Microsoft Store
     needs: windows
     if: >-
-      startsWith(github.ref, 'refs/tags/v') &&
+      (startsWith(github.ref, 'refs/tags/v') || inputs.publish_to_store == true) &&
       github.repository == 'TastyHeadphones/QuakeSignal' &&
       vars.MICROSOFT_STORE_PRODUCT_ID != ''
     runs-on: windows-latest
