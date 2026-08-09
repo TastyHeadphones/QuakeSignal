@@ -110,8 +110,9 @@ jobs:
             Sort-Object Name -Descending |
             ForEach-Object {
               $candidate = Join-Path $_.FullName "x64\MakeAppx.exe"
-              if (Test-Path $candidate) { Get-Item $candidate; break }
-            }
+              if (Test-Path $candidate) { Get-Item $candidate }
+            } |
+            Select-Object -First 1
           if (-not $makeAppx) { throw "MakeAppx.exe was not found on the Windows runner" }
 
           $outDir = Join-Path $env:GITHUB_WORKSPACE "artifacts/windows"
