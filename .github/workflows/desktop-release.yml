@@ -173,17 +173,24 @@ jobs:
           & $makeAppx.FullName pack /d $packageRoot /p $packagePath /o
           if ($LASTEXITCODE -ne 0) { throw "MakeAppx failed with exit code $LASTEXITCODE" }
           if (-not (Test-Path $packagePath)) { throw "MSIX package was not produced" }
+          # Partner Center recommends an MSIX upload container. The Store CLI
+          # also requires this format for a first submission from CI.
+          $storeUploadPath = Join-Path $outDir "QuakeSignal_${env:APP_VERSION}_x64.msixupload"
+          Compress-Archive -Path $packagePath -DestinationPath $storeUploadPath -Force
+          if (-not (Test-Path $storeUploadPath)) { throw "MSIX upload container was not produced" }
           Get-FileHash $packagePath -Algorithm SHA256 | Format-List
+          Get-FileHash $storeUploadPath -Algorithm SHA256 | Format-List
 
       - name: Upload MSIX package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: windows-msix
-          path: ${{ github.workspace }}/artifacts/windows/*.msix
+          path: ${{ github.workspace }}/artifacts/windows/*.msix*
           if-no-files-found: error
 
   macos:
     name: macOS universal
+    if: github.event_name != 'workflow_dispatch' || inputs.publish_to_store != true
     runs-on: macos-latest
     env:
       RUST_TARGET: universal-apple-darwin
@@ -339,6 +346,6 @@ jobs:
       - name: Publish MSIX package
         shell: pwsh
         run: |
-          $package = Get-ChildItem store-package -Filter *.msix -File | Select-Object -First 1
+          $package = Get-ChildItem store-package -Filter *.msixupload -File | Select-Object -First 1
           if (-not $package) { throw "No MSIX package was downloaded" }
           msstore publish $package.FullName -id "$env:STORE_PRODUCT_ID"
