@@ -15,21 +15,6 @@ on:
         required: false
         default: false
         type: boolean
-      inspect_store_submission:
-        description: Retrieve the current Store submission metadata for diagnostics
-        required: false
-        default: false
-        type: boolean
-      apply_free_store_metadata:
-        description: Set the pending Store submission price to Free and save certification notes
-        required: false
-        default: false
-        type: boolean
-      apply_free_store_via_api:
-        description: Apply the documented Free price tier through the Store submission API
-        required: false
-        default: false
-        type: boolean
 
 concurrency:
   group: desktop-release-${{ github.ref }}
@@ -50,10 +35,6 @@ env:
 jobs:
   windows:
     name: Windows MSIX
-    if: >-
-      inputs.inspect_store_submission != true &&
-      inputs.apply_free_store_metadata != true &&
-      inputs.apply_free_store_via_api != true
     runs-on: windows-latest
     env:
       RUST_TARGET: x86_64-pc-windows-msvc
@@ -192,8 +173,8 @@ jobs:
           & $makeAppx.FullName pack /d $packageRoot /p $packagePath /o
           if ($LASTEXITCODE -ne 0) { throw "MakeAppx failed with exit code $LASTEXITCODE" }
           if (-not (Test-Path $packagePath)) { throw "MSIX package was not produced" }
-          # Partner Center recommends an MSIX upload container. The Store CLI
-          # also requires this format for a first submission from CI.
+          # Partner Center recommends an MSIX upload container. The first
+          # submission is uploaded in Partner Center; later updates use it in CI.
           $storeUploadPath = Join-Path $outDir "QuakeSignal_${env:APP_VERSION}_x64.msixupload"
           Compress-Archive -Path $packagePath -DestinationPath $storeUploadPath -Force
           if (-not (Test-Path $storeUploadPath)) { throw "MSIX upload container was not produced" }
@@ -209,11 +190,7 @@ jobs:
 
   macos:
     name: macOS universal
-    if: >-
-      (github.event_name != 'workflow_dispatch' || inputs.publish_to_store != true) &&
-      inputs.inspect_store_submission != true &&
-      inputs.apply_free_store_metadata != true &&
-      inputs.apply_free_store_via_api != true
+    if: github.event_name != 'workflow_dispatch' || inputs.publish_to_store != true
     runs-on: macos-latest
     env:
       RUST_TARGET: universal-apple-darwin
@@ -372,172 +349,3 @@ jobs:
           $package = Get-ChildItem store-package -Filter *.msixupload -File | Select-Object -First 1
           if (-not $package) { throw "No MSIX package was downloaded" }
           msstore publish $package.FullName -id "$env:STORE_PRODUCT_ID"
-
-  store-submission-metadata:
-    name: Inspect Microsoft Store submission metadata
-    if: >-
-      inputs.inspect_store_submission == true &&
-      github.repository == 'TastyHeadphones/QuakeSignal' &&
-      vars.MICROSOFT_STORE_PRODUCT_ID != ''
-    runs-on: windows-latest
-    permissions:
-      contents: read
-    env:
-      STORE_PRODUCT_ID: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
-      AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
-      AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
-      AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
-      SELLER_ID: ${{ secrets.SELLER_ID }}
-
-    steps:
-      - name: Configure Microsoft Store CLI
-        uses: microsoft/microsoft-store-apppublisher@15abd1c50fcc164b19cb240fb04ef3c49bf715a2 # v1.1
-
-      - name: Retrieve submission metadata
-        shell: pwsh
-        run: |
-          $missing = @()
-          foreach ($name in @("STORE_PRODUCT_ID", "AZURE_AD_TENANT_ID", "AZURE_AD_APPLICATION_CLIENT_ID", "AZURE_AD_APPLICATION_SECRET", "SELLER_ID")) {
-            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { $missing += $name }
-          }
-          if ($missing.Count -gt 0) { throw "Microsoft Store configuration is incomplete. Missing: $($missing -join ', ')" }
-          msstore reconfigure `
-            --tenantId "$env:AZURE_AD_TENANT_ID" `
-            --sellerId "$env:SELLER_ID" `
-            --clientId "$env:AZURE_AD_APPLICATION_CLIENT_ID" `
-            --clientSecret "$env:AZURE_AD_APPLICATION_SECRET"
-          msstore submission get "$env:STORE_PRODUCT_ID" | Set-Content -Path submission.json -Encoding utf8
-
-      - name: Upload submission metadata
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: microsoft-store-submission-metadata
-          path: submission.json
-          if-no-files-found: error
-
-  apply-free-store-metadata:
-    name: Set Store submission to free
-    if: >-
-      inputs.apply_free_store_metadata == true &&
-      github.repository == 'TastyHeadphones/QuakeSignal' &&
-      vars.MICROSOFT_STORE_PRODUCT_ID != ''
-    runs-on: windows-latest
-    permissions:
-      contents: read
-    env:
-      STORE_PRODUCT_ID: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
-      AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
-      AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
-      AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
-      SELLER_ID: ${{ secrets.SELLER_ID }}
-
-    steps:
-      - name: Configure Microsoft Store CLI
-        uses: microsoft/microsoft-store-apppublisher@15abd1c50fcc164b19cb240fb04ef3c49bf715a2 # v1.1
-
-      - name: Set free pricing and certification notes
-        shell: pwsh
-        run: |
-          $missing = @()
-          foreach ($name in @("STORE_PRODUCT_ID", "AZURE_AD_TENANT_ID", "AZURE_AD_APPLICATION_CLIENT_ID", "AZURE_AD_APPLICATION_SECRET", "SELLER_ID")) {
-            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { $missing += $name }
-          }
-          if ($missing.Count -gt 0) { throw "Microsoft Store configuration is incomplete. Missing: $($missing -join ', ')" }
-          msstore reconfigure `
-            --tenantId "$env:AZURE_AD_TENANT_ID" `
-            --sellerId "$env:SELLER_ID" `
-            --clientId "$env:AZURE_AD_APPLICATION_CLIENT_ID" `
-            --clientSecret "$env:AZURE_AD_APPLICATION_SECRET"
-          msstore submission get "$env:STORE_PRODUCT_ID" | Set-Content -Path submission.json -Encoding utf8
-          $submission = Get-Content -Path submission.json -Raw | ConvertFrom-Json
-          $submission.Pricing.PriceId = "Free"
-          $submission.NotesForCertification = "QuakeSignal is an independent, non-official earthquake monitor. It connects directly to public seismic feeds, stores event history locally, and uses native Windows notifications and audible alarms. No account or test credentials are required. Use the default English UI and select a city or location during onboarding."
-          $metadata = $submission | ConvertTo-Json -Depth 100 -Compress
-          msstore submission updateMetadata "$env:STORE_PRODUCT_ID" "$metadata"
-          msstore submission get "$env:STORE_PRODUCT_ID" | Set-Content -Path submission-after.json -Encoding utf8
-
-      - name: Upload updated submission metadata
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: microsoft-store-submission-after-free-pricing
-          path: submission-after.json
-          if-no-files-found: error
-
-  apply-free-store-via-api:
-    name: Set Store submission to free via API
-    if: >-
-      inputs.apply_free_store_via_api == true &&
-      github.repository == 'TastyHeadphones/QuakeSignal' &&
-      vars.MICROSOFT_STORE_PRODUCT_ID != ''
-    runs-on: windows-latest
-    permissions:
-      contents: read
-    env:
-      STORE_PRODUCT_ID: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
-      STORE_SUBMISSION_ID: "1152921505701612816"
-      AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
-      AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
-      AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
-
-    steps:
-      - name: Set free pricing through Store submission API
-        shell: pwsh
-        run: |
-          $token = Invoke-RestMethod -Method Post `
-            -Uri "https://login.microsoftonline.com/$env:AZURE_AD_TENANT_ID/oauth2/token" `
-            -ContentType "application/x-www-form-urlencoded" `
-            -Body @{
-              grant_type = "client_credentials"
-              client_id = $env:AZURE_AD_APPLICATION_CLIENT_ID
-              client_secret = $env:AZURE_AD_APPLICATION_SECRET
-              resource = "https://manage.devcenter.microsoft.com"
-            }
-          $headers = @{ Authorization = "Bearer $($token.access_token)" }
-          $uri = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:STORE_PRODUCT_ID/submissions/$env:STORE_SUBMISSION_ID"
-          $submission = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers
-          $packages = @($submission.applicationPackages | ForEach-Object {
-            [ordered]@{
-              fileName = $_.fileName
-              fileStatus = $_.fileStatus
-              minimumDirectXVersion = $_.minimumDirectXVersion
-              minimumSystemRam = $_.minimumSystemRam
-            }
-          })
-          $body = [ordered]@{
-            applicationCategory = $submission.applicationCategory
-            pricing = [ordered]@{
-              trialPeriod = $submission.pricing.trialPeriod
-              marketSpecificPricings = $submission.pricing.marketSpecificPricings
-              priceId = "Free"
-            }
-            visibility = $submission.visibility
-            targetPublishMode = $submission.targetPublishMode
-            targetPublishDate = $submission.targetPublishDate
-            listings = $submission.listings
-            hardwarePreferences = $submission.hardwarePreferences
-            automaticBackupEnabled = $submission.automaticBackupEnabled
-            canInstallOnRemovableMedia = $submission.canInstallOnRemovableMedia
-            isGameDvrEnabled = $submission.isGameDvrEnabled
-            gamingOptions = $submission.gamingOptions
-            hasExternalInAppProducts = $submission.hasExternalInAppProducts
-            meetAccessibilityGuidelines = $submission.meetAccessibilityGuidelines
-            notesForCertification = "QuakeSignal is an independent, non-official earthquake monitor. It connects directly to public seismic feeds, stores event history locally, and uses native Windows notifications and audible alarms. No account or test credentials are required. Use the default English UI and select a city or location during onboarding."
-            applicationPackages = $packages
-            packageDeliveryOptions = $submission.packageDeliveryOptions
-            enterpriseLicensing = $submission.enterpriseLicensing
-            allowMicrosoftDecideAppAvailabilityToFutureDeviceFamilies = $submission.allowMicrosoftDecideAppAvailabilityToFutureDeviceFamilies
-            allowTargetFutureDeviceFamilies = $submission.allowTargetFutureDeviceFamilies
-            trailers = $submission.trailers
-          }
-          $body | ConvertTo-Json -Depth 100 | Set-Content -Path submission-before-commit.json -Encoding utf8
-          $updated = Invoke-RestMethod -Method Put -Uri $uri -Headers $headers -ContentType "application/json" -Body (Get-Content -Path submission-before-commit.json -Raw)
-          $updated | ConvertTo-Json -Depth 100 | Set-Content -Path submission-after-free-pricing.json -Encoding utf8
-
-      - name: Upload Store API response
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: microsoft-store-submission-api-response
-          path: |
-            submission-before-commit.json
-            submission-after-free-pricing.json
-          if-no-files-found: error

@@ -27,7 +27,7 @@ Create the first submission manually in Partner Center:
 
 1. Run **Desktop release** with **Run workflow**. This produces the
    `windows-msix` artifact without publishing it.
-2. Download that artifact and upload the `.msix` package in the Partner Center
+2. Download that artifact and upload the `.msixupload` package in the Partner Center
    submission. Complete the listing, availability, age rating, and
    certification notes, then submit it for certification.
 3. After Microsoft approves the app and it becomes live, later tagged releases
