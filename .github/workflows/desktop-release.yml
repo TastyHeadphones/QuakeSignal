@@ -11,7 +11,12 @@ on:
   workflow_dispatch:
     inputs:
       publish_to_store:
-        description: Submit the built MSIX to Microsoft Store
+        description: Submit an update for the live Microsoft Store app
+        required: false
+        default: false
+        type: boolean
+      inspect_store_submission:
+        description: Retrieve the current Store submission metadata for diagnostics
         required: false
         default: false
         type: boolean
@@ -35,6 +40,7 @@ env:
 jobs:
   windows:
     name: Windows MSIX
+    if: inputs.inspect_store_submission != true
     runs-on: windows-latest
     env:
       RUST_TARGET: x86_64-pc-windows-msvc
@@ -190,7 +196,9 @@ jobs:
 
   macos:
     name: macOS universal
-    if: github.event_name != 'workflow_dispatch' || inputs.publish_to_store != true
+    if: >-
+      (github.event_name != 'workflow_dispatch' || inputs.publish_to_store != true) &&
+      inputs.inspect_store_submission != true
     runs-on: macos-latest
     env:
       RUST_TARGET: universal-apple-darwin
@@ -349,3 +357,45 @@ jobs:
           $package = Get-ChildItem store-package -Filter *.msixupload -File | Select-Object -First 1
           if (-not $package) { throw "No MSIX package was downloaded" }
           msstore publish $package.FullName -id "$env:STORE_PRODUCT_ID"
+
+  store-submission-metadata:
+    name: Inspect Microsoft Store submission metadata
+    if: >-
+      inputs.inspect_store_submission == true &&
+      github.repository == 'TastyHeadphones/QuakeSignal' &&
+      vars.MICROSOFT_STORE_PRODUCT_ID != ''
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      STORE_PRODUCT_ID: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
+      AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+      AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+      AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+      SELLER_ID: ${{ secrets.SELLER_ID }}
+
+    steps:
+      - name: Configure Microsoft Store CLI
+        uses: microsoft/microsoft-store-apppublisher@15abd1c50fcc164b19cb240fb04ef3c49bf715a2 # v1.1
+
+      - name: Retrieve submission metadata
+        shell: pwsh
+        run: |
+          $missing = @()
+          foreach ($name in @("STORE_PRODUCT_ID", "AZURE_AD_TENANT_ID", "AZURE_AD_APPLICATION_CLIENT_ID", "AZURE_AD_APPLICATION_SECRET", "SELLER_ID")) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { $missing += $name }
+          }
+          if ($missing.Count -gt 0) { throw "Microsoft Store configuration is incomplete. Missing: $($missing -join ', ')" }
+          msstore reconfigure `
+            --tenantId "$env:AZURE_AD_TENANT_ID" `
+            --sellerId "$env:SELLER_ID" `
+            --clientId "$env:AZURE_AD_APPLICATION_CLIENT_ID" `
+            --clientSecret "$env:AZURE_AD_APPLICATION_SECRET"
+          msstore submission get "$env:STORE_PRODUCT_ID" | Set-Content -Path submission.json -Encoding utf8
+
+      - name: Upload submission metadata
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: microsoft-store-submission-metadata
+          path: submission.json
+          if-no-files-found: error
