@@ -6,7 +6,7 @@ name: Desktop release
 # Nothing is ever uploaded from a maintainer's machine.
 #
 #   Windows  build (no bundle) -> SignPath sign app .exe -> bundle NSIS + MSI
-#            -> SignPath sign installers -> release
+#            -> SignPath sign installers -> release -> GitHub Pages -> Store
 #   macOS    universal build (ad-hoc signature only, not yet notarized) -> release
 #   release  SHA256SUMS for every artifact -> GitHub Release
 #
@@ -283,9 +283,15 @@ jobs:
             "artifacts/windows/unsigned-installers"
           }
           Write-Host "Publishing Windows artifacts from $source"
-          Get-ChildItem -Path $source -File | ForEach-Object {
-            Copy-Item $_.FullName dist -Force
-          }
+          $nsis = Get-ChildItem -Path $source -Filter "*-setup.exe" -File | Select-Object -First 1
+          $msi = Get-ChildItem -Path $source -Filter "*.msi" -File | Select-Object -First 1
+          if (-not $nsis) { throw "No NSIS installer found under $source" }
+          if (-not $msi)  { throw "No MSI installer found under $source" }
+
+          # Keep release asset names stable. The Store job uses the versioned
+          # MSI URL below, and the release-notes template documents these names.
+          Copy-Item $nsis.FullName "dist/QuakeSignal_${env:APP_VERSION}_x64-setup.exe" -Force
+          Copy-Item $msi.FullName  "dist/QuakeSignal_${env:APP_VERSION}_x64_en-US.msi" -Force
           Get-ChildItem dist
 
       - name: Verify Authenticode signatures
@@ -491,3 +497,159 @@ jobs:
             gh release upload "$tag" dist/* --clobber
             gh release edit "$tag" --notes-file release-notes.md
           fi
+
+  # ---------------------------------------------------------------------------
+  # Store hosting: publish the signed MSI at a stable, non-redirecting URL.
+  #
+  # This is deliberately gated on both Store configuration and successful
+  # Windows signing. Microsoft requires MSI/EXE packages to be Authenticode
+  # signed by a certificate trusted by Windows, so an unsigned test release
+  # must never be submitted to Partner Center.
+  # ---------------------------------------------------------------------------
+  store-pages:
+    name: Host Windows MSI for Microsoft Store
+    needs: [windows, release]
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.repository == 'TastyHeadphones/QuakeSignal' &&
+      needs.windows.outputs.signed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Download the signed MSI from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          asset_name="QuakeSignal_${version}_x64_en-US.msi"
+          mkdir -p "site/store/${version}"
+          gh release download "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$asset_name" \
+            --dir "site/store/${version}"
+          test -s "site/store/${version}/${asset_name}"
+          touch site/.nojekyll
+
+      - name: Upload the Store site artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: site
+
+      - name: Deploy the Store site
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+
+  # ---------------------------------------------------------------------------
+  # Microsoft Store: submit the signed MSI from GitHub Pages.
+  # ---------------------------------------------------------------------------
+  microsoft-store:
+    name: Submit Windows MSI to Microsoft Store
+    needs: [windows, release, store-pages]
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.repository == 'TastyHeadphones/QuakeSignal' &&
+      needs.windows.outputs.signed == 'true' &&
+      vars.MICROSOFT_STORE_PRODUCT_ID != ''
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      STORE_PRODUCT_ID: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
+      AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+      AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+      AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+      SELLER_ID: ${{ secrets.SELLER_ID }}
+
+    steps:
+      - name: Configure Microsoft Store CLI
+        uses: microsoft/microsoft-store-apppublisher@15abd1c50fcc164b19cb240fb04ef3c49bf715a2 # v1.1
+
+      - name: Configure Partner Center credentials
+        shell: pwsh
+        run: |
+          $missing = @()
+          foreach ($name in @(
+            "STORE_PRODUCT_ID",
+            "AZURE_AD_TENANT_ID",
+            "AZURE_AD_APPLICATION_CLIENT_ID",
+            "AZURE_AD_APPLICATION_SECRET",
+            "SELLER_ID"
+          )) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              $missing += $name
+            }
+          }
+          if ($missing.Count -gt 0) {
+            throw "Microsoft Store configuration is incomplete. Missing: $($missing -join ', ')"
+          }
+
+          msstore reconfigure `
+            --tenantId "$env:AZURE_AD_TENANT_ID" `
+            --sellerId "$env:SELLER_ID" `
+            --clientId "$env:AZURE_AD_APPLICATION_CLIENT_ID" `
+            --clientSecret "$env:AZURE_AD_APPLICATION_SECRET"
+
+      - name: Update the draft with the signed MSI URL
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring(1)
+          $assetName = "QuakeSignal_${version}_x64_en-US.msi"
+          $packageUrl = "https://tastyheadphones.github.io/QuakeSignal/store/$version/$assetName"
+
+          # Verify the Pages URL is public, stable, and does not redirect before
+          # touching the Partner Center draft.
+          $asset = Invoke-WebRequest -Uri $packageUrl -Method Head -MaximumRedirection 0
+          if ($asset.StatusCode -lt 200 -or $asset.StatusCode -ge 400) {
+            throw "Release asset check failed with HTTP $($asset.StatusCode): $packageUrl"
+          }
+          Write-Host "Store package URL: $packageUrl"
+
+          $basePath = Join-Path $env:RUNNER_TEMP "store-package-base.json"
+          $updatedPath = Join-Path $env:RUNNER_TEMP "store-package-updated.json"
+          msstore submission get $env:STORE_PRODUCT_ID | Out-File -FilePath $basePath -Encoding utf8
+
+          $base = Get-Content -Raw $basePath | ConvertFrom-Json
+          # The CLI normally returns the package object directly. Accept the
+          # API responseData wrapper too, so the workflow remains compatible
+          # with either CLI response shape.
+          if ($base.responseData -and $base.responseData.packages) {
+            $base = $base.responseData
+          }
+          if (-not $base.packages) {
+            throw "Partner Center returned no package list for product $env:STORE_PRODUCT_ID"
+          }
+
+          $package = @($base.packages) |
+            Where-Object { $_.packageType -ieq "msi" } |
+            Select-Object -First 1
+          if (-not $package) {
+            $package = @($base.packages) | Select-Object -First 1
+          }
+          if (-not $package) {
+            throw "Partner Center returned an empty package list for product $env:STORE_PRODUCT_ID"
+          }
+
+          $package.packageUrl = $packageUrl
+          $package.languages = @("en-us")
+          $package.architectures = @("X64")
+          $package.isSilentInstall = $true
+          $package.installerParameters = "/qn"
+          $package.packageType = "msi"
+          $base.packages = @($package)
+          $base | ConvertTo-Json -Depth 50 | Set-Content -Path $updatedPath -Encoding utf8
+
+          $updatedPackage = Get-Content -Raw $updatedPath
+          msstore submission update $env:STORE_PRODUCT_ID $updatedPackage
+
+      - name: Publish the Microsoft Store submission
+        shell: pwsh
+        run: msstore submission publish $env:STORE_PRODUCT_ID
