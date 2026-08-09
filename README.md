@@ -303,27 +303,12 @@ who may approve a signature — is documented in
 [`docs/SIGNING.md`](docs/SIGNING.md). Privacy is documented separately in
 [`docs/PRIVACY.md`](docs/PRIVACY.md).
 
-**Team roles.** QuakeSignal is a single-maintainer project.
-[@TastyHeadphones](https://github.com/TastyHeadphones) holds all three signing
-roles — Author, Reviewer and Approver. Every external pull request is reviewed
-by the maintainer before merge, and every signing request requires explicit
-manual approval by the maintainer; a tag push alone cannot produce a signature.
+Windows releases are built as MSIX packages by GitHub Actions and distributed
+through Microsoft Store. Microsoft signs the certified Store package; no
+Windows signing key or third-party signing service is used by this project.
 
-Every release publishes a `SHA256SUMS.txt` covering all of its artifacts.
-Desktop binaries are built only by GitHub Actions from a version tag; nothing is
-ever uploaded from a maintainer's machine.
-
-QuakeSignal uses the SignPath Foundation for Windows code signing. The signing
-key is held in SignPath's hardware security module and is never present in this
-repository, in CI, or on a maintainer's machine.
-
-Free code signing provided by [SignPath.io](https://signpath.io?utm_source=foundation&utm_medium=github&utm_campaign=quakesignal),
-certificate by [SignPath Foundation](https://signpath.org/).
-
-> [!NOTE]
-> The SignPath Foundation application is still pending, so Windows signing is
-> configured but not yet active, and macOS builds are not yet notarized. Every
-> release states its own signing status.
+GitHub Releases publish `SHA256SUMS.txt` for their downloadable artifacts.
+macOS builds are not yet notarized by Apple.
 
 ## License
 

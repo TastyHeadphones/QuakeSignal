@@ -1,25 +1,16 @@
 name: Desktop release
 
-# Tag-triggered release pipeline for the QuakeSignal desktop app.
-#
-# Every published artifact is produced by this workflow and nowhere else.
-# Nothing is ever uploaded from a maintainer's machine.
-#
-#   Windows  build (no bundle) -> SignPath sign app .exe -> bundle NSIS + MSI
-#            -> SignPath sign installers -> release -> GitHub Pages -> Store
-#   macOS    universal build (ad-hoc signature only, not yet notarized) -> release
-#   release  SHA256SUMS for every artifact -> GitHub Release
-#
-# Signing runs only for tag pushes on this repository. The workflow has no
-# `pull_request` trigger at all, so a fork can never reach the signing steps.
+# Tagged releases build QuakeSignal for Windows and macOS. Windows is packaged
+# as MSIX and submitted directly to Microsoft Store, which signs the package
+# after certification. No third-party code-signing key is used or stored here.
 
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
-    # Manual runs build and verify the full pipeline but never sign and never
-    # publish a release. Use this to smoke-test changes to this workflow.
+    # Builds an MSIX artifact for the initial manual Store submission. Store
+    # publishing runs only for a version tag, after the app is live.
 
 concurrency:
   group: desktop-release-${{ github.ref }}
@@ -30,26 +21,18 @@ permissions:
 
 env:
   NODE_VERSION: "22"
-  # Upstream repository. Signing is refused anywhere else (forks, mirrors).
   UPSTREAM_REPOSITORY: TastyHeadphones/QuakeSignal
+  # Assigned by Partner Center for the MSIX Store product. These are public
+  # package-manifest values, not credentials.
+  MSIX_IDENTITY_NAME: tastyheadphones.QuakeSignal
+  MSIX_PUBLISHER: CN=EFC77215-2E59-452D-86F8-5990C0BA641E
+  MSIX_PUBLISHER_DISPLAY_NAME: tastyheadphones
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Windows: SignPath-signed NSIS installer, MSI, and main application binary.
-  # ---------------------------------------------------------------------------
   windows:
-    name: Windows x64
+    name: Windows MSIX
     runs-on: windows-latest
-    permissions:
-      contents: read
-      # Required by the SignPath action to read job details and download the
-      # workflow artifact it submits for signing.
-      actions: read
-    outputs:
-      signed: ${{ steps.signing-mode.outputs.enabled }}
     env:
-      # Mapped here so steps can test for presence without exposing the value.
-      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
       RUST_TARGET: x86_64-pc-windows-msvc
 
     steps:
@@ -75,19 +58,19 @@ jobs:
           workspaces: desktop/src-tauri -> target
 
       - name: Resolve application version
-        id: version
         shell: bash
         run: |
-          # Single source of truth for the version, used for the tag check and
-          # for the enforced product-version metadata in both signing passes.
           config_version="$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")"
           if [ -z "$config_version" ] || [ "$config_version" = "undefined" ]; then
             echo "::error::Could not read version from desktop/src-tauri/tauri.conf.json"
             exit 1
           fi
+          if [[ ! "$config_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::MSIX releases require a numeric major.minor.patch version; found $config_version"
+            exit 1
+          fi
           echo "APP_VERSION=$config_version" >> "$GITHUB_ENV"
-          echo "version=$config_version" >> "$GITHUB_OUTPUT"
-          echo "Application version: $config_version"
+          echo "MSIX_VERSION=$config_version.0" >> "$GITHUB_ENV"
 
       - name: Verify tag matches tauri.conf.json version
         if: startsWith(github.ref, 'refs/tags/v')
@@ -98,51 +81,6 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match tauri.conf.json version $APP_VERSION"
             exit 1
           fi
-          echo "Releasing version $APP_VERSION"
-
-      - name: Determine signing mode
-        id: signing-mode
-        shell: bash
-        run: |
-          enabled=false
-          if [ "${{ startsWith(github.ref, 'refs/tags/v') }}" = "true" ] \
-            && [ "${{ github.repository }}" = "$UPSTREAM_REPOSITORY" ] \
-            && [ -n "$SIGNPATH_API_TOKEN" ]; then
-            enabled=true
-          fi
-          echo "SIGN_ENABLED=$enabled" >> "$GITHUB_ENV"
-          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
-          echo "Windows code signing enabled: $enabled"
-
-      - name: Validate SignPath configuration
-        if: env.SIGN_ENABLED == 'true'
-        shell: bash
-        env:
-          ORG_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          CONFIG_APP: ${{ vars.SIGNPATH_ARTIFACT_CONFIG_APP }}
-          CONFIG_INSTALLERS: ${{ vars.SIGNPATH_ARTIFACT_CONFIG_INSTALLERS }}
-        run: |
-          # The API token alone is not enough. Fail here with a list of what is
-          # missing, rather than deep inside the signing action with an opaque
-          # error after a full Rust build has already run.
-          missing=()
-          [ -n "$ORG_ID" ]            || missing+=("SIGNPATH_ORGANIZATION_ID")
-          [ -n "$PROJECT_SLUG" ]      || missing+=("SIGNPATH_PROJECT_SLUG")
-          [ -n "$POLICY_SLUG" ]       || missing+=("SIGNPATH_SIGNING_POLICY_SLUG")
-          [ -n "$CONFIG_APP" ]        || missing+=("SIGNPATH_ARTIFACT_CONFIG_APP")
-          [ -n "$CONFIG_INSTALLERS" ] || missing+=("SIGNPATH_ARTIFACT_CONFIG_INSTALLERS")
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::SIGNPATH_API_TOKEN is set, but these repository variables are missing: ${missing[*]}"
-            echo "::error::Add them under Settings > Secrets and variables > Actions > Variables. See docs/SIGNING.md."
-            exit 1
-          fi
-          echo "SignPath configuration is complete:"
-          echo "  project-slug:                 $PROJECT_SLUG"
-          echo "  signing-policy-slug:          $POLICY_SLUG"
-          echo "  artifact-config (app):        $CONFIG_APP"
-          echo "  artifact-config (installers): $CONFIG_INSTALLERS"
 
       - name: Install frontend dependencies
         working-directory: desktop
@@ -152,181 +90,90 @@ jobs:
         working-directory: desktop/src-tauri
         run: cargo test --locked
 
-      # -- Pass 1: compile the application binary, sign it, then bundle around it.
-      #
-      # The NSIS and MSI installers embed QuakeSignal.exe, so the binary has to
-      # carry its Authenticode signature *before* the installers are built.
-      # `tauri build --no-bundle` compiles without packaging; `tauri bundle`
-      # packages the already-compiled binary.
-      - name: Build application binary (no bundle)
+      - name: Build Windows application
         working-directory: desktop
         run: npm run tauri -- build --no-bundle --target ${{ env.RUST_TARGET }}
 
-      - name: Stage unsigned application binary
+      - name: Package MSIX for Microsoft Store
         shell: pwsh
         run: |
           $releaseDir = "desktop/src-tauri/target/${env:RUST_TARGET}/release"
-          # The compiled binary is named after either the product or the crate
-          # depending on Tauri's rename behaviour (the macOS bundle currently
-          # ships Contents/MacOS/desktop, i.e. the crate name). Accept both and
-          # fail loudly if neither is present, rather than guessing.
-          $exe = $null
-          foreach ($name in @("QuakeSignal.exe", "desktop.exe")) {
-            $candidate = Join-Path $releaseDir $name
-            if (Test-Path $candidate) { $exe = Get-Item $candidate; break }
-          }
-          if (-not $exe) {
-            throw "Main application binary not found under $releaseDir"
-          }
-          Write-Host "Main binary: $($exe.FullName)"
-          # Normalise the staged name so the SignPath artifact configuration has
-          # one stable file name to match, whichever name the build produced.
-          New-Item -ItemType Directory -Force -Path artifacts/windows/unsigned-app | Out-Null
-          Copy-Item $exe.FullName artifacts/windows/unsigned-app/QuakeSignal.exe -Force
-          "MAIN_BINARY_PATH=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $exe = @("QuakeSignal.exe", "desktop.exe") |
+            ForEach-Object {
+              $candidate = Join-Path $releaseDir $_
+              if (Test-Path $candidate) { Get-Item $candidate }
+            } |
+            Select-Object -First 1
+          if (-not $exe) { throw "Main application binary not found under $releaseDir" }
 
-      - name: Upload unsigned application binary
-        id: upload-unsigned-app
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: windows-unsigned-app
-          path: artifacts/windows/unsigned-app
-          if-no-files-found: error
-
-      - name: Sign application binary (SignPath)
-        if: env.SIGN_ENABLED == 'true'
-        uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2.2
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          # TODO(signpath): create these repository variables after the
-          # SignPath Foundation application is approved. See docs/SIGNING.md.
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          # Artifact configuration whose root is <zip-file> containing
-          # QuakeSignal.exe (upload-artifact zips the directory).
-          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIG_APP }}
-          github-artifact-id: ${{ steps.upload-unsigned-app.outputs.artifact-id }}
-          # Satisfies the enforced product-version / file-version metadata
-          # restriction declared in the artifact configuration.
-          parameters: |
-            version: "${{ steps.version.outputs.version }}"
-          wait-for-completion: true
-          output-artifact-directory: artifacts/windows/signed-app
-
-      - name: Install signed application binary
-        if: env.SIGN_ENABLED == 'true'
-        shell: pwsh
-        run: |
-          $signed = "artifacts/windows/signed-app/QuakeSignal.exe"
-          if (-not (Test-Path $signed)) {
-            throw "SignPath did not return a signed QuakeSignal.exe"
-          }
-          Copy-Item $signed $env:MAIN_BINARY_PATH -Force
-          Write-Host "Replaced $env:MAIN_BINARY_PATH with the signed binary"
-
-      # -- Pass 2: bundle the installers around the signed binary, then sign them.
-      - name: Bundle NSIS installer and MSI
-        working-directory: desktop
-        run: npm run tauri -- bundle --target ${{ env.RUST_TARGET }} --bundles nsis,msi
-
-      - name: Stage unsigned installers
-        shell: pwsh
-        run: |
-          $bundleDir = "desktop/src-tauri/target/${env:RUST_TARGET}/release/bundle"
-          New-Item -ItemType Directory -Force -Path artifacts/windows/unsigned-installers | Out-Null
-          $installers = @()
-          $installers += Get-ChildItem -Path (Join-Path $bundleDir "nsis") -Filter *.exe -File -ErrorAction SilentlyContinue
-          $installers += Get-ChildItem -Path (Join-Path $bundleDir "msi")  -Filter *.msi -File -ErrorAction SilentlyContinue
-          if ($installers.Count -lt 2) {
-            throw "Expected an NSIS .exe and an .msi under $bundleDir, found $($installers.Count) file(s)"
-          }
-          foreach ($file in $installers) {
-            Write-Host "Staging $($file.Name)"
-            Copy-Item $file.FullName artifacts/windows/unsigned-installers -Force
-          }
-
-      - name: Upload unsigned installers
-        id: upload-unsigned-installers
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: windows-unsigned-installers
-          path: artifacts/windows/unsigned-installers
-          if-no-files-found: error
-
-      - name: Sign installers (SignPath)
-        if: env.SIGN_ENABLED == 'true'
-        uses: signpath/github-action-submit-signing-request@b9d91eadd323de506c0c81cf0c7fe7438f3360fd # v2.2
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
-          # Artifact configuration whose root is <zip-file> containing the
-          # NSIS *-setup.exe and the *.msi.
-          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIG_INSTALLERS }}
-          github-artifact-id: ${{ steps.upload-unsigned-installers.outputs.artifact-id }}
-          # Same version parameter as the first pass, so the enforced metadata
-          # and the artifact file names cannot drift between the two.
-          parameters: |
-            version: "${{ steps.version.outputs.version }}"
-          wait-for-completion: true
-          output-artifact-directory: artifacts/windows/signed-installers
-
-      - name: Collect release artifacts
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          $source = if ($env:SIGN_ENABLED -eq "true") {
-            "artifacts/windows/signed-installers"
-          } else {
-            "artifacts/windows/unsigned-installers"
-          }
-          Write-Host "Publishing Windows artifacts from $source"
-          $nsis = Get-ChildItem -Path $source -Filter "*-setup.exe" -File | Select-Object -First 1
-          $msi = Get-ChildItem -Path $source -Filter "*.msi" -File | Select-Object -First 1
-          if (-not $nsis) { throw "No NSIS installer found under $source" }
-          if (-not $msi)  { throw "No MSI installer found under $source" }
-
-          # Keep release asset names stable. The Store job uses the versioned
-          # MSI URL below, and the release-notes template documents these names.
-          Copy-Item $nsis.FullName "dist/QuakeSignal_${env:APP_VERSION}_x64-setup.exe" -Force
-          Copy-Item $msi.FullName  "dist/QuakeSignal_${env:APP_VERSION}_x64_en-US.msi" -Force
-          Get-ChildItem dist
-
-      - name: Verify Authenticode signatures
-        if: env.SIGN_ENABLED == 'true'
-        shell: pwsh
-        run: |
-          $failed = $false
-          foreach ($file in Get-ChildItem dist -File) {
-            $sig = Get-AuthenticodeSignature $file.FullName
-            Write-Host "== $($file.Name)"
-            Write-Host "   Status:      $($sig.Status)"
-            Write-Host "   Publisher:   $($sig.SignerCertificate.Subject)"
-            Write-Host "   Timestamp:   $($sig.TimeStamperCertificate.Subject)"
-            if ($sig.Status -ne "Valid") {
-              Write-Host "::error::$($file.Name) signature status is $($sig.Status)"
-              $failed = $true
+          $makeAppx = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory |
+            Sort-Object Name -Descending |
+            ForEach-Object {
+              $candidate = Join-Path $_.FullName "x64\MakeAppx.exe"
+              if (Test-Path $candidate) { Get-Item $candidate; break }
             }
-            if (-not $sig.TimeStamperCertificate) {
-              Write-Host "::error::$($file.Name) has no RFC 3161 timestamp"
-              $failed = $true
-            }
-          }
-          if ($failed) { exit 1 }
+          if (-not $makeAppx) { throw "MakeAppx.exe was not found on the Windows runner" }
 
-      - name: Upload Windows release artifacts
+          $packageRoot = Join-Path $PWD "artifacts/windows/msix-root"
+          $assets = Join-Path $packageRoot "Assets"
+          New-Item -ItemType Directory -Force -Path $assets | Out-Null
+          Copy-Item $exe.FullName (Join-Path $packageRoot "QuakeSignal.exe") -Force
+          Get-ChildItem $releaseDir -Filter *.dll -File -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $packageRoot -Force
+
+          foreach ($assetName in @("StoreLogo.png", "Square44x44Logo.png", "Square150x150Logo.png")) {
+            Copy-Item "desktop/src-tauri/icons/$assetName" (Join-Path $assets $assetName) -Force
+          }
+
+          @"
+          <?xml version="1.0" encoding="utf-8"?>
+          <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+                   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+                   IgnorableNamespaces="uap">
+            <Identity Name="${env:MSIX_IDENTITY_NAME}"
+                      Publisher="${env:MSIX_PUBLISHER}"
+                      Version="${env:MSIX_VERSION}"
+                      ProcessorArchitecture="x64" />
+            <Properties>
+              <DisplayName>QuakeSignal</DisplayName>
+              <PublisherDisplayName>${env:MSIX_PUBLISHER_DISPLAY_NAME}</PublisherDisplayName>
+              <Logo>Assets\StoreLogo.png</Logo>
+            </Properties>
+            <Resources>
+              <Resource Language="en-us" />
+            </Resources>
+            <Dependencies>
+              <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+            </Dependencies>
+            <Applications>
+              <Application Id="App" Executable="QuakeSignal.exe" EntryPoint="Windows.FullTrustApplication">
+                <uap:VisualElements DisplayName="QuakeSignal"
+                                    Description="Local-first desktop earthquake monitor"
+                                    Square150x150Logo="Assets\Square150x150Logo.png"
+                                    Square44x44Logo="Assets\Square44x44Logo.png"
+                                    BackgroundColor="transparent" />
+              </Application>
+            </Applications>
+            <Capabilities>
+              <Capability Name="internetClient" />
+            </Capabilities>
+          </Package>
+          "@ | Set-Content -Path (Join-Path $packageRoot "AppxManifest.xml") -Encoding utf8
+
+          New-Item -ItemType Directory -Force -Path artifacts/windows | Out-Null
+          $packagePath = "artifacts/windows/QuakeSignal_${env:APP_VERSION}_x64.msix"
+          & $makeAppx.FullName pack /d $packageRoot /p $packagePath /o
+          if ($LASTEXITCODE -ne 0) { throw "MakeAppx failed with exit code $LASTEXITCODE" }
+          if (-not (Test-Path $packagePath)) { throw "MSIX package was not produced" }
+          Get-FileHash $packagePath -Algorithm SHA256 | Format-List
+
+      - name: Upload MSIX package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: release-windows
-          path: dist
+          name: windows-msix
+          path: artifacts/windows/*.msix
           if-no-files-found: error
 
-  # ---------------------------------------------------------------------------
-  # macOS: universal .dmg. Ad-hoc signed only — not yet Developer ID signed or
-  # notarized. See docs/SIGNING.md for the migration path.
-  # ---------------------------------------------------------------------------
   macos:
     name: macOS universal
     runs-on: macos-latest
@@ -366,25 +213,7 @@ jobs:
       - name: Build universal macOS bundles
         working-directory: desktop
         env:
-          # Ad-hoc signature ("-"). Required so the universal build launches at
-          # all on Apple silicon, which refuses unsigned native arm64 code.
-          # It is NOT a Developer ID signature and does NOT satisfy Gatekeeper.
           APPLE_SIGNING_IDENTITY: "-"
-          #
-          # TODO(apple): once an Apple Developer Program membership exists,
-          # delete the ad-hoc identity above and supply these instead. No other
-          # change to this workflow is required — Tauri picks all of them up
-          # from the environment and performs signing + notarization itself.
-          #
-          # APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
-          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          # APPLE_SIGNING_IDENTITY:     ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          # APPLE_API_ISSUER:           ${{ secrets.APPLE_API_ISSUER }}
-          # APPLE_API_KEY:              ${{ secrets.APPLE_API_KEY }}
-          # APPLE_API_KEY_PATH:         ${{ secrets.APPLE_API_KEY_PATH }}
-          #
-          # A keychain step is also needed to import APPLE_CERTIFICATE before
-          # this step runs; see docs/SIGNING.md § "Adding Apple signing later".
         run: npm run tauri -- build --target ${{ env.RUST_TARGET }} --bundles app,dmg
 
       - name: Collect release artifacts
@@ -398,26 +227,7 @@ jobs:
             echo "::error::No .dmg produced under $bundle_dir/dmg"
             exit 1
           fi
-          for dmg in "${dmgs[@]}"; do
-            echo "Staging $(basename "$dmg")"
-            cp "$dmg" dist/
-          done
-          ls -la dist
-
-      - name: Report macOS signature state
-        run: |
-          set -euo pipefail
-          app_dir="desktop/src-tauri/target/${RUST_TARGET}/release/bundle/macos"
-          app="$app_dir/QuakeSignal.app"
-          if [ -d "$app" ]; then
-            echo "== codesign"
-            codesign --verify --verbose=2 "$app" 2>&1 || true
-            codesign --display --verbose=2 "$app" 2>&1 || true
-            echo "== Gatekeeper assessment (expected to FAIL until notarized)"
-            spctl --assess --type execute --verbose=4 "$app" 2>&1 || true
-          else
-            echo "::warning::$app not found; skipping signature report"
-          fi
+          cp "${dmgs[@]}" dist/
 
       - name: Upload macOS release artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -426,9 +236,6 @@ jobs:
           path: dist
           if-no-files-found: error
 
-  # ---------------------------------------------------------------------------
-  # Publish: checksums + GitHub Release. Tag builds only.
-  # ---------------------------------------------------------------------------
   release:
     name: Publish release
     needs: [windows, macos]
@@ -441,11 +248,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Download build artifacts
+      - name: Download macOS artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          pattern: release-*
-          merge-multiple: true
+          name: release-macos
           path: dist
 
       - name: Generate SHA256 checksums
@@ -453,31 +259,20 @@ jobs:
         run: |
           set -euo pipefail
           sha256sum -- * > SHA256SUMS.txt
-          cat SHA256SUMS.txt
 
       - name: Compose release notes
         env:
           GH_TOKEN: ${{ github.token }}
-          WINDOWS_SIGNED: ${{ needs.windows.outputs.signed }}
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
           previous="$(gh release list --limit 1 --json tagName --jq '.[0].tagName // empty' || true)"
-          # A sibling workflow may already have created this tag's release.
           if [ "$previous" = "$tag" ]; then previous=""; fi
-
           gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
             -f tag_name="$tag" \
             ${previous:+-f previous_tag_name="$previous"} \
             --jq '.body' > generated-notes.md || : > generated-notes.md
-
-          # Render .github/release-notes-template.md. The template carries the
-          # functional description, download/verification instructions, the
-          # "Code signing policy" heading and the SignPath attribution that the
-          # SignPath Foundation terms require on every download page.
           python3 .github/scripts/render-release-notes.py
-
-          cat release-notes.md
 
       - name: Publish GitHub Release
         env:
@@ -485,79 +280,19 @@ jobs:
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
-          # The Chrome extension workflow also publishes to v* releases, so the
-          # release may already exist or be created concurrently. Try to create
-          # it, and fall back to updating it in place.
-          if gh release create "$tag" dist/* \
-              --title "QuakeSignal $tag" \
-              --notes-file release-notes.md; then
+          if gh release create "$tag" dist/* --title "QuakeSignal $tag" --notes-file release-notes.md; then
             echo "Created release $tag"
           else
-            echo "Release $tag already exists; updating in place"
             gh release upload "$tag" dist/* --clobber
             gh release edit "$tag" --notes-file release-notes.md
           fi
 
-  # ---------------------------------------------------------------------------
-  # Store hosting: publish the signed MSI at a stable, non-redirecting URL.
-  #
-  # This is deliberately gated on both Store configuration and successful
-  # Windows signing. Microsoft requires MSI/EXE packages to be Authenticode
-  # signed by a certificate trusted by Windows, so an unsigned test release
-  # must never be submitted to Partner Center.
-  # ---------------------------------------------------------------------------
-  store-pages:
-    name: Host Windows MSI for Microsoft Store
-    needs: [windows, release]
-    if: >-
-      startsWith(github.ref, 'refs/tags/v') &&
-      github.repository == 'TastyHeadphones/QuakeSignal' &&
-      needs.windows.outputs.signed == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-      - name: Download the signed MSI from the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          asset_name="QuakeSignal_${version}_x64_en-US.msi"
-          mkdir -p "site/store/${version}"
-          gh release download "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "$asset_name" \
-            --dir "site/store/${version}"
-          test -s "site/store/${version}/${asset_name}"
-          touch site/.nojekyll
-
-      - name: Upload the Store site artifact
-        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
-        with:
-          path: site
-
-      - name: Deploy the Store site
-        id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
-
-  # ---------------------------------------------------------------------------
-  # Microsoft Store: submit the signed MSI from GitHub Pages.
-  # ---------------------------------------------------------------------------
   microsoft-store:
-    name: Submit Windows MSI to Microsoft Store
-    needs: [windows, release, store-pages]
+    name: Submit MSIX to Microsoft Store
+    needs: windows
     if: >-
       startsWith(github.ref, 'refs/tags/v') &&
       github.repository == 'TastyHeadphones/QuakeSignal' &&
-      needs.windows.outputs.signed == 'true' &&
       vars.MICROSOFT_STORE_PRODUCT_ID != ''
     runs-on: windows-latest
     permissions:
@@ -570,6 +305,12 @@ jobs:
       SELLER_ID: ${{ secrets.SELLER_ID }}
 
     steps:
+      - name: Download MSIX package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: windows-msix
+          path: store-package
+
       - name: Configure Microsoft Store CLI
         uses: microsoft/microsoft-store-apppublisher@15abd1c50fcc164b19cb240fb04ef3c49bf715a2 # v1.1
 
@@ -577,79 +318,19 @@ jobs:
         shell: pwsh
         run: |
           $missing = @()
-          foreach ($name in @(
-            "STORE_PRODUCT_ID",
-            "AZURE_AD_TENANT_ID",
-            "AZURE_AD_APPLICATION_CLIENT_ID",
-            "AZURE_AD_APPLICATION_SECRET",
-            "SELLER_ID"
-          )) {
-            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
-              $missing += $name
-            }
+          foreach ($name in @("STORE_PRODUCT_ID", "AZURE_AD_TENANT_ID", "AZURE_AD_APPLICATION_CLIENT_ID", "AZURE_AD_APPLICATION_SECRET", "SELLER_ID")) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { $missing += $name }
           }
-          if ($missing.Count -gt 0) {
-            throw "Microsoft Store configuration is incomplete. Missing: $($missing -join ', ')"
-          }
-
+          if ($missing.Count -gt 0) { throw "Microsoft Store configuration is incomplete. Missing: $($missing -join ', ')" }
           msstore reconfigure `
             --tenantId "$env:AZURE_AD_TENANT_ID" `
             --sellerId "$env:SELLER_ID" `
             --clientId "$env:AZURE_AD_APPLICATION_CLIENT_ID" `
             --clientSecret "$env:AZURE_AD_APPLICATION_SECRET"
 
-      - name: Update the draft with the signed MSI URL
+      - name: Publish MSIX package
         shell: pwsh
         run: |
-          $version = $env:GITHUB_REF_NAME.Substring(1)
-          $assetName = "QuakeSignal_${version}_x64_en-US.msi"
-          $packageUrl = "https://tastyheadphones.github.io/QuakeSignal/store/$version/$assetName"
-
-          # Verify the Pages URL is public, stable, and does not redirect before
-          # touching the Partner Center draft.
-          $asset = Invoke-WebRequest -Uri $packageUrl -Method Head -MaximumRedirection 0
-          if ($asset.StatusCode -lt 200 -or $asset.StatusCode -ge 400) {
-            throw "Release asset check failed with HTTP $($asset.StatusCode): $packageUrl"
-          }
-          Write-Host "Store package URL: $packageUrl"
-
-          $basePath = Join-Path $env:RUNNER_TEMP "store-package-base.json"
-          $updatedPath = Join-Path $env:RUNNER_TEMP "store-package-updated.json"
-          msstore submission get $env:STORE_PRODUCT_ID | Out-File -FilePath $basePath -Encoding utf8
-
-          $base = Get-Content -Raw $basePath | ConvertFrom-Json
-          # The CLI normally returns the package object directly. Accept the
-          # API responseData wrapper too, so the workflow remains compatible
-          # with either CLI response shape.
-          if ($base.responseData -and $base.responseData.packages) {
-            $base = $base.responseData
-          }
-          if (-not $base.packages) {
-            throw "Partner Center returned no package list for product $env:STORE_PRODUCT_ID"
-          }
-
-          $package = @($base.packages) |
-            Where-Object { $_.packageType -ieq "msi" } |
-            Select-Object -First 1
-          if (-not $package) {
-            $package = @($base.packages) | Select-Object -First 1
-          }
-          if (-not $package) {
-            throw "Partner Center returned an empty package list for product $env:STORE_PRODUCT_ID"
-          }
-
-          $package.packageUrl = $packageUrl
-          $package.languages = @("en-us")
-          $package.architectures = @("X64")
-          $package.isSilentInstall = $true
-          $package.installerParameters = "/qn"
-          $package.packageType = "msi"
-          $base.packages = @($package)
-          $base | ConvertTo-Json -Depth 50 | Set-Content -Path $updatedPath -Encoding utf8
-
-          $updatedPackage = Get-Content -Raw $updatedPath
-          msstore submission update $env:STORE_PRODUCT_ID $updatedPackage
-
-      - name: Publish the Microsoft Store submission
-        shell: pwsh
-        run: msstore submission publish $env:STORE_PRODUCT_ID
+          $package = Get-ChildItem store-package -Filter *.msix -File | Select-Object -First 1
+          if (-not $package) { throw "No MSIX package was downloaded" }
+          msstore publish $package.FullName -id "$env:STORE_PRODUCT_ID"

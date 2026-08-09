@@ -1,61 +1,35 @@
-QuakeSignal is a free, open source earthquake early-warning monitor for Windows
-and macOS. It connects directly to public seismic feeds, frames each event
-against a location you choose, and raises a native alarm from the system tray
-when a warning affects that location. It is local-first: your event history and
-preferences stay on your own computer, with no account, no server, and no
-telemetry.
+QuakeSignal is a free, open-source earthquake monitor for Windows and macOS.
+It connects directly to public seismic feeds, keeps event history and
+preferences on your device, and has no account or telemetry.
 
 > [!IMPORTANT]
-> QuakeSignal is an independent, non-official app. Earthquake information comes
-> from third-party aggregated sources and may be delayed, incomplete, revised,
-> or inaccurate. Always follow official announcements and local emergency
-> instructions.
+> QuakeSignal is an independent, non-official app. Earthquake information may
+> be delayed, incomplete, revised, or inaccurate. Always follow official
+> emergency instructions.
 
 ## Downloads
 
-| Platform | File |
+| Platform | Download |
 |---|---|
-| Windows (installer) | `QuakeSignal_@@VERSION@@_x64-setup.exe` |
-| Windows (MSI) | `QuakeSignal_@@VERSION@@_x64_en-US.msi` |
+| Windows | [Microsoft Store](https://apps.microsoft.com/detail/9N730S3CZ7Z9) |
 | macOS (universal) | `QuakeSignal_@@VERSION@@_universal.dmg` |
 
-Installation and uninstallation instructions are in the
-[README](https://github.com/@@REPO@@#readme). macOS users: this build is not
-notarized — see [Installation on macOS](https://github.com/@@REPO@@#installation-on-macos)
-for the one-time step needed to open it.
+The Windows app is an MSIX package distributed and signed by Microsoft Store
+after certification. The macOS build is not notarized.
 
-## Verifying your download
+## Verifying this release
 
-Every file in this release is listed in `SHA256SUMS.txt`. Download it alongside
-the artifact and check the hash before installing:
-
-```bash
-# macOS
-shasum -a 256 -c SHA256SUMS.txt
-
-# Linux
-sha256sum -c SHA256SUMS.txt
-```
-
-```powershell
-# Windows
-Get-FileHash .\QuakeSignal_@@VERSION@@_x64-setup.exe -Algorithm SHA256
-```
+Every downloadable file in this GitHub Release is listed in `SHA256SUMS.txt`.
 
 @@CHECKSUMS@@
 
 ## Code signing policy
 
-@@SIGNING_STATUS@@
-
-QuakeSignal's full code signing policy — what is signed, how releases are
-built, who may approve a signature, and what the app does with your data — is
-published at
+Windows packages are built by GitHub Actions and signed by Microsoft Store
+after certification. The full policy is in
 [docs/SIGNING.md](https://github.com/@@REPO@@/blob/@@TAG@@/docs/SIGNING.md).
-Privacy is documented separately at
+Privacy is documented in
 [docs/PRIVACY.md](https://github.com/@@REPO@@/blob/@@TAG@@/docs/PRIVACY.md).
-
-Free code signing provided by [SignPath.io](https://signpath.io?utm_source=foundation&utm_medium=github&utm_campaign=quakesignal), certificate by [SignPath Foundation](https://signpath.org/).
 
 ---
 

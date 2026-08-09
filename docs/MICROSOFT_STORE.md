@@ -1,56 +1,39 @@
 # Microsoft Store distribution
 
-QuakeSignal's Windows release workflow can submit the signed MSI installer to
-Microsoft Partner Center after creating a GitHub Release.
+QuakeSignal is distributed for Windows as an **MSIX** package. GitHub Actions
+builds the package and Microsoft Store re-signs it after certification, so this
+repository does not hold or use a Windows code-signing certificate.
 
-The Store job runs only for a `v*` tag in the upstream repository, only after
-the Windows installers have been signed, and only when the Store configuration
-below exists. Manual workflow runs and unsigned test builds do not submit to
-Partner Center.
+## One-time setup
 
-## One-time Partner Center setup
+The Store product must be an **MSIX or PWA app** in Partner Center. The current
+product ID is stored in the `MICROSOFT_STORE_PRODUCT_ID` repository variable.
 
-The app must already exist in Partner Center and must have at least one
-manually-created submission. Microsoft does not allow the submission API to
-create the app or its first submission.
-
-Create or associate a Microsoft Entra application in Partner Center and give it
-the Partner Center role required to manage submissions. Record the tenant ID,
-client ID, and client secret. Also copy the Seller ID from Partner Center's
-account settings and the app's Partner Center ID from the app overview.
-
-In GitHub, add these under **Settings → Secrets and variables → Actions**:
-
-Secrets:
+GitHub Actions authenticates to Partner Center with these repository secrets:
 
 - `AZURE_AD_TENANT_ID`
 - `AZURE_AD_APPLICATION_CLIENT_ID`
 - `AZURE_AD_APPLICATION_SECRET`
 - `SELLER_ID`
 
-Repository variable:
+The Microsoft Entra application must be associated with Partner Center and
+have the **Manager** role. The MSIX manifest identity is assigned by Partner
+Center and is recorded in `.github/workflows/desktop-release.yml`.
 
-- `MICROSOFT_STORE_PRODUCT_ID` — the app's Partner Center ID
+## First submission
 
-The workflow copies the versioned MSI from the GitHub Release to the project's
-GitHub Pages site and submits that stable, non-redirecting HTTPS URL using the
-silent-install command `/qn`.
+Microsoft's GitHub Actions publishing flow is for apps that are already live.
+Create the first submission manually in Partner Center:
 
-Enable GitHub Pages for the repository with **Settings → Pages → Source: GitHub
-Actions** before the first tagged release. The resulting package URL is:
+1. Run **Desktop release** with **Run workflow**. This produces the
+   `windows-msix` artifact without publishing it.
+2. Download that artifact and upload the `.msix` package in the Partner Center
+   submission. Complete the listing, availability, age rating, and
+   certification notes, then submit it for certification.
+3. After Microsoft approves the app and it becomes live, later tagged releases
+   (`v<version>`) automatically build and publish the MSIX package with
+   `msstore publish`.
 
-`https://tastyheadphones.github.io/QuakeSignal/store/<version>/QuakeSignal_<version>_x64_en-US.msi`
-
-## Publishing
-
-1. Configure the existing SignPath variables and secret so the Windows job
-   produces a trusted Authenticode-signed MSI.
-2. Update `desktop/src-tauri/tauri.conf.json` and create the matching tag, for
-   example `v0.1.0`.
-3. Push the tag. The `Desktop release` workflow builds the Windows installer,
-   creates the GitHub Release, publishes the MSI to GitHub Pages, and then
-   submits it to Partner Center.
-4. Complete any certification or Store listing actions shown in Partner Center.
-
-The Store submission is asynchronous: a successful workflow means that the
-submission was sent to Partner Center, not that certification has finished.
+The raw MSIX build artifact is intentionally not attached to GitHub Releases:
+it becomes a publicly installable package only after Microsoft Store signs and
+hosts the certified submission.
