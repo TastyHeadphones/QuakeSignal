@@ -114,7 +114,8 @@ jobs:
             }
           if (-not $makeAppx) { throw "MakeAppx.exe was not found on the Windows runner" }
 
-          $packageRoot = Join-Path $PWD "artifacts/windows/msix-root"
+          $outDir = Join-Path $env:GITHUB_WORKSPACE "artifacts/windows"
+          $packageRoot = Join-Path $outDir "msix-root"
           $assets = Join-Path $packageRoot "Assets"
           New-Item -ItemType Directory -Force -Path $assets | Out-Null
           Copy-Item $exe.FullName (Join-Path $packageRoot "QuakeSignal.exe") -Force
@@ -160,8 +161,8 @@ jobs:
           </Package>
           "@ | Set-Content -Path (Join-Path $packageRoot "AppxManifest.xml") -Encoding utf8
 
-          New-Item -ItemType Directory -Force -Path artifacts/windows | Out-Null
-          $packagePath = "artifacts/windows/QuakeSignal_${env:APP_VERSION}_x64.msix"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          $packagePath = Join-Path $outDir "QuakeSignal_${env:APP_VERSION}_x64.msix"
           & $makeAppx.FullName pack /d $packageRoot /p $packagePath /o
           if ($LASTEXITCODE -ne 0) { throw "MakeAppx failed with exit code $LASTEXITCODE" }
           if (-not (Test-Path $packagePath)) { throw "MSIX package was not produced" }
@@ -171,7 +172,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: windows-msix
-          path: artifacts/windows/*.msix
+          path: ${{ github.workspace }}/artifacts/windows/*.msix
           if-no-files-found: error
 
   macos:
