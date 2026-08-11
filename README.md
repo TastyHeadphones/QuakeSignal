@@ -23,6 +23,7 @@
 [![Privacy](https://img.shields.io/badge/privacy-policy-0A3D73)](docs/PRIVACY.md)
 
 **[Download](https://github.com/TastyHeadphones/QuakeSignal/releases/latest)** ·
+**[Microsoft Store (Windows)](https://apps.microsoft.com/detail/9N730S3CZ7Z9)** ·
 [Install on macOS](#installation-on-macos) ·
 [Uninstall](#uninstalling) ·
 [Code signing policy](#code-signing-policy) ·
@@ -182,8 +183,12 @@ Nothing is printed if it worked. Open QuakeSignal normally afterwards.
 > removed that shortcut in macOS 15 Sequoia, so **Open Anyway** in System
 > Settings is now the only way to approve an unnotarized app from the interface.
 
-Windows builds are unaffected by any of the above. Notarization is planned; see
-[`docs/SIGNING.md`](docs/SIGNING.md).
+## Installation on Windows
+
+Download QuakeSignal from the
+[Microsoft Store](https://apps.microsoft.com/detail/9N730S3CZ7Z9). The Store
+package is certified and signed by Microsoft. Availability depends on the
+market where the Store listing has been released.
 
 ## Uninstalling
 

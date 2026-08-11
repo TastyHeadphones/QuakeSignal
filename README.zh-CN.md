@@ -21,6 +21,7 @@
 [![隐私政策](https://img.shields.io/badge/privacy-policy-0A3D73)](docs/PRIVACY.md)
 
 **[下载](https://github.com/TastyHeadphones/QuakeSignal/releases/latest)** ·
+**[Microsoft Store（Windows）](https://apps.microsoft.com/detail/9N730S3CZ7Z9)** ·
 [在 macOS 上安装](#在-macos-上安装) ·
 [卸载](#卸载) ·
 [代码签名政策](#代码签名政策) ·
@@ -100,8 +101,11 @@ xattr -dr com.apple.quarantine "/Applications/QuakeSignal.app"
 > 右键（或按住 Control 点按）→**打开**已经不再适用。Apple 在 macOS 15 Sequoia
 > 中移除了该快捷方式，现在只能通过“系统设置”里的**仍要打开**放行未公证的应用。
 
-Windows 版本不受上述影响。公证已在计划中，详见
-[`docs/SIGNING.md`](docs/SIGNING.md)。
+## 在 Windows 上安装
+
+请从 [Microsoft Store](https://apps.microsoft.com/detail/9N730S3CZ7Z9)
+下载 QuakeSignal。商店中的安装包已由微软认证并签名；是否可用取决于该商店
+条目已发布的地区。
 
 ## 卸载
 
@@ -170,15 +174,11 @@ Author、Reviewer 与 Approver 三种角色。所有外部 Pull Request 都由�
 每个发行版都会发布覆盖全部构建产物的 `SHA256SUMS.txt`。桌面端二进制文件仅由
 GitHub Actions 从版本标签构建，绝不会从维护者的机器上传。
 
-QuakeSignal 使用 SignPath Foundation 为 Windows 进行代码签名。签名私钥保存在
-SignPath 的硬件安全模块中，绝不出现在本仓库、CI 或维护者的机器上。
+Windows 发行版由 GitHub Actions 构建为 MSIX，并通过 Microsoft Store 发布。
+经认证的商店安装包由微软签名；本项目不使用 Windows 签名密钥或第三方签名服务。
 
-Free code signing provided by [SignPath.io](https://signpath.io?utm_source=foundation&utm_medium=github&utm_campaign=quakesignal),
-certificate by [SignPath Foundation](https://signpath.org/)。
-
-> [!NOTE]
-> SignPath Foundation 的申请仍在审核中，因此 Windows 签名虽已配置但尚未启用，
-> macOS 版本也尚未公证。每个发行版都会说明其自身的签名状态。
+GitHub Releases 会发布覆盖全部构建产物的 `SHA256SUMS.txt`；macOS 版本尚未由
+Apple 公证。
 
 ## 许可证
 
