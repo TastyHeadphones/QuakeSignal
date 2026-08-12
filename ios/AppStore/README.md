@@ -127,10 +127,10 @@ tested only after the production APNs secrets are configured.
 - 1024 × 1024 App Store icon: already in `Assets.xcassets`
 - 1–10 iPhone screenshots per localization; the five planned frames are in
   [`screenshot-manifest.json`](./screenshot-manifest.json)
-- Primary product-page set: 6.9-inch portrait, at one of
-  `1260 × 2736`, `1290 × 2796`, or `1320 × 2868` pixels
-- Optional QA/reference set: 6.3-inch portrait, at `1179 × 2556` or
-  `1206 × 2622` pixels
+- Primary product-page set: 6.5-inch portrait, at `1242 × 2688` pixels
+- Optional QA/reference sets: 6.9-inch portrait, at `1260 × 2736`,
+  `1290 × 2796`, or `1320 × 2868` pixels; or 6.3-inch portrait, at
+  `1179 × 2556` or `1206 × 2622` pixels
 - JPEG or PNG only, with no alpha channel or transparency. The capture helper
   emits high-quality JPEG files to guarantee an uploadable, opaque asset.
 
@@ -139,10 +139,10 @@ They contain an alpha channel and must not be uploaded as-is.
 
 ### Capture workflow
 
-1. Build and install the exact Release candidate on an iPhone 6.9-inch
+1. Build and install the exact Release candidate on an iPhone 6.5-inch
    Simulator. If only the current `QuakeSignal Test` simulator is available,
-   capture the optional 6.3-inch QA set and create the primary set later on a
-   supported 6.9-inch simulator.
+   capture an optional 6.3-inch QA set and create the primary set later on a
+   supported 6.5-inch simulator.
 2. For each locale, launch the installed app with the matching language and
    locale. For example, after the app has been installed:
 
@@ -164,12 +164,12 @@ They contain an alpha channel and must not be uploaded as-is.
 
    ```sh
    ios/AppStore/scripts/capture-screenshot.sh \
-     --device booted --class 6.9 en-US 01-home
+     --device booted --class 6.5 en-US 01-home
    ```
 
-   Use `--class 6.3` only for the optional QA/reference set. The helper writes
-   `ios/AppStore/screenshots/<locale>/iphone-<class>/<frame>.jpg`.
-5. Review every capture at full size, then upload one consistent 6.9-inch
+   Use `--class 6.9` or `--class 6.3` only for optional QA/reference sets. The
+   helper writes `ios/AppStore/screenshots/<locale>/iphone-<class>/<frame>.jpg`.
+5. Review every capture at full size, then upload one consistent 6.5-inch
    sequence per localization to the iOS version in App Store Connect. Do not
    mix display classes within one uploaded localization.
 
