@@ -8,6 +8,63 @@ enum WolfxError: LocalizedError {
     }
 }
 
+/// The result used by the WebSocket-outage fallback. Unlike an explicit user
+/// refresh, it preserves data from every HTTP source that answered even when
+/// one of the other public endpoints is temporarily unavailable.
+struct WolfxSnapshotFetchResult: Sendable {
+    let events: [EEWEvent]
+    let failedSources: [String]
+    let successfulSourceCount: Int
+
+    var hasSuccessfulSources: Bool { successfulSourceCount > 0 }
+
+    /// Suitable for the existing non-blocking offline banner. It intentionally
+    /// gives a compact source summary instead of exposing transport internals.
+    var statusDescription: String? {
+        guard !failedSources.isEmpty else { return nil }
+        let unavailable = failedSources.joined(separator: ", ")
+        if successfulSourceCount == 0 {
+            return "Wolfx snapshot unavailable; affected sources: \(unavailable)."
+        }
+        return "Updated from \(successfulSourceCount) of \(WolfxClient.sources.count) Wolfx sources; unavailable: \(unavailable)."
+    }
+
+    static func aggregate(
+        batches: [[EEWEvent]],
+        failedSources: [String],
+        successfulSourceCount: Int,
+        limit: Int
+    ) -> WolfxSnapshotFetchResult {
+        var newestByID: [String: EEWEvent] = [:]
+        for event in batches.flatMap({ $0 }) {
+            if let existing = newestByID[event.id], existing.serial > event.serial {
+                continue
+            }
+            newestByID[event.id] = event
+        }
+
+        return WolfxSnapshotFetchResult(
+            events: newestByID.values
+                .sorted { ($0.reportTimeUtc ?? $0.originTimeUtc ?? "") > ($1.reportTimeUtc ?? $1.originTimeUtc ?? "") }
+                .prefix(max(1, limit))
+                .map { $0 },
+            failedSources: failedSources.sorted(),
+            successfulSourceCount: successfulSourceCount
+        )
+    }
+}
+
+/// Wolfx documents a two-requests-per-second public API ceiling. Both manual
+/// refreshes and the foreground WebSocket-recovery fallback share this pacing
+/// so a full seven-source snapshot never creates a burst.
+enum WolfxHTTPFetchPacing {
+    static let requestIntervalNanoseconds: UInt64 = 600_000_000
+
+    static func delayNanoseconds(forSourceIndex index: Int) -> UInt64 {
+        UInt64(max(0, index)) * requestIntervalNanoseconds
+    }
+}
+
 /// Fetches earthquake data straight from the public Wolfx API. Cloudflare is
 /// intentionally not part of foreground data access; it only delivers APNs.
 final class WolfxClient: Sendable {
@@ -21,17 +78,21 @@ final class WolfxClient: Sendable {
     private let session: URLSession = .shared
     private let httpBaseURL = URL(string: "https://api.wolfx.jp")!
 
+    /// The standard explicit-refresh behavior: any endpoint failure reports a
+    /// refresh error rather than presenting a deliberately partial result.
     func fetchRecentQuakes(limit: Int = 50) async throws -> [EEWEvent] {
         let batches = try await withThrowingTaskGroup(of: [EEWEvent].self) { group in
-            for source in Self.sources {
+            for (index, source) in Self.sources.enumerated() {
+                let delayNanoseconds = WolfxHTTPFetchPacing.delayNanoseconds(forSourceIndex: index)
                 group.addTask { [session, httpBaseURL] in
-                    let url = httpBaseURL.appending(path: "\(source).json")
-                    let (data, response) = try await session.data(from: url)
-                    guard let http = response as? HTTPURLResponse,
-                          (200..<300).contains(http.statusCode) else {
-                        throw WolfxError.invalidResponse
+                    if delayNanoseconds > 0 {
+                        try await Task.sleep(nanoseconds: delayNanoseconds)
                     }
-                    return WolfxNormalizer.events(source: source, data: data)
+                    return try await Self.fetchEvents(
+                        session: session,
+                        httpBaseURL: httpBaseURL,
+                        source: source
+                    )
                 }
             }
 
@@ -42,19 +103,89 @@ final class WolfxClient: Sendable {
             return output
         }
 
-        var newestByID: [String: EEWEvent] = [:]
-        for event in batches.flatMap({ $0 }) {
-            if let existing = newestByID[event.id],
-               existing.serial > event.serial {
-                continue
+        return WolfxSnapshotFetchResult.aggregate(
+            batches: batches,
+            failedSources: [],
+            successfulSourceCount: Self.sources.count,
+            limit: limit
+        ).events
+    }
+
+    /// Used only for the bounded foreground recovery path after a sustained
+    /// WebSocket outage. Source-level HTTP failures are collected so healthy
+    /// sources still refresh the UI; cancellation still propagates normally.
+    func fetchRecentQuakesAllowingPartialResults(limit: Int = 50) async throws -> WolfxSnapshotFetchResult {
+        let outcomes = try await withThrowingTaskGroup(of: SourceFetchOutcome.self) { group in
+            for (index, source) in Self.sources.enumerated() {
+                let delayNanoseconds = WolfxHTTPFetchPacing.delayNanoseconds(forSourceIndex: index)
+                group.addTask { [session, httpBaseURL] in
+                    do {
+                        if delayNanoseconds > 0 {
+                            try await Task.sleep(nanoseconds: delayNanoseconds)
+                        }
+                        try Task.checkCancellation()
+                        return .success(
+                            source: source,
+                            events: try await Self.fetchEvents(
+                                session: session,
+                                httpBaseURL: httpBaseURL,
+                                source: source
+                            )
+                        )
+                    } catch {
+                        if error is CancellationError || Task.isCancelled {
+                            throw CancellationError()
+                        }
+                        return .failure(source: source)
+                    }
+                }
             }
-            newestByID[event.id] = event
+
+            var output: [SourceFetchOutcome] = []
+            for try await outcome in group {
+                output.append(outcome)
+            }
+            return output
         }
 
-        return newestByID.values
-            .sorted { ($0.reportTimeUtc ?? $0.originTimeUtc ?? "") > ($1.reportTimeUtc ?? $1.originTimeUtc ?? "") }
-            .prefix(max(1, limit))
-            .map { $0 }
+        var batches: [[EEWEvent]] = []
+        var failedSources: [String] = []
+        var successfulSourceCount = 0
+        for outcome in outcomes {
+            switch outcome {
+            case let .success(_, events):
+                successfulSourceCount += 1
+                batches.append(events)
+            case let .failure(source):
+                failedSources.append(source)
+            }
+        }
+
+        return WolfxSnapshotFetchResult.aggregate(
+            batches: batches,
+            failedSources: failedSources,
+            successfulSourceCount: successfulSourceCount,
+            limit: limit
+        )
+    }
+
+    private static func fetchEvents(
+        session: URLSession,
+        httpBaseURL: URL,
+        source: String
+    ) async throws -> [EEWEvent] {
+        let url = httpBaseURL.appending(path: "\(source).json")
+        let (data, response) = try await session.data(from: url)
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode) else {
+            throw WolfxError.invalidResponse
+        }
+        return WolfxNormalizer.events(source: source, data: data)
+    }
+
+    private enum SourceFetchOutcome: Sendable {
+        case success(source: String, events: [EEWEvent])
+        case failure(source: String)
     }
 }
 

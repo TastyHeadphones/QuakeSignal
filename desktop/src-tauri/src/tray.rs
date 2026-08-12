@@ -4,10 +4,17 @@ use tauri::{AppHandle, Manager};
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
     let open_item = MenuItem::with_id(app, "open", "Open QuakeSignal", true, None::<&str>)?;
+    // A local synthetic alert is useful in direct distribution, but it is a
+    // diagnostic control that must not be present in the Mac App Store build.
+    #[cfg(not(feature = "macos-app-store"))]
     let test_item = MenuItem::with_id(app, "test_alert", "Send Test Alert", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
+
+    #[cfg(not(feature = "macos-app-store"))]
     let menu = Menu::with_items(app, &[&open_item, &test_item, &separator, &quit_item])?;
+    #[cfg(feature = "macos-app-store")]
+    let menu = Menu::with_items(app, &[&open_item, &separator, &quit_item])?;
 
     let icon = app
         .default_window_icon()
@@ -21,6 +28,7 @@ pub fn setup(app: &AppHandle) -> tauri::Result<()> {
         .tooltip("QuakeSignal — monitoring")
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => show_main_window(app),
+            #[cfg(not(feature = "macos-app-store"))]
             "test_alert" => {
                 let state = app.state::<crate::AppState>();
                 crate::commands::send_test_alert(app.clone(), state);

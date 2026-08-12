@@ -1,5 +1,23 @@
 import Foundation
 
+/// The last known server-side lifecycle of this device's QuakeSignal alert
+/// registration. It is deliberately separate from `pushSubscriptionEnabled`:
+/// that preference records the person's intent, while this status tells the
+/// UI whether the latest request actually reached QuakeSignal.
+enum PushRegistrationState: String, Codable, Sendable, Equatable {
+    case unregistered
+    case registering
+    case active
+    case failed
+
+    /// Both a never-completed registration and a failed update can be retried
+    /// as soon as APNs has supplied a token and notification permission allows
+    /// registration.
+    var isRetryable: Bool {
+        self == .unregistered || self == .failed
+    }
+}
+
 @Observable
 @MainActor
 final class AppSettings {
@@ -10,28 +28,36 @@ final class AppSettings {
     static let magnitudeTiers: [Double] = [3, 4, 5, 6]
 
     var selectedCityId: String? {
-        didSet { UserDefaults.standard.set(selectedCityId, forKey: Keys.cityId) }
+        didSet { defaults.set(selectedCityId, forKey: Keys.cityId) }
     }
     var useCurrentLocation: Bool {
-        didSet { UserDefaults.standard.set(useCurrentLocation, forKey: Keys.useCurrentLocation) }
+        didSet { defaults.set(useCurrentLocation, forKey: Keys.useCurrentLocation) }
     }
     var radiusKm: Double {
-        didSet { UserDefaults.standard.set(radiusKm, forKey: Keys.radiusKm) }
+        didSet { defaults.set(radiusKm, forKey: Keys.radiusKm) }
     }
     var minMagnitude: Double {
-        didSet { UserDefaults.standard.set(minMagnitude, forKey: Keys.minMagnitude) }
+        didSet { defaults.set(minMagnitude, forKey: Keys.minMagnitude) }
     }
     var enabledSources: Set<String> {
-        didSet { UserDefaults.standard.set(Array(enabledSources), forKey: Keys.sources) }
-    }
-    var criticalAlertsOptIn: Bool {
-        didSet { UserDefaults.standard.set(criticalAlertsOptIn, forKey: Keys.criticalOptIn) }
+        didSet { defaults.set(Array(enabledSources), forKey: Keys.sources) }
     }
     var includeTestAlerts: Bool {
-        didSet { UserDefaults.standard.set(includeTestAlerts, forKey: Keys.includeTestAlerts) }
+        didSet { defaults.set(includeTestAlerts, forKey: Keys.includeTestAlerts) }
     }
     var notifyAtNight: Bool {
-        didSet { UserDefaults.standard.set(notifyAtNight, forKey: Keys.notifyAtNight) }
+        didSet { defaults.set(notifyAtNight, forKey: Keys.notifyAtNight) }
+    }
+    /// Controls whether this device is registered with QuakeSignal's alert
+    /// service. It is separate from iOS notification permission, which only
+    /// the user can change in Settings.
+    var pushSubscriptionEnabled: Bool {
+        didSet { defaults.set(pushSubscriptionEnabled, forKey: Keys.pushSubscriptionEnabled) }
+    }
+    /// Durable registration status. `.active` is written only after the
+    /// protected device-registration request receives a successful response.
+    var pushRegistrationState: PushRegistrationState {
+        didSet { defaults.set(pushRegistrationState.rawValue, forKey: Keys.pushRegistrationState) }
     }
 
     var selectedCity: City? {
@@ -44,13 +70,18 @@ final class AppSettings {
         static let radiusKm = "settings.radiusKm"
         static let minMagnitude = "settings.minMagnitude"
         static let sources = "settings.sources"
-        static let criticalOptIn = "settings.criticalOptIn"
         static let includeTestAlerts = "settings.includeTestAlerts"
         static let notifyAtNight = "settings.notifyAtNight"
+        static let pushSubscriptionEnabled = "settings.pushSubscriptionEnabled"
+        static let pushRegistrationState = "settings.pushRegistrationState"
     }
 
-    private init() {
-        let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
+
+    /// The injected defaults suite makes persistence behavior directly
+    /// testable without mutating the application's live preferences.
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         selectedCityId = defaults.string(forKey: Keys.cityId)
         useCurrentLocation = defaults.object(forKey: Keys.useCurrentLocation) as? Bool ?? false
         radiusKm = defaults.object(forKey: Keys.radiusKm) as? Double ?? 100
@@ -60,8 +91,23 @@ final class AppSettings {
         } else {
             enabledSources = Set(Self.allSources)
         }
-        criticalAlertsOptIn = defaults.object(forKey: Keys.criticalOptIn) as? Bool ?? false
         includeTestAlerts = defaults.object(forKey: Keys.includeTestAlerts) as? Bool ?? false
         notifyAtNight = defaults.object(forKey: Keys.notifyAtNight) as? Bool ?? true
+        // Preserve existing installations' behavior. A device cannot be
+        // registered until it has both notification permission and an APNs
+        // device token, so this default does not opt an unprompted install in.
+        pushSubscriptionEnabled = defaults.object(forKey: Keys.pushSubscriptionEnabled) as? Bool ?? true
+        let persistedRegistrationState = defaults.string(forKey: Keys.pushRegistrationState)
+            .flatMap(PushRegistrationState.init(rawValue:))
+            ?? .unregistered
+        // An app termination can interrupt a request after it has been sent
+        // but before its response is observed. Never restore that ambiguous
+        // state as active: surface a retryable failure instead.
+        if persistedRegistrationState == .registering {
+            pushRegistrationState = .failed
+            defaults.set(PushRegistrationState.failed.rawValue, forKey: Keys.pushRegistrationState)
+        } else {
+            pushRegistrationState = persistedRegistrationState
+        }
     }
 }

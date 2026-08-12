@@ -1,0 +1,34 @@
+name: Store listing assets
+
+on:
+  push:
+    branches:
+      - main
+      - "codex/**"
+    paths:
+      - "ios/AppStore/**"
+      - "desktop/AppStore/**"
+      - ".github/scripts/verify-store-assets.rb"
+      - ".github/workflows/listing-assets.yml"
+  pull_request:
+    paths:
+      - "ios/AppStore/**"
+      - "desktop/AppStore/**"
+      - ".github/scripts/verify-store-assets.rb"
+      - ".github/workflows/listing-assets.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate listing metadata and screenshots
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Validate listing assets
+        run: ruby .github/scripts/verify-store-assets.rb

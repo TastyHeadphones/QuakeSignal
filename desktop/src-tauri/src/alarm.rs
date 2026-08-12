@@ -8,6 +8,7 @@ static ALARM_PLAYING: AtomicBool = AtomicBool::new(false);
 enum AlarmPattern {
     Warning,
     Report,
+    #[cfg(not(feature = "macos-app-store"))]
     Test,
 }
 
@@ -25,6 +26,7 @@ pub fn play_for_event(settings: &Settings, event: &NormalizedEvent, reason: Noti
     spawn_pattern(pattern, settings.alarm_volume);
 }
 
+#[cfg(not(feature = "macos-app-store"))]
 pub fn play_test(settings: &Settings, event: &NormalizedEvent) {
     let Some(pattern) = pattern_for(settings, event, NotifyReason::Training, true) else {
         return;
@@ -42,7 +44,10 @@ fn pattern_for(
         return None;
     }
     if manual_test {
+        #[cfg(not(feature = "macos-app-store"))]
         return Some(AlarmPattern::Test);
+        #[cfg(feature = "macos-app-store")]
+        return None;
     }
     if event.is_training
         || event.is_cancel
@@ -128,6 +133,7 @@ fn play_native(pattern: AlarmPattern, volume: f32) -> Result<(), String> {
             append_pause(&player, 80);
             append_tone(&player, 880.0, 220, volume * 0.75);
         }
+        #[cfg(not(feature = "macos-app-store"))]
         AlarmPattern::Test => {
             for _ in 0..2 {
                 append_tone(&player, 880.0, 160, volume);
@@ -215,6 +221,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "macos-app-store"))]
     #[test]
     fn explicit_test_uses_test_pattern() {
         assert_eq!(
@@ -225,6 +232,20 @@ mod tests {
                 true
             ),
             Some(AlarmPattern::Test)
+        );
+    }
+
+    #[cfg(feature = "macos-app-store")]
+    #[test]
+    fn store_build_never_selects_a_manual_test_pattern() {
+        assert_eq!(
+            pattern_for(
+                &Settings::default(),
+                &event(EventKind::Eew),
+                NotifyReason::Training,
+                true
+            ),
+            None
         );
     }
 }

@@ -8,5 +8,4 @@ export const api = {
   listRevisions: (eventId: string) => invoke<NormalizedEvent[]>("list_revisions", { eventId }),
   getConnectionStatus: () => invoke<Record<string, boolean>>("get_connection_status"),
   getPendingAlert: () => invoke<PendingAlert | null>("get_pending_alert"),
-  sendTestAlert: () => invoke<void>("send_test_alert"),
 };

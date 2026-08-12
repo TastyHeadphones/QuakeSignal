@@ -147,6 +147,10 @@ button {
   font-size: 12px;
   margin-bottom: 14px;
 }
+#sources-dots {
+  display: flex;
+  gap: 4px;
+}
 .dot {
   width: 7px;
   height: 7px;
@@ -213,6 +217,12 @@ button {
   color: var(--gray);
   margin-top: 4px;
 }
+.sources-group-label {
+  margin-bottom: 4px;
+}
+.sources-reports-label {
+  margin-top: 10px;
+}
 
 .alarm-volume-field {
   padding: 10px 0 4px;
@@ -231,6 +241,9 @@ button {
   padding: 10px 0;
   border-bottom: 1px solid var(--border);
   gap: 12px;
+}
+.row-toggle[hidden] {
+  display: none !important;
 }
 .row-toggle:last-child {
   border-bottom: none;
@@ -303,6 +316,10 @@ button {
   background: var(--card-secondary);
   border-radius: 10px;
   font-size: 12px;
+}
+.event-detail-heading {
+  font-weight: 700;
+  margin-bottom: 4px;
 }
 .event-detail .rev {
   display: flex;

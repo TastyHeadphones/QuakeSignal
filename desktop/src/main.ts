@@ -12,6 +12,7 @@ let recentEvents: NormalizedEvent[] = [];
 let connectionStatus: Record<string, boolean> = {};
 let expandedEventId: string | null = null;
 const revisionsCache: Record<string, NormalizedEvent[]> = {};
+const isMacAppStoreBuild = import.meta.env.VITE_MAC_APP_STORE === "true";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -229,8 +230,7 @@ function renderEventItem(event: NormalizedEvent, expandable: boolean): HTMLEleme
       void loadRevisions(event.id).then((revs) => {
         detail.innerHTML = "";
         const heading = document.createElement("div");
-        heading.style.fontWeight = "700";
-        heading.style.marginBottom = "4px";
+        heading.className = "event-detail-heading";
         heading.textContent = t("events.revisions.title");
         detail.appendChild(heading);
         for (const rev of revs) {
@@ -268,9 +268,17 @@ function emptyState(message: string): HTMLElement {
 // -------------------------------------------------------------- settings --
 
 function wireSettingsForm() {
-  $("test-alert-btn").addEventListener("click", () => {
-    void api.sendTestAlert();
-  });
+  const testAlertButton = $("test-alert-btn");
+  // A Store listing must represent the normal monitoring experience, not a
+  // locally generated alarm. Keep the direct-download diagnostic available,
+  // but do not surface it in the sandboxed Mac App Store build.
+  testAlertButton.hidden = isMacAppStoreBuild;
+  if (!isMacAppStoreBuild) {
+    testAlertButton.addEventListener("click", async () => {
+      const { sendTestAlert } = await import("./direct-api");
+      await sendTestAlert();
+    });
+  }
 
   const citySelect = $<HTMLSelectElement>("f-city");
   const noneOpt = document.createElement("option");
@@ -341,7 +349,9 @@ function renderSettingsForm() {
   $<HTMLInputElement>("f-alarm-enabled").checked = settings.alarmEnabled;
   $<HTMLInputElement>("f-alarm-volume").value = String(settings.alarmVolume);
   renderAlarmVolume();
-  $<HTMLInputElement>("f-launch-at-login").checked = settings.launchAtLogin;
+  const launchAtLogin = $<HTMLInputElement>("f-launch-at-login");
+  launchAtLogin.checked = !isMacAppStoreBuild && settings.launchAtLogin;
+  $("launch-at-login-row").hidden = isMacAppStoreBuild;
 
   document
     .querySelectorAll<HTMLInputElement>("#sources-eew-list input, #sources-reports-list input")
@@ -352,7 +362,10 @@ function renderSettingsForm() {
 
 function renderAlarmVolume() {
   const volume = Number($<HTMLInputElement>("f-alarm-volume").value);
-  $("d-alarm-volume").textContent = t("settings.alarmVolume.detail", {
+  const detailKey = isMacAppStoreBuild
+    ? "settings.alarmVolume.storeDetail"
+    : "settings.alarmVolume.detail";
+  $("d-alarm-volume").textContent = t(detailKey, {
     volume: Math.round(volume * 100),
   });
 }
@@ -382,7 +395,7 @@ function collectSettingsFromForm(): Settings {
     notifyAtNight: $<HTMLInputElement>("f-notify-at-night").checked,
     alarmEnabled: $<HTMLInputElement>("f-alarm-enabled").checked,
     alarmVolume: Number($<HTMLInputElement>("f-alarm-volume").value),
-    launchAtLogin: $<HTMLInputElement>("f-launch-at-login").checked,
+    launchAtLogin: !isMacAppStoreBuild && $<HTMLInputElement>("f-launch-at-login").checked,
   };
 }
 

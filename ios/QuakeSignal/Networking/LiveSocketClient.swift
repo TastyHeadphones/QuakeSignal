@@ -41,6 +41,10 @@ final class LiveSocketClient {
 
     private(set) var isConnected = false
     var onEvents: (([EEWEvent], Bool) -> Void)?
+    /// Reports transitions between a fully live socket set and an incomplete
+    /// one. The foreground store uses this to enable a deliberately slow HTTP
+    /// fallback only while a Wolfx WebSocket route remains unavailable.
+    var onConnectionStateChanged: ((Bool) -> Void)?
 
     private var tasks: [WolfxRoute: URLSessionWebSocketTask] = [:]
     private var connectedRoutes: Set<WolfxRoute> = []
@@ -64,7 +68,7 @@ final class LiveSocketClient {
         }
         tasks.removeAll()
         connectedRoutes.removeAll()
-        isConnected = false
+        updateConnectionState()
     }
 
     private func connect(_ route: WolfxRoute) {
@@ -91,7 +95,7 @@ final class LiveSocketClient {
                 case .success(let message):
                     self.connectedRoutes.insert(route)
                     self.reconnectDelays[route] = 1
-                    self.isConnected = self.connectedRoutes.count == Self.routes.count
+                    self.updateConnectionState()
 
                     switch message {
                     case .string(let text):
@@ -106,7 +110,7 @@ final class LiveSocketClient {
                 case .failure:
                     self.tasks[route] = nil
                     self.connectedRoutes.remove(route)
-                    self.isConnected = false
+                    self.updateConnectionState()
                     self.scheduleReconnect(route)
                 }
             }
@@ -151,5 +155,12 @@ final class LiveSocketClient {
             guard let self, self.shouldReconnect, self.tasks[route] == nil else { return }
             self.connect(route)
         }
+    }
+
+    private func updateConnectionState() {
+        let nextState = connectedRoutes.count == Self.routes.count
+        guard isConnected != nextState else { return }
+        isConnected = nextState
+        onConnectionStateChanged?(nextState)
     }
 }

@@ -1,12 +1,30 @@
 # Node / backend
 node_modules/
 .wrangler/
+.playwright-cli/
+backend/cloudflare/worker-configuration.d.ts
+backend/cloudflare/*.cpuprofile
 backend/dist/
 backend/data/
 backend/secrets/
 backend/.env
+# Wrangler loads these per-Worker local values automatically. They can contain
+# APNs/App Attest development secrets and must never enter a commit.
+backend/cloudflare/.dev.vars*
+backend/cloudflare/.env
+backend/cloudflare/.env.*
+# A non-secret, documented template may still be checked in deliberately.
+!backend/cloudflare/.env.example
 npm-debug.log*
 extension/dist/
+
+# Apple signing material — never keep credentials or provisioning profiles in
+# the worktree, even temporarily. CI materializes these only in runner temp
+# directories from protected environment secrets.
+*.p8
+*.p12
+*.mobileprovision
+*.provisionprofile
 
 # iOS / Xcode
 ios/**/xcuserdata/
@@ -14,6 +32,9 @@ ios/**/*.xcodeproj/project.xcworkspace/xcuserdata/
 ios/DerivedData/
 ios/build/
 ios/.build/
+# Owner-specific Debug staging Worker URL. The checked-in xcconfig defaults to
+# the reserved .invalid domain until this local override is supplied.
+ios/QuakeSignal/Supporting/Debug.local.xcconfig
 
 # macOS
 .DS_Store

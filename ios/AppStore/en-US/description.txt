@@ -9,6 +9,9 @@ Choose a city or use your current location to see distance, direction, magnitude
 RECOGNIZE EVERY STATUS
 Preliminary, updated, final, cancelled, and training messages use distinct labels, icons, and colors. Event details preserve a report-revision timeline when updates are available.
 
+OPTIONAL LOCAL ALERTS
+When you choose to enable notifications, QuakeSignal can send nearby alerts for reports that match your selected sources, magnitude, city or approximate location, and radius. This optional feature is best-effort, not a government emergency service, and not a replacement for official alerts.
+
 PREPARE OFFLINE
 Keep drop-cover-hold-on guidance, situation-specific safety actions, an emergency kit checklist, and family check-in notes available even without a network connection.
 

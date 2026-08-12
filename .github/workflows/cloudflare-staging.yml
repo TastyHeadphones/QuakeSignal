@@ -1,0 +1,211 @@
+name: Cloudflare Staging Worker
+
+on:
+  push:
+    branches:
+      - main
+      - "codex/**"
+    paths:
+      - "backend/cloudflare/**"
+      - ".github/workflows/cloudflare-staging.yml"
+  pull_request:
+    paths:
+      - "backend/cloudflare/**"
+      - ".github/workflows/cloudflare-staging.yml"
+  workflow_dispatch:
+    inputs:
+      deploy_staging:
+        description: Apply isolated staging D1 migrations and deploy the Debug-only Worker
+        required: false
+        default: false
+        type: boolean
+      verify_staging_apns:
+        description: Require staging APNs secrets and run the remote readiness smoke after deployment
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: cloudflare-staging-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate isolated staging configuration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/cloudflare/package-lock.json
+
+      - name: Install Worker dependencies
+        working-directory: backend/cloudflare
+        run: npm ci
+
+      - name: Type-check Worker and staging config renderer
+        working-directory: backend/cloudflare
+        run: |
+          set -euo pipefail
+          npm run check
+          npm run test:alert-delivery-reliability
+          npm run test:app-attest-registration-recovery
+          npm run test:production-training-test-push-limit
+          npm run test:production-gates
+          npm run test:render-staging-config
+          npm run test:verify-apns-secret-config
+          npm audit --audit-level=high
+
+  deploy-staging:
+    name: Deploy isolated Debug staging Worker
+    needs: validate
+    # Staging can contact APNs and persist device subscriptions. It is still a
+    # manual protected-main operation and must never be a PR preview.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.deploy_staging &&
+      github.ref == 'refs/heads/main' &&
+      github.ref_protected
+    runs-on: ubuntu-latest
+    environment:
+      name: cloudflare-staging
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/cloudflare/package-lock.json
+
+      # Do not expose the Cloudflare deployment token while third-party npm
+      # lifecycle scripts run. The immutable lockfile is installed first.
+      - name: Install Worker dependencies
+        working-directory: backend/cloudflare
+        run: npm ci
+
+      - name: Render isolated staging Worker configuration
+        working-directory: backend/cloudflare
+        env:
+          CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+          CLOUDFLARE_STAGING_D1_DATABASE_NAME: ${{ vars.CLOUDFLARE_STAGING_D1_DATABASE_NAME }}
+          CLOUDFLARE_STAGING_D1_DATABASE_ID: ${{ vars.CLOUDFLARE_STAGING_D1_DATABASE_ID }}
+          CLOUDFLARE_STAGING_DEVICE_API_RATE_LIMIT_NAMESPACE_ID: ${{ vars.CLOUDFLARE_STAGING_DEVICE_API_RATE_LIMIT_NAMESPACE_ID }}
+          CLOUDFLARE_STAGING_DEVICE_MUTATION_RATE_LIMIT_NAMESPACE_ID: ${{ vars.CLOUDFLARE_STAGING_DEVICE_MUTATION_RATE_LIMIT_NAMESPACE_ID }}
+          CLOUDFLARE_STAGING_APP_ATTEST_CHALLENGE_RATE_LIMIT_NAMESPACE_ID: ${{ vars.CLOUDFLARE_STAGING_APP_ATTEST_CHALLENGE_RATE_LIMIT_NAMESPACE_ID }}
+          CLOUDFLARE_STAGING_ALLOWED_BUNDLE_VERSIONS: ${{ vars.CLOUDFLARE_STAGING_ALLOWED_BUNDLE_VERSIONS }}
+        run: |
+          set -euo pipefail
+          config="$RUNNER_TEMP/quakesignal-staging-wrangler.json"
+          npm run render:staging-config -- --output "$config"
+          chmod 600 "$config"
+          echo "STAGING_WRANGLER_CONFIG=$config" >> "$GITHUB_ENV"
+
+      - name: Validate rendered staging Worker bundle
+        working-directory: backend/cloudflare
+        run: |
+          set -euo pipefail
+          # `npx wrangler` preserves --dry-run; do not replace this with the
+          # ambiguous `npm exec wrangler --dry-run` form.
+          npx wrangler deploy --dry-run --config "$STAGING_WRANGLER_CONFIG"
+
+      - name: Apply generated staging migrations locally first
+        working-directory: backend/cloudflare
+        env:
+          CLOUDFLARE_STAGING_D1_DATABASE_NAME: ${{ vars.CLOUDFLARE_STAGING_D1_DATABASE_NAME }}
+        run: |
+          set -euo pipefail
+          state_dir="$RUNNER_TEMP/quakesignal-staging-d1-state"
+          npx wrangler d1 migrations apply "$CLOUDFLARE_STAGING_D1_DATABASE_NAME" --local --persist-to "$state_dir" --config "$STAGING_WRANGLER_CONFIG"
+
+      - name: Apply isolated staging D1 migrations
+        working-directory: backend/cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_STAGING_D1_DATABASE_NAME: ${{ vars.CLOUDFLARE_STAGING_D1_DATABASE_NAME }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          npx wrangler d1 migrations apply "$CLOUDFLARE_STAGING_D1_DATABASE_NAME" --remote --config "$STAGING_WRANGLER_CONFIG"
+
+      - name: Deploy isolated staging Worker
+        working-directory: backend/cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          npx wrangler deploy --config "$STAGING_WRANGLER_CONFIG" | tee "$RUNNER_TEMP/quakesignal-staging-deploy.log"
+
+      - name: Record the discovered staging endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          deploy_log="$RUNNER_TEMP/quakesignal-staging-deploy.log"
+          urls="$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' "$deploy_log" | sort -u || true)"
+          {
+            echo "### Isolated Debug staging Worker"
+            if [ -n "$urls" ]; then
+              echo
+              echo "Wrangler reported this public staging endpoint:"
+              echo
+              while IFS= read -r url; do echo "- $url"; done <<< "$urls"
+              echo
+              echo "Before running with \`verify_staging_apns=true\`, copy the intended bare URL into the protected \`CLOUDFLARE_STAGING_WORKER_URL\` environment variable."
+            else
+              echo
+              echo "Wrangler did not print a workers.dev endpoint. Inspect the completed deploy output, then set the intended bare workers.dev URL in \`CLOUDFLARE_STAGING_WORKER_URL\` before enabling readiness verification."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify staging APNs readiness and legal URLs
+        if: inputs.verify_staging_apns
+        working-directory: backend/cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+          STAGING_WORKER_URL: ${{ vars.CLOUDFLARE_STAGING_WORKER_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$STAGING_WORKER_URL"
+          node --input-type=module <<'NODE'
+          const value = process.env.STAGING_WORKER_URL;
+          const workerName = process.env.STAGING_WORKER_NAME;
+          const url = new URL(value);
+          const labels = url.hostname.split(".");
+          if (
+            url.protocol !== "https:" ||
+            !workerName ||
+            !url.hostname.endsWith(".workers.dev") ||
+            labels.length < 4 ||
+            labels[0] !== workerName ||
+            url.pathname !== "/" ||
+            url.search ||
+            url.hash ||
+            url.username ||
+            url.password ||
+            url.port
+          ) {
+            throw new Error("CLOUDFLARE_STAGING_WORKER_URL must be the bare https://<CLOUDFLARE_STAGING_WORKER_NAME>.<account-subdomain>.workers.dev URL.");
+          }
+          NODE
+          npm run verify:apns-secrets -- --config "$STAGING_WRANGLER_CONFIG"
+          curl --fail --show-error --silent --retry 3 "$STAGING_WORKER_URL/healthz"
+          npm run test:remote -- "$STAGING_WORKER_URL"

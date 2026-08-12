@@ -87,6 +87,9 @@ body {
   display: flex;
   justify-content: flex-end;
 }
+.alert-footer {
+  margin-top: 12px;
+}
 
 .dismiss {
   border: none;

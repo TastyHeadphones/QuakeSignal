@@ -1,0 +1,7 @@
+QuakeSignal is an independent monitoring app. It does not require an account, sign-in, payment, or a backend service operated by the developer.
+
+The app opens on the Home tab and connects directly to selected public earthquake-information feeds through the Wolfx Open API. Live information can change, be delayed, or be revised.
+
+The Mac App Store build does not expose a Test Alarm control. Location is entered manually in Settings; the app does not request macOS Location Services access.
+
+For review, use Settings to select a language, source feeds, magnitude threshold, optional location/radius, and local notification preferences. The Mac App Store build intentionally does not expose Launch at Login.

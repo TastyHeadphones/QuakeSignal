@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The App ID Prefix must match the Mac App Store Connect profile. -->
+	<key>com.apple.application-identifier</key>
+	<string>5TT564H883.com.quakesignal.desktop</string>
+	<key>com.apple.developer.team-identifier</key>
+	<string>5TT564H883</string>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- QuakeSignal connects directly to public Wolfx HTTPS/WebSocket feeds. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+</dict>
+</plist>

@@ -1,0 +1,98 @@
+{
+  "name": "__WORKER_NAME__",
+  "main": "__SOURCE_ROOT__/src/index.ts",
+  "compatibility_date": "2026-08-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "vars": {
+    "ENABLE_PRODUCTION_TEST_PUSH": "false",
+    "APP_ATTEST_ENFORCEMENT": "development",
+    "APP_ATTEST_DEVELOPMENT_ENVIRONMENT": "true",
+    "APP_ATTEST_APP_ID": "5TT564H883.com.quakesignal.app",
+    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "__ALLOWED_BUNDLE_VERSIONS__",
+    "APP_ATTEST_REQUIRE_RELEASE_METADATA": "false",
+    "ALERT_DELIVERY_QUEUE_NAME": "__ALERT_DELIVERY_QUEUE_NAME__",
+    "ALERT_DELIVERY_DLQ_NAME": "__ALERT_DELIVERY_DLQ_NAME__",
+    "ALERT_DELIVERY_DLQ_FALLBACK_NAME": "__ALERT_DELIVERY_DLQ_FALLBACK_NAME__"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  },
+  "queues": {
+    "producers": [
+      {
+        "binding": "ALERT_DELIVERY_QUEUE",
+        "queue": "__ALERT_DELIVERY_QUEUE_NAME__"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "__ALERT_DELIVERY_QUEUE_NAME__",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_concurrency": 1,
+        "max_retries": 5,
+        "retry_delay": 30,
+        "dead_letter_queue": "__ALERT_DELIVERY_DLQ_NAME__"
+      },
+      {
+        "queue": "__ALERT_DELIVERY_DLQ_NAME__",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_concurrency": 1,
+        "max_retries": 5,
+        "retry_delay": 60,
+        "dead_letter_queue": "__ALERT_DELIVERY_DLQ_FALLBACK_NAME__"
+      }
+    ]
+  },
+  "ratelimits": [
+    {
+      "name": "DEVICE_API_RATE_LIMIT",
+      "namespace_id": "__DEVICE_API_RATE_LIMIT_NAMESPACE_ID__",
+      "simple": {
+        "limit": 300,
+        "period": 60
+      }
+    },
+    {
+      "name": "DEVICE_MUTATION_RATE_LIMIT",
+      "namespace_id": "__DEVICE_MUTATION_RATE_LIMIT_NAMESPACE_ID__",
+      "simple": {
+        "limit": 8,
+        "period": 60
+      }
+    },
+    {
+      "name": "APP_ATTEST_CHALLENGE_RATE_LIMIT",
+      "namespace_id": "__APP_ATTEST_CHALLENGE_RATE_LIMIT_NAMESPACE_ID__",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RELAY",
+        "class_name": "QuakeRelay"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["QuakeRelay"]
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "__D1_DATABASE_NAME__",
+      "database_id": "__D1_DATABASE_ID__",
+      "migrations_dir": "__SOURCE_ROOT__/migrations"
+    }
+  ]
+}

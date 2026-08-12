@@ -20,7 +20,7 @@
 [![コード署名ポリシー](https://img.shields.io/badge/code_signing-policy-6E56CF)](docs/SIGNING.md)
 [![プライバシーポリシー](https://img.shields.io/badge/privacy-policy-0A3D73)](docs/PRIVACY.md)
 
-**[ダウンロード](https://github.com/TastyHeadphones/QuakeSignal/releases/latest)** ·
+**[macOS 配布状況](#macos-へのインストール)** ·
 **[Microsoft Store（Windows）](https://apps.microsoft.com/detail/9N730S3CZ7Z9)** ·
 [macOS へのインストール](#macos-へのインストール) ·
 [アンインストール](#アンインストール) ·
@@ -60,55 +60,30 @@ iOS・macOS・Windows は地震データをすべて Wolfx から直接取得し
 
 ## macOS へのインストール
 
-[最新リリース](https://github.com/TastyHeadphones/QuakeSignal/releases/latest)
-から `QuakeSignal_<バージョン>_universal.dmg` をダウンロードして開き、
-**QuakeSignal** をアプリケーションフォルダにドラッグします。本プロジェクトの
-Homebrew tap からも導入できます:
+現在、サポート対象の公開 macOS ダウンロード版および Homebrew cask はありません。
+現行の GitHub Release `v0.1.0` は Developer ID 署名と公証より前のものであり、
+`TastyHeadphones/tap` には公開 cask もありません。どちらもインストールしないでください。
+後続の GitHub Release に Developer ID 署名・公証・staple 済みの universal DMG と
+`SHA256SUMS.txt` が示された後、`QuakeSignal_<バージョン>_universal.dmg` をダウンロードして
+開き、**QuakeSignal** をアプリケーションフォルダにドラッグします。Homebrew は、その
+同じ公証済みリリースの cask が公開 tap に反映された後にのみ使用できます:
 
 ```bash
+# 公開 tap に対象の公証済みリリース用 cask がある場合にのみ実行します。
 brew tap TastyHeadphones/tap
 brew install --cask quakesignal
 ```
 
-### 「壊れている」「開発元を確認できない」と表示される場合
+### Gatekeeper と公証
 
-初回起動時、macOS は次のいずれかを表示して起動を拒否することがほとんどです。
-*「"QuakeSignal" は壊れているため開けません。ゴミ箱に入れる必要があります。」*
-または *「開発元を検証できないため、"QuakeSignal" は開けません。」*
+保護された macOS リリースジョブは、直接配布/Homebrew 用アプリを **Developer ID
+Application** 証明書で署名し、公証後に DMG へチケットを staple します。
+`SHA256SUMS.txt` があり、macOS 成果物が公証済みと示されるリリースだけを使用してください。
 
-**アプリは壊れておらず、ダウンロードにも問題はありません。** Apple が保証するのは
-*公証（notarization）* を受けたアプリだけで、公証には有料の Apple Developer
-Program メンバーシップが必要ですが、本プロジェクトはまだ取得していません。macOS は
-インターネットから入手したファイルすべてに「隔離（quarantine）」属性を付け、登録
-された開発元をたどれない隔離済みアプリの起動を拒否します。この警告は Apple への
-登録がないことを示すもので、ファイルの破損を意味しません。ダウンロードの完全性を
-確認したい場合は、各リリースで公開している SHA256 チェックサムと照合してください。
-
-以下の**どちらか**を実行してください。インストールしたバージョンごとに一度だけで
-済みます。
-
-**方法 1 —— 隔離属性を解除する（コマンド1行）。**
-**ターミナル**を開き（⌘ + スペースで `Terminal` と入力して Return）、次の行を
-そのまま貼り付けて Return を押します。
-
-```bash
-xattr -dr com.apple.quarantine "/Applications/QuakeSignal.app"
-```
-
-成功すると何も表示されません。その後は通常どおり QuakeSignal を開けます。
-
-**方法 2 —— システム設定で許可する。**
-
-1. **QuakeSignal** をダブルクリックし、警告を閉じます。
-2. アップルメニュー → **システム設定** → **プライバシーとセキュリティ**を開きます。
-3. **セキュリティ**セクションまでスクロールすると「"QuakeSignal" は Mac を保護
-   するためにブロックされました」と表示されます。
-4. **このまま開く**をクリックし、**開く**で確認して、Mac のパスワードを入力します。
-
-> [!NOTE]
-> 右クリック（または Control キーを押しながらクリック）→ **開く**は使えなくなり
-> ました。Apple が macOS 15 Sequoia でこのショートカットを廃止したため、未公証の
-> アプリを許可する手段はシステム設定の**このまま開く**だけです。
+隔離属性の削除や Gatekeeper の回避は行わないでください。この手順で作成されたリリースが
+macOS によりブロックされた場合は、`SHA256SUMS.txt` と照合し、ダウンロードファイルを
+保持したままリリース URL と macOS バージョンを issue で報告してください。旧 `v0.1.0`
+リリースはサポート対象のインストール元または cask のソースではありません。
 
 ## Windows へのインストール
 
@@ -135,7 +110,7 @@ QuakeSignal はアプリ本体の場所と専用のデータディレクトリ�
 
 ### macOS
 
-Homebrew tap から導入した場合:
+将来の公開 Homebrew cask から導入した場合:
 
 ```bash
 brew uninstall --cask quakesignal
@@ -171,6 +146,25 @@ npm run tauri dev
 **Chrome** —— `chrome://extensions` でデベロッパーモードを有効にし、
 **パッケージ化されていない拡張機能を読み込む**から `extension/` を選択します。
 
+## iOS 本番リリースの前提条件
+
+公開 iOS リリースの前に、次を完了してください。
+
+- ユーザー承認済みの本番 Cloudflare Workers endpoint
+  `https://quakesignal-api.hopeso.workers.dev`、その公開 TLS、および `/healthz` を
+  確認します。別の `workers.dev` hostname は隔離された Debug/staging 用だけであり、
+  Release の代替には使いません。
+- `com.quakesignal.app` で App Attest を有効にし、本番用 provisioning profile を
+  更新して、本番 Worker の App Attest 必須モードを維持します。
+- Debug と Simulator は本番データや認証情報を共有しない別の staging Worker を使います。
+  実機で APNs/App Attest、登録・削除・トークン更新を確認し、その後ユーザー承認済みの
+  本番 endpoint に対する TestFlight APNs テストを完了してから reviewer の承認を受けます。
+- 最初の本番 Worker デプロイでは、保護されたワークフローで
+  `bootstrap_testflight=true` を指定し、`APP_ATTEST_PRODUCTION_ENFORCED` を `false`
+  にします。これは本番 App Attest、APNs、承認済み Worker endpoint を引き続き必須にした
+  非公開 TestFlight 検証専用の段階です。実機検証後に変数を `true` に変更し、通常の
+  launch 段階を再実行してから、App Review への提出または公開リリースを行います。
+
 ## ローカライズ
 
 ユーザー向けの画面はすべて英語（`en`）、日本語（`ja`）、簡体字中国語
@@ -197,8 +191,10 @@ Windows リリースは GitHub Actions で MSIX パッケージとしてビル�
 Store を通じて配布されます。認定済みの Store パッケージは Microsoft が署名し、
 このプロジェクトで Windows 用の署名鍵や第三者の署名サービスは使用しません。
 
-GitHub Releases では、すべてのビルド成果物を対象とした `SHA256SUMS.txt` を公開
-しています。macOS ビルドはまだ Apple による公証を受けていません。
+macOS の直接配布版が公開される場合は、`SHA256SUMS.txt` を含み、Developer ID で
+署名・公証・staple されたものになります。Mac App Store 用の sandbox 化された
+パッケージはその後に別の非公開 Actions artifact として作成でき、公開 GitHub
+Release には添付されません。
 
 ## ライセンス
 

@@ -64,6 +64,7 @@ export const en = {
   "settings.alarmEnabled.detail": "Play a native alarm automatically for real earthquakes that pass your filters.",
   "settings.alarmVolume": "Alarm Volume",
   "settings.alarmVolume.detail": "{volume}% — use Test Alarm to verify your speakers.",
+  "settings.alarmVolume.storeDetail": "{volume}% volume for automatic earthquake alarms.",
   "settings.includeTestAlerts": "Receive Test/Drill Alerts",
   "settings.includeTestAlerts.detail": "Occasionally JMA and other agencies broadcast training alerts to test the system.",
   "settings.notifyAtNight": "Notify at Night",

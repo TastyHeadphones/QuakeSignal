@@ -1,0 +1,1 @@
+earthquake,quake,monitoring,JMA,CENC,Japan,China,alerts,alarm,disaster,weather

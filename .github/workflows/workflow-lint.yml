@@ -1,0 +1,33 @@
+name: Workflow lint
+
+on:
+  push:
+    branches:
+      - main
+      - "codex/**"
+    paths:
+      - ".github/workflows/**"
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Validate GitHub Actions workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Ubuntu hosted runners include Go. Pin the actionlint module version so
+      # workflow syntax and expression validation is reproducible and does not
+      # depend on a floating GitHub Action implementation.
+      - name: Run actionlint
+        run: |
+          set -euo pipefail
+          go version
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 .github/workflows/*.yml

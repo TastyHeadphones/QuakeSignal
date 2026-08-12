@@ -2,12 +2,122 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "quakesignal-api",
   "main": "src/index.ts",
-  "compatibility_date": "2026-07-29",
+  "compatibility_date": "2026-08-11",
+  "compatibility_flags": ["nodejs_compat"],
+  // UniSphereco LLC explicitly approved this public production origin:
+  // https://quakesignal-api.hopeso.workers.dev. Keep `workers_dev` enabled and
+  // do not add a route or Custom Domain to this production configuration.
+  // Cloudflare serves this public endpoint with normal Web PKI TLS; no private
+  // CA, origin certificate, or client mTLS configuration belongs here.
   "workers_dev": true,
+  "vars": {
+    // The queue handler validates these against its `MessageBatch.queue`.
+    // A named staging environment must set both values to its own producer,
+    // consumer, and DLQ names; they are not credentials.
+    "ALERT_DELIVERY_QUEUE_NAME": "quakesignal-alert-delivery",
+    "ALERT_DELIVERY_DLQ_NAME": "quakesignal-alert-delivery-dlq",
+    // A DLQ persistence failure first lands in Durable Object storage. This
+    // consumerless final Queue is only the bounded, operator-visible last
+    // resort when both D1 and that independent storage path are unavailable.
+    "ALERT_DELIVERY_DLQ_FALLBACK_NAME": "quakesignal-alert-delivery-dlq-fallback",
+    // Production test pushes are deliberately disabled. Enabling this is a
+    // conscious, deploy-time choice; it is not a credential.
+    "ENABLE_PRODUCTION_TEST_PUSH": "false",
+    // Every public device mutation is bound to a one-time Apple App Attest
+    // proof. `disabled` and the development bypass are intentionally absent
+    // from this production configuration; use an isolated local/staging
+    // Worker when testing Debug/simulator flows.
+    "APP_ATTEST_ENFORCEMENT": "required",
+    "APP_ATTEST_APP_ID": "5TT564H883.com.quakesignal.app",
+    // CFBundleVersion, not the marketing version. Update this allow-list in
+    // the same reviewed release that changes CURRENT_PROJECT_VERSION.
+    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1",
+    // iOS 17–26 valid App Attest proofs do not have the iOS 27 release
+    // metadata extension. Whenever an extension is present it is still
+    // strictly checked for App Store/TestFlight category and this build ID.
+    "APP_ATTEST_REQUIRE_RELEASE_METADATA": "false"
+  },
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1
+    // Registration traffic contains device subscription data. Keep error logs
+    // structured and reduce routine-request sampling in production.
+    "head_sampling_rate": 0.1
   },
+  "queues": {
+    "producers": [
+      {
+        "binding": "ALERT_DELIVERY_QUEUE",
+        "queue": "quakesignal-alert-delivery"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "quakesignal-alert-delivery",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        // One page is already internally limited to two APNs requests. Keep
+        // the Queue at one consumer invocation so event fan-out cannot exceed
+        // that relay-level network budget under an alert burst.
+        "max_concurrency": 1,
+        "max_retries": 5,
+        "retry_delay": 30,
+        "dead_letter_queue": "quakesignal-alert-delivery-dlq"
+      },
+      {
+        // The same Worker persists sanitized DLQ incident metadata in D1. A
+        // D1 outage is first journaled in Durable Object storage; only if that
+        // path is unavailable as well may bounded retries reach the final
+        // consumerless evidence Queue below.
+        "queue": "quakesignal-alert-delivery-dlq",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_concurrency": 1,
+        "max_retries": 5,
+        "retry_delay": 60,
+        "dead_letter_queue": "quakesignal-alert-delivery-dlq-fallback"
+      }
+      // Intentionally no consumer for quakesignal-alert-delivery-dlq-fallback.
+      // Cloudflare retains a consumerless DLQ for its bounded Queue retention;
+      // configure an external Queue backlog alert and recover it manually.
+    ]
+  },
+  "ratelimits": [
+    {
+      "name": "DEVICE_API_RATE_LIMIT",
+      // This account-scoped namespace ID is intentionally reserved for the
+      // QuakeSignal public device-API route budget. Keep it unique within the
+      // Cloudflare account and stable after the first production deployment.
+      "namespace_id": "62228001",
+      "simple": {
+        // Applies once per route per Cloudflare location, before parsing a
+        // request body. This native binding remains required for the public
+        // Workers.dev device API.
+        "limit": 300,
+        "period": 60
+      }
+    },
+    {
+      "name": "DEVICE_MUTATION_RATE_LIMIT",
+      // Separate counter so one device/App Attest key cannot churn its
+      // registration or trigger repeated test-push attempts.
+      "namespace_id": "62228002",
+      "simple": {
+        "limit": 8,
+        "period": 60
+      }
+    },
+    {
+      "name": "APP_ATTEST_CHALLENGE_RATE_LIMIT",
+      // New App Attest keys are caller supplied until Apple verifies a proof.
+      // Keep this separate route-wide budget stable and account-unique so key
+      // rotation cannot turn challenge issuance into unbounded D1 writes.
+      "namespace_id": "62228003",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    }
+  ],
   "durable_objects": {
     "bindings": [
       {

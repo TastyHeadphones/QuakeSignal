@@ -1,0 +1,222 @@
+name: Cloudflare Worker
+
+on:
+  push:
+    branches:
+      - main
+      - "codex/**"
+    paths:
+      - "backend/cloudflare/**"
+      - ".github/workflows/cloudflare.yml"
+  pull_request:
+    paths:
+      - "backend/cloudflare/**"
+      - ".github/workflows/cloudflare.yml"
+  workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: Apply production D1 migrations and deploy the emergency-alert Worker
+        required: false
+        default: false
+        type: boolean
+      bootstrap_testflight:
+        description: First protected production deployment for TestFlight App Attest/APNs verification; never a public-launch approval
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: cloudflare-worker-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Worker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/cloudflare/package-lock.json
+
+      - name: Install Worker dependencies
+        working-directory: backend/cloudflare
+        run: npm ci
+
+      - name: Type-check Worker
+        working-directory: backend/cloudflare
+        run: npm run check
+
+      - name: Test emergency-alert delivery reliability
+        working-directory: backend/cloudflare
+        run: npm run test:alert-delivery-reliability
+
+      - name: Test App Attest key-rotation registration recovery
+        working-directory: backend/cloudflare
+        run: npm run test:app-attest-registration-recovery
+
+      - name: Test production training-push daily claim limit
+        working-directory: backend/cloudflare
+        run: npm run test:production-training-test-push-limit
+
+      - name: Test production-gate invariant
+        working-directory: backend/cloudflare
+        run: npm run test:production-gates
+
+      - name: Smoke the local device-request validation boundary
+        working-directory: backend/cloudflare
+        run: |
+          set -euo pipefail
+          state_dir="$RUNNER_TEMP/quakesignal-worker-state"
+          log_file="$RUNNER_TEMP/quakesignal-worker.log"
+          npx wrangler d1 migrations apply quakesignal-production --local --persist-to "$state_dir"
+          npx wrangler dev --local --ip 127.0.0.1 --port 8787 --persist-to "$state_dir" > "$log_file" 2>&1 &
+          worker_pid=$!
+          cleanup() {
+            kill "$worker_pid" 2>/dev/null || true
+            wait "$worker_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for _ in $(seq 1 30); do
+            # The Worker deliberately has no successful root route; an HTTP
+            # response (including its expected 404) proves that local workerd
+            # is listening. The following focused script makes the actual
+            # request-boundary assertions.
+            http_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              --max-time 2 http://127.0.0.1:8787/ || true)"
+            if [ "$http_status" != "000" ] && [ -n "$http_status" ]; then
+              npm run test:local-request-validation -- http://127.0.0.1:8787
+              npm run test:attested-key-bound-deletion -- http://127.0.0.1:8787
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$log_file"
+          echo "::error::Local Worker did not become ready"
+          exit 1
+
+      - name: Audit Worker dependencies
+        working-directory: backend/cloudflare
+        run: npm audit --audit-level=high
+
+      - name: Validate D1 migrations and Worker bundle
+        working-directory: backend/cloudflare
+        run: |
+          set -euo pipefail
+          npx wrangler d1 migrations apply quakesignal-production --local
+          # Use npx directly. `npm exec wrangler --dry-run` can lose the flag
+          # without npm's `--` delimiter and must never be substituted here.
+          npx wrangler deploy --dry-run
+
+  deploy-production:
+    name: Deploy production Worker
+    needs: validate
+    # A production migration/deploy is an explicit, protected-main operation.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.deploy_production &&
+      github.ref == 'refs/heads/main' &&
+      github.ref_protected
+    runs-on: ubuntu-latest
+    environment:
+      name: cloudflare-production
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/cloudflare/package-lock.json
+
+      - name: Install Worker dependencies
+        working-directory: backend/cloudflare
+        run: npm ci
+
+      - name: Validate protected Cloudflare configuration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
+          ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED: ${{ vars.ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED }}
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID WORKER_URL ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::cloudflare-production is missing: $name"
+              exit 1
+            fi
+          done
+          if [ "$WORKER_URL" != "https://quakesignal-api.hopeso.workers.dev" ]; then
+            echo "::error::CLOUDFLARE_WORKER_URL must be https://quakesignal-api.hopeso.workers.dev"
+            exit 1
+          fi
+          if [ "$ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED" != "true" ]; then
+            echo "::error::ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED must be exactly true after an operator verifies the external terminal DLQ fallback monitor and recovery procedure"
+            exit 1
+          fi
+
+      - name: Verify APNs Worker secret names
+        working-directory: backend/cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run verify:apns-secrets
+
+      - name: Select App Attest deployment phase
+        env:
+          BOOTSTRAP_TESTFLIGHT: ${{ inputs.bootstrap_testflight }}
+        run: |
+          set -euo pipefail
+          if [ "$BOOTSTRAP_TESTFLIGHT" = "true" ]; then
+            echo "APP_ATTEST_DEPLOYMENT_PHASE=testflight-bootstrap" >> "$GITHUB_ENV"
+            echo "::warning::Deploying a protected TestFlight bootstrap. The terminal DLQ fallback monitor/recovery verification is required now; do not submit the app publicly until physical-device verification is complete and the launch gate is promoted."
+          else
+            echo "APP_ATTEST_DEPLOYMENT_PHASE=launch" >> "$GITHUB_ENV"
+          fi
+
+      - name: Verify protected Cloudflare production gates
+        working-directory: backend/cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_WORKER_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
+          APP_ATTEST_PRODUCTION_ENFORCED: ${{ vars.APP_ATTEST_PRODUCTION_ENFORCED }}
+          APP_ATTEST_DEPLOYMENT_PHASE: ${{ env.APP_ATTEST_DEPLOYMENT_PHASE }}
+          ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED: ${{ vars.ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED }}
+        run: npm run verify:production-gates
+
+      - name: Apply D1 migrations
+        working-directory: backend/cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler d1 migrations apply quakesignal-production --remote
+
+      - name: Deploy Worker
+        working-directory: backend/cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+
+      - name: Run post-deployment smoke test
+        working-directory: backend/cloudflare
+        env:
+          WORKER_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
+        run: |
+          set -euo pipefail
+          curl --fail --show-error --silent --retry 3 "$WORKER_URL/healthz"
+          npm run test:remote -- "$WORKER_URL"
