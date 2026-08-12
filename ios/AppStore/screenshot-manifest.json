@@ -1,7 +1,7 @@
 {
   "version": 1,
   "platform": "iOS",
-  "primaryDisplayClass": "6.9",
+  "primaryDisplayClass": "6.5",
   "locales": [
     {
       "directory": "en-US",
@@ -20,13 +20,19 @@
     }
   ],
   "displayClasses": {
+    "6.5": {
+      "acceptedPortraitPixels": [
+        [1242, 2688]
+      ],
+      "upload": true
+    },
     "6.9": {
       "acceptedPortraitPixels": [
         [1260, 2736],
         [1290, 2796],
         [1320, 2868]
       ],
-      "upload": true
+      "upload": false
     },
     "6.3": {
       "acceptedPortraitPixels": [

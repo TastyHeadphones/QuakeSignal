@@ -12,10 +12,10 @@ readonly APP_STORE_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  capture-screenshot.sh [--device <UDID|booted>] [--class <6.9|6.3>] <locale> <frame>
+  capture-screenshot.sh [--device <UDID|booted>] [--class <6.5|6.9|6.3>] <locale> <frame>
 
 Examples:
-  capture-screenshot.sh --device booted --class 6.9 en-US 01-home
+  capture-screenshot.sh --device booted --class 6.5 en-US 01-home
   capture-screenshot.sh --class 6.3 ja 04-guide
 
 Locales: en-US, ja, zh-Hans
@@ -27,7 +27,7 @@ EOF
 }
 
 device="booted"
-display_class="6.9"
+display_class="6.5"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -77,7 +77,7 @@ case "$frame" in
 esac
 
 case "$display_class" in
-  6.9|6.3) ;;
+  6.5|6.9|6.3) ;;
   *)
     printf 'Unsupported display class: %s\n' "$display_class" >&2
     exit 2
@@ -107,7 +107,7 @@ width="$(sips -g pixelWidth "$output_file" | awk '/pixelWidth/ { print $2 }')"
 height="$(sips -g pixelHeight "$output_file" | awk '/pixelHeight/ { print $2 }')"
 
 case "${display_class}:${width}x${height}" in
-  6.9:1260x2736|6.9:1290x2796|6.9:1320x2868|6.3:1179x2556|6.3:1206x2622) ;;
+  6.5:1242x2688|6.9:1260x2736|6.9:1290x2796|6.9:1320x2868|6.3:1179x2556|6.3:1206x2622) ;;
   *)
     printf 'Unexpected %s screenshot dimensions: %sx%s\n' "$display_class" "$width" "$height" >&2
     printf 'The file was kept for diagnosis: %s\n' "$output_file" >&2
