@@ -723,8 +723,9 @@ jobs:
           assert_plist_value "$profile_plist" "TeamIdentifier:0" "$expected_team" "Mac App Store provisioning profile"
           assert_profile_identifier "$profile_plist" "$expected_application_identifier" "Mac App Store provisioning profile"
           assert_plist_value "$profile_plist" "Entitlements:com.apple.developer.team-identifier" "$expected_team" "Mac App Store provisioning profile"
-          assert_plist_value "$profile_plist" "Entitlements:com.apple.security.app-sandbox" "true" "Mac App Store provisioning profile"
-          assert_plist_value "$profile_plist" "Entitlements:com.apple.security.network.client" "true" "Mac App Store provisioning profile"
+          # On macOS, App Sandbox and its network configuration are unrestricted
+          # entitlements. Apple authorizes the profile identity here and the signed
+          # app assertions above verify the required sandbox configuration.
           mkdir -p "$package_dir"
           xcrun productbuild --sign "$MACOS_APP_STORE_INSTALLER_IDENTITY" --component "$app" /Applications "$package"
           pkgutil --check-signature "$package"
