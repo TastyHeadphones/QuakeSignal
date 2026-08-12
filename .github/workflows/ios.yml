@@ -358,6 +358,7 @@ jobs:
             assert_plist_value "$entitlements" "com.apple.developer.team-identifier" "$expected_team" "$label signed entitlements"
             assert_plist_value "$entitlements" "aps-environment" "production" "$label signed entitlements"
             assert_plist_value "$entitlements" "com.apple.developer.devicecheck.appattest-environment" "production" "$label signed entitlements"
+            assert_plist_value "$entitlements" "com.apple.developer.usernotifications.time-sensitive" "true" "$label signed entitlements"
 
             security cms -D -i "$profile" > "$profile_plist"
             plutil -lint "$profile_plist" >/dev/null
@@ -368,6 +369,7 @@ jobs:
             assert_plist_value "$profile_plist" "Entitlements:com.apple.developer.team-identifier" "$expected_team" "$label provisioning profile"
             assert_plist_value "$profile_plist" "Entitlements:aps-environment" "production" "$label provisioning profile"
             assert_plist_value "$profile_plist" "Entitlements:com.apple.developer.devicecheck.appattest-environment" "production" "$label provisioning profile"
+            assert_plist_value "$profile_plist" "Entitlements:com.apple.developer.usernotifications.time-sensitive" "true" "$label provisioning profile"
           }
 
           shopt -s nullglob
