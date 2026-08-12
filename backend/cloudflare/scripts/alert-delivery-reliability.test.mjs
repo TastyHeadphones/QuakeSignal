@@ -673,10 +673,54 @@ test("an undrained live-ingest journal immediately makes its source stale", asyn
   const now = Date.parse("2026-08-12T00:10:00.000Z");
   assert.equal(isUpstreamSourceStale("open", now, false, now), false);
   assert.equal(
+    isUpstreamSourceStale("closed", now, false, now),
+    true,
+    "a fresh HTTP seed cannot mask a closed live WebSocket route",
+  );
+  assert.equal(
     isUpstreamSourceStale("open", now, true, now),
     true,
     "a recent heartbeat cannot mask a durable event awaiting D1 ingestion",
   );
+});
+
+test("bounds HTTP seeding concurrency and preserves source order", async () => {
+  const { mapWithConcurrency } = await workerModule();
+  let active = 0;
+  let peak = 0;
+  const releases = [];
+  const values = ["jma_eew", "sc_eew", "cenc_eew", "fj_eew", "cq_eew"];
+  const promise = mapWithConcurrency(values, 2, async (source, index) => {
+    active += 1;
+    peak = Math.max(peak, active);
+    await new Promise((resolve) => releases[index] = resolve);
+    active -= 1;
+    return `${index}:${source}`;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(peak, 2, "only two HTTP seeds may be in flight at once");
+  for (let index = 0; index < values.length; index += 1) {
+    releases[index]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.deepEqual(
+    await promise,
+    values.map((source, index) => `${index}:${source}`),
+    "bounded completion must retain the original source ordering",
+  );
+  await assert.rejects(
+    () => mapWithConcurrency([], 0, async () => null),
+    /positive safe integer/,
+  );
+});
+
+test("keeps a short websocket reconnect alarm ahead of routine relay work", async () => {
+  const { preferredRelayAlarmAt } = await workerModule();
+  const now = Date.parse("2026-08-12T00:10:00.000Z");
+  assert.equal(preferredRelayAlarmAt(now + 1_000, now), now + 1_000);
+  assert.equal(preferredRelayAlarmAt(null, now), now + 60_000);
+  assert.equal(preferredRelayAlarmAt(now - 1, now), now + 60_000);
+  assert.equal(preferredRelayAlarmAt(now + 60_000, now), now + 60_000);
 });
 
 test("calculates bounded reason-specific delivery deadlines", async () => {

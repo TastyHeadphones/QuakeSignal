@@ -181,8 +181,10 @@ const LOC_KEYS: Record<NotifyReason, { title: string; body: string }> = {
 };
 
 // A Worker may have only a small number of simultaneous outgoing connections.
-// Reserve headroom for the three Wolfx watcher sockets and HTTP seed requests.
+// Keep HTTP seed work below the six-connection limit while the three Wolfx
+// watcher sockets are establishing their handshakes.
 const APNS_MAX_CONCURRENT_DELIVERIES = 2;
+const HTTP_SEED_MAX_CONCURRENT_REQUESTS = 2;
 // Keep one queue message comfortably below Workers' subrequest limits: a page
 // has at most 20 APNs requests plus a small, fixed number of D1 operations.
 const DEVICE_DELIVERY_PAGE_SIZE = 20;
@@ -224,6 +226,8 @@ const OUTBOX_QUEUE_LEASE_MS = 72 * 60 * 60_000;
 const OUTBOX_ENQUEUE_FAILURE_RETRY_MS = 60_000;
 const OUTBOX_STALE_AFTER_MS = 2 * 60 * 60_000;
 const UPSTREAM_STALE_AFTER_MS = 3 * 60_000;
+const ROUTINE_RELAY_ALARM_DELAY_MS = 60_000;
+const UPSTREAM_RECONNECT_DELAY_MS = 1_000;
 // HTTP recovery must not turn a historical snapshot into a notification
 // replay. It is only allowed to surface a fresh event/revision that arrived
 // while a WebSocket route was unavailable.
@@ -672,6 +676,57 @@ export function isUpstreamSourceStale(
     !lastSuccessMs ||
     now - lastSuccessMs > UPSTREAM_STALE_AFTER_MS
   );
+}
+
+/**
+ * Keep a close/error-triggered reconnect ahead of the routine relay alarm.
+ * A startup seed can take long enough for an upstream socket to fail while it
+ * is running, so a blind one-minute replacement would unnecessarily extend a
+ * known alert-ingestion outage.
+ */
+export function preferredRelayAlarmAt(
+  requestedAlarmAt: number | null,
+  now = Date.now(),
+): number {
+  const routineAlarmAt = now + ROUTINE_RELAY_ALARM_DELAY_MS;
+  return (
+    typeof requestedAlarmAt === "number" &&
+    Number.isFinite(requestedAlarmAt) &&
+    requestedAlarmAt > now &&
+    requestedAlarmAt < routineAlarmAt
+  )
+    ? requestedAlarmAt
+    : routineAlarmAt;
+}
+
+/**
+ * Bound setup-time upstream work so the three long-lived watcher connections
+ * retain room under the Workers/Durable Objects simultaneous-connection limit.
+ * Results preserve source order, which keeps initial-seed completion policy
+ * deterministic without starting every source request at once.
+ */
+export async function mapWithConcurrency<T, Result>(
+  values: readonly T[],
+  concurrency: number,
+  mapper: (value: T, index: number) => Promise<Result>,
+): Promise<Result[]> {
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
+    throw new RangeError("concurrency must be a positive safe integer");
+  }
+  const results = new Array<Result>(values.length);
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, values.length) },
+    async () => {
+      while (nextIndex < values.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await mapper(values[index], index);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
 }
 
 function messageExpiry(
@@ -2604,17 +2659,11 @@ export class QuakeRelay {
       await this.seedFromHttp(initialSeedComplete ? "recovery" : "initial");
       this.ensureUpstreams();
     } finally {
-      const routineAlarmAt = Date.now() + 60_000;
+      const now = Date.now();
       const requestedAlarmAt = await this.state.storage.getAlarm();
       // Preserve a short journal-retry alarm requested during this run rather
       // than accidentally replacing it with the routine one-minute wakeup.
-      await this.state.storage.setAlarm(
-        requestedAlarmAt !== null &&
-          requestedAlarmAt > Date.now() &&
-          requestedAlarmAt < routineAlarmAt
-          ? requestedAlarmAt
-          : routineAlarmAt,
-      );
+      await this.state.storage.setAlarm(preferredRelayAlarmAt(requestedAlarmAt, now));
     }
   }
 
@@ -2633,7 +2682,15 @@ export class QuakeRelay {
         INITIAL_HTTP_SEED_COMPLETE_KEY,
       );
       await this.seedFromHttp(initialSeedComplete ? "recovery" : "initial");
-      await this.state.storage.setAlarm(Date.now() + 60_000);
+      // A socket can close while the initial HTTP seed is still in flight.
+      // Re-read the requested alarm so that fast reconnect wins over the
+      // ordinary one-minute wakeup just as it does in `alarm()`.
+      await this.state.storage.setAlarm(
+        preferredRelayAlarmAt(
+          await this.state.storage.getAlarm(),
+          Date.now(),
+        ),
+      );
     }
   }
 
@@ -3570,13 +3627,52 @@ export class QuakeRelay {
         console.warn(`Unable to handle ${route} message`, error);
       }
     });
-    socket.addEventListener("close", () => {
+    socket.addEventListener("close", (event) => {
+      // A replaced socket must not erase the status or reconnect request for a
+      // newer healthy connection to the same route.
+      if (this.upstreams.get(route) !== socket) return;
+      const reconnectAtMs = Date.now() + UPSTREAM_RECONNECT_DELAY_MS;
+      // Close reasons are upstream-controlled text, so expose only bounded,
+      // operationally useful metadata in the structured log.
+      console.warn(
+        JSON.stringify({
+          outcome: "wolfx_upstream_websocket_closed",
+          route,
+          closeCode: Number.isSafeInteger(event.code) ? event.code : null,
+          wasClean: event.wasClean === true,
+          closeReasonPresent:
+            typeof event.reason === "string" && event.reason.length > 0,
+          reconnectAtUtc: new Date(reconnectAtMs).toISOString(),
+        }),
+      );
       this.setRouteStatus(route, "closed");
       this.upstreams.delete(route);
-      this.state.waitUntil(this.state.storage.setAlarm(Date.now() + 1_000));
+      this.state.waitUntil(this.state.storage.setAlarm(reconnectAtMs));
     });
     socket.addEventListener("error", () => {
+      if (this.upstreams.get(route) !== socket) return;
+      const reconnectAtMs = Date.now() + UPSTREAM_RECONNECT_DELAY_MS;
+      // ErrorEvent details can include transport text; route + planned recovery
+      // are sufficient for the operator without copying upstream content.
+      console.warn(
+        JSON.stringify({
+          outcome: "wolfx_upstream_websocket_error",
+          route,
+          reconnectAtUtc: new Date(reconnectAtMs).toISOString(),
+        }),
+      );
       this.setRouteStatus(route, "error");
+      // Some runtimes emit `error` before (or, exceptionally, without) a
+      // matching `close`. Drop and close this socket proactively so the next
+      // short alarm always establishes a replacement rather than retaining a
+      // broken entry in the route map.
+      this.upstreams.delete(route);
+      try {
+        socket.close(1011);
+      } catch {
+        // The socket may already be closed; its state is no longer retained.
+      }
+      this.state.waitUntil(this.state.storage.setAlarm(reconnectAtMs));
     });
   }
 
@@ -3607,11 +3703,19 @@ export class QuakeRelay {
   }
 
   private async seedFromHttp(mode: "initial" | "recovery"): Promise<void> {
-    const outcomes = await Promise.all(
-      ALL_WOLFX_SOURCES.map(async (source) => {
+    const outcomes = await mapWithConcurrency(
+      ALL_WOLFX_SOURCES,
+      HTTP_SEED_MAX_CONCURRENT_REQUESTS,
+      async (source) => {
         try {
           const response = await fetch(`${HTTP_BASE}/${source}.json`);
-          if (!response.ok) return false;
+          if (!response.ok) {
+            // We do not consume an unsuccessful snapshot response. Explicitly
+            // release its body so it cannot retain an outbound connection
+            // while the bounded seed pool continues with another source.
+            await response.body?.cancel();
+            return false;
+          }
           const message: unknown = await response.json();
           for (const event of normalizeMessages(source, message)) {
             await this.ingest(event, mode);
@@ -3622,7 +3726,7 @@ export class QuakeRelay {
           console.warn(`Unable to seed ${source}`, error);
           return false;
         }
-      }),
+      },
     );
     if (mode === "initial" && outcomes.every(Boolean)) {
       await this.state.storage.put(INITIAL_HTTP_SEED_COMPLETE_KEY, true);
