@@ -14,7 +14,7 @@ quakesignal-alert-delivery Queue ──► bounded Queue consumer ──► rela
                                       token-free Durable Object fallback ──► replay D1 incident
                                                        │ Durable Object unavailable
                                                        ▼
-                            quakesignal-alert-delivery-dlq-fallback (consumerless, external Queue alert)
+                            quakesignal-alert-delivery-dlq-fallback (consumerless, scheduled Queue monitor)
 ```
 
 The Queue messages contain a normalized earthquake snapshot, notification
@@ -73,9 +73,12 @@ exists, `/healthz` returns `503` with
 storage are unavailable, the DLQ message remains retriable. Its bounded DLQ
 consumer policy finally routes the original message to the intentionally
 consumerless `quakesignal-alert-delivery-dlq-fallback` Queue. Cloudflare Queue
-backlog is not available to this Worker, so configure an external Queue metric
-alert for that terminal Queue and recover the message before Cloudflare's
-consumerless-DLQ retention ends.
+backlog is not available to this Worker, so the scheduled GitHub Actions
+terminal-DLQ monitor reads only the Queue's aggregate Cloudflare metrics and
+opens one labelled recovery issue on any retained evidence. Configure its
+dedicated read-only monitor Environment and follow the recovery runbook before Cloudflare's
+consumerless-DLQ retention ends; see
+[`docs/CLOUDFLARE_PRODUCTION.md`](../../docs/CLOUDFLARE_PRODUCTION.md#terminal-dlq-fallback-recovery).
 
 Each page has a persisted deadline. New, updated, cancelled, and training EEW
 work expires after 30 minutes; final EEW and earthquake reports after 60
@@ -119,9 +122,9 @@ npx wrangler queues create quakesignal-alert-delivery-dlq
 npx wrangler queues create quakesignal-alert-delivery-dlq-fallback
 ```
 
-Before either protected production deployment phase, configure an external
-Cloudflare Queue backlog monitor for the exact consumerless
-`quakesignal-alert-delivery-dlq-fallback` Queue. A release operator may set the
+Before either protected production deployment phase, configure and manually
+verify the scheduled GitHub Actions terminal-DLQ monitor for the exact
+consumerless `quakesignal-alert-delivery-dlq-fallback` Queue. A release operator may set the
 protected `cloudflare-production` Environment variable
 `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true` only after
 verifying the monitor reaches a staffed responder and reviewing the
@@ -129,7 +132,7 @@ retention-aware recovery procedure. The production gate deliberately does not
 inspect Queue depth or Cloudflare dashboard alert wiring; it verifies only this
 explicit operator attestation and blocks both TestFlight bootstrap and launch
 when it is absent or not exactly `true`. See
-[`docs/CLOUDFLARE_PRODUCTION.md`](../../docs/CLOUDFLARE_PRODUCTION.md#production-deployment-order)
+[`docs/CLOUDFLARE_PRODUCTION.md`](../../docs/CLOUDFLARE_PRODUCTION.md#terminal-dlq-fallback-recovery)
 for the recovery runbook.
 
 Run the migrations in filename order; the queue/deduplication schema is in

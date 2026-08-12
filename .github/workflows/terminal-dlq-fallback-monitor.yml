@@ -1,0 +1,92 @@
+name: Monitor terminal DLQ fallback
+
+on:
+  schedule:
+    # A consumerless terminal Queue is bounded-retention evidence. Five minutes
+    # is deliberately a monitor cadence, not a high-frequency Queue poll.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: terminal-dlq-fallback-monitor
+  cancel-in-progress: false
+
+# The monitor needs only repository read access to check out its reviewed
+# script. The incident writer gets issues:write in its own job only.
+permissions:
+  contents: read
+
+jobs:
+  detect-terminal-dlq-fallback:
+    name: Read terminal Queue aggregate metrics
+    # Do not release even the monitor token to a manually selected feature
+    # branch. Scheduled runs use the default protected branch.
+    if: github.ref == 'refs/heads/main' && github.ref_protected
+    runs-on: ubuntu-latest
+    # Scheduled checks cannot wait for a deployment approval. This separate
+    # Environment is limited to a Queues-Read monitor token and protected-main
+    # access; it must not contain any deployment, APNs, D1, or Worker secret.
+    environment:
+      name: cloudflare-terminal-dlq-monitor
+    outputs:
+      alert: ${{ steps.probe.outputs.alert }}
+      queue_name: ${{ steps.probe.outputs.queue_name }}
+      backlog_count: ${{ steps.probe.outputs.backlog_count }}
+      oldest_message_timestamp_ms: ${{ steps.probe.outputs.oldest_message_timestamp_ms }}
+      oldest_message_age_seconds: ${{ steps.probe.outputs.oldest_message_age_seconds }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Scope the Cloudflare credentials to this one read-only aggregate-metric
+      # request after the reviewed checkout. The script has no Queue message
+      # endpoint and does not print API bodies, tokens, or message contents.
+      - name: Probe consumerless terminal Queue
+        id: probe
+        env:
+          CLOUDFLARE_MONITOR_API_TOKEN: ${{ secrets.CLOUDFLARE_MONITOR_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TERMINAL_DLQ_FALLBACK_QUEUE_NAME: quakesignal-alert-delivery-dlq-fallback
+        run: bash .github/scripts/check-terminal-dlq-fallback.sh
+
+  open-or-update-recovery-issue:
+    name: Open or update terminal Queue recovery issue
+    needs: detect-terminal-dlq-fallback
+    if: needs.detect-terminal-dlq-fallback.outputs.alert == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Open or update the single recovery issue
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          QUEUE_NAME: ${{ needs.detect-terminal-dlq-fallback.outputs.queue_name }}
+          BACKLOG_COUNT: ${{ needs.detect-terminal-dlq-fallback.outputs.backlog_count }}
+          OLDEST_MESSAGE_TIMESTAMP_MS: ${{ needs.detect-terminal-dlq-fallback.outputs.oldest_message_timestamp_ms }}
+          OLDEST_MESSAGE_AGE_SECONDS: ${{ needs.detect-terminal-dlq-fallback.outputs.oldest_message_age_seconds }}
+        run: bash .github/scripts/open-or-update-terminal-dlq-recovery-issue.sh
+
+  fail-on-terminal-dlq-fallback:
+    name: Fail when terminal Queue evidence requires recovery
+    needs:
+      - detect-terminal-dlq-fallback
+      - open-or-update-recovery-issue
+    if: >-
+      always() &&
+      needs.detect-terminal-dlq-fallback.result == 'success' &&
+      needs.open-or-update-recovery-issue.result == 'success' &&
+      needs.detect-terminal-dlq-fallback.outputs.alert == 'true'
+    runs-on: ubuntu-latest
+    permissions: {}
+
+    steps:
+      - name: Mark recovery as required
+        run: |
+          echo "::error title=Terminal DLQ fallback backlog::A recovery issue was opened or updated. Preserve the consumerless Queue and follow docs/CLOUDFLARE_PRODUCTION.md#terminal-dlq-fallback-recovery."
+          exit 1

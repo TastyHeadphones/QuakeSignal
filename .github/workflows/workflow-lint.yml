@@ -7,9 +7,11 @@ on:
       - "codex/**"
     paths:
       - ".github/workflows/**"
+      - ".github/scripts/**"
   pull_request:
     paths:
       - ".github/workflows/**"
+      - ".github/scripts/**"
   workflow_dispatch:
 
 permissions:
@@ -31,3 +33,13 @@ jobs:
           set -euo pipefail
           go version
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 .github/workflows/*.yml
+
+      - name: Test terminal DLQ fallback monitor
+        run: |
+          set -euo pipefail
+          bash -n .github/scripts/check-terminal-dlq-fallback.sh
+          bash -n .github/scripts/open-or-update-terminal-dlq-recovery-issue.sh
+          bash -n .github/scripts/test-check-terminal-dlq-fallback.sh
+          bash -n .github/scripts/test-open-or-update-terminal-dlq-recovery-issue.sh
+          bash .github/scripts/test-check-terminal-dlq-fallback.sh
+          bash .github/scripts/test-open-or-update-terminal-dlq-recovery-issue.sh
