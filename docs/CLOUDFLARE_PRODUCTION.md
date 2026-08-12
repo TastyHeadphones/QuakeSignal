@@ -86,16 +86,20 @@ release evidence; repeat the production proof against
    DLQ, and the intentionally consumerless
    `quakesignal-alert-delivery-dlq-fallback` terminal-evidence Queue. Use a
    Workers plan that supports the expected alert volume and add billing/usage
-   alerts. Configure an external Cloudflare Queue metric alert for that exact
-   terminal Queue. Before either the TestFlight bootstrap or launch deployment,
-   a release operator must verify the monitor reaches a staffed responder and
-   review the retention-aware recovery procedure, then set protected Environment
-   variable `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true`.
-   The protected workflow fails closed without that explicit operator
-   attestation, but it does **not** inspect Queue depth, retention, or the
-   Cloudflare dashboard alert configuration automatically. The Worker cannot
-   query Queue depth; a nonzero backlog is an urgent operator-recovery event
-   before the consumerless Queue retention ends.
+   alerts. The checked-in **Monitor terminal DLQ fallback** workflow runs every
+   five minutes and can also be dispatched manually. It uses the separate,
+   least-privilege `cloudflare-terminal-dlq-monitor` Environment to list the
+   exact Queue and read its aggregate Cloudflare metrics; it never reads, logs,
+   acknowledges, retries, purges, or redrives Queue messages. A nonzero backlog
+   or oldest-message timestamp opens or updates one labelled GitHub recovery
+   issue and makes the workflow fail. Before either the TestFlight bootstrap or
+   launch deployment, a release operator must verify that the monitor can reach
+   a staffed responder and review the retention-aware recovery procedure below,
+   then set protected
+   Environment variable `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true`.
+   The protected deployment workflow fails closed without that explicit operator
+   attestation. The Worker cannot query Queue depth; a nonzero backlog is an
+   urgent operator-recovery event before the consumerless Queue retention ends.
 4. Configure APNs Worker secrets interactively, as documented in
    [`RELEASE_SECRETS.md`](RELEASE_SECRETS.md#cloudflare-production). Store the
    one-time-download `.p8` key in the organization's password manager first.
@@ -143,7 +147,9 @@ release evidence; repeat the production proof against
    set `APP_ATTEST_PRODUCTION_ENFORCED=true` and re-run the protected workflow
    with `bootstrap_testflight` disabled for the **launch promotion**. That
    variable records an approved test; it is not an App Attest credential.
-7. Put `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
+7. After the separate `cloudflare-terminal-dlq-monitor` Environment has passed
+   both its protected-`main` manual probe and an unattended scheduled probe,
+   put `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
    `CLOUDFLARE_WORKER_URL=https://quakesignal-api.hopeso.workers.dev`, the App
    Attest review gate, and
    `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true` (only after
@@ -170,6 +176,55 @@ release evidence; repeat the production proof against
    Complete the launch promotion before public App Review/submission or any
    public release.
 
+## Terminal DLQ fallback recovery
+
+The final `quakesignal-alert-delivery-dlq-fallback` Queue is deliberately
+consumerless. Its messages are evidence that the normal DLQ could not complete
+the D1 incident transaction and the independent Durable Object fallback was
+also unavailable. Treat a labelled GitHub recovery issue from **Monitor
+terminal DLQ fallback** as a production incident, even when the Cloudflare
+metric reports only an oldest-message timestamp.
+
+Before setting
+`ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true`, verify all of the
+following:
+
+1. The monitor's dedicated `cloudflare-terminal-dlq-monitor` Environment has
+   only `CLOUDFLARE_MONITOR_API_TOKEN` (Cloudflare **Queues Read** scope) and
+   `CLOUDFLARE_ACCOUNT_ID`, and a manual dispatch from protected `main`
+   successfully identifies exactly one
+   `quakesignal-alert-delivery-dlq-fallback` Queue and reports aggregate
+   metrics. The monitor requires Cloudflare **Queues Read** permission; its
+   reviewed script makes only Queue-list and Queue-metrics requests.
+2. The dedicated monitor Environment permits protected `main` but has **no
+   required reviewers**, so a scheduled run can obtain its two read-only
+   values without an unattended approval bottleneck. It must not contain the
+   `cloudflare-production` deployment token or any other production secret.
+3. The labelled GitHub issue reaches a staffed responder. It contains only the
+   Queue name and aggregate count/timestamp; Queue message bodies, device data,
+   APNs keys, Cloudflare tokens, and raw API responses must never be added to
+   the issue.
+
+When the monitor alerts:
+
+1. Preserve the terminal Queue. Do **not** attach a Worker consumer, purge it,
+   or use the monitor workflow/credential to pull, acknowledge, retry, or
+   redrive messages. Record the aggregate metric and time only.
+2. Restore and verify D1 plus the global Durable Object first. Confirm the
+   production Worker is healthy and the underlying storage/configuration cause
+   has been addressed; a terminal Queue message must not be allowed to vanish
+   merely because the monitor was acknowledged.
+3. Use a separately approved, time-bound break-glass Queue credential to
+   recover one retained original message at a time. Replay it to the **DLQ**
+   (`quakesignal-alert-delivery-dlq`), not the primary delivery Queue, and wait
+   for the DLQ handler's durable D1 incident transaction before acknowledging
+   the original terminal copy. Do not redeliver the original page to APNs from
+   this recovery route.
+4. Re-read the terminal Queue metrics until the backlog and oldest timestamp
+   are zero. Record the recovery/disposition in the incident, then manually
+   close its labelled GitHub issue. The monitor deliberately never auto-closes
+   an incident or removes retained evidence.
+
 ## Operational controls before public launch
 
 - Configure an external GET monitor for `/healthz` at a normal monitor cadence
@@ -181,12 +236,13 @@ release evidence; repeat the production proof against
   `delivery.pendingDlqPersistenceFallbacks=true`; it means D1 incident
   persistence is awaiting recovery and the Worker has retained only sanitized,
   token-free evidence in Durable Object storage. Do not delete that marker
-  manually; the relay replays it before ordinary outbox work. Independently
-  alert on the terminal consumerless Queue's Cloudflare backlog metric—this is
-  not exposed through `/healthz`. `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED`
-  is a protected operator attestation that this external monitor and a
-  retention-aware recovery procedure were reviewed; it is not a Queue-depth
-  check. If the monitor/recovery path is changed or unverified, set it to
+  manually; the relay replays it before ordinary outbox work. The separate
+  scheduled terminal-DLQ monitor alerts on the terminal consumerless Queue's
+  aggregate Cloudflare backlog metric—this is not exposed through `/healthz`.
+  `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED` is a protected
+  operator attestation that this monitor and a retention-aware recovery
+  procedure were reviewed; it is not a Queue-depth check. If the
+  monitor/recovery path is changed or unverified, set it to
   `false` so both bootstrap and launch deployment fail closed.
   A generic HEAD probe is not sufficient. `/healthz` intentionally returns
   `503` for any required stale/closed source.

@@ -5,14 +5,16 @@ keys, APNs tokens, or Cloudflare credentials. Add the following values as
 **environment-scoped GitHub secrets**, never as repository files, Actions
 variables, source code, issues, or pull-request comments.
 
-Create the seven GitHub Environments below, restrict them to trusted release
-approvers, and require approval before use. Configure a protected `main` rule
-and a protected `v*` tag rule: the workflows use `github.ref_protected` and
-will intentionally skip production lanes until those controls exist. Allow the
-matching protected branch/tag to deploy to each environment. The workflows fail
-with a named missing-value error until their secrets are present. The required
-Apple, Cloudflare, APNs, DNS, and notarization credentials are external
-prerequisites; none is represented in this repository.
+Create the eight GitHub Environments below, restrict them to their intended
+release or monitoring scope, and require approval before use **except** the
+dedicated read-only `cloudflare-terminal-dlq-monitor` Environment described
+below. Configure a protected `main` rule and a protected `v*` tag rule: the
+workflows use `github.ref_protected` and will intentionally skip production
+lanes until those controls exist. Allow the matching protected branch/tag to
+deploy to each environment. The workflows fail with a named missing-value
+error until their secrets are present. The required Apple, Cloudflare, APNs,
+DNS, and notarization credentials are external prerequisites; none is
+represented in this repository.
 
 ## `ios-app-store-release`
 
@@ -165,15 +167,37 @@ needed, belongs to a short-lived local setup; it must not be enabled in this
 protected environment. The exact physical-device steps are in
 [`CLOUDFLARE_PRODUCTION.md`](CLOUDFLARE_PRODUCTION.md#isolated-debug-staging-worker).
 
+## `cloudflare-terminal-dlq-monitor`
+
+This dedicated Environment lets the five-minute **Monitor terminal DLQ
+fallback** workflow obtain only the aggregate-metrics credential without
+exposing the production deployment credential to an unattended run. Restrict it
+to protected `main`, but do **not** require reviewers: a reviewer-gated
+Environment causes scheduled runs to remain pending and is not a monitor. It
+must contain no APNs key, Worker deployment token, D1 credential, or production
+release secret.
+
+| Name | Kind | Value |
+| --- | --- | --- |
+| `CLOUDFLARE_MONITOR_API_TOKEN` | Secret | Separate Cloudflare API token restricted to **Queues Read** for the account that owns `quakesignal-alert-delivery-dlq-fallback`. It is used only to list Queues and read the terminal Queue's aggregate metrics; do not grant Workers Scripts, D1, Durable Object, Queue write, or message-recovery permissions. |
+| `CLOUDFLARE_ACCOUNT_ID` | Secret | Cloudflare account ID that owns the exact terminal fallback Queue. |
+
+After a manual protected-`main` run and a subsequent unattended scheduled run
+both complete successfully, a release operator may review the staffed response
+path and set the separate `cloudflare-production`
+`ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true` deployment
+attestation. The monitor Environment never contains that attestation or any
+deployment credential.
+
 ## `cloudflare-production`
 
 | Name | Kind | Value |
 | --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | Secret | Scoped token limited to this Worker, its Durable Object, D1 database/migrations, all three delivery/incident Queues, Worker-secret-name listing, and Workers Scripts Read/Write needed to verify and deploy the `hopeso.workers.dev` Worker |
+| `CLOUDFLARE_API_TOKEN` | Secret | Scoped deployment token limited to this Worker, its Durable Object, D1 database/migrations, all three delivery/incident Queues, Worker-secret-name listing, and Workers Scripts Read/Write needed to verify and deploy the `hopeso.workers.dev` Worker. It is never used by the scheduled terminal-DLQ monitor. |
 | `CLOUDFLARE_ACCOUNT_ID` | Secret | Cloudflare account ID that owns those resources |
 | `CLOUDFLARE_WORKER_URL` | Environment variable | Exactly `https://quakesignal-api.hopeso.workers.dev`; this is the user-approved public Workers.dev production origin |
 | `APP_ATTEST_PRODUCTION_ENFORCED` | Environment variable | Exactly `false` for the one-time protected TestFlight bootstrap, then exactly `true` only after a reviewer has completed the physical-device/TestFlight App Attest test plan |
-| `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED` | Environment variable | Exactly `true` only after a release operator has verified an external, staffed Cloudflare Queue backlog monitor for `quakesignal-alert-delivery-dlq-fallback` and reviewed its retention-aware recovery procedure. Required for both TestFlight bootstrap and launch; it is an explicit attestation, not telemetry. |
+| `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED` | Environment variable | Exactly `true` only after a release operator has verified the scheduled, staffed terminal-DLQ Queue monitor for `quakesignal-alert-delivery-dlq-fallback` and reviewed its retention-aware recovery procedure. Required for both TestFlight bootstrap and launch; it is an explicit attestation, not telemetry. |
 
 The manual **Cloudflare Worker → Run workflow** deployment is the sole normal
 production route for remote D1 migrations and Worker deployment. Include
@@ -198,23 +222,24 @@ staging account. These commands set secrets only—they are not a replacement
 for the protected production migration/deploy workflow.
 
 The terminal `quakesignal-alert-delivery-dlq-fallback` Queue intentionally has
-no Worker consumer. Configure a Cloudflare Queue backlog alert for it outside
-this application; Workers cannot reliably query Queue depth. A nonzero backlog
-means both D1 and Durable Object fallback persistence were unavailable long
-enough to exhaust DLQ retries, so preserve and recover the retained message
-through the approved incident procedure before the consumerless Queue's
-retention period expires.
+no Worker consumer. The separate read-only monitor Environment invokes the
+checked-in Queue-metrics workflow; Workers cannot reliably query Queue depth.
+A nonzero backlog means both D1 and Durable Object fallback persistence were
+unavailable long enough to exhaust DLQ retries, so preserve and recover the
+retained message through the approved incident procedure before the
+consumerless Queue's retention period expires.
 
 Before changing
 `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED` to `true`, the release
-operator must verify that the external alert targets the exact terminal Queue,
-reaches a staffed responder, and has a documented, retention-aware recovery
-path. The protected deployment gate deliberately does **not** inspect Queue
-depth, retention, or Cloudflare dashboard alert wiring; it only fails closed
-unless this protected Environment attestation is exactly `true`. Set it back to
-`false` while the monitor or recovery procedure is unverified. This is required
-even for the TestFlight bootstrap because that deployment can create terminal
-fallback evidence.
+operator must verify that the separate monitor targets the exact terminal Queue,
+has passed one manual and one unattended scheduled run, reaches a staffed
+responder, and has a documented, retention-aware recovery path. The protected
+deployment gate deliberately does **not** inspect Queue depth, retention, or
+GitHub Environment wiring; it only fails closed unless this protected
+Environment attestation is exactly `true`. Set it back to `false` while the
+monitor or recovery procedure is unverified. This is required even for the
+TestFlight bootstrap because that deployment can create terminal fallback
+evidence.
 
 ```bash
 cd backend/cloudflare
