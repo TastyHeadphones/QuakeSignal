@@ -14,6 +14,11 @@ on:
       - ".github/workflows/ios.yml"
   workflow_dispatch:
     inputs:
+      archive_only:
+        description: Archive, export, and validate a signed IPA without uploading it to App Store Connect
+        required: false
+        default: false
+        type: boolean
       upload_to_testflight:
         description: Archive, sign, and upload a new build to TestFlight
         required: false
@@ -26,7 +31,8 @@ on:
         type: string
 
 concurrency:
-  # A manual TestFlight upload must not be cancelled by an ordinary main push.
+  # A manual signed archive or TestFlight upload must not be cancelled by an
+  # ordinary main push.
   # CI runs remain coalesced by ref, while dispatches use an isolated lane.
   group: ios-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
@@ -134,13 +140,13 @@ jobs:
           if-no-files-found: ignore
 
   testflight:
-    name: Archive and upload TestFlight build
+    name: Archive and optionally upload TestFlight build
     needs: test
-    # The signing and App Store Connect upload lane is deliberately manual and
-    # only permitted from a protected main ref.
+    # The signing lane is deliberately manual and only permitted from a
+    # protected main ref. archive_only never makes an App Store Connect request.
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      inputs.upload_to_testflight &&
+      (inputs.archive_only || inputs.upload_to_testflight) &&
       github.ref == 'refs/heads/main' &&
       github.ref_protected
     runs-on: macos-latest
@@ -179,20 +185,24 @@ jobs:
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_APP_STORE_CERTIFICATE_PASSWORD }}
           IOS_PROFILE: ${{ secrets.IOS_APP_STORE_PROVISIONING_PROFILE }}
           IOS_PROFILE_NAME: ${{ vars.IOS_APP_STORE_PROFILE_NAME }}
-          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
-          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER: ${{ vars.APP_STORE_CONNECT_API_ISSUER }}
           IOS_RELEASE_API_BASE_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
+          ARCHIVE_ONLY: ${{ inputs.archive_only }}
+          UPLOAD_TO_TESTFLIGHT: ${{ inputs.upload_to_testflight }}
         run: |
           set -euo pipefail
+          if [ "$ARCHIVE_ONLY" = "true" ] && [ "$UPLOAD_TO_TESTFLIGHT" = "true" ]; then
+            echo "::error::Choose either archive_only or upload_to_testflight, not both"
+            exit 1
+          fi
+          if [ "$ARCHIVE_ONLY" != "true" ] && [ "$UPLOAD_TO_TESTFLIGHT" != "true" ]; then
+            echo "::error::Choose archive_only or upload_to_testflight"
+            exit 1
+          fi
           required=(
             IOS_CERTIFICATE
             IOS_CERTIFICATE_PASSWORD
             IOS_PROFILE
             IOS_PROFILE_NAME
-            APP_STORE_CONNECT_KEY
-            APP_STORE_CONNECT_KEY_ID
-            APP_STORE_CONNECT_ISSUER
             IOS_RELEASE_API_BASE_URL
           )
           missing=()
@@ -205,6 +215,28 @@ jobs:
           fi
           if [ "$IOS_RELEASE_API_BASE_URL" != "https://quakesignal-api.hopeso.workers.dev" ]; then
             echo "::error::IOS_RELEASE_API_BASE_URL must be https://quakesignal-api.hopeso.workers.dev"
+            exit 1
+          fi
+
+      - name: Validate App Store Connect upload configuration
+        if: ${{ inputs.upload_to_testflight && !inputs.archive_only }}
+        env:
+          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER: ${{ vars.APP_STORE_CONNECT_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          required=(
+            APP_STORE_CONNECT_KEY
+            APP_STORE_CONNECT_KEY_ID
+            APP_STORE_CONNECT_ISSUER
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::ios-app-store-release is missing: $(IFS=,; echo "${missing[*]}")"
             exit 1
           fi
 
@@ -418,6 +450,7 @@ jobs:
           verify_ios_app "ipa" "${ipa_apps[0]}"
 
       - name: Upload build to TestFlight
+        if: ${{ inputs.upload_to_testflight && !inputs.archive_only }}
         env:
           APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
           APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
@@ -427,6 +460,11 @@ jobs:
           key_dir="$RUNNER_TEMP/appstore-private-keys"
           key_path="$key_dir/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
           mkdir -p "$key_dir"
+          cleanup() {
+            rm -f "$key_path"
+            rmdir "$key_dir" 2>/dev/null || true
+          }
+          trap cleanup EXIT
           printf '%s' "$APP_STORE_CONNECT_KEY" > "$key_path"
           chmod 600 "$key_path"
           export API_PRIVATE_KEYS_DIR="$key_dir"
@@ -446,12 +484,9 @@ jobs:
 
       - name: Remove signing material
         if: always()
-        env:
-          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
         run: |
           rm -f "$RUNNER_TEMP/quakesignal-ios-distribution.p12"
           rm -f "$RUNNER_TEMP/QuakeSignal-ExportOptions.plist"
           rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/quakesignal-ios.mobileprovision"
-          rm -f "$RUNNER_TEMP/appstore-private-keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
           rmdir "$RUNNER_TEMP/appstore-private-keys" 2>/dev/null || true
           security delete-keychain "$RUNNER_TEMP/quakesignal-ios.keychain-db" 2>/dev/null || true
