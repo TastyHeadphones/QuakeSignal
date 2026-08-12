@@ -81,11 +81,7 @@ jobs:
           npx wrangler d1 migrations apply quakesignal-production --local --persist-to "$state_dir"
           npx wrangler dev --local --ip 127.0.0.1 --port 8787 --persist-to "$state_dir" > "$log_file" 2>&1 &
           worker_pid=$!
-          cleanup() {
-            kill "$worker_pid" 2>/dev/null || true
-            wait "$worker_pid" 2>/dev/null || true
-          }
-          trap cleanup EXIT
+          trap 'kill "$worker_pid" 2>/dev/null || true; wait "$worker_pid" 2>/dev/null || true' EXIT
           for _ in $(seq 1 30); do
             # The Worker deliberately has no successful root route; an HTTP
             # response (including its expected 404) proves that local workerd

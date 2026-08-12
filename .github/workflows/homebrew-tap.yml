@@ -155,9 +155,11 @@ jobs:
             exit 1
           }
 
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-          echo "TAG=$tag" >> "$GITHUB_ENV"
-          echo "DMG_NAME=QuakeSignal_${version}_universal.dmg" >> "$GITHUB_ENV"
+          {
+            echo "VERSION=$version"
+            echo "TAG=$tag"
+            echo "DMG_NAME=QuakeSignal_${version}_universal.dmg"
+          } >> "$GITHUB_ENV"
 
       - name: Download and validate the notarized DMG and checksum
         shell: bash
