@@ -322,6 +322,25 @@ jobs:
             fi
           }
 
+          assert_plist_array_contains() {
+            local plist="$1"
+            local key="$2"
+            local expected="$3"
+            local label="$4"
+            local index=0
+            local actual
+
+            while actual="$(/usr/libexec/PlistBuddy -c "Print :$key:$index" "$plist" 2>/dev/null)"; do
+              if [ "$actual" = "$expected" ]; then
+                return 0
+              fi
+              index=$((index + 1))
+            done
+
+            echo "::error::$label does not include required value $expected for $key"
+            return 1
+          }
+
           verify_ios_app() {
             local label="$1"
             local app="$2"
@@ -368,7 +387,9 @@ jobs:
             assert_plist_value "$profile_plist" "Entitlements:application-identifier" "$expected_application_identifier" "$label provisioning profile"
             assert_plist_value "$profile_plist" "Entitlements:com.apple.developer.team-identifier" "$expected_team" "$label provisioning profile"
             assert_plist_value "$profile_plist" "Entitlements:aps-environment" "production" "$label provisioning profile"
-            assert_plist_value "$profile_plist" "Entitlements:com.apple.developer.devicecheck.appattest-environment" "production" "$label provisioning profile"
+            # Apple profiles authorize both App Attest environments as an array;
+            # the signed application entitlement above is still required to be production.
+            assert_plist_array_contains "$profile_plist" "Entitlements:com.apple.developer.devicecheck.appattest-environment" "production" "$label provisioning profile"
             assert_plist_value "$profile_plist" "Entitlements:com.apple.developer.usernotifications.time-sensitive" "true" "$label provisioning profile"
           }
 
