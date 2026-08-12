@@ -30,11 +30,9 @@ function fmtMagnitude(n: number | null): string {
   return n === null ? "--" : n.toFixed(1);
 }
 
-function buildRawPayload(event: NormalizedEvent, reason: NotifyReason, useCritical: boolean) {
+function buildRawPayload(event: NormalizedEvent, reason: NotifyReason) {
   const keys = LOC_KEYS[reason];
   const sourceLabel = SOURCE_LABEL[event.sourceId] ?? event.sourceId;
-  const isSevere = reason !== "cancelled" && reason !== "training" && (event.magnitude ?? 0) >= 5.5;
-
   const aps = {
     alert: {
       "title-loc-key": keys.title,
@@ -42,11 +40,11 @@ function buildRawPayload(event: NormalizedEvent, reason: NotifyReason, useCritic
       "loc-key": keys.body,
       "loc-args": [event.hypocenter || sourceLabel, fmtMagnitude(event.magnitude), event.maxIntensity ?? "--"],
     },
-    sound:
-      useCritical && isSevere
-        ? { critical: 1, name: "default", volume: 1.0 }
-        : "default",
-    "interruption-level": reason === "training" ? "active" : useCritical && isSevere ? "critical" : "time-sensitive",
+    // Critical Alerts need Apple's separate entitlement, which QuakeSignal
+    // does not currently have. All public deliveries are standard or
+    // Time Sensitive notifications.
+    sound: "default",
+    "interruption-level": reason === "training" ? "active" : "time-sensitive",
     "relevance-score": reason === "cancelled" || reason === "training" ? 0.3 : 1.0,
     category: reason === "training" ? "EEW_TRAINING" : "EEW_ALERT",
   };
@@ -65,17 +63,11 @@ function buildRawPayload(event: NormalizedEvent, reason: NotifyReason, useCritic
   };
 }
 
-/**
- * `useCritical` should only be true when the device both opted in (Settings
- * toggle) AND the app holds the com.apple.developer.usernotifications.critical-alerts
- * entitlement -- Apple grants that per-app on request. Falls back to
- * time-sensitive (no special entitlement needed) otherwise.
- */
-export function buildNotification(event: NormalizedEvent, reason: NotifyReason, useCritical: boolean): apn.Notification {
+export function buildNotification(event: NormalizedEvent, reason: NotifyReason): apn.Notification {
   const note = new apn.Notification();
   note.topic = config.apns.bundleId;
   note.priority = 10;
   note.pushType = "alert";
-  note.rawPayload = buildRawPayload(event, reason, useCritical);
+  note.rawPayload = buildRawPayload(event, reason);
   return note;
 }

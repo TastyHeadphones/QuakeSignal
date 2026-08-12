@@ -7,11 +7,26 @@
     "check": "tsc --noEmit",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "render:staging-config": "node scripts/render-staging-config.mjs",
+    "test:render-staging-config": "node --test scripts/render-staging-config.test.mjs",
+    "verify:apns-secrets": "node scripts/verify-apns-worker-secrets.mjs",
+    "test:verify-apns-secret-config": "node --test scripts/verify-apns-worker-secrets.test.mjs",
+    "verify:production-gates": "node scripts/verify-production-gates.mjs",
+    "test:production-gates": "node --test scripts/verify-production-gates.test.mjs",
+    "test:alert-delivery-reliability": "node --test scripts/alert-delivery-reliability.test.mjs",
+    "test:app-attest-registration-recovery": "node --experimental-sqlite --test scripts/app-attest-registration-recovery.test.mjs",
+    "test:production-training-test-push-limit": "node --experimental-sqlite --test scripts/production-training-test-push-limit.test.mjs",
+    "test:attested-key-bound-deletion": "node scripts/local-attested-key-bound-deletion-test.mjs",
+    "test:local-request-validation": "node scripts/local-request-validation-test.mjs",
     "test:remote": "node scripts/smoke-test.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260722.1",
+    "esbuild": "0.28.1",
     "typescript": "^5.9.2",
-    "wrangler": "^4.115.0"
+    "wrangler": "4.121.0"
+  },
+  "dependencies": {
+    "@bradford-tech/supabase-integrity-attest": "0.9.1"
   }
 }

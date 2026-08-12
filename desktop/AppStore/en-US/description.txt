@@ -1,0 +1,7 @@
+QuakeSignal is an independent desktop app for monitoring selected earthquake information feeds.
+
+See recent reports, review local event history, choose the data sources you want to follow, and set a minimum magnitude and optional distance filter. Configure local alarm sound, volume, test and drill handling, and routine-report notifications to fit your needs.
+
+The macOS edition stores its history and preferences on your computer. It has no account system or cloud synchronization. It connects directly to the Wolfx Open API, which aggregates selected Japan Meteorological Agency (JMA) and Chinese national and regional earthquake-network feeds.
+
+QuakeSignal is not affiliated with JMA, CENC, or any government agency. Information from upstream sources can be delayed, incomplete, revised, or inaccurate. Always follow official local emergency guidance during an earthquake.

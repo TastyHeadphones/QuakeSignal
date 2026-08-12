@@ -36,13 +36,20 @@ pub fn run() {
     // starts; otherwise each task panics before opening a network socket.
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
-        ))
+        .plugin(tauri_plugin_notification::init());
+
+    // The direct distribution uses a LaunchAgent for its optional “launch at
+    // login” setting. That legacy mechanism writes to ~/Library/LaunchAgents,
+    // which is not available to a Mac App Store sandboxed app.
+    #[cfg(not(feature = "macos-app-store"))]
+    let builder = builder.plugin(tauri_plugin_autostart::init(
+        tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+        None,
+    ));
+
+    let builder = builder
         .plugin(tauri_plugin_log::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
@@ -80,16 +87,32 @@ pub fn run() {
             }
 
             Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
-            commands::get_settings,
-            commands::save_settings,
-            commands::list_recent_events,
-            commands::list_revisions,
-            commands::get_connection_status,
-            commands::get_pending_alert,
-            commands::send_test_alert,
-        ])
+        });
+
+    // Keep the Store invoke surface limited to normal monitoring controls.
+    // The synthetic alert is compiled and registered only for direct builds.
+    #[cfg(feature = "macos-app-store")]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        commands::get_settings,
+        commands::save_settings,
+        commands::list_recent_events,
+        commands::list_revisions,
+        commands::get_connection_status,
+        commands::get_pending_alert,
+    ]);
+
+    #[cfg(not(feature = "macos-app-store"))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        commands::get_settings,
+        commands::save_settings,
+        commands::list_recent_events,
+        commands::list_revisions,
+        commands::get_connection_status,
+        commands::get_pending_alert,
+        commands::send_test_alert,
+    ]);
+
+    builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

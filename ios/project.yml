@@ -15,6 +15,10 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
+    # Debug has a checked-in fail-closed default and an optional ignored local
+    # override. The override is intentionally not available to Release.
+    configFiles:
+      Debug: QuakeSignal/Supporting/Debug.xcconfig
     sources:
       - path: QuakeSignal/App
       - path: QuakeSignal/Models
@@ -36,4 +40,40 @@ targets:
         # which treat the path as something *they* generate/own and will
         # silently overwrite a hand-written file with a bare-bones default).
         INFOPLIST_FILE: QuakeSignal/Supporting/Info.plist
-        CODE_SIGN_ENTITLEMENTS: QuakeSignal/Supporting/QuakeSignal.entitlements
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: Apple Development
+          CODE_SIGN_ENTITLEMENTS: QuakeSignal/Supporting/QuakeSignal.entitlements
+          # Enables only the explicit unsupported-service bypass used by local
+          # development and Simulator builds. Supported physical devices still
+          # run the real App Attest sandbox flow.
+          QUAKESIGNAL_APP_ATTEST_MODE: development
+        Release:
+          CODE_SIGN_IDENTITY: Apple Distribution
+          CODE_SIGN_ENTITLEMENTS: QuakeSignal/Supporting/QuakeSignal-Release.entitlements
+          # The user-approved public Cloudflare Workers hostname is the release
+          # origin. The release workflow pins this exact URL before archiving.
+          QUAKESIGNAL_API_BASE_URL: https://quakesignal-api.hopeso.workers.dev
+          # Release code also hard-codes a fail-closed production policy, so a
+          # copied Info.plist cannot turn on a bypass in a distributed build.
+          QUAKESIGNAL_APP_ATTEST_MODE: production
+  QuakeSignalTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: QuakeSignalTests
+    dependencies:
+      - target: QuakeSignal
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  QuakeSignal:
+    build:
+      targets:
+        QuakeSignal: all
+    test:
+      targets:
+        - QuakeSignalTests

@@ -9,7 +9,20 @@ const log = createLogger("api:devices");
 export const devicesRouter = Router();
 
 function isValidSources(value: unknown): value is WolfxSourceId[] {
-  return Array.isArray(value) && value.every((v) => (ALL_WOLFX_SOURCES as string[]).includes(v));
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= ALL_WOLFX_SOURCES.length &&
+    value.every((v) => (ALL_WOLFX_SOURCES as string[]).includes(v))
+  );
+}
+
+function isDeviceToken(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 10 && value.length <= 512;
+}
+
+function isFiniteInRange(value: unknown, minimum: number, maximum: number): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= minimum && value <= maximum;
 }
 
 devicesRouter.post("/", (req, res) => {
@@ -19,7 +32,6 @@ devicesRouter.post("/", (req, res) => {
     locale,
     sources,
     minMagnitude,
-    criticalAlertsEnabled,
     cityName,
     latitude,
     longitude,
@@ -29,20 +41,37 @@ devicesRouter.post("/", (req, res) => {
     notifyAtNight,
   } = req.body ?? {};
 
-  if (typeof token !== "string" || token.length < 10) {
+  if (!isDeviceToken(token)) {
     return res.status(400).json({ error: "token is required" });
+  }
+
+  if (
+    (locale !== undefined && (typeof locale !== "string" || locale.length > 32)) ||
+    (cityName !== undefined && (typeof cityName !== "string" || cityName.length > 120)) ||
+    (sources !== undefined && !isValidSources(sources)) ||
+    (minMagnitude !== undefined && !isFiniteInRange(minMagnitude, 0, 10)) ||
+    (latitude !== undefined && !isFiniteInRange(latitude, -90, 90)) ||
+    (longitude !== undefined && !isFiniteInRange(longitude, -180, 180)) ||
+    (radiusKm !== undefined && !isFiniteInRange(radiusKm, 1, 2_000)) ||
+    (utcOffsetMinutes !== undefined && !isFiniteInRange(utcOffsetMinutes, -720, 840)) ||
+    (includeTestAlerts !== undefined && typeof includeTestAlerts !== "boolean") ||
+    (notifyAtNight !== undefined && typeof notifyAtNight !== "boolean")
+  ) {
+    return res.status(400).json({ error: "invalid device registration" });
   }
 
   const validSources = isValidSources(sources) ? sources : ALL_WOLFX_SOURCES;
   const env: DeviceEnvironment = environment === "sandbox" ? "sandbox" : "production";
 
-  const device = upsertDevice({
+  upsertDevice({
     token,
     environment: env,
     locale: typeof locale === "string" ? locale : null,
     sources: validSources,
     minMagnitude: typeof minMagnitude === "number" ? minMagnitude : 0,
-    criticalAlertsEnabled: !!criticalAlertsEnabled,
+    // The public bundle does not have Apple's Critical Alerts entitlement.
+    // Never accept a caller-controlled opt-in for an unavailable capability.
+    criticalAlertsEnabled: false,
     cityName: typeof cityName === "string" ? cityName : null,
     latitude: typeof latitude === "number" ? latitude : null,
     longitude: typeof longitude === "number" ? longitude : null,
@@ -52,18 +81,22 @@ devicesRouter.post("/", (req, res) => {
     notifyAtNight: notifyAtNight === undefined ? true : !!notifyAtNight,
   });
 
-  log.info(`registered device ${token.slice(0, 8)}... sources=${validSources.join(",")} city=${device.cityName ?? "-"}`);
-  res.status(201).json(device);
+  log.info(`registered device sources=${validSources.join(",")}`);
+  res.status(201).json({ registered: true });
 });
 
-devicesRouter.delete("/:token", (req, res) => {
-  deleteDevice(req.params.token);
+devicesRouter.delete("/", (req, res) => {
+  const { token } = req.body ?? {};
+  if (!isDeviceToken(token)) return res.status(400).json({ error: "token is required" });
+  deleteDevice(token);
   res.status(204).end();
 });
 
 /** Exercises the full push pipeline for one device -- backs the Settings "send test alert" button. */
-devicesRouter.post("/:token/test", async (req, res) => {
-  const device = getDevice(req.params.token);
+devicesRouter.post("/test", async (req, res) => {
+  const { token } = req.body ?? {};
+  if (!isDeviceToken(token)) return res.status(400).json({ error: "token is required" });
+  const device = getDevice(token);
   if (!device) return res.status(404).json({ error: "device not found" });
 
   const now = new Date().toISOString();
@@ -84,13 +117,13 @@ devicesRouter.post("/:token/test", async (req, res) => {
     isWarn: true,
     isFinal: false,
     isCancel: false,
-    isTraining: false,
+    isTraining: true,
     tsunami: null,
     raw: null,
   };
 
   try {
-    await sendDirectPush(testEvent, "new", device);
+    await sendDirectPush(testEvent, "training", device);
     res.json({ ok: true });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message });

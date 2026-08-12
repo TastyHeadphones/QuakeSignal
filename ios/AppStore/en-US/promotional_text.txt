@@ -1,1 +1,1 @@
-Live earthquake reports, nearby context, and an offline preparedness guide in English, Japanese, and Simplified Chinese.
+Live earthquake reports, optional nearby alerts, and an offline preparedness guide in English, Japanese, and Simplified Chinese.

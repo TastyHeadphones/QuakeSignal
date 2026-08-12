@@ -1,0 +1,308 @@
+name: Publish Homebrew cask
+
+# A Homebrew cask is a public distribution update. This manual lane is
+# intentionally separate from the signed release workflow: it consumes an
+# already-published, notarized GitHub Release and never permits the historical
+# unsupported v0.1.0 artifact to enter the tap.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Numeric release version already published as v<version> (for example 1.0.1)
+        required: true
+        type: string
+      publish_to_tap:
+        description: After every artifact/cask check passes, commit and push the cask to TastyHeadphones/homebrew-tap
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: homebrew-tap-${{ inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  UPSTREAM_REPOSITORY: TastyHeadphones/QuakeSignal
+  TAP_REPOSITORY: TastyHeadphones/homebrew-tap
+
+jobs:
+  publish:
+    name: Verify notarized release and publish cask
+    # The cask can only be changed from protected main, after an explicit
+    # maintainer opt-in. The environment adds a second reviewer gate.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.publish_to_tap &&
+      github.ref == 'refs/heads/main' &&
+      github.ref_protected &&
+      github.repository == 'TastyHeadphones/QuakeSignal'
+    runs-on: macos-latest
+    environment:
+      name: homebrew-tap-release
+
+    steps:
+      - name: Check out protected release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Verify the requested direct-release provenance
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$INPUT_VERSION"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must be numeric major.minor.patch"
+            exit 1
+          fi
+          if [ "$version" = "0.1.0" ]; then
+            echo "::error::v0.1.0 predates Developer ID signing/notarization and must never be published to Homebrew"
+            exit 1
+          fi
+          tag="v$version"
+          gh release view "$tag" --repo "$UPSTREAM_REPOSITORY" \
+            --json tagName,isDraft,isPrerelease,assets > "$RUNNER_TEMP/quakesignal-release.json"
+          jq -e --arg tag "$tag" '
+            .tagName == $tag and
+            .isDraft == false and
+            .isPrerelease == false and
+            ([.assets[].name] | index("QuakeSignal_" + ($tag | ltrimstr("v")) + "_universal.dmg")) and
+            ([.assets[].name] | index("SHA256SUMS.txt"))
+          ' "$RUNNER_TEMP/quakesignal-release.json" >/dev/null
+
+          # The public release must have been produced from this exact tag by
+          # the protected desktop-release workflow, not merely uploaded by a
+          # workstation. Resolve the tag target first so matching a similarly
+          # named branch or a later run cannot substitute a different commit.
+          tag_ref="refs/tags/$tag"
+          tag_refs="$(git ls-remote --tags "https://github.com/$UPSTREAM_REPOSITORY.git" \
+            "$tag_ref" "$tag_ref^{}")"
+          tag_commit="$(awk -v peeled="$tag_ref^{}" '$2 == peeled { print $1 }' <<<"$tag_refs")"
+          if [ -z "$tag_commit" ]; then
+            tag_commit="$(awk -v direct="$tag_ref" '$2 == direct { print $1 }' <<<"$tag_refs")"
+          fi
+          if [[ ! "$tag_commit" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Could not resolve the commit target for $tag"
+            exit 1
+          fi
+
+          # Release main can legitimately advance to the next version before
+          # this manual cask publication runs. Inspect the immutable tagged
+          # source instead of requiring current protected main to retain the
+          # older release number. Fetch the tag explicitly and ensure it did
+          # not move between the remote lookup above and this checkout.
+          git fetch --no-tags --depth=1 origin \
+            "+refs/tags/$tag:refs/tags/$tag"
+          fetched_tag_commit="$(git rev-parse "$tag^{commit}")"
+          if [ "$fetched_tag_commit" != "$tag_commit" ]; then
+            echo "::error::$tag moved while verifying its release provenance"
+            exit 1
+          fi
+          tag_source_version="$(git show "$tag:desktop/src-tauri/tauri.conf.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")"
+          if [ "$tag_source_version" != "$version" ]; then
+            echo "::error::Requested v$version does not match $tag's tauri.conf.json version $tag_source_version"
+            exit 1
+          fi
+
+          gh run list --repo "$UPSTREAM_REPOSITORY" --workflow desktop-release.yml \
+            --commit "$tag_commit" --event push --limit 100 \
+            --json databaseId,headBranch,headSha,event > "$RUNNER_TEMP/desktop-release-runs.json"
+          run_id="$(jq -r --arg tag "$tag" --arg commit "$tag_commit" '
+            [ .[] | select(
+              .event == "push" and
+              .headBranch == $tag and
+              .headSha == $commit
+            ) | .databaseId ] |
+            if length == 1 then .[0] else empty end
+          ' "$RUNNER_TEMP/desktop-release-runs.json")"
+          if [[ ! "$run_id" =~ ^[0-9]+$ ]]; then
+            echo "::error::Expected exactly one desktop-release push run for $tag at $tag_commit"
+            exit 1
+          fi
+
+          # A Windows packaging failure makes the workflow's aggregate
+          # conclusion fail even when the independently guarded Mac artifact
+          # and GitHub Release jobs succeeded. Verify those required jobs by
+          # name and exact SHA instead of treating an unrelated Windows job as
+          # Homebrew provenance.
+          gh api "repos/$UPSTREAM_REPOSITORY/actions/runs/$run_id/jobs?filter=latest&per_page=100" \
+            > "$RUNNER_TEMP/desktop-release-jobs.json"
+          jq -e --arg commit "$tag_commit" '
+            .total_count <= 100 and
+            ([.jobs[] | select(
+              .name == "Verify protected tag provenance" and
+              .conclusion == "success" and
+              .head_sha == $commit
+            )] | length == 1) and
+            ([.jobs[] | select(
+              .name == "macOS direct/Homebrew universal" and
+              .conclusion == "success" and
+              .head_sha == $commit
+            )] | length == 1) and
+            ([.jobs[] | select(
+              .name == "Publish release" and
+              .conclusion == "success" and
+              .head_sha == $commit
+            )] | length == 1)
+          ' "$RUNNER_TEMP/desktop-release-jobs.json" >/dev/null || {
+            echo "::error::Desktop release $run_id lacks successful protected provenance, macOS direct, or GitHub Release job evidence for $tag_commit"
+            exit 1
+          }
+
+          {
+            echo "VERSION=$version"
+            echo "TAG=$tag"
+            echo "DMG_NAME=QuakeSignal_${version}_universal.dmg"
+          } >> "$GITHUB_ENV"
+
+      - name: Download and validate the notarized DMG and checksum
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_dir="$RUNNER_TEMP/quakesignal-homebrew-release"
+          mkdir -p "$release_dir"
+          gh release download "$TAG" --repo "$UPSTREAM_REPOSITORY" \
+            --pattern "$DMG_NAME" --pattern SHA256SUMS.txt --dir "$release_dir"
+          dmg="$release_dir/$DMG_NAME"
+          checksums="$release_dir/SHA256SUMS.txt"
+          test -s "$dmg"
+          test -s "$checksums"
+          expected_sha="$(awk -v asset="$DMG_NAME" '$2 == asset || $2 == "*" asset { print $1 }' "$checksums")"
+          if [ "$(printf '%s\n' "$expected_sha" | sed '/^$/d' | wc -l | tr -d ' ')" != "1" ] || \
+             [[ ! "$expected_sha" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            echo "::error::SHA256SUMS.txt must contain exactly one valid checksum for $DMG_NAME"
+            exit 1
+          fi
+          actual_sha="$(shasum -a 256 "$dmg" | awk '{print $1}')"
+          expected_sha_lower="$(printf '%s' "$expected_sha" | tr '[:upper:]' '[:lower:]')"
+          if [ "$expected_sha_lower" != "$actual_sha" ]; then
+            echo "::error::Downloaded DMG does not match SHA256SUMS.txt"
+            exit 1
+          fi
+
+          hdiutil verify "$dmg"
+          xcrun stapler validate "$dmg"
+          mountpoint="$(mktemp -d "$RUNNER_TEMP/quakesignal-homebrew-dmg.XXXXXX")"
+          cleanup() {
+            hdiutil detach "$mountpoint" -quiet 2>/dev/null || true
+            rmdir "$mountpoint" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mountpoint" >/dev/null
+          shopt -s nullglob
+          apps=("$mountpoint"/*.app)
+          if [ "${#apps[@]}" -ne 1 ]; then
+            echo "::error::Notarized DMG must contain exactly one root .app"
+            exit 1
+          fi
+          app="${apps[0]}"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          if ! codesign -dvv "$app" 2>&1 | grep -Fq 'Authority=Developer ID Application'; then
+            echo "::error::DMG app is not signed with a Developer ID Application certificate"
+            exit 1
+          fi
+          xcrun stapler validate "$app"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
+          binary="$app/Contents/MacOS/$executable"
+          architectures="$(lipo -archs "$binary")"
+          for architecture in arm64 x86_64; do
+            if [[ " $architectures " != *" $architecture "* ]]; then
+              echo "::error::Published DMG is missing $architecture; found: $architectures"
+              exit 1
+            fi
+          done
+          spctl --assess --type execute --verbose=4 "$app"
+
+          echo "DMG_SHA256=$actual_sha" >> "$GITHUB_ENV"
+
+      - name: Verify the public tap exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$TAP_REPOSITORY" --jq '
+            .private == false and
+            .archived == false and
+            .name == "homebrew-tap" and
+            .default_branch == "main"
+          ' | grep -Fx true >/dev/null
+
+      - name: Render and validate the cask in a temporary tap checkout
+        shell: bash
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          set -euo pipefail
+          tap_dir="$RUNNER_TEMP/quakesignal-homebrew-tap"
+          # The preceding API gate guarantees Homebrew's public default branch
+          # is main. Clone that exact branch rather than silently updating a
+          # non-default branch that `brew tap` would never consume.
+          git clone --depth 1 --branch main --single-branch \
+            "https://github.com/$TAP_REPOSITORY.git" "$tap_dir"
+          test -d "$tap_dir/.git"
+          mkdir -p "$tap_dir/Casks"
+          existing="$tap_dir/Casks/quakesignal.rb"
+          is_new=false
+          if [ ! -f "$existing" ]; then
+            is_new=true
+          else
+            existing_version="$(ruby -ne 'puts Regexp.last_match(1) if /^  version "([^"]+)"$/' "$existing")"
+            if [ -z "$existing_version" ]; then
+              echo "::error::Existing tap cask has no parseable version"
+              exit 1
+            fi
+            ruby -r rubygems -e 'exit Gem::Version.new(ARGV[0]) > Gem::Version.new(ARGV[1]) ? 0 : 1' "$VERSION" "$existing_version" || {
+              echo "::error::Refusing to publish v$VERSION over existing cask version $existing_version"
+              exit 1
+            }
+          fi
+
+          ruby .github/scripts/render-homebrew-cask.rb \
+            packaging/homebrew-tap/Casks/quakesignal.rb "$existing" "$VERSION" "$DMG_SHA256"
+          ruby -c "$existing"
+
+          # Homebrew deliberately audits casks through a tap-qualified name,
+          # not an arbitrary .rb path. The runner is disposable; undo the
+          # temporary tap registration even if audit fails.
+          cleanup_tap() { brew untap TastyHeadphones/tap >/dev/null 2>&1 || true; }
+          trap cleanup_tap EXIT
+          brew tap TastyHeadphones/tap "$tap_dir"
+          brew style --cask TastyHeadphones/tap/quakesignal
+          if [ "$is_new" = true ]; then
+            brew audit --new --cask TastyHeadphones/tap/quakesignal
+          else
+            brew audit --strict --online --cask TastyHeadphones/tap/quakesignal
+          fi
+
+          git -C "$tap_dir" add Casks/quakesignal.rb
+          if git -C "$tap_dir" diff --cached --quiet; then
+            echo "TAP_HAS_CHANGES=false" >> "$GITHUB_ENV"
+          else
+            git -C "$tap_dir" -c user.name='QuakeSignal release bot' \
+              -c user.email='release-bot@users.noreply.github.com' \
+              commit -m "quakesignal $VERSION"
+            echo "TAP_HAS_CHANGES=true" >> "$GITHUB_ENV"
+          fi
+          echo "TAP_DIRECTORY=$tap_dir" >> "$GITHUB_ENV"
+
+      - name: Push validated cask to the public tap
+        if: env.TAP_HAS_CHANGES == 'true'
+        shell: bash
+        # Do not expose the cross-repository token until every release,
+        # signature, checksum, cask, and Homebrew validation above succeeded.
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          gh auth setup-git
+          git -C "$TAP_DIRECTORY" push origin HEAD:main

@@ -13,6 +13,10 @@ TypeScript, and local SQLite.
 The desktop app does **not** use the QuakeSignal server, Cloudflare Worker, user
 accounts, or device registration. It connects directly to the seven Wolfx
 WebSocket feeds and keeps its event history and preferences on the computer.
+If a Wolfx WebSocket route remains unavailable for 90 seconds, it conservatively
+refreshes only the affected public HTTPS snapshot at most every five minutes.
+Those recovery snapshots are backfill: they update local history and never
+create an alarm or notification.
 
 ```mermaid
 flowchart LR
@@ -62,12 +66,21 @@ npm run tauri build
 ```
 
 Native packages are written below `desktop/src-tauri/target/*/release/bundle`.
-The GitHub Actions workflow builds a universal macOS application/DMG and a
-Windows x64 MSI/NSIS installer, then uploads them as workflow artifacts.
-Pushing a version tag such as `v0.1.0` also creates a GitHub Release, generates
-release notes, and attaches every native installer to that release.
+The current desktop release metadata is `1.0.0`; the first supported direct
+macOS/Homebrew release must be built from the protected `v1.0.0` tag. Keep
+`package.json`, `Cargo.toml`, and `tauri.conf.json` aligned before creating a
+later release tag.
 
-CI applies an ad-hoc macOS signature so downloaded test builds remain
-launchable. Public distribution should replace it with an Apple Developer ID
-certificate and notarization, plus an appropriate code-signing certificate for
-Windows.
+The pull-request workflow may use an ad-hoc macOS signature for a test build.
+That artifact is never a public release. The protected release workflow can
+produce two macOS lanes when its environments are configured: a Developer ID
+signed, notarized, stapled universal DMG for direct download/Homebrew, and a
+separate sandboxed Mac App Store `.pkg` artifact. The App Store package is
+retained only as a workflow artifact; it is not attached to the public GitHub
+Release.
+
+No supported macOS binary or Homebrew cask is public yet. The `v0.1.0` GitHub
+Release predates Developer ID signing and notarization, and the
+`TastyHeadphones/tap` cask has not been published and must not be treated as
+installable. Publish a later notarized, stapled DMG with `SHA256SUMS.txt` first,
+then mirror its matching cask to a public tap.

@@ -74,6 +74,20 @@ jobs:
         working-directory: desktop/src-tauri
         run: cargo test --locked
 
+      - name: Test Mac App Store feature
+        if: matrix.name == 'macOS universal'
+        working-directory: desktop/src-tauri
+        run: cargo test --locked --features macos-app-store
+
+      - name: Build Mac App Store configuration without signing
+        if: matrix.name == 'macOS universal'
+        working-directory: desktop
+        env:
+          VITE_MAC_APP_STORE: "true"
+        run: >-
+          npm run tauri -- build --no-bundle --features macos-app-store
+          --config src-tauri/tauri.macos-app-store.conf.json
+
       - name: Build native installer
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:

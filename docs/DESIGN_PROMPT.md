@@ -11,6 +11,30 @@
 > root [README](../README.md). The app follows the shipped design; this file
 > records where it started.
 
+## Current release boundaries (supersede the historical prompt below)
+
+- A Release build registers notifications only with the user-approved public
+  Cloudflare Workers endpoint `https://quakesignal-api.hopeso.workers.dev`.
+  This exact `workers.dev` hostname is permitted in the store archive and
+  product URLs. A separate Worker hostname must be used for isolated
+  Debug/staging testing and must not share production resources or credentials.
+- Production registration, removal, and test-push requests require Apple's App
+  Attest. The Simulator/Debug development bypass is permitted only on that
+  separate staging Worker, never on production; physical TestFlight testing is
+  required before review.
+- The approved Workers hostname uses Cloudflare-managed public TLS. Do not
+  introduce a private CA, private root, or public-client mTLS scheme.
+- Release credentials, APNs setup, and physical-device verification remain
+  external release prerequisites.
+  Normal production D1 migration and Worker deployment occur only through the
+  protected GitHub Actions workflow described in
+  [`CLOUDFLARE_PRODUCTION.md`](CLOUDFLARE_PRODUCTION.md).
+- Expired App Attest challenges are deleted within five minutes. The key,
+  public verifier, receipt, and counter are deleted when the last associated
+  registration is removed or the daily 90-day purge runs; delivery-failure
+  token hashes are purged after 14 days. These integrity records are described
+  in [`PRIVACY.md`](PRIVACY.md) and are not product analytics.
+
 ---
 
 ## Prompt
@@ -55,8 +79,8 @@ chrome (labels, buttons, units, alert copy) is localized.
 
 1. **Onboarding** (first launch only)
    - 2–3 short screens explaining what the app does and why it needs
-     Notifications (and ideally Critical Alerts) permission, then a system
-     permission prompt.
+     notification permission, then a system permission prompt. The public
+     release uses standard/Time Sensitive alerts, not Critical Alerts.
 2. **Home** (tab 1)
    - Big status header: monitoring is active, which sources are subscribed,
      last time data was refreshed.
@@ -87,8 +111,8 @@ chrome (labels, buttons, units, alert copy) is localized.
    - Source toggles: JMA EEW, CENC EEW, Sichuan EEW, Fujian EEW, Chongqing EEW,
      CENC earthquake list, JMA earthquake list — each independently on/off.
    - Minimum magnitude / minimum intensity threshold below which no push is sent.
-   - Notification style: sound on/off, "Critical Alert" opt-in explainer (with a
-     link to enable it in system Settings if the entitlement is granted).
+   - Notification style: sound on/off and a Time Sensitive delivery explainer.
+     Critical Alerts are intentionally not offered in this release.
    - "Send test alert" button that exercises the full push pipeline end to end.
    - About / data-source attribution (Wolfx is a relay of JMA/CENC/provincial
      bureaus — link their ToS/Privacy Policy per Wolfx's usage terms), app

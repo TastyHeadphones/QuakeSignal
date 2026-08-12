@@ -66,6 +66,7 @@ export const ja: Record<LocaleKey, string> = {
   "settings.alarmEnabled.detail": "フィルター条件に一致した実際の地震を受信すると、警報音を自動で再生します。",
   "settings.alarmVolume": "警報音の音量",
   "settings.alarmVolume.detail": "{volume}% — テスト警報でスピーカーを確認できます。",
+  "settings.alarmVolume.storeDetail": "{volume}% — 実際の地震に対する自動警報音の音量です。",
   "settings.includeTestAlerts": "訓練・テスト配信を受信する",
   "settings.includeTestAlerts.detail": "気象庁などが動作確認のために訓練配信を行うことがあります。",
   "settings.notifyAtNight": "夜間も通知する",

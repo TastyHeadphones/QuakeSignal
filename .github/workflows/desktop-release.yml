@@ -1,8 +1,10 @@
 name: Desktop release
 
-# Tagged releases build QuakeSignal for Windows and macOS. Windows is packaged
-# as MSIX and submitted directly to Microsoft Store, which signs the package
-# after certification. No third-party code-signing key is used or stored here.
+# Protected v* tags publish the notarized direct macOS artifact to GitHub for
+# direct/Homebrew distribution. Mac App Store and Microsoft Store submissions
+# are separate, manual protected-main operations. Windows is packaged as MSIX;
+# Microsoft Store signs it after certification, so no third-party signing key
+# is stored here.
 
 on:
   push:
@@ -10,8 +12,23 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
+      build_macos_direct:
+        description: Build, sign, notarize, and upload the direct macOS DMG artifact
+        required: false
+        default: false
+        type: boolean
       publish_to_store:
         description: Submit an update for the live Microsoft Store app
+        required: false
+        default: false
+        type: boolean
+      build_macos_app_store:
+        description: Build the protected Mac App Store package artifact
+        required: false
+        default: false
+        type: boolean
+      upload_macos_to_app_store_connect:
+        description: Validate and upload the protected Mac App Store package to App Store Connect
         required: false
         default: false
         type: boolean
@@ -33,6 +50,44 @@ env:
   MSIX_PUBLISHER_DISPLAY_NAME: tastyheadphones
 
 jobs:
+  verify-release-provenance:
+    name: Verify protected tag provenance
+    # `github.ref_protected` proves only that the v* ref matches a repository
+    # ruleset. Before a tag can request the macOS release environment, also
+    # prove that its target commit is in the protected main history. This keeps
+    # a protected-but-arbitrary tag from signing or publishing unreviewed code.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.ref_protected &&
+      github.repository == 'TastyHeadphones/QuakeSignal'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out tagged source and protected main history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag target is contained in protected main
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Fetch main explicitly even though checkout fetched full history;
+          # this avoids relying on checkout's remote-ref layout for tag runs.
+          git fetch --no-tags --prune origin \
+            '+refs/heads/main:refs/remotes/origin/main'
+
+          tag_commit="$(git rev-parse "${GITHUB_REF}^{commit}")"
+          main_commit="$(git rev-parse 'refs/remotes/origin/main^{commit}')"
+          if ! git merge-base --is-ancestor "$tag_commit" "$main_commit"; then
+            echo "::error::${GITHUB_REF} targets $tag_commit, which is not contained in protected main ($main_commit)"
+            exit 1
+          fi
+
+          echo "Verified ${GITHUB_REF} target $tag_commit is contained in protected main history at $main_commit."
+
   windows:
     name: Windows MSIX
     runs-on: windows-latest
@@ -188,10 +243,25 @@ jobs:
           path: ${{ github.workspace }}/artifacts/windows/*.msix*
           if-no-files-found: error
 
-  macos:
-    name: macOS universal
-    if: github.event_name != 'workflow_dispatch' || inputs.publish_to_store != true
+  macos-direct:
+    name: macOS direct/Homebrew universal
+    # A protected v* tag supplies the GitHub Release/Homebrew source artifact.
+    # Manual runs must opt in so an empty dispatch never signs or notarizes.
+    needs: [verify-release-provenance]
+    if: >-
+      always() && (
+        (startsWith(github.ref, 'refs/tags/v') &&
+         github.ref_protected &&
+         github.repository == 'TastyHeadphones/QuakeSignal' &&
+         needs.verify-release-provenance.result == 'success') ||
+        (github.event_name == 'workflow_dispatch' &&
+         github.ref == 'refs/heads/main' &&
+         github.ref_protected &&
+         inputs.build_macos_direct)
+      )
     runs-on: macos-latest
+    environment:
+      name: macos-direct-release
     env:
       RUST_TARGET: universal-apple-darwin
 
@@ -225,36 +295,506 @@ jobs:
         working-directory: desktop/src-tauri
         run: cargo test --locked
 
-      - name: Build universal macOS bundles
+      # Run the repository's frontend/Rust build before any Developer ID or
+      # notarization credential is injected. `tauri bundle` below packages the
+      # already-built executable and only runs a configured beforeBundleCommand
+      # (none is configured for this project).
+      - name: Build unsigned universal macOS app before release credentials
+        working-directory: desktop
+        run: >-
+          npm run tauri -- build --no-bundle --no-sign
+          --target ${{ env.RUST_TARGET }}
+
+      - name: Verify protected tag matches app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_version="$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ -z "$app_version" ] || [ "$app_version" = "undefined" ]; then
+            echo "::error::Could not read the application version from tauri.conf.json"
+            exit 1
+          fi
+          if [ "$app_version" != "$tag_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match tauri.conf.json version $app_version"
+            exit 1
+          fi
+
+      - name: Validate protected direct-release configuration
+        shell: bash
         working-directory: desktop
         env:
-          APPLE_SIGNING_IDENTITY: "-"
-        run: npm run tauri -- build --target ${{ env.RUST_TARGET }} --bundles app,dmg
+          DEVELOPER_ID_CERTIFICATE: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE }}
+          DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          DEVELOPER_ID_SIGNING_IDENTITY: ${{ vars.MACOS_DEVELOPER_ID_SIGNING_IDENTITY }}
+          NOTARY_API_KEY: ${{ secrets.MACOS_NOTARY_API_KEY }}
+          NOTARY_API_KEY_ID: ${{ secrets.MACOS_NOTARY_API_KEY_ID }}
+          NOTARY_API_ISSUER: ${{ secrets.MACOS_NOTARY_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          required=(
+            DEVELOPER_ID_CERTIFICATE
+            DEVELOPER_ID_CERTIFICATE_PASSWORD
+            DEVELOPER_ID_SIGNING_IDENTITY
+            NOTARY_API_KEY
+            NOTARY_API_KEY_ID
+            NOTARY_API_ISSUER
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::macos-direct-release is missing: $(IFS=,; echo "${missing[*]}")"
+            exit 1
+          fi
 
-      - name: Collect release artifacts
+      - name: Materialize notarization API key
+        shell: bash
+        env:
+          NOTARY_API_KEY: ${{ secrets.MACOS_NOTARY_API_KEY }}
+          NOTARY_API_KEY_ID: ${{ secrets.MACOS_NOTARY_API_KEY_ID }}
+        run: |
+          set -euo pipefail
+          key_dir="$RUNNER_TEMP/quakesignal-notary"
+          key_path="$key_dir/AuthKey_${NOTARY_API_KEY_ID}.p8"
+          mkdir -p "$key_dir"
+          printf '%s' "$NOTARY_API_KEY" > "$key_path"
+          chmod 600 "$key_path"
+          echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Sign, notarize, and staple built universal macOS DMG
+        working-directory: desktop
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.MACOS_DEVELOPER_ID_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.MACOS_NOTARY_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.MACOS_NOTARY_API_ISSUER }}
+        run: npm run tauri -- bundle --target ${{ env.RUST_TARGET }} --bundles app,dmg
+
+      - name: Verify and collect notarized direct-release artifact
+        shell: bash
         run: |
           set -euo pipefail
           bundle_dir="desktop/src-tauri/target/${RUST_TARGET}/release/bundle"
-          mkdir -p dist
           shopt -s nullglob
+          apps=("$bundle_dir"/macos/*.app)
           dmgs=("$bundle_dir"/dmg/*.dmg)
-          if [ ${#dmgs[@]} -eq 0 ]; then
-            echo "::error::No .dmg produced under $bundle_dir/dmg"
+          if [ "${#apps[@]}" -ne 1 ] || [ "${#dmgs[@]}" -ne 1 ]; then
+            echo "::error::Expected one universal .app and .dmg under $bundle_dir"
             exit 1
           fi
-          cp "${dmgs[@]}" dist/
+          app="${apps[0]}"
+          dmg="${dmgs[0]}"
 
-      - name: Upload macOS release artifacts
+          verify_universal_app() {
+            local candidate_app="$1"
+            local info_plist="$candidate_app/Contents/Info.plist"
+            local executable
+            local executable_path
+            local architectures
+
+            if [ ! -f "$info_plist" ]; then
+              echo "::error::App bundle has no Info.plist: $candidate_app"
+              return 1
+            fi
+            executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info_plist")"
+            if [ -z "$executable" ] || [[ "$executable" == */* ]]; then
+              echo "::error::App bundle has an invalid CFBundleExecutable: $candidate_app"
+              return 1
+            fi
+            executable_path="$candidate_app/Contents/MacOS/$executable"
+            if [ ! -x "$executable_path" ]; then
+              echo "::error::App executable is missing or not executable: $executable_path"
+              return 1
+            fi
+
+            architectures="$(lipo -archs "$executable_path")"
+            for architecture in arm64 x86_64; do
+              if [[ " $architectures " != *" $architecture "* ]]; then
+                echo "::error::Expected $architecture in universal app executable; found: $architectures"
+                return 1
+              fi
+            done
+          }
+
+          codesign --verify --deep --strict --verbose=2 "$app"
+          if ! codesign -dvv "$app" 2>&1 | grep -q 'Authority=Developer ID Application'; then
+            echo "::error::The direct-release app is not signed with a Developer ID Application certificate"
+            exit 1
+          fi
+
+          # Verify the app bundle itself is universal and carries a stapled
+          # notarization ticket, rather than validating only its enclosing DMG.
+          verify_universal_app "$app"
+          xcrun stapler validate "$app"
+          xcrun stapler validate "$dmg"
+
+          # Gatekeeper evaluates the app users receive from the disk image.
+          # Mount it to ensure the DMG really contains the notarized universal
+          # app and then assess that copy with the system policy engine.
+          mountpoint="$(mktemp -d "$RUNNER_TEMP/quakesignal-dmg.XXXXXX")"
+          cleanup_dmg() {
+            hdiutil detach "$mountpoint" -quiet 2>/dev/null || true
+            rmdir "$mountpoint" 2>/dev/null || true
+          }
+          trap cleanup_dmg EXIT
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mountpoint" >/dev/null
+          mounted_apps=("$mountpoint"/*.app)
+          if [ "${#mounted_apps[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one app bundle at the root of $dmg"
+            exit 1
+          fi
+          mounted_app="${mounted_apps[0]}"
+          verify_universal_app "$mounted_app"
+          xcrun stapler validate "$mounted_app"
+          spctl --assess --type execute --verbose=4 "$mounted_app"
+
+          mkdir -p dist
+          cp "$dmg" dist/
+
+      - name: Upload notarized macOS direct-release artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: release-macos
-          path: dist
+          name: release-macos-direct
+          path: dist/*.dmg
           if-no-files-found: error
+
+      - name: Remove notarization API key
+        if: always()
+        shell: bash
+        env:
+          NOTARY_API_KEY_ID: ${{ secrets.MACOS_NOTARY_API_KEY_ID }}
+        run: |
+          rm -f "$RUNNER_TEMP/quakesignal-notary/AuthKey_${NOTARY_API_KEY_ID}.p8"
+          rmdir "$RUNNER_TEMP/quakesignal-notary" 2>/dev/null || true
+
+  macos-app-store:
+    name: macOS App Store universal
+    # App Store signing, packaging, and optional upload are never tag-driven.
+    # An upload necessarily builds its package in the same protected manual run.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/main' &&
+       github.ref_protected &&
+       (inputs.build_macos_app_store == true ||
+        inputs.upload_macos_to_app_store_connect == true)
+    runs-on: macos-latest
+    environment:
+      name: macos-app-store-release
+    env:
+      RUST_TARGET: universal-apple-darwin
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable @ 2026-08-05
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: desktop/src-tauri -> target
+
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Test Rust core
+        working-directory: desktop/src-tauri
+        run: cargo test --locked
+
+      # Build the app without a bundle before importing any App Store signing
+      # material. The sandbox profile is only needed by the later bundling
+      # operation, and the App Store Connect API key is only needed to upload
+      # an already-verified package.
+      - name: Build unsigned universal Mac App Store app before signing material
+        working-directory: desktop
+        env:
+          VITE_MAC_APP_STORE: "true"
+        run: >-
+          npm run tauri -- build --no-bundle --no-sign
+          --target ${{ env.RUST_TARGET }} --features macos-app-store
+          --config src-tauri/tauri.macos-app-store.conf.json
+
+      - name: Validate protected Mac App Store configuration
+        shell: bash
+        env:
+          APPLICATION_CERTIFICATE: ${{ secrets.MACOS_APP_STORE_APPLICATION_CERTIFICATE }}
+          APPLICATION_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_APP_STORE_APPLICATION_CERTIFICATE_PASSWORD }}
+          APPLICATION_IDENTITY: ${{ vars.MACOS_APP_STORE_APPLICATION_IDENTITY }}
+          INSTALLER_CERTIFICATE: ${{ secrets.MACOS_APP_STORE_INSTALLER_CERTIFICATE }}
+          INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD }}
+          INSTALLER_IDENTITY: ${{ vars.MACOS_APP_STORE_INSTALLER_IDENTITY }}
+          PROVISIONING_PROFILE: ${{ secrets.MACOS_APP_STORE_PROVISIONING_PROFILE }}
+        run: |
+          set -euo pipefail
+          required=(
+            APPLICATION_CERTIFICATE
+            APPLICATION_CERTIFICATE_PASSWORD
+            APPLICATION_IDENTITY
+            INSTALLER_CERTIFICATE
+            INSTALLER_CERTIFICATE_PASSWORD
+            INSTALLER_IDENTITY
+            PROVISIONING_PROFILE
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::macos-app-store-release is missing: $(IFS=,; echo "${missing[*]}")"
+            exit 1
+          fi
+
+      - name: Validate App Store Connect upload configuration
+        if: github.event_name == 'workflow_dispatch' && inputs.upload_macos_to_app_store_connect
+        shell: bash
+        env:
+          APP_STORE_CONNECT_KEY: ${{ secrets.MACOS_APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.MACOS_APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER: ${{ vars.MACOS_APP_STORE_CONNECT_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          required=(
+            APP_STORE_CONNECT_KEY
+            APP_STORE_CONNECT_KEY_ID
+            APP_STORE_CONNECT_ISSUER
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::macos-app-store-release is missing: $(IFS=,; echo "${missing[*]}")"
+            exit 1
+          fi
+
+      - name: Import App Store certificates and provisioning profile
+        shell: bash
+        env:
+          APPLICATION_CERTIFICATE: ${{ secrets.MACOS_APP_STORE_APPLICATION_CERTIFICATE }}
+          APPLICATION_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_APP_STORE_APPLICATION_CERTIFICATE_PASSWORD }}
+          INSTALLER_CERTIFICATE: ${{ secrets.MACOS_APP_STORE_INSTALLER_CERTIFICATE }}
+          INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD }}
+          PROVISIONING_PROFILE: ${{ secrets.MACOS_APP_STORE_PROVISIONING_PROFILE }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/quakesignal-macos-app-store.keychain-db"
+          application_certificate="$RUNNER_TEMP/quakesignal-macos-app-store-application.p12"
+          installer_certificate="$RUNNER_TEMP/quakesignal-macos-app-store-installer.p12"
+          profile="desktop/src-tauri/macos-app-store.provisionprofile"
+          keychain_password="$(uuidgen)"
+
+          printf '%s' "$APPLICATION_CERTIFICATE" | base64 -D > "$application_certificate"
+          printf '%s' "$INSTALLER_CERTIFICATE" | base64 -D > "$installer_certificate"
+          printf '%s' "$PROVISIONING_PROFILE" | base64 -D > "$profile"
+          chmod 600 "$application_certificate" "$installer_certificate" "$profile"
+
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -t 3600 -u "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain"
+          security default-keychain -d user -s "$keychain"
+          security import "$application_certificate" -k "$keychain" -P "$APPLICATION_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security import "$installer_certificate" -k "$keychain" -P "$INSTALLER_CERTIFICATE_PASSWORD" -T /usr/bin/productbuild
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
+          security find-identity -v -p codesigning "$keychain"
+
+      - name: Bundle signed sandboxed universal Mac App Store app
+        working-directory: desktop
+        env:
+          # Tauri resolves a signing identity independently while bundling.
+          # Keep this explicit so the packaged .app is not left unsigned after
+          # the preceding --no-bundle build succeeds.
+          APPLE_SIGNING_IDENTITY: ${{ vars.MACOS_APP_STORE_APPLICATION_IDENTITY }}
+          VITE_MAC_APP_STORE: "true"
+        run: |
+          npm run tauri -- bundle --bundles app --target ${{ env.RUST_TARGET }} --features macos-app-store --config src-tauri/tauri.macos-app-store.conf.json
+
+      - name: Package and verify Mac App Store artifact
+        shell: bash
+        env:
+          MACOS_APP_STORE_INSTALLER_IDENTITY: ${{ vars.MACOS_APP_STORE_INSTALLER_IDENTITY }}
+        run: |
+          set -euo pipefail
+          bundle_dir="desktop/src-tauri/target/${RUST_TARGET}/release/bundle"
+          shopt -s nullglob
+          apps=("$bundle_dir"/macos/*.app)
+          if [ "${#apps[@]}" -ne 1 ]; then
+            echo "::error::Expected one sandboxed .app under $bundle_dir/macos"
+            exit 1
+          fi
+          app="${apps[0]}"
+          version="$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")"
+          package_dir="artifacts/macos-app-store"
+          package="$package_dir/QuakeSignal_${version}_universal.pkg"
+          entitlements="$RUNNER_TEMP/quakesignal-macos-app-store-entitlements.plist"
+          profile="$app/Contents/embedded.provisionprofile"
+          profile_plist="$RUNNER_TEMP/quakesignal-macos-app-store-profile.plist"
+          expected_team="5TT564H883"
+          expected_bundle_identifier="com.quakesignal.desktop"
+          expected_application_identifier="$expected_team.$expected_bundle_identifier"
+
+          assert_plist_value() {
+            local plist="$1"
+            local key="$2"
+            local expected="$3"
+            local label="$4"
+            local actual
+
+            if ! actual="$(/usr/libexec/PlistBuddy -c "Print :$key" "$plist" 2>/dev/null)"; then
+              echo "::error::$label is missing required key $key"
+              return 1
+            fi
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::$label has an unexpected value for $key"
+              return 1
+            fi
+          }
+
+          assert_profile_identifier() {
+            local plist="$1"
+            local expected="$2"
+            local label="$3"
+            local found=0
+            local key
+            local actual
+
+            # Mac provisioning profiles have used both spellings across Xcode
+            # generations. Accept either spelling, but reject a mismatch in
+            # every spelling that is present.
+            for key in \
+              "Entitlements:com.apple.application-identifier" \
+              "Entitlements:application-identifier"; do
+              if actual="$(/usr/libexec/PlistBuddy -c "Print :$key" "$plist" 2>/dev/null)"; then
+                found=1
+                if [ "$actual" != "$expected" ]; then
+                  echo "::error::$label has an unexpected value for $key"
+                  return 1
+                fi
+              fi
+            done
+            if [ "$found" -ne 1 ]; then
+              echo "::error::$label is missing an application-identifier entitlement"
+              return 1
+            fi
+          }
+
+          codesign --verify --deep --strict --verbose=2 "$app"
+          if ! codesign -dvv "$app" 2>&1 | grep -Fqx "TeamIdentifier=$expected_team"; then
+            echo "::error::Mac App Store app is not signed for the expected Apple team"
+            exit 1
+          fi
+          if ! codesign -dvv "$app" 2>&1 | grep -Fq 'Authority=Apple Distribution'; then
+            echo "::error::Mac App Store app is not signed with an Apple Distribution identity"
+            exit 1
+          fi
+          if [ ! -f "$app/Contents/Info.plist" ] || [ ! -f "$profile" ]; then
+            echo "::error::Mac App Store app is missing Info.plist or embedded.provisionprofile"
+            exit 1
+          fi
+
+          plutil -lint "$app/Contents/Info.plist" >/dev/null
+          assert_plist_value "$app/Contents/Info.plist" "CFBundleIdentifier" "$expected_bundle_identifier" "Mac App Store Info.plist"
+          codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
+          plutil -lint "$entitlements" >/dev/null
+          assert_plist_value "$entitlements" "com.apple.application-identifier" "$expected_application_identifier" "Mac App Store signed entitlements"
+          assert_plist_value "$entitlements" "com.apple.developer.team-identifier" "$expected_team" "Mac App Store signed entitlements"
+          assert_plist_value "$entitlements" "com.apple.security.app-sandbox" "true" "Mac App Store signed entitlements"
+          assert_plist_value "$entitlements" "com.apple.security.network.client" "true" "Mac App Store signed entitlements"
+
+          security cms -D -i "$profile" > "$profile_plist"
+          plutil -lint "$profile_plist" >/dev/null
+          assert_plist_value "$profile_plist" "ApplicationIdentifierPrefix:0" "$expected_team" "Mac App Store provisioning profile"
+          assert_plist_value "$profile_plist" "TeamIdentifier:0" "$expected_team" "Mac App Store provisioning profile"
+          assert_profile_identifier "$profile_plist" "$expected_application_identifier" "Mac App Store provisioning profile"
+          assert_plist_value "$profile_plist" "Entitlements:com.apple.developer.team-identifier" "$expected_team" "Mac App Store provisioning profile"
+          # On macOS, App Sandbox and its network configuration are unrestricted
+          # entitlements. Apple authorizes the profile identity here and the signed
+          # app assertions above verify the required sandbox configuration.
+          mkdir -p "$package_dir"
+          xcrun productbuild --sign "$MACOS_APP_STORE_INSTALLER_IDENTITY" --component "$app" /Applications "$package"
+          pkgutil --check-signature "$package"
+          echo "MACOS_APP_STORE_PACKAGE=$package" >> "$GITHUB_ENV"
+
+      - name: Materialize App Store Connect API key immediately before upload
+        if: github.event_name == 'workflow_dispatch' && inputs.upload_macos_to_app_store_connect
+        shell: bash
+        env:
+          APP_STORE_CONNECT_KEY: ${{ secrets.MACOS_APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.MACOS_APP_STORE_CONNECT_API_KEY_ID }}
+        run: |
+          set -euo pipefail
+          key_dir="$RUNNER_TEMP/macos-app-store-private-keys"
+          key_path="$key_dir/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          mkdir -p "$key_dir"
+          printf '%s' "$APP_STORE_CONNECT_KEY" > "$key_path"
+          chmod 600 "$key_path"
+          echo "API_PRIVATE_KEYS_DIR=$key_dir" >> "$GITHUB_ENV"
+
+      - name: Validate and upload Mac App Store package
+        if: github.event_name == 'workflow_dispatch' && inputs.upload_macos_to_app_store_connect
+        shell: bash
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.MACOS_APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER: ${{ vars.MACOS_APP_STORE_CONNECT_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          xcrun altool --validate-app "$MACOS_APP_STORE_PACKAGE" \
+            --api-key "$APP_STORE_CONNECT_KEY_ID" \
+            --api-issuer "$APP_STORE_CONNECT_ISSUER" \
+            --output-format json
+          xcrun altool --upload-package "$MACOS_APP_STORE_PACKAGE" \
+            --api-key "$APP_STORE_CONNECT_KEY_ID" \
+            --api-issuer "$APP_STORE_CONNECT_ISSUER" \
+            --output-format json
+
+      - name: Upload private Mac App Store package artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: macos-app-store-pkg
+          path: artifacts/macos-app-store/*.pkg
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove App Store signing material
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/quakesignal-macos-app-store-application.p12"
+          rm -f "$RUNNER_TEMP/quakesignal-macos-app-store-installer.p12"
+          rm -f "$RUNNER_TEMP/quakesignal-macos-app-store-entitlements.plist"
+          rm -f "$RUNNER_TEMP/quakesignal-macos-app-store-profile.plist"
+          rm -f "desktop/src-tauri/macos-app-store.provisionprofile"
+          rm -f "$RUNNER_TEMP/macos-app-store-private-keys/AuthKey_${{ vars.MACOS_APP_STORE_CONNECT_API_KEY_ID }}.p8"
+          rmdir "$RUNNER_TEMP/macos-app-store-private-keys" 2>/dev/null || true
+          security delete-keychain "$RUNNER_TEMP/quakesignal-macos-app-store.keychain-db" 2>/dev/null || true
 
   release:
     name: Publish release
-    needs: [windows, macos]
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Keep the tag-based direct/Homebrew release independent of Mac App Store.
+    needs: [verify-release-provenance, macos-direct]
+    if: >-
+      always() &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.ref_protected &&
+      github.repository == 'TastyHeadphones/QuakeSignal' &&
+      needs.verify-release-provenance.result == 'success' &&
+      needs.macos-direct.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -263,10 +803,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Download macOS artifact
+      - name: Download notarized macOS direct-release artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: release-macos
+          name: release-macos-direct
           path: dist
 
       - name: Generate SHA256 checksums
@@ -305,19 +845,19 @@ jobs:
   microsoft-store:
     name: Submit MSIX to Microsoft Store
     needs: windows
+    # Partner Center publication must be manually approved from protected main.
     if: >-
-      (startsWith(github.ref, 'refs/tags/v') || inputs.publish_to_store == true) &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.ref_protected &&
+      inputs.publish_to_store == true &&
       github.repository == 'TastyHeadphones/QuakeSignal' &&
       vars.MICROSOFT_STORE_PRODUCT_ID != ''
     runs-on: windows-latest
+    environment:
+      name: microsoft-store-release
     permissions:
       contents: read
-    env:
-      STORE_PRODUCT_ID: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
-      AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
-      AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
-      AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
-      SELLER_ID: ${{ secrets.SELLER_ID }}
 
     steps:
       - name: Download MSIX package
@@ -331,6 +871,12 @@ jobs:
 
       - name: Configure Partner Center credentials
         shell: pwsh
+        env:
+          STORE_PRODUCT_ID: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
+          AZURE_AD_TENANT_ID: ${{ secrets.AZURE_AD_TENANT_ID }}
+          AZURE_AD_APPLICATION_CLIENT_ID: ${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}
+          AZURE_AD_APPLICATION_SECRET: ${{ secrets.AZURE_AD_APPLICATION_SECRET }}
+          SELLER_ID: ${{ secrets.SELLER_ID }}
         run: |
           $missing = @()
           foreach ($name in @("STORE_PRODUCT_ID", "AZURE_AD_TENANT_ID", "AZURE_AD_APPLICATION_CLIENT_ID", "AZURE_AD_APPLICATION_SECRET", "SELLER_ID")) {
@@ -345,6 +891,8 @@ jobs:
 
       - name: Publish MSIX package
         shell: pwsh
+        env:
+          STORE_PRODUCT_ID: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
         run: |
           $package = Get-ChildItem store-package -Filter *.msixupload -File | Select-Object -First 1
           if (-not $package) { throw "No MSIX package was downloaded" }

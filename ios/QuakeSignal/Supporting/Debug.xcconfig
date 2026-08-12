@@ -1,0 +1,10 @@
+// Debug must be explicitly pointed at an owner-controlled isolated staging
+// Worker before it can register devices. The reserved .invalid domain makes
+// an unconfigured Debug build fail closed instead of contacting a legacy or
+// production service.
+QUAKESIGNAL_URL_SLASH = /
+QUAKESIGNAL_API_BASE_URL = https:$(QUAKESIGNAL_URL_SLASH)$(QUAKESIGNAL_URL_SLASH)quakesignal-staging.invalid
+
+// This file is optional and ignored by Git. It can override the setting above
+// for a real isolated staging Worker without changing checked-in source.
+#include? "Debug.local.xcconfig"

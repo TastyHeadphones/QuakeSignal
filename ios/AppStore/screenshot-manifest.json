@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "platform": "iOS",
+  "primaryDisplayClass": "6.9",
+  "locales": [
+    {
+      "directory": "en-US",
+      "appleLanguage": "en-US",
+      "appleLocale": "en_US"
+    },
+    {
+      "directory": "ja",
+      "appleLanguage": "ja",
+      "appleLocale": "ja_JP"
+    },
+    {
+      "directory": "zh-Hans",
+      "appleLanguage": "zh-Hans",
+      "appleLocale": "zh_CN"
+    }
+  ],
+  "displayClasses": {
+    "6.9": {
+      "acceptedPortraitPixels": [
+        [1260, 2736],
+        [1290, 2796],
+        [1320, 2868]
+      ],
+      "upload": true
+    },
+    "6.3": {
+      "acceptedPortraitPixels": [
+        [1179, 2556],
+        [1206, 2622]
+      ],
+      "upload": false
+    }
+  },
+  "frames": [
+    {
+      "file": "01-home.jpg",
+      "screen": "Home",
+      "purpose": "Current nearby report and at-a-glance status",
+      "setup": "Choose a generic city; do not use precise current location. Wait for a normal, loaded report state."
+    },
+    {
+      "file": "02-reports.jpg",
+      "screen": "Reports tab",
+      "purpose": "Filterable historical and live earthquake reports",
+      "setup": "Use a non-empty, benign list and one visible filter state."
+    },
+    {
+      "file": "03-map.jpg",
+      "screen": "Map tab",
+      "purpose": "Epicenter map and report context",
+      "setup": "Use a loaded map and ordinary report markers; do not depict an active emergency."
+    },
+    {
+      "file": "04-guide.jpg",
+      "screen": "Preparedness Guide tab",
+      "purpose": "Offline preparedness guidance and emergency kit",
+      "setup": "Show the normal guide root, without user-entered family-contact details."
+    },
+    {
+      "file": "05-alert-preferences.jpg",
+      "screen": "Settings tab",
+      "purpose": "Opt-in local alert controls",
+      "setup": "Show notification preferences only. Exclude system permission dialogs, test results, APNs tokens, and exact location."
+    }
+  ]
+}

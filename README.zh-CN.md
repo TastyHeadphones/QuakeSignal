@@ -20,7 +20,8 @@
 [![代码签名政策](https://img.shields.io/badge/code_signing-policy-6E56CF)](docs/SIGNING.md)
 [![隐私政策](https://img.shields.io/badge/privacy-policy-0A3D73)](docs/PRIVACY.md)
 
-**[下载](https://github.com/TastyHeadphones/QuakeSignal/releases/latest)** ·
+**[macOS 发布状态](#在-macos-上安装)** ·
+**[Microsoft Store（Windows）](https://apps.microsoft.com/detail/9N730S3CZ7Z9)** ·
 [在 macOS 上安装](#在-macos-上安装) ·
 [卸载](#卸载) ·
 [代码签名政策](#代码签名政策) ·
@@ -57,51 +58,34 @@ iOS、macOS 与 Windows 都直接从 Wolfx 获取地震数据。Cloudflare 只�
 
 ## 在 macOS 上安装
 
-从[最新发行版](https://github.com/TastyHeadphones/QuakeSignal/releases/latest)
-下载 `QuakeSignal_<版本>_universal.dmg`，打开后把 **QuakeSignal** 拖入
-“应用程序”文件夹。也可以使用本项目的 Homebrew tap：
+目前没有受支持的公开 macOS 下载版或 Homebrew cask。当前 GitHub Release `v0.1.0`
+早于 Developer ID 签名和公证，`TastyHeadphones/tap` 也尚未发布 cask；请不要安装
+其中任何一个。待后续 GitHub Release 标明 universal DMG 已由 Developer ID 签名、
+完成公证和 stapled，并附带 `SHA256SUMS.txt` 后，再下载
+`QuakeSignal_<版本>_universal.dmg`，打开后把 **QuakeSignal** 拖入“应用程序”文件夹。
+只有该公证发行版的 cask 已同步到公开 tap 后，才能使用 Homebrew：
 
 ```bash
+# 仅当公开 tap 已包含该公证发行版的 cask 时运行。
 brew tap TastyHeadphones/tap
 brew install --cask quakesignal
 ```
 
-### 如果 macOS 提示“已损坏”或“无法验证开发者”
+### Gatekeeper 与公证
 
-首次打开时，macOS 很可能拒绝启动，并提示
-*“QuakeSignal 已损坏，无法打开。您应该将它移到废纸篓。”*
-或 *“无法打开 QuakeSignal，因为无法验证开发者。”*
+受保护的 macOS 发布任务会使用 **Developer ID Application** 证书签名直接下载/Homebrew
+版本，完成公证后将票据 stapled 到 DMG。请只使用包含 `SHA256SUMS.txt` 且注明 macOS
+产物已公证的发行版。
 
-**应用并没有损坏，你的下载也没有问题。** Apple 只为经过*公证*（notarization）
-的应用背书，而公证需要付费的 Apple Developer Program 会员资格，本项目目前还没有。
-macOS 会给所有从网上下载的文件加上“隔离”标记，并拒绝打开无法追溯到注册开发者的
-隔离应用。这个警告说的是缺少 Apple 注册，而不是文件损坏。如果想确认下载完整，
-可以核对发行版中公布的 SHA256 校验值。
+不要清除隔离标记或绕过 Gatekeeper。若按此流程构建的版本仍被 macOS 阻止，请先用
+`SHA256SUMS.txt` 验证校验值，保留下载文件，并在 issue 中提供发行版 URL 与 macOS
+版本。旧的 `v0.1.0` 发行版不是受支持的安装来源或 cask 来源。
 
-以下**任选其一**即可，每个安装版本只需操作一次。
+## 在 Windows 上安装
 
-**方式一 —— 清除隔离标记（一条命令）。**
-打开**终端**（按 ⌘ + 空格，输入 `Terminal` 后回车），原样粘贴并回车：
-
-```bash
-xattr -dr com.apple.quarantine "/Applications/QuakeSignal.app"
-```
-
-成功时不会有任何输出。之后正常打开 QuakeSignal 即可。
-
-**方式二 —— 在“系统设置”中放行。**
-
-1. 双击 **QuakeSignal**，关掉警告弹窗。
-2. 打开苹果菜单 → **系统设置** → **隐私与安全性**。
-3. 向下找到**安全性**一节，会看到“已阻止 QuakeSignal 以保护 Mac”。
-4. 点击**仍要打开**，确认**打开**，然后输入 Mac 密码。
-
-> [!NOTE]
-> 右键（或按住 Control 点按）→**打开**已经不再适用。Apple 在 macOS 15 Sequoia
-> 中移除了该快捷方式，现在只能通过“系统设置”里的**仍要打开**放行未公证的应用。
-
-Windows 版本不受上述影响。公证已在计划中，详见
-[`docs/SIGNING.md`](docs/SIGNING.md)。
+请从 [Microsoft Store](https://apps.microsoft.com/detail/9N730S3CZ7Z9)
+下载 QuakeSignal。商店中的安装包已由微软认证并签名；是否可用取决于该商店
+条目已发布的地区。
 
 ## 卸载
 
@@ -120,7 +104,7 @@ QuakeSignal 只写入自身的安装位置和数据目录，删除这两处即�
 
 ### macOS
 
-若通过 Homebrew tap 安装：
+若通过未来发布的公开 Homebrew cask 安装：
 
 ```bash
 brew uninstall --cask quakesignal
@@ -152,6 +136,24 @@ npm run tauri dev
 
 **Chrome** —— 打开 `chrome://extensions`，启用开发者模式，点击“加载已解压的扩展程序”并选择 `extension/`。
 
+## iOS 正式发布前提
+
+公开发布 iOS 前，请完成以下事项：
+
+- 验证用户批准的生产 Cloudflare Workers endpoint
+  `https://quakesignal-api.hopeso.workers.dev`、其公开 TLS 和 `/healthz`。
+  其他 `workers.dev` hostname 仅限隔离的 Debug/staging 服务，绝不能作为 Release
+  备用地址。
+- 为 `com.quakesignal.app` 启用 App Attest，更新生产 provisioning profile，并让生产
+  Worker 保持 App Attest 必需的强制模式。
+- Debug 与 Simulator 必须使用不共享生产数据或凭据的独立 staging Worker。先在真机上
+  完成 APNs/App Attest、注册/删除和令牌刷新测试，再针对用户批准的生产 endpoint 完成
+  TestFlight APNs 测试，之后才能由 reviewer 批准。
+- 首次生产 Worker 部署使用受保护工作流的 `bootstrap_testflight=true`，并将
+  `APP_ATTEST_PRODUCTION_ENFORCED` 设为 `false`；它仍强制执行生产 App Attest、APNs、
+  批准的 Worker endpoint，只用于未公开的 TestFlight 验证。完成真机验证后将变量改为
+  `true`，再次运行正常 launch 阶段，才能提交 App Review 或公开发布。
+
 ## 本地化
 
 所有面向用户的流程均提供英语（`en`）、日语（`ja`）与简体中文（`zh-Hans`）。
@@ -170,15 +172,12 @@ Author、Reviewer 与 Approver 三种角色。所有外部 Pull Request 都由�
 每个发行版都会发布覆盖全部构建产物的 `SHA256SUMS.txt`。桌面端二进制文件仅由
 GitHub Actions 从版本标签构建，绝不会从维护者的机器上传。
 
-QuakeSignal 使用 SignPath Foundation 为 Windows 进行代码签名。签名私钥保存在
-SignPath 的硬件安全模块中，绝不出现在本仓库、CI 或维护者的机器上。
+Windows 发行版由 GitHub Actions 构建为 MSIX，并通过 Microsoft Store 发布。
+经认证的商店安装包由微软签名；本项目不使用 Windows 签名密钥或第三方签名服务。
 
-Free code signing provided by [SignPath.io](https://signpath.io?utm_source=foundation&utm_medium=github&utm_campaign=quakesignal),
-certificate by [SignPath Foundation](https://signpath.org/)。
-
-> [!NOTE]
-> SignPath Foundation 的申请仍在审核中，因此 Windows 签名虽已配置但尚未启用，
-> macOS 版本也尚未公证。每个发行版都会说明其自身的签名状态。
+macOS 直接下载版发布时将包含 `SHA256SUMS.txt`，并已完成 Developer ID 签名、公证和
+stapled。届时可为 Mac App Store 构建独立的私有 Actions artifact sandbox 安装包，
+它不会附加到公开 GitHub Release。
 
 ## 许可证
 

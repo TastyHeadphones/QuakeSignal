@@ -13,13 +13,17 @@
 		0C3EC0B633E26287A449E3EC /* SourceDisclaimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CF66A4956C46CA1A148C070 /* SourceDisclaimerView.swift */; };
 		0EA04CC2D8769B4D1119146E /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401F05AD76497DD2ACB64C7F /* LocationManager.swift */; };
 		1931BFD99782ED3DA8A6E288 /* EEWEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */; };
+		1DAF3142799F4F35F8AE699A /* CoarseCoordinateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D470158F86E7CD243746CAA1 /* CoarseCoordinateTests.swift */; };
 		1FE00A80B0B13AA6832583E5 /* EEWAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C53C8F8BFB7156840BCDD1 /* EEWAlertView.swift */; };
+		270DEBC62F5495435C5094ED /* ForegroundHTTPFallbackPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCAD92FC9E1A1EE5AFD62669 /* ForegroundHTTPFallbackPolicyTests.swift */; };
+		2B3817E67944FF65B8F5D6FA /* CoarseCoordinate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F8D96701CD094BC65C3127 /* CoarseCoordinate.swift */; };
 		300716B6C8AD2C38974ED1C8 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = DA0B489340F90173C681EA84 /* InfoPlist.strings */; };
 		30787BE285C2AF3865685D31 /* PushPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54ADAFC4D778C958BC996871 /* PushPayload.swift */; };
 		3578006137ABBE79E0A5B06F /* FamilyCheckInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB33C47F86F32C61F4CC83CB /* FamilyCheckInView.swift */; };
 		401D81C61074F8E0B821A0DC /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */; };
 		4BF03EE23D5F476E518295C2 /* QuakeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2145117E4D6B0221B490C9F4 /* QuakeStore.swift */; };
 		4CFC59C9E1BF37D668AD4138 /* GuideStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC4C4FFC783F65DB874CB2CD /* GuideStore.swift */; };
+		5965D4C2C897BD817231CFA6 /* WolfxHTTPFetchPacingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 257AE1C288EED96009491911 /* WolfxHTTPFetchPacingTests.swift */; };
 		6221D8ADA6A6A44E45C2C5EE /* EventRevision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BEC24C83F9F7FEB6C1D8F41 /* EventRevision.swift */; };
 		6279092DC98DB8233CEEE8B8 /* BackendConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DADE472DF1F2B627818A5F8 /* BackendConfig.swift */; };
 		662850A82C0C42CC36161123 /* DeviceRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C54A7070352BEB382AD32B /* DeviceRegistration.swift */; };
@@ -30,7 +34,10 @@
 		8AB603839990610758AFC649 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5AAEBB21DA806680D87F2BE /* AppSettings.swift */; };
 		8FB6DF50DFD1FE9B637469F8 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57E54B5E816643F7401A58F /* RootView.swift */; };
 		99912A9F35669522264D1A56 /* EpicenterMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E59ED0E3F738AC6AE4FF165 /* EpicenterMapView.swift */; };
+		9A1EE3D0BCEE13F790BEC7D5 /* AppAttestWireFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95F3401BE11EE7C35379E76F /* AppAttestWireFormatTests.swift */; };
 		9AAC1CF8B2A760F00E998C16 /* QuakeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5CC2AF0389FFB5D223C0DD /* QuakeDetailView.swift */; };
+		B55EE7B71D09CFF033F9814A /* PushRegistrationLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE196D534922B8AE9051684 /* PushRegistrationLifecycleTests.swift */; };
+		BAD8BB0744EB1269AD91FA53 /* AppAttestClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F74B9E3617F5FBD0A063EBB7 /* AppAttestClient.swift */; };
 		C95674FB61B4A12788753D96 /* City.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFBDB4E5BC222EB32F6ACEA /* City.swift */; };
 		CADFF98599F67B0638D53EEA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FB035B0C75FC4309B8A80D43 /* PrivacyInfo.xcprivacy */; };
 		CB398BC7708A86279C3BF6D4 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67D5A0D955C6D9F0A33F738C /* AppDelegate.swift */; };
@@ -43,8 +50,19 @@
 		DA9722C2E131BBE0CFCC8DF0 /* IntensityScale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662358026FACAB4DA608E630 /* IntensityScale.swift */; };
 		DFBD32451B2D74367698EFC2 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D224641E8F2E766BEF1FA2E /* SettingsView.swift */; };
 		EB68B0A59F9F99DA6D274C91 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E397F876EB72C79A9710C4 /* OnboardingView.swift */; };
+		F1FFAEE76DFCC009CBCDFD11 /* ForegroundHTTPFallbackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F9DCB855FF5D952D0920F49 /* ForegroundHTTPFallbackPolicy.swift */; };
 		F44520F00F5256BBB9FE6F39 /* CityPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FD76A1C9FFB9929722BA327 /* CityPickerView.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		806671887B446B19EEE6FE60 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 935E44C805D7E6B9A9B590BC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0C571730824BD0FE25517524;
+			remoteInfo = QuakeSignal;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		041E5AA38657BA9C30BAC034 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
@@ -56,12 +74,15 @@
 		1FD76A1C9FFB9929722BA327 /* CityPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityPickerView.swift; sourceTree = "<group>"; };
 		2145117E4D6B0221B490C9F4 /* QuakeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeStore.swift; sourceTree = "<group>"; };
 		2372157BA03FB135F30D085A /* QuakeSignal.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = QuakeSignal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		257AE1C288EED96009491911 /* WolfxHTTPFetchPacingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WolfxHTTPFetchPacingTests.swift; sourceTree = "<group>"; };
 		2BEC24C83F9F7FEB6C1D8F41 /* EventRevision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventRevision.swift; sourceTree = "<group>"; };
 		33AFA4921875AD86CEB86D47 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		3CF66A4956C46CA1A148C070 /* SourceDisclaimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceDisclaimerView.swift; sourceTree = "<group>"; };
 		3D224641E8F2E766BEF1FA2E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		3DADE472DF1F2B627818A5F8 /* BackendConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendConfig.swift; sourceTree = "<group>"; };
+		3DFCD227F9ED367CDC787519 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		3E59ED0E3F738AC6AE4FF165 /* EpicenterMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpicenterMapView.swift; sourceTree = "<group>"; };
+		3F9DCB855FF5D952D0920F49 /* ForegroundHTTPFallbackPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundHTTPFallbackPolicy.swift; sourceTree = "<group>"; };
 		401F05AD76497DD2ACB64C7F /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 		41E397F876EB72C79A9710C4 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		48820A9D89E7DA9CE7EEECA1 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
@@ -72,8 +93,11 @@
 		759EAC4A90329D3CD0F82833 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		7B58B74D54691C905E32B3BE /* QuakeListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeListView.swift; sourceTree = "<group>"; };
 		80C54A7070352BEB382AD32B /* DeviceRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRegistration.swift; sourceTree = "<group>"; };
+		8DE196D534922B8AE9051684 /* PushRegistrationLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistrationLifecycleTests.swift; sourceTree = "<group>"; };
 		8ECF89FDF3F2879D09784FE3 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		9399D7DEA2638CABE5AFF970 /* GuideContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideContent.swift; sourceTree = "<group>"; };
+		95F3401BE11EE7C35379E76F /* AppAttestWireFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAttestWireFormatTests.swift; sourceTree = "<group>"; };
+		9C1906221BBAC871B5B8BA41 /* QuakeSignalTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = QuakeSignalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A16B1C64A6D002370B927BF7 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		A2A0053EFB595D59068829B2 /* QuakeSignalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeSignalApp.swift; sourceTree = "<group>"; };
 		A3FFEE58B247EFABCA2FBF98 /* GuideTopicDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideTopicDetailView.swift; sourceTree = "<group>"; };
@@ -83,9 +107,13 @@
 		B5CDC5F5361A20005A34BCD0 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		C57E54B5E816643F7401A58F /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		CB33C47F86F32C61F4CC83CB /* FamilyCheckInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyCheckInView.swift; sourceTree = "<group>"; };
+		D470158F86E7CD243746CAA1 /* CoarseCoordinateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoarseCoordinateTests.swift; sourceTree = "<group>"; };
+		D4F8D96701CD094BC65C3127 /* CoarseCoordinate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoarseCoordinate.swift; sourceTree = "<group>"; };
 		D6815129F2447CE72E122CE0 /* WolfxClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WolfxClient.swift; sourceTree = "<group>"; };
+		DCAD92FC9E1A1EE5AFD62669 /* ForegroundHTTPFallbackPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundHTTPFallbackPolicyTests.swift; sourceTree = "<group>"; };
 		DCFBDB4E5BC222EB32F6ACEA /* City.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = City.swift; sourceTree = "<group>"; };
 		EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EEWEvent.swift; sourceTree = "<group>"; };
+		F74B9E3617F5FBD0A063EBB7 /* AppAttestClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAttestClient.swift; sourceTree = "<group>"; };
 		FB035B0C75FC4309B8A80D43 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		FC4C4FFC783F65DB874CB2CD /* GuideStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideStore.swift; sourceTree = "<group>"; };
 		FCD28BDF2FD8950F9FCF83BE /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
@@ -96,6 +124,7 @@
 			isa = PBXGroup;
 			children = (
 				2372157BA03FB135F30D085A /* QuakeSignal.app */,
+				9C1906221BBAC871B5B8BA41 /* QuakeSignalTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -134,6 +163,14 @@
 			path = AlertDetail;
 			sourceTree = "<group>";
 		};
+		8786F352563D1E4A3A22DD6A /* Supporting */ = {
+			isa = PBXGroup;
+			children = (
+				3DFCD227F9ED367CDC787519 /* Debug.xcconfig */,
+			);
+			path = Supporting;
+			sourceTree = "<group>";
+		};
 		89A3F8796DCD9CE7D201410F /* Root */ = {
 			isa = PBXGroup;
 			children = (
@@ -156,6 +193,7 @@
 			isa = PBXGroup;
 			children = (
 				DCFBDB4E5BC222EB32F6ACEA /* City.swift */,
+				D4F8D96701CD094BC65C3127 /* CoarseCoordinate.swift */,
 				80C54A7070352BEB382AD32B /* DeviceRegistration.swift */,
 				EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */,
 				2BEC24C83F9F7FEB6C1D8F41 /* EventRevision.swift */,
@@ -169,6 +207,7 @@
 			isa = PBXGroup;
 			children = (
 				EADDBB474D5569AA3B351EC9 /* QuakeSignal */,
+				BED8CC3C586E0ACA3448C11E /* QuakeSignalTests */,
 				01C72AF1F3337BDE9EA7E857 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -210,6 +249,18 @@
 			path = Notifications;
 			sourceTree = "<group>";
 		};
+		BED8CC3C586E0ACA3448C11E /* QuakeSignalTests */ = {
+			isa = PBXGroup;
+			children = (
+				95F3401BE11EE7C35379E76F /* AppAttestWireFormatTests.swift */,
+				D470158F86E7CD243746CAA1 /* CoarseCoordinateTests.swift */,
+				DCAD92FC9E1A1EE5AFD62669 /* ForegroundHTTPFallbackPolicyTests.swift */,
+				8DE196D534922B8AE9051684 /* PushRegistrationLifecycleTests.swift */,
+				257AE1C288EED96009491911 /* WolfxHTTPFetchPacingTests.swift */,
+			);
+			path = QuakeSignalTests;
+			sourceTree = "<group>";
+		};
 		C63708C9F35685C280097777 /* Onboarding */ = {
 			isa = PBXGroup;
 			children = (
@@ -231,7 +282,9 @@
 			isa = PBXGroup;
 			children = (
 				B5CDC5F5361A20005A34BCD0 /* APIClient.swift */,
+				F74B9E3617F5FBD0A063EBB7 /* AppAttestClient.swift */,
 				3DADE472DF1F2B627818A5F8 /* BackendConfig.swift */,
+				3F9DCB855FF5D952D0920F49 /* ForegroundHTTPFallbackPolicy.swift */,
 				1BD11E3C4D40F7F456CAF5AA /* LiveSocketClient.swift */,
 				D6815129F2447CE72E122CE0 /* WolfxClient.swift */,
 			);
@@ -265,6 +318,7 @@
 				B9C41AF8B19BE7E480C8308B /* Notifications */,
 				A6381A24F2A297864EF7166D /* Resources */,
 				F0A0A11FFA4D31B54D40C650 /* State */,
+				8786F352563D1E4A3A22DD6A /* Supporting */,
 			);
 			path = QuakeSignal;
 			sourceTree = "<group>";
@@ -301,6 +355,24 @@
 			productReference = 2372157BA03FB135F30D085A /* QuakeSignal.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AAED90583AE429A9A2BCAF56 /* QuakeSignalTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 10D67234BA36B228569D57E2 /* Build configuration list for PBXNativeTarget "QuakeSignalTests" */;
+			buildPhases = (
+				AD71B4BBF928321FEF5E3FC3 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				24AB836CEC8F759A4343FA84 /* PBXTargetDependency */,
+			);
+			name = QuakeSignalTests;
+			packageProductDependencies = (
+			);
+			productName = QuakeSignalTests;
+			productReference = 9C1906221BBAC871B5B8BA41 /* QuakeSignalTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -333,6 +405,7 @@
 			projectRoot = "";
 			targets = (
 				0C571730824BD0FE25517524 /* QuakeSignal */,
+				AAED90583AE429A9A2BCAF56 /* QuakeSignalTests */,
 			);
 		};
 /* End PBXProject section */
@@ -357,11 +430,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				00CBA3F9A30565BBA1B7E842 /* APIClient.swift in Sources */,
+				BAD8BB0744EB1269AD91FA53 /* AppAttestClient.swift in Sources */,
 				CB398BC7708A86279C3BF6D4 /* AppDelegate.swift in Sources */,
 				8AB603839990610758AFC649 /* AppSettings.swift in Sources */,
 				6279092DC98DB8233CEEE8B8 /* BackendConfig.swift in Sources */,
 				C95674FB61B4A12788753D96 /* City.swift in Sources */,
 				F44520F00F5256BBB9FE6F39 /* CityPickerView.swift in Sources */,
+				2B3817E67944FF65B8F5D6FA /* CoarseCoordinate.swift in Sources */,
 				662850A82C0C42CC36161123 /* DeviceRegistration.swift in Sources */,
 				6B6E89AB5EE885007554F98A /* DisasterGuideView.swift in Sources */,
 				1FE00A80B0B13AA6832583E5 /* EEWAlertView.swift in Sources */,
@@ -369,6 +444,7 @@
 				99912A9F35669522264D1A56 /* EpicenterMapView.swift in Sources */,
 				6221D8ADA6A6A44E45C2C5EE /* EventRevision.swift in Sources */,
 				3578006137ABBE79E0A5B06F /* FamilyCheckInView.swift in Sources */,
+				F1FFAEE76DFCC009CBCDFD11 /* ForegroundHTTPFallbackPolicy.swift in Sources */,
 				CF0E4A95DE46CC7A146650EA /* GuideContent.swift in Sources */,
 				4CFC59C9E1BF37D668AD4138 /* GuideStore.swift in Sources */,
 				7E008E58665F263BDC9DDD08 /* GuideTopicDetailView.swift in Sources */,
@@ -392,7 +468,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AD71B4BBF928321FEF5E3FC3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9A1EE3D0BCEE13F790BEC7D5 /* AppAttestWireFormatTests.swift in Sources */,
+				1DAF3142799F4F35F8AE699A /* CoarseCoordinateTests.swift in Sources */,
+				270DEBC62F5495435C5094ED /* ForegroundHTTPFallbackPolicyTests.swift in Sources */,
+				B55EE7B71D09CFF033F9814A /* PushRegistrationLifecycleTests.swift in Sources */,
+				5965D4C2C897BD817231CFA6 /* WolfxHTTPFetchPacingTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		24AB836CEC8F759A4343FA84 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0C571730824BD0FE25517524 /* QuakeSignal */;
+			targetProxy = 806671887B446B19EEE6FE60 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		B0692F2F796B70A77314C23B /* Localizable.strings */ = {
@@ -484,13 +580,50 @@
 			};
 			name = Debug;
 		};
+		567F9A5741C73B23B8B2B850 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/QuakeSignal.app/QuakeSignal";
+			};
+			name = Debug;
+		};
+		696862DC809C395864282BD7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/QuakeSignal.app/QuakeSignal";
+			};
+			name = Release;
+		};
 		A42E66C5407563B633D16E48 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 3DFCD227F9ED367CDC787519 /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = QuakeSignal/Supporting/QuakeSignal.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 5TT564H883;
 				INFOPLIST_FILE = QuakeSignal/Supporting/Info.plist;
@@ -500,6 +633,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
+				QUAKESIGNAL_APP_ATTEST_MODE = development;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -510,8 +644,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = QuakeSignal/Supporting/QuakeSignal.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_ENTITLEMENTS = "QuakeSignal/Supporting/QuakeSignal-Release.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 5TT564H883;
 				INFOPLIST_FILE = QuakeSignal/Supporting/Info.plist;
@@ -521,6 +655,8 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
+				QUAKESIGNAL_API_BASE_URL = "https://quakesignal-api.hopeso.workers.dev";
+				QUAKESIGNAL_APP_ATTEST_MODE = production;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -593,6 +729,15 @@
 			buildConfigurations = (
 				050C13D6BEC425AF923AACD7 /* Debug */,
 				F8AF886BA0A01B695061E973 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		10D67234BA36B228569D57E2 /* Build configuration list for PBXNativeTarget "QuakeSignalTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				567F9A5741C73B23B8B2B850 /* Debug */,
+				696862DC809C395864282BD7 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

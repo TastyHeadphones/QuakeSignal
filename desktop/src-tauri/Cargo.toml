@@ -1,6 +1,6 @@
 [package]
 name = "desktop"
-version = "0.1.0"
+version = "1.0.0"
 description = "QuakeSignal Desktop — direct-to-Wolfx earthquake early warning alerts"
 authors = ["UniSphereco LLC"]
 edition = "2021"
@@ -13,6 +13,11 @@ edition = "2021"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# The Mac App Store build cannot use the legacy LaunchAgent implementation
+# provided by tauri-plugin-autostart: it writes outside the App Sandbox.
+macos-app-store = []
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -33,6 +38,9 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 regex = "1"
 log = "0.4"
 sys-locale = "0.3"
+# Reuse the explicit Ring crypto provider installed by lib.rs instead of
+# pulling a second TLS provider just for the bounded HTTPS recovery client.
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]

@@ -3,7 +3,7 @@ import CoreLocation
 
 /// Client-side normalized Wolfx event shared by the app's direct HTTP and
 /// WebSocket data paths.
-struct EEWEvent: Codable, Identifiable, Equatable, Hashable {
+struct EEWEvent: Codable, Identifiable, Equatable, Hashable, Sendable {
     let id: String
     let sourceId: String
     let eventId: String

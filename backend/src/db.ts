@@ -88,7 +88,9 @@ function rowToDevice(row: any): DeviceRecord {
     locale: row.locale,
     sources: JSON.parse(row.sources),
     minMagnitude: row.min_magnitude,
-    criticalAlertsEnabled: !!row.critical_alerts_enabled,
+    // Legacy schema column; the public bundle is not approved for Critical
+    // Alerts, so a persisted or forged preference can never enable them.
+    criticalAlertsEnabled: false,
     cityName: row.city_name,
     latitude: row.latitude,
     longitude: row.longitude,
@@ -136,7 +138,7 @@ export function upsertDevice(input: DeviceRegistrationInput): DeviceRecord {
     locale: input.locale,
     sources: JSON.stringify(input.sources),
     minMagnitude: input.minMagnitude,
-    criticalAlertsEnabled: input.criticalAlertsEnabled ? 1 : 0,
+    criticalAlertsEnabled: 0,
     cityName: input.cityName,
     latitude: input.latitude,
     longitude: input.longitude,

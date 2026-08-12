@@ -1,40 +1,40 @@
 # QuakeSignal Homebrew tap
 
-This directory is the source of truth for the personal Homebrew tap that
-distributes the QuakeSignal desktop app on macOS. It is kept in this repository
-so the cask is versioned alongside the code it installs, and mirrored into a
-standalone tap repository that Homebrew can consume.
+This directory is the release template and future source of truth for a
+personal Homebrew tap that can distribute the QuakeSignal desktop app on macOS.
+It is kept in this repository so a future cask is versioned alongside the code
+it installs. It is not itself an installable tap, and no public
+`TastyHeadphones/tap` cask is published yet.
 
-## Why a personal tap and not `homebrew/cask`
+## Release contract
 
-QuakeSignal is not yet signed with an Apple Developer ID and not notarized.
+A future public tap may distribute only DMGs that have been signed with a
+Developer ID Application certificate, notarized by Apple, and stapled by the
+protected `macos-direct-release` job. A cask must never tell users to clear
+quarantine or bypass Gatekeeper.
 
-- Homebrew has removed the `--no-quarantine` flag, so there is no supported way
-  to install a cask without the quarantine attribute being applied.
-- From **1 September 2026**, Homebrew will disable every cask in the official
-  `homebrew/cask` tap that fails Gatekeeper checks
-  ([Homebrew/brew#20755](https://github.com/Homebrew/brew/issues/20755)).
-
-An unnotarized QuakeSignal therefore cannot be submitted to the official tap.
-A personal tap can still ship it, provided the cask tells users plainly that
-the app is unnotarized and gives them the command to clear quarantine — which
-the `caveats` block in [`Casks/quakesignal.rb`](Casks/quakesignal.rb) does.
-
-Once notarization exists, delete the `caveats` block and the cask becomes
-eligible for the official tap.
+The checked-in `0.1.0` cask preserves a historical artifact checksum, but that
+release predates Developer ID signing and notarization. Do **not** mirror it
+into a public tap or use it to install QuakeSignal. The first public cask commit
+must point at a later release that has passed the notarized macOS workflow and
+published a stapled DMG plus `SHA256SUMS.txt`.
 
 ## Creating the tap repository
 
 Homebrew requires the repository to be named `homebrew-<tap>`. For a tap
 installed as `TastyHeadphones/tap`, create a **public** repository named
-`homebrew-tap` under the `TastyHeadphones` account, then:
+`homebrew-tap` under the `TastyHeadphones` account only after a qualifying
+release has been published. Create it with an initial `main` branch (for
+example, with a README), but do **not** manually copy or commit the historical
+`0.1.0` cask. Configure the protected `homebrew-tap-release` environment and
+run **Publish Homebrew cask** for the qualifying version instead. That workflow
+renders the first cask from the template only after it has verified the tagged
+notarized DMG, checksum, protected-release provenance, and Homebrew audit.
 
-```bash
-git clone https://github.com/TastyHeadphones/homebrew-tap.git
-mkdir -p homebrew-tap/Casks
-cp packaging/homebrew-tap/Casks/quakesignal.rb homebrew-tap/Casks/
-cd homebrew-tap && git add Casks/quakesignal.rb && git commit -m "Add QuakeSignal cask" && git push
-```
+The public repository is a prerequisite only; the protected workflow creates
+the initial `Casks/quakesignal.rb` commit. A manual cask commit is reserved for
+the documented incident-recovery procedure below, after reproducing every
+release check.
 
 Resulting layout:
 
@@ -44,22 +44,43 @@ homebrew-tap/
     └── quakesignal.rb
 ```
 
-## Installing
+## Installing after publication
+
+The commands below are not usable today: the public tap and a supported cask
+have not been published. After the first qualifying cask has been mirrored to
+the public tap, users may run:
 
 ```bash
 brew tap TastyHeadphones/tap
 brew install --cask quakesignal
 ```
 
-Then run the command Homebrew prints in the caveats to clear quarantine.
+Only publish the cask after the release checks below succeed. The tap must stay
+public so `brew tap TastyHeadphones/tap` can resolve it.
 
 ## Updating the cask for a new release
 
-After a `v*` tag has been released by
+After a later `v*` tag (not `v0.1.0`) has completed the protected direct macOS
+release job in
 [`.github/workflows/desktop-release.yml`](../../.github/workflows/desktop-release.yml):
 
+The normal release route is the protected manual
+[`Publish Homebrew cask`](../../.github/workflows/homebrew-tap.yml) workflow.
+It checks the tagged release's DMG signature, notarization ticket, universal
+architectures, Gatekeeper assessment, published checksum, and Homebrew cask
+audit before it uses the environment-scoped tap token to push a rendered cask.
+It deliberately rejects `v0.1.0` and will not create the public tap. See
+[`docs/RELEASE_SECRETS.md`](../../docs/RELEASE_SECRETS.md#homebrew-tap-release)
+for the one token and reviewer setup required before this lane can run.
+
+For an incident-recovery or audited manual update, reproduce the same checks
+before making a tap commit:
+
 ```bash
-VERSION=0.2.0
+VERSION=1.0.0
+
+# Confirm that the direct-download DMG, notarization, and stapling job passed.
+gh run list --repo TastyHeadphones/QuakeSignal --workflow desktop-release.yml --limit 5
 
 # Take the checksum straight from the release's published SHA256SUMS.txt.
 gh release download "v${VERSION}" --repo TastyHeadphones/QuakeSignal \
@@ -67,20 +88,23 @@ gh release download "v${VERSION}" --repo TastyHeadphones/QuakeSignal \
   | grep "QuakeSignal_${VERSION}_universal.dmg"
 ```
 
-Update `version` and `sha256` in `Casks/quakesignal.rb`, copy it into the tap
-repository, and push. Verify before publishing:
+Update `version` and `sha256` in `Casks/quakesignal.rb`, copy it into the
+Homebrew-managed tap checkout above, and verify it before pushing:
 
 ```bash
-brew audit --cask --online --strict Casks/quakesignal.rb
-brew style Casks/quakesignal.rb
+brew audit --strict --online --cask TastyHeadphones/tap/quakesignal
+brew style --cask TastyHeadphones/tap/quakesignal
 ```
 
-## Verifying an install end to end
+## Verifying a notarized install end to end
 
 ```bash
 brew uninstall --cask quakesignal 2>/dev/null || true
 brew install --cask quakesignal
-xattr -p com.apple.quarantine /Applications/QuakeSignal.app   # attribute is present
-xattr -dr com.apple.quarantine "/Applications/QuakeSignal.app"
-open -a QuakeSignal                                            # app launches
+codesign --verify --deep --strict --verbose=2 /Applications/QuakeSignal.app
+spctl --assess --type open --verbose=4 /Applications/QuakeSignal.app
+open -a QuakeSignal
 ```
+
+If Gatekeeper rejects the app, stop the release update and investigate the
+signed GitHub artifact. Do not document or use a quarantine-bypass command.

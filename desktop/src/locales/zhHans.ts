@@ -66,6 +66,7 @@ export const zhHans: Record<LocaleKey, string> = {
   "settings.alarmEnabled.detail": "收到符合筛选条件的真实地震信息时，自动播放本地警报声。",
   "settings.alarmVolume": "警报音量",
   "settings.alarmVolume.detail": "{volume}% — 可使用测试警报检查扬声器。",
+  "settings.alarmVolume.storeDetail": "{volume}% — 用于真实地震自动警报的音量。",
   "settings.includeTestAlerts": "接收演习/测试提醒",
   "settings.includeTestAlerts.detail": "气象厅等机构偶尔会发布演习提醒以测试系统。",
   "settings.notifyAtNight": "接收夜间通知",

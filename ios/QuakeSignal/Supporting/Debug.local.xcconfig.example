@@ -1,0 +1,6 @@
+// Copy this file to Debug.local.xcconfig (which is ignored by Git) and set an
+// owner-controlled isolated staging Worker URL. Never use the user-approved
+// production Worker hostname here.
+// The base config supplies QUAKESIGNAL_URL_SLASH so this avoids `//`, which
+// xcconfig treats as the start of a comment.
+QUAKESIGNAL_API_BASE_URL = https:$(QUAKESIGNAL_URL_SLASH)$(QUAKESIGNAL_URL_SLASH)your-isolated-staging-worker.example

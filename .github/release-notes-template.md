@@ -15,7 +15,9 @@ preferences on your device, and has no account or telemetry.
 | macOS (universal) | `QuakeSignal_@@VERSION@@_universal.dmg` |
 
 The Windows app is an MSIX package distributed and signed by Microsoft Store
-after certification. The macOS build is not notarized.
+after certification. The macOS direct-download build is Developer ID signed,
+notarized, and stapled. The separate Mac App Store package is retained as a
+private Actions artifact for App Store Connect upload.
 
 ## Verifying this release
 
