@@ -14,6 +14,17 @@ the isolated staging Worker is useful development evidence, but cannot satisfy
 this gate. Do not submit the app for public App Review while any required row
 below is incomplete.
 
+## Build boundary
+
+The uploaded TestFlight build `1.0 (2)` is **InternalQA-only**. It includes
+**Schedule Background Test Alert** for the delayed background/locked/terminated
+evidence, while a public `Release` intentionally excludes that feature. Use
+build `2` only for this runbook: do not attach it to the App Store version or
+submit it for App Review. After the physical evidence and protected production
+launch promotion are complete, create a new public `Release` build with a later
+build number (at least `3`), coordinated with the source release configuration,
+the Worker App Attest allowlist, and the checked-in iOS workflow build guard.
+
 ## Before starting
 
 - Use an iPhone that supports App Attest, has normal network access, and is
@@ -138,11 +149,12 @@ device.
 
 ### 6. Delayed background, locked, and terminated training notification
 
-This check requires TestFlight build `1.0 (2)` or later containing **Schedule
-Background Test Alert** and a reviewed Worker revision containing the private
-delayed-training scheduler. Build `1.0 (2)` is assigned to the internal QA
-group and contains this control. The requirement remains pending until the
-following physical-device check has passed.
+This check requires the InternalQA TestFlight build `1.0 (2)`, or an explicitly
+later InternalQA build, containing **Schedule Background Test Alert** and a
+reviewed Worker revision containing the private delayed-training scheduler. A
+public `Release` is intentionally not an alternative. Build `1.0 (2)` is
+assigned to the internal QA group and contains this control. The requirement
+remains pending until the following physical-device check has passed.
 
 During a separate, explicitly reviewed temporary window with
 `ENABLE_PRODUCTION_TEST_PUSH=true`, use an already active production
@@ -167,11 +179,11 @@ registration:
 The fresh-key rebind requirement is not reproducibly testable by a person using
 the current TestFlight UI alone. Mark it as pending rather than inferring a
 pass. The background/locked/terminated requirement remains pending until the
-build-2-or-later check above has passed.
+InternalQA check above has passed.
 
 | Requirement | Why the current UI is insufficient | Safe completion path |
 | --- | --- | --- |
-| Background, locked, and terminated APNs delivery | Build `1.0 (2)` provides **Schedule Background Test Alert**, but no physical-device result has been recorded yet. | Install build `1.0 (2)` or later, then use section 6 during a reviewed temporary test window. |
+| Background, locked, and terminated APNs delivery | The InternalQA build `1.0 (2)` provides **Schedule Background Test Alert**, but no physical-device result has been recorded yet. | Install build `1.0 (2)` or an explicitly later InternalQA build, then use section 6 during a reviewed temporary test window. |
 | A verified fresh-key rebind after reinstall/restore | Reinstalling is a useful smoke test, but iOS does not guarantee that it will create the exact App Attest key-reset condition on demand. The Settings UI never exposes a key ID or proof type. | Use a controlled QA key-reset/restore scenario or narrowly scoped, sanitized reviewer evidence that shows a fresh production attestation rebound the same APNs token. Do not expose keys, tokens, proofs, or raw D1 rows to the tester. |
 
 For the reinstall smoke test itself, leave an active registration in place,
@@ -193,7 +205,7 @@ Copy this into the release ticket; redact all identifiers and personal data.
 | Token-bound unsubscribe + re-enrollment |  |  |  |
 | Key-owned empty-body unsubscribe + re-enrollment |  |  |  |
 | Controlled training notification |  |  |  |
-| Background/locked/terminated delivery | Pending until section 6 passes on build `1.0 (2)` or later |  |  |
+| Background/locked/terminated delivery | Pending until section 6 passes on the InternalQA build `1.0 (2)` or a later explicitly InternalQA build |  |  |
 | Fresh-key rebind after reinstall/restore | Pending unless separately evidenced |  |  |
 
 Do not promote the App Attest environment gate or submit the iOS app while a
