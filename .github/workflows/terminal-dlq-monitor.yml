@@ -1,0 +1,192 @@
+name: Deploy terminal DLQ monitor
+
+on:
+  push:
+    branches:
+      - main
+      - "codex/**"
+    paths:
+      - "backend/cloudflare/terminal-dlq-monitor/**"
+      - ".github/workflows/terminal-dlq-monitor.yml"
+  pull_request:
+    paths:
+      - "backend/cloudflare/terminal-dlq-monitor/**"
+      - ".github/workflows/terminal-dlq-monitor.yml"
+  workflow_dispatch:
+    inputs:
+      deploy_monitor:
+        description: Deploy the independent, cron-only terminal DLQ monitor
+        required: false
+        default: false
+        type: boolean
+      monitor_target:
+        description: Deploy the protected production monitor or the isolated staging escalation rehearsal
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - staging
+
+concurrency:
+  group: terminal-dlq-monitor-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate terminal DLQ monitor
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/cloudflare/terminal-dlq-monitor/package-lock.json
+
+      - name: Install monitor dependencies
+        working-directory: backend/cloudflare/terminal-dlq-monitor
+        run: npm ci
+
+      - name: Generate and check Worker runtime types
+        working-directory: backend/cloudflare/terminal-dlq-monitor
+        run: |
+          set -euo pipefail
+          npx wrangler types
+          npx wrangler types --check
+
+      - name: Type-check and test monitor
+        working-directory: backend/cloudflare/terminal-dlq-monitor
+        run: |
+          set -euo pipefail
+          npm run check
+          npm test
+          npm audit --audit-level=high
+
+      - name: Validate monitor bundle
+        working-directory: backend/cloudflare/terminal-dlq-monitor
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dry-run
+          npx wrangler deploy --dry-run --config wrangler.staging.jsonc
+
+  deploy-monitor:
+    name: Deploy terminal DLQ monitor
+    needs: validate
+    # A cron monitor has production visibility and two runtime credentials, so
+    # deploy it only through protected main and a dedicated Environment.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.deploy_monitor &&
+      github.ref == 'refs/heads/main' &&
+      github.ref_protected
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.monitor_target == 'staging' && 'cloudflare-terminal-dlq-monitor-worker-staging' || 'cloudflare-terminal-dlq-monitor-worker' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/cloudflare/terminal-dlq-monitor/package-lock.json
+
+      # Do not expose the deployment or runtime secrets while third-party npm
+      # lifecycle scripts run. The immutable lockfile is installed first.
+      - name: Install monitor dependencies
+        working-directory: backend/cloudflare/terminal-dlq-monitor
+        run: npm ci
+
+      - name: Validate protected monitor configuration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEPLOY_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
+          CLOUDFLARE_TARGET_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_TARGET_ACCOUNT_ID }}
+          CLOUDFLARE_MONITOR_API_TOKEN: ${{ secrets.CLOUDFLARE_MONITOR_API_TOKEN }}
+          GITHUB_APP_ID: ${{ secrets.GITHUB_APP_ID }}
+          GITHUB_APP_INSTALLATION_ID: ${{ secrets.GITHUB_APP_INSTALLATION_ID }}
+          GITHUB_APP_PRIVATE_KEY_PKCS8: ${{ secrets.GITHUB_APP_PRIVATE_KEY_PKCS8 }}
+        run: |
+          set -euo pipefail
+          for name in \
+            CLOUDFLARE_API_TOKEN \
+            CLOUDFLARE_DEPLOY_ACCOUNT_ID \
+            CLOUDFLARE_TARGET_ACCOUNT_ID \
+            CLOUDFLARE_MONITOR_API_TOKEN \
+            GITHUB_APP_ID \
+            GITHUB_APP_INSTALLATION_ID \
+            GITHUB_APP_PRIVATE_KEY_PKCS8; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::cloudflare-terminal-dlq-monitor-worker is missing: $name"
+              exit 1
+            fi
+          done
+          [[ "$GITHUB_APP_ID" =~ ^[0-9]{1,20}$ ]] || { echo "::error::GITHUB_APP_ID must be numeric"; exit 1; }
+          [[ "$GITHUB_APP_INSTALLATION_ID" =~ ^[0-9]{1,20}$ ]] || { echo "::error::GITHUB_APP_INSTALLATION_ID must be numeric"; exit 1; }
+          [[ "$GITHUB_APP_PRIVATE_KEY_PKCS8" == *"-----BEGIN PRIVATE KEY-----"* ]] || {
+            echo "::error::GITHUB_APP_PRIVATE_KEY_PKCS8 must be an unencrypted PKCS#8 PEM"
+            exit 1
+          }
+          if [ "$CLOUDFLARE_DEPLOY_ACCOUNT_ID" = "$CLOUDFLARE_TARGET_ACCOUNT_ID" ]; then
+            echo "::error::The monitor must deploy from a separate Cloudflare account; Workers Scripts: Edit is account-wide."
+            exit 1
+          fi
+
+      # Deploy one complete version with its required secrets. Do not call
+      # `wrangler secret put` first: creating a draft Worker can briefly expose
+      # a workers.dev endpoint before this checked-in workers_dev:false setting
+      # is applied.
+      - name: Deploy cron-only monitor with atomically supplied secrets
+        working-directory: backend/cloudflare/terminal-dlq-monitor
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
+          CLOUDFLARE_TARGET_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_TARGET_ACCOUNT_ID }}
+          CLOUDFLARE_MONITOR_API_TOKEN: ${{ secrets.CLOUDFLARE_MONITOR_API_TOKEN }}
+          GITHUB_APP_ID: ${{ secrets.GITHUB_APP_ID }}
+          GITHUB_APP_INSTALLATION_ID: ${{ secrets.GITHUB_APP_INSTALLATION_ID }}
+          GITHUB_APP_PRIVATE_KEY_PKCS8: ${{ secrets.GITHUB_APP_PRIVATE_KEY_PKCS8 }}
+        run: |
+          set -euo pipefail
+          monitor_config="wrangler.jsonc"
+          if [ "${{ inputs.monitor_target }}" = "staging" ]; then
+            monitor_config="wrangler.staging.jsonc"
+          fi
+          secrets_file="$RUNNER_TEMP/quakesignal-terminal-dlq-monitor-secrets.json"
+          trap 'rm -f "$secrets_file"' EXIT
+          node - "$secrets_file" <<'NODE'
+          const fs = require("node:fs");
+          const output = process.argv[2];
+          const names = [
+            "CLOUDFLARE_TARGET_ACCOUNT_ID",
+            "CLOUDFLARE_MONITOR_API_TOKEN",
+            "GITHUB_APP_ID",
+            "GITHUB_APP_INSTALLATION_ID",
+            "GITHUB_APP_PRIVATE_KEY_PKCS8",
+          ];
+          const secrets = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+          fs.writeFileSync(output, JSON.stringify(secrets), { encoding: "utf8", mode: 0o600 });
+          NODE
+          chmod 600 "$secrets_file"
+          npx wrangler deploy --config "$monitor_config" --secrets-file "$secrets_file" | tee "$RUNNER_TEMP/quakesignal-terminal-dlq-monitor-deploy.log"
+
+      - name: Record cron monitor deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "### Independent terminal DLQ monitor"
+            echo
+            echo "Deployed the cron-only monitor target: \`${{ inputs.monitor_target }}\`. Cloudflare Cron Trigger changes can take up to 15 minutes to propagate; verify three on-cadence executions and the separate missed-heartbeat/error alert before accepting production as launch evidence."
+          } >> "$GITHUB_STEP_SUMMARY"

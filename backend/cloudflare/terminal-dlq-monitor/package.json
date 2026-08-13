@@ -1,0 +1,16 @@
+{
+  "name": "quakesignal-terminal-dlq-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "wrangler types && tsc --noEmit",
+    "test": "node --test src/index.test.mjs",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1",
+    "typescript": "^5.9.2",
+    "wrangler": "4.121.0"
+  }
+}

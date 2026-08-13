@@ -5,8 +5,9 @@ keys, APNs tokens, or Cloudflare credentials. Add the following values as
 **environment-scoped GitHub secrets**, never as repository files, Actions
 variables, source code, issues, or pull-request comments.
 
-Create the eight GitHub Environments below, restrict them to their intended
-release or monitoring scope, and require approval before use **except** the
+Create the nine primary GitHub Environments below (plus the separately named
+staging mirror for the Cron monitor when rehearsing escalation), restrict them
+to their intended release or monitoring scope, and require approval before use **except** the
 dedicated read-only `cloudflare-terminal-dlq-monitor` Environment described
 below. Configure a protected `main` rule and a protected `v*` tag rule: the
 workflows use `github.ref_protected` and will intentionally skip production
@@ -182,12 +183,55 @@ release secret.
 | `CLOUDFLARE_MONITOR_API_TOKEN` | Secret | Separate Cloudflare API token restricted to **Queues Read** for the account that owns `quakesignal-alert-delivery-dlq-fallback`. It is used only to list Queues and read the terminal Queue's aggregate metrics; do not grant Workers Scripts, D1, Durable Object, Queue write, or message-recovery permissions. |
 | `CLOUDFLARE_ACCOUNT_ID` | Secret | Cloudflare account ID that owns the exact terminal fallback Queue. |
 
-After a manual protected-`main` run and a subsequent unattended scheduled run
-both complete successfully, a release operator may review the staffed response
-path and set the separate `cloudflare-production`
+This GitHub workflow is a best-effort secondary check only: GitHub can delay or
+drop scheduled runs. It does **not** justify setting the separate
+`cloudflare-production`
 `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true` deployment
-attestation. The monitor Environment never contains that attestation or any
-deployment credential.
+attestation by itself. It never contains that attestation or any deployment
+credential; the independent Cron Worker below is the required primary control.
+
+## `cloudflare-terminal-dlq-monitor-worker`
+
+This separate, reviewer-protected Environment deploys the cron-only
+`quakesignal-terminal-dlq-monitor` Worker. It is intentionally distinct from
+both the production Worker deploy and the best-effort GitHub monitor above.
+The runtime Worker can only read aggregate Queue metrics and create/update a
+single recovery issue; it has no Queue message, D1, APNs, delivery, or
+production-deployment capability.
+
+| Name | Kind | Value |
+| --- | --- | --- |
+| `CLOUDFLARE_API_TOKEN` | Secret | **Separate-monitor-account** Workers Scripts: Edit deployment token. Workers Scripts permission is account-wide, so it must not have access to the production API account. |
+| `CLOUDFLARE_DEPLOY_ACCOUNT_ID` | Secret | Account ID for that separate monitor account; it must differ from the production Queue account. |
+| `CLOUDFLARE_TARGET_ACCOUNT_ID` | Secret | Production Queue account ID. It is stored as a runtime Worker secret so the target cannot be changed by source. |
+| `CLOUDFLARE_MONITOR_API_TOKEN` | Secret | Separate account-scoped **Queues Read** token only. It may list Queues and read aggregate metrics but cannot read, acknowledge, retry, purge, or redrive messages. |
+| `GITHUB_APP_ID` | Secret | Numeric ID of a GitHub App installed only on `TastyHeadphones/QuakeSignal`. |
+| `GITHUB_APP_INSTALLATION_ID` | Secret | Numeric ID of that one-repository GitHub App installation. |
+| `GITHUB_APP_PRIVATE_KEY_PKCS8` | Secret | Full unencrypted PKCS#8 RSA private-key PEM for the GitHub App. Convert a downloaded PKCS#1 key with `openssl pkcs8 -topk8 -nocrypt`; never commit the result. |
+
+Create the GitHub App with only repository permission **Issues: Read and
+write** (Metadata read is implicit), no webhooks, and repository selection
+limited to `TastyHeadphones/QuakeSignal`. In particular, do not grant
+**Actions: write**: that permission is repository-wide and could dispatch
+unrelated release workflows. The Worker requests a fresh installation token
+for each escalation and restricts it to this repository and `issues: write`.
+
+Run **Deploy terminal DLQ monitor → Run workflow → `deploy_monitor=true`**
+from protected `main`. It atomically deploys all runtime secrets with the first
+`workers_dev:false` Cron Worker version. Cloudflare Cron changes can take up to
+15 minutes to propagate. Before re-affirming the production monitor
+attestation, confirm three on-cadence Cron Events, the App credential/scope
+readiness logged on every empty-Queue run, a staging-target issue escalation,
+and an independent missed-heartbeat/Cron-failure alert. A cron Worker cannot
+self-report an invocation that never starts; see its [monitor
+runbook](../backend/cloudflare/terminal-dlq-monitor/README.md).
+
+Create a second reviewer-protected Environment named
+`cloudflare-terminal-dlq-monitor-worker-staging` with the same secret names,
+but a staging Queue account/token. Run the same workflow with
+`monitor_target=staging` to exercise the distinct test label/issue path without
+putting evidence in the production terminal Queue. The deploy and target
+accounts must still differ.
 
 ## `cloudflare-production`
 
@@ -197,7 +241,7 @@ deployment credential.
 | `CLOUDFLARE_ACCOUNT_ID` | Secret | Cloudflare account ID that owns those resources |
 | `CLOUDFLARE_WORKER_URL` | Environment variable | Exactly `https://quakesignal-api.hopeso.workers.dev`; this is the user-approved public Workers.dev production origin |
 | `APP_ATTEST_PRODUCTION_ENFORCED` | Environment variable | Exactly `false` for the one-time protected TestFlight bootstrap, then exactly `true` only after a reviewer has completed the physical-device/TestFlight App Attest test plan |
-| `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED` | Environment variable | Exactly `true` only after a release operator has verified the scheduled, staffed terminal-DLQ Queue monitor for `quakesignal-alert-delivery-dlq-fallback` and reviewed its retention-aware recovery procedure. Required for both TestFlight bootstrap and launch; it is an explicit attestation, not telemetry. |
+| `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED` | Environment variable | Exactly `true` only after a release operator has verified the independent Cloudflare Cron terminal-DLQ monitor, its missed-heartbeat/Cron-failure escalation, and the staffed recovery procedure for `quakesignal-alert-delivery-dlq-fallback`. GitHub-only scheduled runs are secondary evidence. Required for both TestFlight bootstrap and launch; it is an explicit attestation, not telemetry. |
 
 The manual **Cloudflare Worker → Run workflow** deployment is the sole normal
 production route for remote D1 migrations and Worker deployment. Include
@@ -222,24 +266,30 @@ staging account. These commands set secrets only—they are not a replacement
 for the protected production migration/deploy workflow.
 
 The terminal `quakesignal-alert-delivery-dlq-fallback` Queue intentionally has
-no Worker consumer. The separate read-only monitor Environment invokes the
-checked-in Queue-metrics workflow; Workers cannot reliably query Queue depth.
-A nonzero backlog means both D1 and Durable Object fallback persistence were
-unavailable long enough to exhaust DLQ retries, so preserve and recover the
-retained message through the approved incident procedure before the
-consumerless Queue's retention period expires.
+no Worker consumer. Its primary monitor is the isolated
+`quakesignal-terminal-dlq-monitor` Cloudflare Cron Worker above. It reads only
+aggregate Queue metrics; the delivery Worker itself cannot query Queue depth.
+The checked-in GitHub Queue-metrics workflow remains a best-effort secondary
+audit because GitHub can delay or drop scheduled runs. A nonzero backlog means
+both D1 and Durable Object fallback persistence were unavailable long enough to
+exhaust DLQ retries, so preserve and recover the retained message through the
+approved incident procedure before the consumerless Queue's retention period
+expires.
 
 Before changing
 `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED` to `true`, the release
-operator must verify that the separate monitor targets the exact terminal Queue,
-has passed one manual and one unattended scheduled run, reaches a staffed
-responder, and has a documented, retention-aware recovery path. The protected
-deployment gate deliberately does **not** inspect Queue depth, retention, or
-GitHub Environment wiring; it only fails closed unless this protected
-Environment attestation is exactly `true`. Set it back to `false` while the
-monitor or recovery procedure is unverified. This is required even for the
-TestFlight bootstrap because that deployment can create terminal fallback
-evidence.
+operator must verify that the separate-account primary monitor targets the exact
+terminal Queue, its Queues-Read token and repository-limited **Issues: write**
+GitHub App credential are valid, and both monitor deployment Environments are
+protected. Exercise the staging-target escalation, confirm three on-cadence
+production Cron events, configure and test an independent missed-heartbeat/Cron
+failure alert, and ensure a staffed responder has the documented
+retention-aware recovery path. The protected deployment gate deliberately does
+**not** inspect Queue depth, retention, Cron delivery, or Environment wiring; it
+only fails closed unless this protected Environment attestation is exactly
+`true`. Set it back to `false` while any part of the monitor or recovery
+procedure is unverified. This is required even for the TestFlight bootstrap
+because that deployment can create terminal fallback evidence.
 
 ```bash
 cd backend/cloudflare
