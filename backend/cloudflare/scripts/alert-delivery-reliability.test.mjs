@@ -606,20 +606,26 @@ test("activates one fetch-Upgraded Wolfx route only after accept", async () => {
 });
 
 test("rejected and failed Upgrade handshakes cancel, log safely, and retry", async () => {
-  const { QuakeRelay } = await workerModule();
+  const { QuakeRelay, upstreamReconnectDelayMs } = await workerModule();
   const originalFetch = globalThis.fetch;
   const originalConsoleWarn = console.warn;
   const pending = new Set();
   const failures = [];
   const alarms = [];
   const warnings = [];
+  const values = new Map();
   const storage = {
-    async get() {
-      return undefined;
+    async get(key) {
+      return values.get(key);
     },
-    async put() {},
+    async put(key, value) {
+      values.set(key, value);
+    },
     async list() {
       return new Map();
+    },
+    async getAlarm() {
+      return null;
     },
     async setAlarm(value) {
       alarms.push(value);
@@ -678,9 +684,25 @@ test("rejected and failed Upgrade handshakes cancel, log safely, and retry", asy
       },
     );
     assert.ok(
-      alarms.at(-1) >= beforeRejected + 900,
-      "a rejected handshake gets a short reconnect alarm",
+      alarms.at(-1) >= beforeRejected + 4_000,
+      "a rejected handshake gets a bounded first reconnect alarm",
     );
+    assert.equal(values.get("upstream-reconnect-failures:jma_eqlist"), 1);
+
+    const firstRetryDelayMs = rejected.retryDelayMs;
+    relay.connect("jma_eqlist");
+    await drain();
+    const repeated = JSON.parse(warnings.at(-1));
+    assert.equal(repeated.failureCount, 2);
+    assert.equal(
+      repeated.retryDelayMs,
+      upstreamReconnectDelayMs(2, "jma_eqlist"),
+    );
+    assert.ok(
+      repeated.retryDelayMs > firstRetryDelayMs,
+      "a repeated rejection must not retry in a tight one-second loop",
+    );
+    assert.equal(values.get("upstream-reconnect-failures:jma_eqlist"), 2);
 
     mode = "throw";
     relay.connect("cenc_eqlist");
@@ -705,6 +727,166 @@ test("rejected and failed Upgrade handshakes cancel, log safely, and retry", asy
       false,
       "upstream exception text must not enter Worker logs",
     );
+  } finally {
+    console.warn = originalConsoleWarn;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("only starts periodic HTTP recovery after a sustained websocket outage", async () => {
+  const { QuakeRelay, isHttpRecoverySeedDue } = await workerModule();
+  const now = Date.now();
+  const values = new Map([
+    ["last-http-seed-ms", now - 5 * 60_000],
+    ["upstream-degraded-since-ms:jma_eqlist", now - 80_000],
+  ]);
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  relay.statuses.set("jma_eqlist", "error");
+
+  assert.equal(
+    await relay.shouldRunHttpRecoverySeed(),
+    false,
+    "the first 90 seconds of a websocket outage must not poll HTTP",
+  );
+  values.set("upstream-degraded-since-ms:jma_eqlist", now - 90_001);
+  assert.equal(await relay.shouldRunHttpRecoverySeed(), true);
+  values.set("last-http-seed-ms", Date.now());
+  assert.equal(
+    await relay.shouldRunHttpRecoverySeed(),
+    false,
+    "the durable interval prevents the routine one-minute alarm from polling",
+  );
+  assert.equal(isHttpRecoverySeedDue(now - 5 * 60_000, now), true);
+  assert.equal(isHttpRecoverySeedDue(now - 5 * 60_000 + 1, now), false);
+});
+
+test("serializes an opened route reset before its next close records backoff", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalConsoleWarn = console.warn;
+  const values = new Map();
+  let alarmAt = null;
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async put(key, value) {
+        values.set(key, value);
+      },
+      async getAlarm() {
+        return alarmAt;
+      },
+      async setAlarm(value) {
+        alarmAt = value;
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  console.warn = () => {};
+  try {
+    // These two operations model an immediate close after a route just became
+    // usable. The queue must retain the close's failure state rather than
+    // letting the older reset zero its persisted retry gate afterwards.
+    await Promise.all([
+      relay.resetUpstreamReconnectBackoff("all_eew"),
+      relay.scheduleUpstreamReconnect(
+        "all_eew",
+        "wolfx_upstream_websocket_closed",
+        { closeCode: 1006, wasClean: false, closeReasonPresent: false },
+        "closed",
+      ),
+    ]);
+    assert.equal(values.get("upstream-reconnect-failures:all_eew"), 1);
+    assert.ok(
+      values.get("upstream-reconnect-not-before-ms:all_eew") > Date.now(),
+    );
+    assert.ok(values.get("upstream-degraded-since-ms:all_eew") > 0);
+    assert.ok(alarmAt > Date.now());
+  } finally {
+    console.warn = originalConsoleWarn;
+  }
+});
+
+test("a websocket listener owns recovery when send fails after an Upgrade", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalFetch = globalThis.fetch;
+  const originalConsoleWarn = console.warn;
+  const values = new Map();
+  const warnings = [];
+  const pending = new Set();
+  const failures = [];
+  let alarmAt = null;
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async put(key, value) {
+        values.set(key, value);
+      },
+      async list() {
+        return new Map();
+      },
+      async getAlarm() {
+        return alarmAt;
+      },
+      async setAlarm(value) {
+        alarmAt = value;
+      },
+    },
+    waitUntil(promise) {
+      let tracked;
+      tracked = Promise.resolve(promise)
+        .catch((error) => failures.push(error))
+        .finally(() => pending.delete(tracked));
+      pending.add(tracked);
+    },
+  };
+  class SocketWithSendFailure {
+    readyState = 1;
+    listeners = new Map();
+
+    accept() {}
+
+    addEventListener(type, listener) {
+      this.listeners.set(type, listener);
+    }
+
+    send() {
+      this.listeners.get("error")?.({});
+      throw new TypeError("send failure must not double-count reconnect state");
+    }
+
+    close() {
+      this.readyState = 3;
+    }
+  }
+  const socket = new SocketWithSendFailure();
+  globalThis.fetch = async () => ({ status: 101, webSocket: socket, body: null });
+  console.warn = (entry) => warnings.push(JSON.parse(entry));
+  try {
+    const relay = new QuakeRelay(state, {});
+    relay.connect("cenc_eqlist");
+    for (let pass = 0; pass < 20 && pending.size > 0; pass += 1) {
+      await Promise.all([...pending]);
+    }
+    assert.deepEqual(failures, []);
+    assert.equal(values.get("upstream-reconnect-failures:cenc_eqlist"), 1);
+    assert.deepEqual(
+      warnings.map((entry) => entry.outcome),
+      ["wolfx_upstream_websocket_error"],
+      "the listener's recovery owns an already-detached socket",
+    );
+    assert.ok(alarmAt > Date.now());
   } finally {
     console.warn = originalConsoleWarn;
     globalThis.fetch = originalFetch;
@@ -1246,6 +1428,9 @@ test("Durable Object fallback persists and replays only sanitized DLQ evidence",
   const records = new Map();
   let alarmAt = null;
   const storage = {
+    async getAlarm() {
+      return alarmAt;
+    },
     async transaction(callback) {
       return callback({
         async get(key) {

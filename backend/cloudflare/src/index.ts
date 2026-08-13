@@ -200,6 +200,10 @@ const LEGACY_PENDING_DELIVERY_PREFIX = "pending-delivery:";
 const LAST_DEVICE_PURGE_KEY = "last-device-purge-ms";
 const INITIAL_HTTP_SEED_COMPLETE_KEY = "initial-http-seed-complete";
 const UPSTREAM_LAST_SUCCESS_PREFIX = "upstream-last-success-ms:";
+const UPSTREAM_RECONNECT_FAILURE_PREFIX = "upstream-reconnect-failures:";
+const UPSTREAM_RECONNECT_NOT_BEFORE_PREFIX = "upstream-reconnect-not-before-ms:";
+const UPSTREAM_DEGRADED_SINCE_PREFIX = "upstream-degraded-since-ms:";
+const LAST_HTTP_SEED_MS_KEY = "last-http-seed-ms";
 // A journal entry is persisted before live WebSocket work touches D1. It
 // survives a Durable Object restart and lets the next alarm retry a failed
 // event write without pretending the upstream is healthy.
@@ -226,7 +230,14 @@ const OUTBOX_ENQUEUE_FAILURE_RETRY_MS = 60_000;
 const OUTBOX_STALE_AFTER_MS = 2 * 60 * 60_000;
 const UPSTREAM_STALE_AFTER_MS = 3 * 60_000;
 const ROUTINE_RELAY_ALARM_DELAY_MS = 60_000;
-const UPSTREAM_RECONNECT_DELAY_MS = 1_000;
+// A Worker-origin 503 must not turn one upstream rejection into a tight
+// reconnect/HTTP-seed loop. The first retry remains prompt for a transient
+// transport blip; subsequent attempts back off per route and are persisted
+// across Durable Object eviction.
+const UPSTREAM_RECONNECT_INITIAL_DELAY_MS = 5_000;
+const UPSTREAM_RECONNECT_MAX_DELAY_MS = 5 * 60_000;
+const HTTP_RECOVERY_SEED_GRACE_MS = 90_000;
+const HTTP_RECOVERY_SEED_INTERVAL_MS = 5 * 60_000;
 // HTTP recovery must not turn a historical snapshot into a notification
 // replay. It is only allowed to surface a fresh event/revision that arrived
 // while a WebSocket route was unavailable.
@@ -696,6 +707,52 @@ export function preferredRelayAlarmAt(
   )
     ? requestedAlarmAt
     : routineAlarmAt;
+}
+
+/**
+ * Compute a bounded, deterministic per-route reconnect delay. A stable jitter
+ * prevents the three Wolfx routes from retrying in lockstep without making
+ * outages non-reproducible in logs or tests.
+ */
+export function upstreamReconnectDelayMs(
+  consecutiveFailures: number,
+  route: string,
+): number {
+  const failures = Number.isSafeInteger(consecutiveFailures) &&
+      consecutiveFailures > 0
+    ? consecutiveFailures
+    : 1;
+  const unjittered = Math.min(
+    UPSTREAM_RECONNECT_MAX_DELAY_MS,
+    UPSTREAM_RECONNECT_INITIAL_DELAY_MS * 2 ** Math.min(failures - 1, 16),
+  );
+  let hash = 0;
+  for (const character of route) {
+    hash = (Math.imul(hash, 31) + character.charCodeAt(0)) >>> 0;
+  }
+  // ±20%, in one-tenth-percent increments. Round so alarm timestamps remain
+  // integer milliseconds.
+  const jitter = 0.8 + (hash % 401) / 1_000;
+  return Math.min(
+    UPSTREAM_RECONNECT_MAX_DELAY_MS,
+    Math.round(unjittered * jitter),
+  );
+}
+
+/**
+ * A prior recovery attempt is durable so a short routine relay alarm cannot
+ * turn an upstream-side rejection into a repeated HTTP polling loop.
+ */
+export function isHttpRecoverySeedDue(
+  lastSeedMs: number | undefined,
+  now = Date.now(),
+): boolean {
+  return (
+    typeof lastSeedMs !== "number" ||
+    !Number.isFinite(lastSeedMs) ||
+    lastSeedMs > now ||
+    now - lastSeedMs >= HTTP_RECOVERY_SEED_INTERVAL_MS
+  );
 }
 
 /**
@@ -2489,6 +2546,10 @@ export class QuakeRelay {
   private apnsJwtCache: { authorization: string; issuedAtMs: number } | null =
     null;
   private apnsJwtRefresh: Promise<string> | null = null;
+  // A Durable Object has one alarm. Serialize every non-journal alarm decision
+  // so a concurrent routine write cannot overwrite a faster reconnect wakeup
+  // (or vice versa) between storage.getAlarm() and storage.setAlarm().
+  private relayAlarmWrite: Promise<void> = Promise.resolve();
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -2618,7 +2679,7 @@ export class QuakeRelay {
       // otherwise gets to read storage, but that must not suppress the first
       // HTTP seed for a genuinely uninitialized relay.
       const alarm = await this.state.storage.getAlarm();
-      this.ensureUpstreams();
+      await this.ensureUpstreams();
       if (alarm === null) {
         try {
           await this.ensureStarted(alarm);
@@ -2627,7 +2688,7 @@ export class QuakeRelay {
           // immediately. Leave a bounded alarm retry behind before reporting
           // the structured degraded status instead.
           try {
-            await this.state.storage.setAlarm(
+            await this.scheduleRelayAlarm(
               Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
             );
           } catch (alarmError) {
@@ -2664,14 +2725,20 @@ export class QuakeRelay {
       const initialSeedComplete = await this.state.storage.get<boolean>(
         INITIAL_HTTP_SEED_COMPLETE_KEY,
       );
-      await this.seedFromHttp(initialSeedComplete ? "recovery" : "initial");
-      this.ensureUpstreams();
+      const lastHttpSeedMs = await this.state.storage.get<number>(
+        LAST_HTTP_SEED_MS_KEY,
+      );
+      if (
+        (!initialSeedComplete && isHttpRecoverySeedDue(lastHttpSeedMs)) ||
+        (initialSeedComplete && await this.shouldRunHttpRecoverySeed())
+      ) {
+        await this.seedFromHttp(initialSeedComplete ? "recovery" : "initial");
+      }
+      await this.ensureUpstreams();
     } finally {
-      const now = Date.now();
-      const requestedAlarmAt = await this.state.storage.getAlarm();
       // Preserve a short journal-retry alarm requested during this run rather
       // than accidentally replacing it with the routine one-minute wakeup.
-      await this.state.storage.setAlarm(preferredRelayAlarmAt(requestedAlarmAt, now));
+      await this.scheduleRoutineRelayAlarm();
     }
   }
 
@@ -2684,7 +2751,7 @@ export class QuakeRelay {
     const alarm = alarmAtStart === undefined
       ? await this.state.storage.getAlarm()
       : alarmAtStart;
-    this.ensureUpstreams();
+    await this.ensureUpstreams();
     // This must precede every path that can enqueue an outbox row. A recovered
     // D1 incident write is the terminal decision for the original page.
     await this.reconcileDlqPersistenceFallbacks();
@@ -2700,12 +2767,7 @@ export class QuakeRelay {
       // A socket can close while the initial HTTP seed is still in flight.
       // Re-read the requested alarm so that fast reconnect wins over the
       // ordinary one-minute wakeup just as it does in `alarm()`.
-      await this.state.storage.setAlarm(
-        preferredRelayAlarmAt(
-          await this.state.storage.getAlarm(),
-          Date.now(),
-        ),
-      );
+      await this.scheduleRoutineRelayAlarm();
     }
   }
 
@@ -2759,7 +2821,7 @@ export class QuakeRelay {
     });
     // Ensure recovery attempts continue even when the fallback endpoint was
     // the relay's first interaction and no routine alarm exists yet.
-    await this.state.storage.setAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
+    await this.scheduleRelayAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
     return Response.json({ ok: true });
   }
 
@@ -2795,7 +2857,7 @@ export class QuakeRelay {
             errorName: error instanceof Error ? error.name : "UnknownError",
           }),
         );
-        await this.state.storage.setAlarm(
+        await this.scheduleRelayAlarm(
           Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
         );
         return;
@@ -2870,7 +2932,7 @@ export class QuakeRelay {
           errorName: error instanceof Error ? error.name : "UnknownError",
         }),
       );
-      await this.state.storage.setAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
+      await this.scheduleRelayAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
     }
   }
 
@@ -2904,7 +2966,7 @@ export class QuakeRelay {
               outcome: "invalid_live_ingest_journal_record",
             }),
           );
-          await this.state.storage.setAlarm(
+          await this.scheduleRelayAlarm(
             Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
           );
           return;
@@ -2931,7 +2993,7 @@ export class QuakeRelay {
               errorName: error instanceof Error ? error.name : "UnknownError",
             }),
           );
-          await this.state.storage.setAlarm(
+          await this.scheduleRelayAlarm(
             Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
           );
           return;
@@ -3397,7 +3459,8 @@ export class QuakeRelay {
     }
   }
 
-  private ensureUpstreams(): void {
+  private async ensureUpstreams(): Promise<void> {
+    const now = Date.now();
     for (const route of UPSTREAM_ROUTES) {
       const current = this.upstreams.get(route);
       if (
@@ -3406,8 +3469,51 @@ export class QuakeRelay {
       ) {
         continue;
       }
+      const notBefore = await this.state.storage.get<number>(
+        `${UPSTREAM_RECONNECT_NOT_BEFORE_PREFIX}${route}`,
+      );
+      if (typeof notBefore === "number" && Number.isFinite(notBefore) && notBefore > now) {
+        // Preserve strict readiness while respecting a persisted backoff after
+        // an upstream-side rejection. The routine alarm still owns D1/outbox
+        // maintenance, but this route must not create another handshake yet.
+        this.setRouteStatus(route, "error");
+        continue;
+      }
       this.connect(route);
     }
+  }
+
+  private routeIsOpen(route: UpstreamRoute): boolean {
+    const sources: WolfxSourceId[] =
+      route === "all_eew" ? EEW_SOURCES : [route];
+    return sources.every((source) => this.statuses.get(source) === "open");
+  }
+
+  private async shouldRunHttpRecoverySeed(): Promise<boolean> {
+    const now = Date.now();
+    const lastSeedMs = await this.state.storage.get<number>(LAST_HTTP_SEED_MS_KEY);
+    if (!isHttpRecoverySeedDue(lastSeedMs, now)) return false;
+
+    for (const route of UPSTREAM_ROUTES) {
+      if (this.routeIsOpen(route)) continue;
+      const degradedSinceMs = await this.state.storage.get<number>(
+        `${UPSTREAM_DEGRADED_SINCE_PREFIX}${route}`,
+      );
+      if (
+        typeof degradedSinceMs === "number" &&
+        Number.isFinite(degradedSinceMs) &&
+        degradedSinceMs <= now - HTTP_RECOVERY_SEED_GRACE_MS
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private sourcesNeedingHttpRecovery(): WolfxSourceId[] {
+    return ALL_WOLFX_SOURCES.filter(
+      (source) => this.statuses.get(source) !== "open",
+    );
   }
 
   private async statusResponse(): Promise<Response> {
@@ -3605,6 +3711,46 @@ export class QuakeRelay {
     this.state.waitUntil(this.connectWithUpgrade(route));
   }
 
+  private serializeRelayAlarm<T>(
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const queued = this.relayAlarmWrite.then(operation, operation);
+    // Retain a usable serial queue even if a storage write fails. The caller
+    // continues to receive its own error so operational failure is not hidden.
+    this.relayAlarmWrite = queued.then(
+      () => undefined,
+      () => undefined,
+    );
+    return queued;
+  }
+
+  private scheduleRelayAlarm(requestedAtMs: number): Promise<void> {
+    return this.serializeRelayAlarm(async () => {
+      const now = Date.now();
+      const requested =
+        Number.isFinite(requestedAtMs) && requestedAtMs > now
+          ? requestedAtMs
+          : now + PENDING_INGEST_RETRY_DELAY_MS;
+      const existing = await this.state.storage.getAlarm();
+      const alarmAt =
+        typeof existing === "number" &&
+        Number.isFinite(existing) &&
+        existing > now &&
+        existing < requested
+          ? existing
+          : requested;
+      await this.state.storage.setAlarm(alarmAt);
+    });
+  }
+
+  private scheduleRoutineRelayAlarm(): Promise<void> {
+    return this.serializeRelayAlarm(async () => {
+      const now = Date.now();
+      const existing = await this.state.storage.getAlarm();
+      await this.state.storage.setAlarm(preferredRelayAlarmAt(existing, now));
+    });
+  }
+
   private async connectWithUpgrade(route: UpstreamRoute): Promise<void> {
     let socket: WebSocket | null = null;
     try {
@@ -3621,7 +3767,7 @@ export class QuakeRelay {
           // The rejected handshake remains authoritative even if the upstream
           // body has already been closed by the runtime.
         }
-        this.scheduleUpgradeReconnect(route, "wolfx_upstream_upgrade_rejected", {
+        await this.scheduleUpstreamReconnect(route, "wolfx_upstream_upgrade_rejected", {
           httpStatus: Number.isSafeInteger(response.status)
             ? response.status
             : null,
@@ -3641,7 +3787,8 @@ export class QuakeRelay {
       }
       this.activateUpstreamSocket(route, socket);
     } catch (error) {
-      if (socket && this.upstreams.get(route) === socket) {
+      const ownsRecovery = socket === null || this.upstreams.get(route) === socket;
+      if (socket && ownsRecovery) {
         this.upstreams.delete(route);
         try {
           socket.close(1011);
@@ -3650,35 +3797,103 @@ export class QuakeRelay {
           // scheduled reconnect below remains the authoritative recovery.
         }
       }
-      this.scheduleUpgradeReconnect(route, "wolfx_upstream_upgrade_error", {
-        errorName: error instanceof Error ? error.name : "UnknownError",
-      });
+      // A synchronous close/error listener can already have removed this
+      // socket and queued its own reconnect. In that case it is the sole
+      // recovery owner; incrementing again would skip a backoff step.
+      if (ownsRecovery) {
+        await this.scheduleUpstreamReconnect(route, "wolfx_upstream_upgrade_error", {
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        });
+      }
     } finally {
       this.connectingRoutes.delete(route);
     }
   }
 
-  private scheduleUpgradeReconnect(
+  private scheduleUpstreamReconnect(
     route: UpstreamRoute,
-    outcome: "wolfx_upstream_upgrade_rejected" | "wolfx_upstream_upgrade_error",
-    detail: { httpStatus: number | null } | { errorName: string },
-  ): void {
-    const reconnectAtMs = Date.now() + UPSTREAM_RECONNECT_DELAY_MS;
-    console.warn(
-      JSON.stringify({
-        outcome,
-        route,
-        ...detail,
-        reconnectAtUtc: new Date(reconnectAtMs).toISOString(),
-      }),
-    );
-    this.setRouteStatus(route, "error");
-    this.state.waitUntil(this.state.storage.setAlarm(reconnectAtMs));
+    outcome:
+      | "wolfx_upstream_upgrade_rejected"
+      | "wolfx_upstream_upgrade_error"
+      | "wolfx_upstream_websocket_closed"
+      | "wolfx_upstream_websocket_error",
+    detail: Record<string, unknown>,
+    status: "closed" | "error" = "error",
+  ): Promise<void> {
+    return this.serializeRelayAlarm(async () => {
+      const now = Date.now();
+      const failureKey = `${UPSTREAM_RECONNECT_FAILURE_PREFIX}${route}`;
+      const currentFailures = await this.state.storage.get<number>(failureKey);
+      const failureCount =
+        typeof currentFailures === "number" &&
+        Number.isSafeInteger(currentFailures) &&
+        currentFailures > 0
+          ? Math.min(currentFailures + 1, 32)
+          : 1;
+      const retryDelayMs = upstreamReconnectDelayMs(failureCount, route);
+      const reconnectAtMs = now + retryDelayMs;
+      await this.state.storage.put(failureKey, failureCount);
+      await this.state.storage.put(
+        `${UPSTREAM_RECONNECT_NOT_BEFORE_PREFIX}${route}`,
+        reconnectAtMs,
+      );
+      const degradedSinceKey = `${UPSTREAM_DEGRADED_SINCE_PREFIX}${route}`;
+      const degradedSinceMs = await this.state.storage.get<number>(
+        degradedSinceKey,
+      );
+      if (
+        typeof degradedSinceMs !== "number" ||
+        !Number.isFinite(degradedSinceMs) ||
+        degradedSinceMs <= 0 ||
+        degradedSinceMs > now
+      ) {
+        await this.state.storage.put(degradedSinceKey, now);
+      }
+      console.warn(
+        JSON.stringify({
+          outcome,
+          route,
+          ...detail,
+          failureCount,
+          retryDelayMs,
+          reconnectAtUtc: new Date(reconnectAtMs).toISOString(),
+        }),
+      );
+      this.setRouteStatus(route, status);
+      // A route-level not-before still prevents another handshake if routine
+      // maintenance fires first. The serialized alarm decision preserves the
+      // earliest actual wakeup across concurrent route failures.
+      const requestedAlarmAt = await this.state.storage.getAlarm();
+      const alarmAt =
+        typeof requestedAlarmAt === "number" &&
+        Number.isFinite(requestedAlarmAt) &&
+        requestedAlarmAt > now &&
+        requestedAlarmAt < reconnectAtMs
+          ? requestedAlarmAt
+          : reconnectAtMs;
+      await this.state.storage.setAlarm(alarmAt);
+    });
+  }
+
+  private resetUpstreamReconnectBackoff(
+    route: UpstreamRoute,
+  ): Promise<void> {
+    return this.serializeRelayAlarm(async () => {
+      // Keep the small fixed key set instead of deleting it so a post-success
+      // socket event cannot race a stale absence check. Zero is explicitly
+      // treated as no backoff/degradation by all readers above.
+      await Promise.all([
+        this.state.storage.put(`${UPSTREAM_RECONNECT_FAILURE_PREFIX}${route}`, 0),
+        this.state.storage.put(`${UPSTREAM_RECONNECT_NOT_BEFORE_PREFIX}${route}`, 0),
+        this.state.storage.put(`${UPSTREAM_DEGRADED_SINCE_PREFIX}${route}`, 0),
+      ]);
+    });
   }
 
   private activateUpstreamSocket(route: UpstreamRoute, socket: WebSocket): void {
     this.setRouteStatus(route, "open");
     this.state.waitUntil(this.markRouteSuccessful(route));
+    this.state.waitUntil(this.resetUpstreamReconnectBackoff(route));
     const queries =
       route === "all_eew"
         ? [
@@ -3731,37 +3946,27 @@ export class QuakeRelay {
       // A replaced socket must not erase the status or reconnect request for a
       // newer healthy connection to the same route.
       if (this.upstreams.get(route) !== socket) return;
-      const reconnectAtMs = Date.now() + UPSTREAM_RECONNECT_DELAY_MS;
       // Close reasons are upstream-controlled text, so expose only bounded,
       // operationally useful metadata in the structured log.
-      console.warn(
-        JSON.stringify({
-          outcome: "wolfx_upstream_websocket_closed",
-          route,
-          closeCode: Number.isSafeInteger(event.code) ? event.code : null,
-          wasClean: event.wasClean === true,
-          closeReasonPresent:
-            typeof event.reason === "string" && event.reason.length > 0,
-          reconnectAtUtc: new Date(reconnectAtMs).toISOString(),
-        }),
-      );
-      this.setRouteStatus(route, "closed");
       this.upstreams.delete(route);
-      this.state.waitUntil(this.state.storage.setAlarm(reconnectAtMs));
+      this.state.waitUntil(
+        this.scheduleUpstreamReconnect(
+          route,
+          "wolfx_upstream_websocket_closed",
+          {
+            closeCode: Number.isSafeInteger(event.code) ? event.code : null,
+            wasClean: event.wasClean === true,
+            closeReasonPresent:
+              typeof event.reason === "string" && event.reason.length > 0,
+          },
+          "closed",
+        ),
+      );
     });
     socket.addEventListener("error", () => {
       if (this.upstreams.get(route) !== socket) return;
-      const reconnectAtMs = Date.now() + UPSTREAM_RECONNECT_DELAY_MS;
       // ErrorEvent details can include transport text; route + planned recovery
       // are sufficient for the operator without copying upstream content.
-      console.warn(
-        JSON.stringify({
-          outcome: "wolfx_upstream_websocket_error",
-          route,
-          reconnectAtUtc: new Date(reconnectAtMs).toISOString(),
-        }),
-      );
-      this.setRouteStatus(route, "error");
       // Some runtimes emit `error` before (or, exceptionally, without) a
       // matching `close`. Drop and close this socket proactively so the next
       // short alarm always establishes a replacement rather than retaining a
@@ -3772,7 +3977,13 @@ export class QuakeRelay {
       } catch {
         // The socket may already be closed; its state is no longer retained.
       }
-      this.state.waitUntil(this.state.storage.setAlarm(reconnectAtMs));
+      this.state.waitUntil(
+        this.scheduleUpstreamReconnect(
+          route,
+          "wolfx_upstream_websocket_error",
+          {},
+        ),
+      );
     });
   }
 
@@ -3803,33 +4014,43 @@ export class QuakeRelay {
   }
 
   private async seedFromHttp(mode: "initial" | "recovery"): Promise<void> {
-    const outcomes = await mapWithConcurrency(
-      ALL_WOLFX_SOURCES,
-      HTTP_SEED_MAX_CONCURRENT_REQUESTS,
-      async (source) => {
-        try {
-          const response = await fetch(`${HTTP_BASE}/${source}.json`);
-          if (!response.ok) {
-            // We do not consume an unsuccessful snapshot response. Explicitly
-            // release its body so it cannot retain an outbound connection
-            // while the bounded seed pool continues with another source.
-            await response.body?.cancel();
+    const sources =
+      mode === "initial" ? ALL_WOLFX_SOURCES : this.sourcesNeedingHttpRecovery();
+    if (sources.length === 0) return;
+
+    try {
+      const outcomes = await mapWithConcurrency(
+        sources,
+        HTTP_SEED_MAX_CONCURRENT_REQUESTS,
+        async (source) => {
+          try {
+            const response = await fetch(`${HTTP_BASE}/${source}.json`);
+            if (!response.ok) {
+              // We do not consume an unsuccessful snapshot response. Explicitly
+              // release its body so it cannot retain an outbound connection
+              // while the bounded seed pool continues with another source.
+              await response.body?.cancel();
+              return false;
+            }
+            const message: unknown = await response.json();
+            for (const event of normalizeMessages(source, message)) {
+              await this.ingest(event, mode);
+            }
+            await this.markSourceSuccessful(source);
+            return true;
+          } catch (error) {
+            console.warn(`Unable to seed ${source}`, error);
             return false;
           }
-          const message: unknown = await response.json();
-          for (const event of normalizeMessages(source, message)) {
-            await this.ingest(event, mode);
-          }
-          await this.markSourceSuccessful(source);
-          return true;
-        } catch (error) {
-          console.warn(`Unable to seed ${source}`, error);
-          return false;
-        }
-      },
-    );
-    if (mode === "initial" && outcomes.every(Boolean)) {
-      await this.state.storage.put(INITIAL_HTTP_SEED_COMPLETE_KEY, true);
+        },
+      );
+      if (mode === "initial" && outcomes.every(Boolean)) {
+        await this.state.storage.put(INITIAL_HTTP_SEED_COMPLETE_KEY, true);
+      }
+    } finally {
+      // Record attempts, not just success, so a persistent 503 does not make
+      // every routine alarm recreate the bounded HTTP recovery pool.
+      await this.state.storage.put(LAST_HTTP_SEED_MS_KEY, Date.now());
     }
   }
 
