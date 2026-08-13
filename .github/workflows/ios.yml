@@ -8,10 +8,12 @@ on:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
+      - ".github/scripts/verify-ios-build-split.sh"
   pull_request:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
+      - ".github/scripts/verify-ios-build-split.sh"
   workflow_dispatch:
     inputs:
       archive_only:
@@ -103,15 +105,17 @@ jobs:
             -enableCodeCoverage YES \
             CODE_SIGNING_ALLOWED=NO | tee xcodebuild-test.log
 
-      - name: Build and verify the unsigned Release configuration
+      - name: Build and verify the public unsigned Release configuration
         run: |
           set -euo pipefail
           set -o pipefail
+          release_derived_data="$RUNNER_TEMP/quakesignal-ios-release-derived-data"
           xcodebuild build \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -configuration Release \
             -destination "$IOS_DESTINATION" \
+            -derivedDataPath "$release_derived_data" \
             CODE_SIGNING_ALLOWED=NO | tee xcodebuild-release.log
 
           xcodebuild -showBuildSettings \
@@ -127,6 +131,69 @@ jobs:
             ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements
           test "$(/usr/libexec/PlistBuddy -c 'Print :aps-environment' ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements)" = production
           test "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.devicecheck.appattest-environment' ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements)" = production
+          if grep -Fq 'QUAKESIGNAL_INTERNAL_QA' release-build-settings.txt; then
+            echo "::error::Public Release must not compile the InternalQA capability"
+            exit 1
+          fi
+
+          # Do not assume Xcode's product-location policy. Some developer
+          # machines route products through a shared external cache even when
+          # a derived-data path is supplied, while GitHub-hosted runners do
+          # not. Ask the target for its actual output before auditing it.
+          release_target_build_dir="$(xcodebuild -showBuildSettings \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -derivedDataPath "$release_derived_data" | awk -F ' = ' '$1 ~ /TARGET_BUILD_DIR$/ { print $2; exit }')"
+          release_app="$release_target_build_dir/QuakeSignal.app"
+          if [ -z "$release_target_build_dir" ] || [ ! -d "$release_app" ]; then
+            echo "::error::Could not locate the public Release app bundle"
+            exit 1
+          fi
+          echo "RELEASE_APP=$release_app" >> "$GITHUB_ENV"
+
+      - name: Build and test the production InternalQA configuration
+        run: |
+          set -euo pipefail
+          set -o pipefail
+          internal_qa_derived_data="$RUNNER_TEMP/quakesignal-ios-internal-qa-derived-data"
+          xcodebuild test \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration InternalQA \
+            -destination "$IOS_DESTINATION" \
+            -derivedDataPath "$internal_qa_derived_data" \
+            CODE_SIGNING_ALLOWED=NO | tee xcodebuild-internal-qa.log
+
+          xcodebuild -showBuildSettings \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration InternalQA \
+            -sdk iphonesimulator > internal-qa-build-settings.txt
+          grep -F 'PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app' internal-qa-build-settings.txt
+          grep -F 'QUAKESIGNAL_API_BASE_URL = https://quakesignal-api.hopeso.workers.dev' internal-qa-build-settings.txt
+          grep -F 'QUAKESIGNAL_APP_ATTEST_MODE = production' internal-qa-build-settings.txt
+          grep -F 'CODE_SIGN_ENTITLEMENTS = QuakeSignal/Supporting/QuakeSignal-Release.entitlements' internal-qa-build-settings.txt
+          grep -F 'QUAKESIGNAL_INTERNAL_QA' internal-qa-build-settings.txt
+
+          internal_qa_target_build_dir="$(xcodebuild -showBuildSettings \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration InternalQA \
+            -sdk iphonesimulator \
+            -derivedDataPath "$internal_qa_derived_data" | awk -F ' = ' '$1 ~ /TARGET_BUILD_DIR$/ { print $2; exit }')"
+          internal_qa_app="$internal_qa_target_build_dir/QuakeSignal.app"
+          if [ -z "$internal_qa_target_build_dir" ] || [ ! -d "$internal_qa_app" ]; then
+            echo "::error::Could not locate the InternalQA app bundle"
+            exit 1
+          fi
+          echo "INTERNAL_QA_APP=$internal_qa_app" >> "$GITHUB_ENV"
+
+      - name: Verify the compiled public/InternalQA capability split
+        run: |
+          set -euo pipefail
+          .github/scripts/verify-ios-build-split.sh "$RELEASE_APP" "$INTERNAL_QA_APP"
 
       - name: Upload Xcode test log on failure
         if: failure()
@@ -136,7 +203,9 @@ jobs:
           path: |
             xcodebuild-test.log
             xcodebuild-release.log
+            xcodebuild-internal-qa.log
             release-build-settings.txt
+            internal-qa-build-settings.txt
           if-no-files-found: ignore
 
   testflight:

@@ -6,9 +6,11 @@ struct SettingsView: View {
     @State private var notifications = NotificationManager.shared
     @State private var isSendingTest = false
     @State private var testResultMessage: String?
+#if QUAKESIGNAL_INTERNAL_QA
     @State private var isSchedulingDelayedTest = false
     @State private var delayedTestResultMessage: String?
     @State private var showingDelayedTestConfirmation = false
+#endif
     @State private var isUpdatingPushSubscription = false
     @State private var isSynchronizingPushPreferences = false
     @State private var needsPushPreferenceResync = false
@@ -104,6 +106,7 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
 
+#if QUAKESIGNAL_INTERNAL_QA
                     Button {
                         showingDelayedTestConfirmation = true
                     } label: {
@@ -129,6 +132,7 @@ struct SettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+#endif
                 }
 
                 Section("settings.section.language") {
@@ -166,6 +170,7 @@ struct SettingsView: View {
             } message: {
                 Text("settings.pushSubscription.remove.confirmation.message")
             }
+#if QUAKESIGNAL_INTERNAL_QA
             .confirmationDialog(
                 String(localized: "settings.delayedTestAlert.confirmation.title"),
                 isPresented: $showingDelayedTestConfirmation,
@@ -178,6 +183,7 @@ struct SettingsView: View {
             } message: {
                 Text("settings.delayedTestAlert.confirmation.message")
             }
+#endif
             .onChange(of: settings.minMagnitude) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.notifyAtNight) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.includeTestAlerts) { _, _ in resyncPushPreferences() }
@@ -420,6 +426,7 @@ struct SettingsView: View {
         isSendingTest = false
     }
 
+#if QUAKESIGNAL_INTERNAL_QA
     private func scheduleDelayedTestAlert() async {
         guard settings.pushRegistrationState == .active,
               let token = notifications.deviceToken else {
@@ -438,6 +445,7 @@ struct SettingsView: View {
             )
         }
     }
+#endif
 }
 
 private struct TierChip: View {

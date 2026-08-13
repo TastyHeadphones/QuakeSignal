@@ -15,21 +15,22 @@ struct DeviceRegistrationRequest: Encodable {
     let notifyAtNight: Bool
 }
 
-/// The delayed mode is a fixed server-side TestFlight QA window, not a
-/// client-controlled delivery time. Keeping this as a distinct request model
-/// makes its exact, App-Attest-signed JSON contract explicit.
-struct DeviceTrainingTestRequest: Encodable, Equatable {
-    enum Delivery: String, Encodable {
+/// The token-bearing request used by the ordinary, user-visible test alert.
+/// It intentionally contains no client-selectable delivery mode.
+struct DeviceTokenRequest: Encodable, Equatable {
+    let token: String
+}
+
+#if QUAKESIGNAL_INTERNAL_QA
+/// A fixed server-side background-delivery verification request. This type is
+/// compiled only into the controlled InternalQA configuration, never into the
+/// public Release archive.
+struct DelayedTrainingTestRequest: Encodable, Equatable {
+    private enum Delivery: String, Encodable {
         case delayedTraining = "delayed-training"
     }
 
     let token: String
-    let delivery: Delivery?
-
-    init(token: String, delivery: Delivery? = nil) {
-        self.token = token
-        self.delivery = delivery
-    }
 
     private enum CodingKeys: String, CodingKey {
         case token
@@ -39,11 +40,10 @@ struct DeviceTrainingTestRequest: Encodable, Equatable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(token, forKey: .token)
-        if let delivery {
-            try container.encode(delivery, forKey: .delivery)
-        }
+        try container.encode(Delivery.delayedTraining, forKey: .delivery)
     }
 }
+#endif
 
 /// A device deletion can be bound to an APNs token when one is still present,
 /// or to the authenticated App Attest credential alone after an APNs token has

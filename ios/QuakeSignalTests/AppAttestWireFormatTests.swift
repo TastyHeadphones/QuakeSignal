@@ -68,18 +68,21 @@ final class AppAttestWireFormatTests: XCTestCase {
         XCTAssertNotEqual(original, changed)
     }
 
+    func testTestAlertRequestContainsOnlyTheDeviceToken() throws {
+        let request = try JSONEncoder().encode(DeviceTokenRequest(token: "device-token"))
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: request) as? [String: String]
+        )
+        XCTAssertEqual(object, ["token": "device-token"])
+    }
+
+#if QUAKESIGNAL_INTERNAL_QA
     func testDelayedTrainingRequestIsStrictlyEncodedAndChangesTheAttestedBody() throws {
-        let immediate = try JSONEncoder().encode(DeviceTrainingTestRequest(token: "device-token"))
-        let delayed = try JSONEncoder().encode(
-            DeviceTrainingTestRequest(token: "device-token", delivery: .delayedTraining)
-        )
-        let immediateObject = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: immediate) as? [String: String]
-        )
+        let immediate = try JSONEncoder().encode(DeviceTokenRequest(token: "device-token"))
+        let delayed = try JSONEncoder().encode(DelayedTrainingTestRequest(token: "device-token"))
         let delayedObject = try XCTUnwrap(
             JSONSerialization.jsonObject(with: delayed) as? [String: String]
         )
-        XCTAssertEqual(immediateObject, ["token": "device-token"])
         XCTAssertEqual(
             delayedObject,
             ["token": "device-token", "delivery": "delayed-training"]
@@ -109,6 +112,7 @@ final class AppAttestWireFormatTests: XCTestCase {
         )
         XCTAssertNotEqual(immediateProof, delayedProof)
     }
+#endif
 
     func testIdentifierValidationRejectsHeaderInjection() {
         XCTAssertTrue(AppAttestWireFormat.isValidOpaqueIdentifier("AbCd-0123_opaque"))
