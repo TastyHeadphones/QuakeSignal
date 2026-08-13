@@ -70,8 +70,8 @@
     {
       "file": "05-alert-preferences.jpg",
       "screen": "Settings tab",
-      "purpose": "Opt-in local alert controls",
-      "setup": "Show notification preferences only. Exclude system permission dialogs, test results, APNs tokens, and exact location."
+      "purpose": "Local alert threshold, radius, and source preferences",
+      "setup": "Show a generic selected city with ordinary threshold and source controls. Exclude system permission dialogs, test or training controls, test results, APNs tokens, and exact location."
     }
   ]
 }

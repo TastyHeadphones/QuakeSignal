@@ -47,7 +47,7 @@ final class APIClient: Sendable {
     }
 
     func sendTestAlert(token: String) async throws {
-        let body = try JSONEncoder().encode(DeviceTrainingTestRequest(token: token))
+        let body = try JSONEncoder().encode(DeviceTokenRequest(token: token))
         try await performProtectedRequest(
             binding: AppAttestRequestBinding(
                 operation: .testPush,
@@ -58,13 +58,13 @@ final class APIClient: Sendable {
         )
     }
 
+#if QUAKESIGNAL_INTERNAL_QA
     /// Schedules one fixed-delay, clearly labelled training notification for a
     /// controlled TestFlight background/locked/terminated delivery check. The
     /// Worker rejects it unless the reviewed production test window is open.
+    /// This request path is excluded from public Release compilation.
     func scheduleDelayedTestAlert(token: String) async throws {
-        let body = try JSONEncoder().encode(
-            DeviceTrainingTestRequest(token: token, delivery: .delayedTraining)
-        )
+        let body = try JSONEncoder().encode(DelayedTrainingTestRequest(token: token))
         try await performProtectedRequest(
             binding: AppAttestRequestBinding(
                 operation: .testPush,
@@ -74,6 +74,7 @@ final class APIClient: Sendable {
             body: body
         )
     }
+#endif
 
     /// App Attest signs `body` before the protected URL request is created. Do
     /// not encode a model a second time here: its exact byte sequence is part
