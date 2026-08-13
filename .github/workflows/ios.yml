@@ -171,6 +171,20 @@ jobs:
           echo "$install_root/xcodegen/bin" >> "$GITHUB_PATH"
           "$install_root/xcodegen/bin/xcodegen" --version
 
+      # Keep the production-origin check below independent from the signing
+      # material: install the immutable Worker test dependencies before any
+      # certificate, profile, or App Store Connect secret is exposed.
+      - name: Set up Node.js for production Worker smoke
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/cloudflare/package-lock.json
+
+      - name: Install Worker smoke-test dependencies
+        working-directory: backend/cloudflare
+        run: npm ci
+
       - name: Regenerate Xcode project and verify it is committed
         working-directory: ios
         run: |
@@ -240,13 +254,19 @@ jobs:
             exit 1
           fi
 
-      - name: Verify production notification origin readiness
+      - name: Verify production notification origin readiness and contract
+        working-directory: backend/cloudflare
         env:
           IOS_RELEASE_API_BASE_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
         run: |
           set -euo pipefail
           curl --fail --show-error --silent --retry 3 \
             "$IOS_RELEASE_API_BASE_URL/healthz"
+          # A legacy Worker can return a superficial 200 from /healthz while
+          # lacking App Attest, delivery readiness, and the App Store legal
+          # routes. Require the full production smoke contract before signing
+          # an archive for TestFlight or App Review.
+          npm run test:remote -- "$IOS_RELEASE_API_BASE_URL"
 
       - name: Import Apple Distribution certificate and App Store profile
         env:
