@@ -320,10 +320,18 @@ npx wrangler secret put APNS_BUNDLE_ID
   HTTP-alternate snapshot. After all three WebSocket routes have been degraded
   for 90 seconds, the relay may report `upstream.transport: "http-polling"`
   (with `websocketStatus: "degraded"`) only while every affected source has a
-  structurally valid, durably ingested HTTP snapshot less than 15 seconds old.
-  The fallback polls one source at least 600 ms apart, accepts only fresh
-  revisions inside the existing 10-minute alert window, and never turns a
-  historical backfill into an alert.
+  structurally valid, durably ingested HTTP snapshot less than three minutes
+  old. The emergency fallback begins one full sweep of affected sources per
+  minute, with individual source requests at least 600 ms apart. It accepts
+  only fresh revisions inside the existing 10-minute alert window and never
+  turns a historical backfill into an alert. On the Workers Free plan,
+  Cloudflare currently allows 100,000 Durable Object rows written per day. To
+  stay within a routine budget, healthy WebSocket and emergency HTTP freshness
+  checkpoints are each written at most once per source per minute. This is not
+  an unlimited-capacity claim: unusual sustained event, reconnect, or recovery
+  activity can still exhaust the quota. Monitor Durable Object usage; a failed
+  durable checkpoint is not treated as fresh and the three-minute stale policy
+  makes `/healthz` fail closed.
 - Keep `ENABLE_PRODUCTION_TEST_PUSH=false` unless a reviewed training-alert
   exercise explicitly requires production-device test delivery. When it is
   deliberately set to `true`, an existing App Attest key may make exactly one

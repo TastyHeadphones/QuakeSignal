@@ -84,13 +84,24 @@ release evidence; repeat the production proof against
    [`backend/cloudflare/wrangler.jsonc`](../backend/cloudflare/wrangler.jsonc)
    before deploying the queue-enabled Worker: the primary delivery Queue, its
    DLQ, and the intentionally consumerless
-   `quakesignal-alert-delivery-dlq-fallback` terminal-evidence Queue. Use a
-   **Workers Paid** plan and add billing/usage alerts. This relay keeps live
-   WebSocket and emergency HTTP-fallback freshness checkpoints in Durable
-   Object SQLite. Cloudflare's Free plan permits only 100,000 rows written per
-   day; after that limit, further write operations fail until the 00:00 UTC
-   reset, so it is not a safe production capacity tier for this alert service.
-   See [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/).
+   `quakesignal-alert-delivery-dlq-fallback` terminal-evidence Queue. Review
+   the selected Workers plan's limits and monitor its usage. A SQLite-backed
+   Durable Object can run on Workers Free, where Cloudflare currently allows
+   100,000 Durable Object rows written per day; see
+   [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/).
+   The relay deliberately budgets routine freshness writes: while WebSockets
+   are healthy, it durably checkpoints each source at most once per minute.
+   After sustained WebSocket degradation, the emergency HTTP alternate
+   transport begins one full sweep of the affected sources per minute, starting
+   each source request at least 600 ms apart, and also checkpoints HTTP
+   freshness at most once per minute. A source with no current durable
+   WebSocket or HTTP freshness proof is stale after three minutes, so
+   `/healthz` fails closed rather than claiming an unverified alert path.
+   This bounded cadence does not make the Free tier unlimited: unusual
+   sustained event ingestion, reconnect/recovery activity, or other durable
+   work can still exhaust the daily write quota. Monitor Durable Object usage
+   and treat quota errors or health degradation as an operational incident;
+   choose a paid plan when the observed or expected volume requires it.
    Deploy the separate, cron-only
    [`terminal-DLQ monitor`](../backend/cloudflare/terminal-dlq-monitor/) with a
    five-minute Cloudflare Cron Trigger. It uses only a **Queues Read** token to

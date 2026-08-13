@@ -780,7 +780,6 @@ test("activates paced HTTP fallback only after every websocket route has sustain
   } = await workerModule();
   const now = Date.now();
   const values = new Map([
-    ["last-http-seed-ms", now - 601],
     ["upstream-degraded-since-ms:all_eew", now - 100_000],
     ["upstream-degraded-since-ms:cenc_eqlist", now - 80_000],
     ["upstream-degraded-since-ms:jma_eqlist", now - 100_000],
@@ -823,17 +822,17 @@ test("activates paced HTTP fallback only after every websocket route has sustain
     "all three routes past the grace window activate alternate transport",
   );
   assert.equal(values.get("http-fallback-active"), true);
-  values.set("last-http-seed-ms", Date.now());
+  values.set("http-fallback-next-sweep-at-ms", Date.now() + 60_000);
   assert.equal(
     await relay.shouldRunHttpRecoverySeed(),
     false,
-    "a durable 600ms interval prevents overlapping fallback requests",
+    "the durable one-minute sweep interval prevents overlapping fallback requests",
   );
 
-  assert.equal(isHttpRecoverySeedDue(now - 600, now), true);
-  assert.equal(isHttpRecoverySeedDue(now - 599, now), false);
-  assert.equal(isHttpFallbackSourceStale(now - 14_000, false, now), false);
-  assert.equal(isHttpFallbackSourceStale(now - 16_000, false, now), true);
+  assert.equal(isHttpRecoverySeedDue(now - 60_000, now), true);
+  assert.equal(isHttpRecoverySeedDue(now - 59_999, now), false);
+  assert.equal(isHttpFallbackSourceStale(now - 179_000, false, now), false);
+  assert.equal(isHttpFallbackSourceStale(now - 181_000, false, now), true);
   assert.equal(isHttpFallbackSourceStale(now, true, now), true);
 
   let clock = 0;
@@ -870,18 +869,21 @@ test("HTTP and Upgrade timeout guards reject even when transport ignores abort",
   );
 });
 
-test("coalesces concurrent HTTP sweeps and treats a silent open socket as degraded", async () => {
+test("coalesces concurrent HTTP recovery sweeps without durable lease or cursor writes", async () => {
   const { QuakeRelay } = await workerModule();
   const values = new Map();
+  const writes = [];
   const state = {
     storage: {
       async get(key) {
         return values.get(key);
       },
       async put(key, value) {
+        writes.push(["put", key, value]);
         values.set(key, value);
       },
       async delete(key) {
+        writes.push(["delete", key]);
         values.delete(key);
       },
       async list({ prefix = "" } = {}) {
@@ -919,28 +921,119 @@ test("coalesces concurrent HTTP sweeps and treats a silent open socket as degrad
     markSourceStarted = resolve;
   });
   let sourceCalls = 0;
-  relay.seedHttpSource = async () => {
+  relay.seedHttpSource = async (source) => {
     sourceCalls += 1;
+    assert.equal(source, "jma_eqlist");
     markSourceStarted();
     await gate;
-    return true;
+    return { completed: true, snapshotWorkStarted: false };
   };
   const first = relay.seedFromHttp("recovery");
   const second = relay.seedFromHttp("recovery");
   await sourceStarted;
   assert.equal(sourceCalls, 1, "one relay instance must coalesce concurrent sweeps");
+  assert.deepEqual(
+    writes.map(([operation, key]) => [operation, key]),
+    [["put", "http-fallback-next-sweep-at-ms"]],
+    "the sweep itself persists only its one-minute cadence scalar",
+  );
+  assert.ok(
+    writes[0][2] >= Date.now() + 59_000,
+    "the cadence scalar prevents an evicted replacement from sweeping early",
+  );
   assert.equal(
-    values.has("http-seed-lease-until-ms"),
+    [...values.keys()].some((key) =>
+      key === "http-seed-source-cursor" || key === "last-http-seed-ms" ||
+      key.includes("lease")
+    ),
     false,
-    "the cursor lease must not reuse the legacy numeric lease key",
+    "recovery does not churn a lease, source cursor, or initial-seed timestamp",
+  );
+  release();
+  await Promise.all([first, second]);
+  assert.equal(sourceCalls, 1);
+});
+
+test("a legacy sweep lease fences the low-write recovery scheduler during rolling deploy", async () => {
+  const { QuakeRelay } = await workerModule();
+  const now = Date.now();
+  const legacyUntil = now + 60_000;
+  const values = new Map([
+    ["http-fallback-active", true],
+    ["http-seed-lease-until-ms", { ownerId: "preceding-release", untilMs: legacyUntil }],
+  ]);
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async list() { return new Map(); },
+      async put() { throw new Error("must not claim while the legacy sweep owns it"); },
+      async transaction(callback) {
+        return callback({
+          get: this.get.bind(this),
+          put: this.put.bind(this),
+        });
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  for (const source of [
+    "jma_eew", "sc_eew", "cenc_eew", "fj_eew", "cq_eew", "cenc_eqlist", "jma_eqlist",
+  ]) relay.statuses.set(source, "error");
+  let sourceCalls = 0;
+  relay.seedHttpSource = async () => {
+    sourceCalls += 1;
+    return { completed: true, snapshotWorkStarted: false };
+  };
+
+  assert.equal(await relay.nextHttpFallbackAlarmAt(now), legacyUntil);
+  assert.equal(await relay.nextDueHttpSeedMode(true), null);
+  values.set("http-fallback-active", false);
+  relay.pendingHttpSnapshotWorks = async () => [{
+    source: "jma_eqlist",
+    mode: "recovery",
+  }];
+  assert.equal(
+    await relay.nextHttpFallbackAlarmAt(now),
+    legacyUntil,
+    "an old in-flight cursor also fences the new scheduler",
   );
   assert.equal(
-    typeof values.get("http-seed-lease-v2")?.ownerId,
-    "string",
-    "the cursor relay records ownership under a versioned lease key",
+    await relay.nextDueHttpSeedMode(false),
+    null,
+    "a pending cursor cannot bypass the rolling-deploy fence",
   );
-  const secondRelay = new QuakeRelay(state, {});
-  for (const source of [
+  relay.pendingHttpSnapshotWorks = async () => [];
+  values.set("initial-http-seed-complete", false);
+  assert.equal(
+    await relay.nextHttpFallbackAlarmAt(now),
+    legacyUntil,
+    "an old in-flight baseline seed also fences the new scheduler",
+  );
+  assert.equal(
+    await relay.nextDueHttpSeedMode(false),
+    null,
+    "an initial seed cannot bypass the rolling-deploy fence",
+  );
+  let initialCalls = 0;
+  relay.runInitialHttpSeed = async () => { initialCalls += 1; };
+  await relay.runHttpSeed("initial");
+  assert.equal(initialCalls, 0, "the executor also fences an initial seed");
+  await relay.runHttpRecoverySweep();
+  assert.equal(sourceCalls, 0, "the new relay must not overlap the old sweep");
+});
+
+test("rotates recovery sweep fairness in memory and treats a silent open socket as degraded", async () => {
+  const { QuakeRelay } = await workerModule();
+  const state = {
+    storage: {
+      async get() { return undefined; },
+      async list() { return new Map(); },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  const sources = [
     "jma_eew",
     "sc_eew",
     "cenc_eew",
@@ -948,24 +1041,20 @@ test("coalesces concurrent HTTP sweeps and treats a silent open socket as degrad
     "cq_eew",
     "cenc_eqlist",
     "jma_eqlist",
-  ]) {
-    secondRelay.statuses.set(source, source === "jma_eqlist" ? "error" : "open");
-    secondRelay.lastSuccessfulUpstreamMs.set(source, Date.now());
-  }
-  let secondInstanceCalls = 0;
-  secondRelay.seedHttpSource = async () => {
-    secondInstanceCalls += 1;
-    return true;
-  };
-  await secondRelay.seedFromHttp("recovery");
-  assert.equal(
-    secondInstanceCalls,
-    0,
-    "the durable lease prevents a replacement instance from overlapping a sweep",
+  ];
+  for (const source of sources) relay.statuses.set(source, "error");
+
+  assert.deepEqual(relay.recoverySweepSources(0), sources);
+  assert.deepEqual(
+    relay.recoverySweepSources(60_000),
+    [...sources.slice(1), sources[0]],
+    "each minute starts at the next source without a durable recovery cursor",
   );
-  release();
-  await Promise.all([first, second]);
-  assert.equal(sourceCalls, 1);
+  assert.deepEqual(
+    relay.recoverySweepSources(7 * 60_000),
+    sources,
+    "the fair source order wraps after every source receives first position",
+  );
 
   const staleSocket = { readyState: 1, close() {} };
   relay.upstreams.set("jma_eqlist", staleSocket);
@@ -978,213 +1067,25 @@ test("coalesces concurrent HTTP sweeps and treats a silent open socket as degrad
   );
 });
 
-test("a legacy numeric seed lease is a read-only rolling-deploy hand-off fence", async () => {
+test("a due HTTP recovery sweep writes no polling rows and reserves the fallback turn", async () => {
   const { QuakeRelay } = await workerModule();
-  const legacyUntil = Date.now() + 60_000;
-  const values = new Map([["http-seed-lease-until-ms", legacyUntil]]);
-  const state = {
-    storage: {
-      async get(key) {
-        return values.get(key);
-      },
-      async put(key, value) {
-        values.set(key, value);
-      },
-      async delete(key) {
-        values.delete(key);
-      },
-      async list({ prefix = "" } = {}) {
-        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
-      },
-      async transaction(callback) {
-        return callback({
-          get: this.get.bind(this),
-          put: this.put.bind(this),
-          delete: this.delete.bind(this),
-        });
-      },
-    },
-    waitUntil() {},
-  };
-  const relay = new QuakeRelay(state, {});
-
-  assert.equal(
-    await relay.acquireHttpSeedLease(),
-    null,
-    "an active legacy owner must finish before the cursor relay begins",
-  );
-  assert.equal(
-    await relay.nextHttpFallbackAlarmAt(Date.now()),
-    legacyUntil,
-    "the fallback scheduler waits for the legacy hand-off fence",
-  );
-  assert.equal(
-    values.get("http-seed-lease-until-ms"),
-    legacyUntil,
-    "the cursor relay never mutates the legacy owner record",
-  );
-  assert.equal(
-    values.has("http-seed-lease-v2"),
-    false,
-    "the cursor relay must not create a lease while the legacy fence is live",
-  );
-});
-
-test("a legacy object seed lease from the preceding cursor revision is also fenced", async () => {
-  const { QuakeRelay } = await workerModule();
-  const legacyUntil = Date.now() + 60_000;
-  const values = new Map([[
-    "http-seed-lease-until-ms",
-    { ownerId: "preceding-cursor-release", untilMs: legacyUntil },
-  ]]);
-  const state = {
-    storage: {
-      async get(key) { return values.get(key); },
-      async put(key, value) { values.set(key, value); },
-      async delete(key) { values.delete(key); },
-      async list() { return new Map(); },
-      async transaction(callback) {
-        return callback({
-          get: this.get.bind(this),
-          put: this.put.bind(this),
-          delete: this.delete.bind(this),
-        });
-      },
-    },
-    waitUntil() {},
-  };
-  const relay = new QuakeRelay(state, {});
-
-  assert.equal(await relay.acquireHttpSeedLease(), null);
-  assert.equal(await relay.nextHttpFallbackAlarmAt(Date.now()), legacyUntil);
-  assert.deepEqual(values.get("http-seed-lease-until-ms"), {
-    ownerId: "preceding-cursor-release",
-    untilMs: legacyUntil,
-  });
-  assert.equal(values.has("http-seed-lease-v2"), false);
-});
-
-test("HTTP recovery rotates after a failed source attempt instead of starving later feeds", async () => {
-  const { QuakeRelay } = await workerModule();
-  const values = new Map();
-  const state = {
-    storage: {
-      async get(key) {
-        return values.get(key);
-      },
-      async put(key, value) {
-        values.set(key, value);
-      },
-      async delete(key) {
-        values.delete(key);
-      },
-      async list({ prefix = "" } = {}) {
-        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
-      },
-      async transaction(callback) {
-        return callback({
-          get: this.get.bind(this),
-          put: this.put.bind(this),
-          delete: this.delete.bind(this),
-        });
-      },
-    },
-    waitUntil() {},
-  };
-  const relay = new QuakeRelay(state, {});
-  const attempts = [];
-  relay.seedHttpSource = async (source) => {
-    attempts.push(source);
-    return false;
-  };
-
-  await relay.runHttpSeed("recovery");
-  await relay.runHttpSeed("recovery");
-
-  assert.deepEqual(
-    attempts,
-    ["jma_eew", "sc_eew"],
-    "a cursor-free timeout/invalid response yields to the next degraded source",
-  );
-});
-
-test("a stale HTTP seed owner cannot overwrite a successor's pacing or source cursor", async () => {
-  const { QuakeRelay } = await workerModule();
-  const values = new Map();
-  const state = {
-    storage: {
-      async get(key) {
-        return values.get(key);
-      },
-      async put(key, value) {
-        values.set(key, value);
-      },
-      async delete(key) {
-        values.delete(key);
-      },
-      async list({ prefix = "" } = {}) {
-        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
-      },
-      async transaction(callback) {
-        return callback({
-          get: this.get.bind(this),
-          put: this.put.bind(this),
-          delete: this.delete.bind(this),
-        });
-      },
-    },
-    waitUntil() {},
-  };
-  const relay = new QuakeRelay(state, {});
-  for (const source of [
-    "jma_eew",
-    "sc_eew",
-    "cenc_eew",
-    "fj_eew",
-    "cq_eew",
-    "cenc_eqlist",
-    "jma_eqlist",
-  ]) {
-    relay.statuses.set(source, "error");
-  }
-  const originalRenew = relay.renewHttpSeedLease;
-  let renewCalls = 0;
-  relay.renewHttpSeedLease = async (ownerId) => {
-    renewCalls += 1;
-    if (renewCalls === 1) return originalRenew.call(relay, ownerId);
-    values.set("http-seed-lease-v2", {
-      ownerId: "successor",
-      untilMs: Date.now() + 60_000,
-    });
-    values.set("http-seed-source-cursor", 5);
-    values.set("last-http-seed-ms", 12345);
-    return false;
-  };
-  relay.seedHttpSource = async () => true;
-
-  await relay.runHttpSeed("recovery");
-
-  assert.equal(values.get("http-seed-source-cursor"), 5);
-  assert.equal(values.get("last-http-seed-ms"), 12345);
-  assert.equal(values.get("http-seed-lease-v2").ownerId, "successor");
-});
-
-test("a due HTTP recovery alarm reserves the whole D1 turn for one source slice", async () => {
-  const { QuakeRelay } = await workerModule();
+  const now = Date.now();
   const values = new Map([
     ["http-fallback-active", true],
-    ["last-http-seed-ms", Date.now() - 601],
-    ["initial-http-seed-complete", true],
   ]);
+  const writes = [];
+  let alarmAt = null;
   const state = {
     storage: {
       async get(key) {
         return values.get(key);
       },
       async put(key, value) {
+        writes.push(["put", key, value]);
         values.set(key, value);
       },
       async delete(key) {
+        writes.push(["delete", key]);
         values.delete(key);
       },
       async list({ prefix = "" } = {}) {
@@ -1197,8 +1098,11 @@ test("a due HTTP recovery alarm reserves the whole D1 turn for one source slice"
           delete: this.delete.bind(this),
         });
       },
-      async getAlarm() { return null; },
-      async setAlarm() {},
+      async getAlarm() { return alarmAt; },
+      async setAlarm(value) {
+        writes.push(["setAlarm", "alarm", value]);
+        alarmAt = value;
+      },
     },
     waitUntil() {},
   };
@@ -1213,7 +1117,8 @@ test("a due HTTP recovery alarm reserves the whole D1 turn for one source slice"
     "cenc_eqlist",
     "jma_eqlist",
   ]) {
-    relay.statuses.set(source, "error");
+    relay.statuses.set(source, source === "jma_eqlist" ? "error" : "open");
+    relay.lastSuccessfulUpstreamMs.set(source, now);
   }
   relay.reconcileDlqPersistenceFallbacks = async () => maintenance.push("dlq");
   relay.migrateLegacyPendingDeliveries = async () => maintenance.push("legacy");
@@ -1221,26 +1126,90 @@ test("a due HTTP recovery alarm reserves the whole D1 turn for one source slice"
   relay.flushAlertDeliveryOutbox = async (limit) => maintenance.push(`outbox:${limit}`);
   relay.purgeExpiredDevicesIfDue = async () => maintenance.push("purge");
   relay.ensureUpstreams = async () => {};
-  relay.scheduleRoutineRelayAlarm = async () => {};
   const sources = [];
   relay.seedHttpSource = async (source) => {
     sources.push(source);
-    return false;
+    return { completed: true, snapshotWorkStarted: false };
   };
 
   await relay.alarm();
 
-  assert.deepEqual(sources, ["jma_eew"], "one alarm attempts one fallback source");
+  assert.deepEqual(sources, ["jma_eqlist"]);
   assert.deepEqual(
     maintenance,
     ["outbox:4"],
     "only a D1-safe four-row outbox handoff shares the fallback turn",
   );
+  assert.deepEqual(
+    writes.map(([operation, key]) => [operation, key]),
+    [
+      ["put", "http-fallback-next-sweep-at-ms"],
+      ["setAlarm", "alarm"],
+    ],
+    "a steady fallback turn accounts for both its cadence marker and alarm row",
+  );
+  assert.ok(
+    typeof alarmAt === "number" && alarmAt >= now + 59_000,
+    "the next unchanged recovery sweep is scheduled about one minute later",
+  );
 });
 
-test("sustained fallback keeps source turns bounded and does not run D1 maintenance", async () => {
+test("a recovery sweep stops after the first changed snapshot starts durable work", async () => {
   const { QuakeRelay } = await workerModule();
-  const values = new Map([["http-fallback-active", true]]);
+  const values = new Map();
+  const writes = [];
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) {
+        writes.push([key, value]);
+        values.set(key, value);
+      },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  for (const source of [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ]) {
+    relay.statuses.set(source, "error");
+  }
+  const attempted = [];
+  relay.seedHttpSource = async (source) => {
+    attempted.push(source);
+    return { completed: true, snapshotWorkStarted: true };
+  };
+
+  await relay.runHttpRecoverySweep();
+
+  assert.equal(
+    attempted.length,
+    1,
+    "one alarm may start only one changed-snapshot D1 cursor",
+  );
+  assert.deepEqual(
+    writes.map(([key]) => key),
+    ["http-fallback-next-sweep-at-ms"],
+    "the only recovery bookkeeping write is the next-sweep marker",
+  );
+});
+
+test("an early alarm between recovery sweeps does not fall through to normal D1 maintenance", async () => {
+  const { QuakeRelay } = await workerModule();
+  const now = Date.now();
+  const values = new Map([
+    ["http-fallback-active", true],
+    ["http-fallback-next-sweep-at-ms", now + 60_000],
+  ]);
   const state = {
     storage: {
       async get(key) { return values.get(key); },
@@ -1254,7 +1223,6 @@ test("sustained fallback keeps source turns bounded and does not run D1 maintena
   };
   const relay = new QuakeRelay(state, {});
   const calls = [];
-  relay.nextDueHttpSeedMode = async () => "recovery";
   relay.ensureUpstreams = async () => calls.push("upstreams");
   relay.seedFromHttp = async () => calls.push("source");
   relay.reconcileDlqPersistenceFallbacks = async (limit) => calls.push(`dlq:${limit}`);
@@ -1264,14 +1232,60 @@ test("sustained fallback keeps source turns bounded and does not run D1 maintena
   relay.scheduleRoutineRelayAlarm = async () => {};
 
   await relay.alarm();
-  await relay.alarm();
-  await relay.alarm();
 
-  assert.deepEqual(calls, [
-    "upstreams", "source", "outbox:4", "upstreams",
-    "upstreams", "source", "outbox:4", "upstreams",
-    "upstreams", "source", "outbox:4", "upstreams",
+  assert.deepEqual(
+    calls,
+    ["upstreams"],
+    "a replacement relay honors the durable next-sweep time and avoids normal maintenance",
+  );
+});
+
+test("an alarm repairs a malformed HTTP snapshot cursor without making status readers write", async () => {
+  const { QuakeRelay } = await workerModule();
+  const malformedKey = "pending-http-snapshot:jma_eqlist";
+  const values = new Map([
+    [malformedKey, { unexpected: "shape" }],
+    ["initial-http-seed-complete", true],
   ]);
+  const deletes = [];
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
+      async delete(key) {
+        deletes.push(key);
+        values.delete(key);
+      },
+      async getAlarm() { return null; },
+      async setAlarm() {},
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  for (const source of [
+    "jma_eew", "sc_eew", "cenc_eew", "fj_eew", "cq_eew", "cenc_eqlist", "jma_eqlist",
+  ]) {
+    relay.statuses.set(source, "open");
+    relay.lastSuccessfulUpstreamMs.set(source, Date.now());
+  }
+  relay.reconcileDlqPersistenceFallbacks = async () => {};
+  relay.migrateLegacyPendingDeliveries = async () => {};
+  relay.drainPendingIngestJournal = async () => {};
+  relay.flushAlertDeliveryOutbox = async () => {};
+  relay.purgeExpiredDevicesIfDue = async () => {};
+  relay.ensureUpstreams = async () => {};
+  relay.scheduleRoutineRelayAlarm = async () => {};
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  try {
+    await relay.alarm();
+  } finally {
+    console.error = originalConsoleError;
+  }
+  assert.deepEqual(deletes, [malformedKey]);
+  assert.equal(values.has(malformedKey), false);
 });
 
 test("a fallible fallback outbox handoff defers without an automatic alarm retry", async () => {
@@ -1301,13 +1315,15 @@ test("a fallible fallback outbox handoff defers without an automatic alarm retry
   await relay.alarm();
   assert.ok(reconnectAttempts >= 1);
   assert.ok(
-    values.get("http-fallback-retry-not-before-ms") >= Date.now() + 4_000,
-    "the fallback persists a slow retry and resolves the alarm handler",
+    values.get("http-fallback-retry-not-before-ms") >= Date.now() + 59_000,
+    "the fallback persists a one-minute retry and resolves the alarm handler",
   );
 });
 
-test("an active fallback defers a recovery cursor even when its scheduler label is initial", async () => {
+test("a pending recovery cursor resumes every five seconds and owns its D1 turn", async () => {
   const { QuakeRelay } = await workerModule();
+  const originalNow = Date.now;
+  let now = Date.parse("2026-08-13T00:00:00.000Z");
   const values = new Map([["http-fallback-active", true]]);
   const state = {
     storage: {
@@ -1321,42 +1337,68 @@ test("an active fallback defers a recovery cursor even when its scheduler label 
     waitUntil() {},
   };
   const relay = new QuakeRelay(state, {});
-  let sourceAttempts = 0;
-  let outboxAttempts = 0;
-  relay.pendingHttpSnapshotSources = async () => ["jma_eqlist"];
-  relay.ensureUpstreams = async () => {};
-  relay.seedFromHttp = async () => { sourceAttempts += 1; };
-  relay.flushAlertDeliveryOutbox = async () => {
-    outboxAttempts += 1;
-    throw new Error("simulated cursor handoff D1 failure");
+  const work = { source: "jma_eqlist", mode: "recovery" };
+  relay.pendingHttpSnapshotWorks = async () => [work];
+  const calls = [];
+  const maintenance = [];
+  relay.ensureUpstreams = async () => calls.push("upstreams");
+  relay.seedFromHttp = async (mode) => {
+    calls.push(`source:${mode}`);
+    relay.lastHttpSnapshotResumeStartedMs = Date.now();
   };
+  relay.flushAlertDeliveryOutbox = async (limit) => calls.push(`outbox:${limit}`);
+  relay.reconcileDlqPersistenceFallbacks = async () => maintenance.push("dlq");
+  relay.migrateLegacyPendingDeliveries = async () => maintenance.push("legacy");
+  relay.drainPendingIngestJournal = async () => maintenance.push("journal");
+  relay.purgeExpiredDevicesIfDue = async () => maintenance.push("purge");
   relay.scheduleRoutineRelayAlarm = async () => {};
 
-  assert.equal(
-    await relay.nextDueHttpSeedMode(),
-    "initial",
-    "pending work resumes immediately with the scheduler's cursor label",
-  );
-  await relay.alarm();
-  assert.equal(sourceAttempts, 1);
-  assert.equal(outboxAttempts, 1);
-  assert.ok(
-    values.get("http-fallback-retry-not-before-ms") >= Date.now() + 4_000,
-    "active fallback, not the cursor label, controls automatic-retry safety",
-  );
+  try {
+    Date.now = () => now;
+    assert.equal(
+      await relay.nextDueHttpSeedMode(true),
+      "recovery",
+      "a stored cursor retains its recovery notification semantics",
+    );
+    relay.lastHttpSnapshotResumeStartedMs = now;
+    assert.equal(
+      await relay.nextDueHttpSeedMode(true),
+      null,
+      "a cursor cannot be retried in a tight alarm loop",
+    );
+    assert.equal(
+      await relay.nextHttpFallbackAlarmAt(now),
+      now + 5_000,
+      "a changed snapshot receives its bounded five-second continuation wakeup",
+    );
 
-  await relay.alarm();
-  assert.equal(sourceAttempts, 1, "retry window permits reconnect only");
-  assert.equal(outboxAttempts, 1);
+    now += 5_000;
+    await relay.alarm();
+    assert.deepEqual(calls, ["upstreams", "source:recovery", "outbox:4", "upstreams"]);
+    assert.deepEqual(
+      maintenance,
+      [],
+      "pending snapshot work must not share a turn with routine D1 maintenance",
+    );
+
+    calls.length = 0;
+    await relay.alarm();
+    assert.deepEqual(
+      calls,
+      ["upstreams"],
+      "an early alarm waits for the next five-second cursor window",
+    );
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
-test("a successful active-fallback cursor clears an expired retry marker before scheduling", async () => {
+test("a successful cursor clears an expired retry marker before its five-second continuation", async () => {
   const { QuakeRelay } = await workerModule();
   const now = Date.now();
   const values = new Map([
     ["http-fallback-active", true],
     ["http-fallback-retry-not-before-ms", now - 1],
-    ["last-http-seed-ms", now - 601],
   ]);
   let alarmAt = null;
   const state = {
@@ -1372,10 +1414,13 @@ test("a successful active-fallback cursor clears an expired retry marker before 
   };
   const relay = new QuakeRelay(state, {});
   const maintenance = [];
-  relay.pendingHttpSnapshotSources = async () => ["jma_eqlist"];
+  relay.pendingHttpSnapshotWorks = async () => [{
+    source: "jma_eqlist",
+    mode: "recovery",
+  }];
   relay.ensureUpstreams = async () => {};
   relay.seedFromHttp = async () => {
-    values.set("last-http-seed-ms", Date.now());
+    relay.lastHttpSnapshotResumeStartedMs = Date.now();
   };
   relay.flushAlertDeliveryOutbox = async () => {};
   relay.reconcileDlqPersistenceFallbacks = async () => maintenance.push("dlq");
@@ -1389,14 +1434,14 @@ test("a successful active-fallback cursor clears an expired retry marker before 
   assert.equal(values.has("http-fallback-retry-not-before-ms"), false);
   assert.deepEqual(maintenance, []);
   assert.ok(
-    typeof alarmAt === "number" && alarmAt >= startedAt + 400,
-    "the next fallback slice stays paced instead of waking immediately",
+    typeof alarmAt === "number" && alarmAt >= startedAt + 4_000,
+    "the next cursor slice stays on its five-second continuation cadence",
   );
 });
 
 test("a recovered WebSocket transport still defers a failing unfinished HTTP cursor", async () => {
   const { QuakeRelay } = await workerModule();
-  const values = new Map([["last-http-seed-ms", Date.now() - 601]]);
+  const values = new Map();
   let alarmAt = null;
   const state = {
     storage: {
@@ -1425,7 +1470,10 @@ test("a recovered WebSocket transport still defers a failing unfinished HTTP cur
   let reconnectAttempts = 0;
   let sourceAttempts = 0;
   let outboxAttempts = 0;
-  relay.pendingHttpSnapshotSources = async () => ["jma_eqlist"];
+  relay.pendingHttpSnapshotWorks = async () => [{
+    source: "jma_eqlist",
+    mode: "recovery",
+  }];
   relay.ensureUpstreams = async () => { reconnectAttempts += 1; };
   relay.seedFromHttp = async () => { sourceAttempts += 1; };
   relay.flushAlertDeliveryOutbox = async () => {
@@ -1437,21 +1485,20 @@ test("a recovered WebSocket transport still defers a failing unfinished HTTP cur
   assert.equal(sourceAttempts, 1);
   assert.equal(outboxAttempts, 1);
   assert.ok(
-    values.get("http-fallback-retry-not-before-ms") >= Date.now() + 4_000,
+    values.get("http-fallback-retry-not-before-ms") >= Date.now() + 59_000,
   );
 
   await relay.alarm();
   assert.equal(sourceAttempts, 1, "retry window keeps the cursor out of automatic retry");
   assert.equal(outboxAttempts, 1);
   assert.equal(reconnectAttempts, 2, "the only permitted work during the retry window is reconnect maintenance");
-  assert.ok(typeof alarmAt === "number" && alarmAt >= Date.now() + 3_000);
+  assert.ok(typeof alarmAt === "number" && alarmAt >= Date.now() + 59_000);
 });
 
 test("a D1 failure while persisting an HTTP cursor uses the durable fallback retry", async () => {
   const { QuakeRelay } = await workerModule();
   const values = new Map([
     ["http-fallback-active", true],
-    ["last-http-seed-ms", Date.now() - 601],
     ["pending-http-snapshot:jma_eqlist", {
       version: 1,
       source: "jma_eqlist",
@@ -1525,7 +1572,7 @@ test("a D1 failure while persisting an HTTP cursor uses the durable fallback ret
   await relay.alarm();
   assert.equal(batchAttempts, 1);
   assert.equal(outboxAttempts, 0, "failed persistence never reaches Queue handoff");
-  assert.ok(values.get("http-fallback-retry-not-before-ms") >= Date.now() + 4_000);
+  assert.ok(values.get("http-fallback-retry-not-before-ms") >= Date.now() + 59_000);
 
   await relay.alarm();
   assert.equal(batchAttempts, 1, "retry window does not repeat the D1 cursor slice");
@@ -1564,7 +1611,7 @@ test("a grace-boundary recovery selection enables the same durable retry protect
   await relay.alarm();
   assert.equal(sourceAttempts, 1);
   assert.equal(outboxAttempts, 1);
-  assert.ok(values.get("http-fallback-retry-not-before-ms") >= Date.now() + 4_000);
+  assert.ok(values.get("http-fallback-retry-not-before-ms") >= Date.now() + 59_000);
 
   await relay.alarm();
   assert.equal(sourceAttempts, 1);
@@ -1608,10 +1655,12 @@ test("a deferred fallback turn does not touch D1 again before its retry time", a
   assert.ok(typeof alarmAt === "number" && alarmAt >= now + 4_000);
 });
 
-test("a partial initial baseline retries cursor-free failures on the five-minute cadence", async () => {
+test("a cursor-free initial HTTP failure persists its five-minute retry timestamp", async () => {
   const { QuakeRelay } = await workerModule();
-  const now = Date.now();
-  const values = new Map([["last-http-seed-ms", now - 601]]);
+  const originalNow = Date.now;
+  let now = Date.parse("2026-08-13T00:00:00.000Z");
+  const values = new Map();
+  const writes = [];
   for (const source of [
     "jma_eew",
     "sc_eew",
@@ -1625,26 +1674,56 @@ test("a partial initial baseline retries cursor-free failures on the five-minute
   const state = {
     storage: {
       async get(key) { return values.get(key); },
-      async put(key, value) { values.set(key, value); },
+      async put(key, value) {
+        writes.push([key, value]);
+        values.set(key, value);
+      },
       async delete(key) { values.delete(key); },
       async list({ prefix = "" } = {}) {
         return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
+      async transaction(callback) {
+        return callback({
+          get: this.get.bind(this),
+          put: this.put.bind(this),
+          delete: this.delete.bind(this),
+        });
       },
     },
     waitUntil() {},
   };
   const relay = new QuakeRelay(state, {});
-
-  assert.equal(
-    await relay.nextDueHttpSeedMode(),
-    null,
-    "one missing source without a durable cursor waits for the initial retry interval",
-  );
-  assert.equal(
-    await relay.nextHttpFallbackAlarmAt(now),
-    null,
-    "the routine alarm, not a 600ms fallback loop, owns the retry wakeup",
-  );
+  const attempts = [];
+  relay.seedHttpSource = async (source, mode) => {
+    attempts.push([source, mode]);
+    return { completed: false, snapshotWorkStarted: false };
+  };
+  try {
+    Date.now = () => now;
+    await relay.runInitialHttpSeed();
+    assert.deepEqual(attempts, [["jma_eqlist", "initial"]]);
+    assert.equal(values.get("last-http-seed-ms"), now);
+    assert.equal(
+      writes.filter(([key]) => key === "last-http-seed-ms").length,
+      1,
+      "a cursor-free failure records exactly one baseline-attempt timestamp",
+    );
+    assert.equal(
+      await relay.nextDueHttpSeedMode(false),
+      null,
+      "routine alarms cannot immediately repeat a failed baseline fetch",
+    );
+    now += 5 * 60_000 - 1;
+    assert.equal(await relay.nextDueHttpSeedMode(false), null);
+    now += 1;
+    assert.equal(
+      await relay.nextDueHttpSeedMode(false),
+      "initial",
+      "the same missing baseline source becomes eligible only after five minutes",
+    );
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test("a cold Queue-facing relay defers its first HTTP baseline to the alarm", async () => {
@@ -1792,7 +1871,10 @@ test("HTTP fallback ingests only structurally valid changed snapshots", async ()
     const relay = new QuakeRelay(state, { DB: database });
     relay.flushAlertDeliveryOutbox = async () => {};
 
-    assert.equal(await relay.seedHttpSource("jma_eew", "recovery"), true);
+    assert.deepEqual(
+      await relay.seedHttpSource("jma_eew", "recovery"),
+      { completed: true, snapshotWorkStarted: true },
+    );
     assert.equal(batches, 1, "a changed snapshot commits in one bounded D1 batch");
     assert.equal(
       snapshotFetches[0].cache,
@@ -1809,7 +1891,10 @@ test("HTTP fallback ingests only structurally valid changed snapshots", async ()
       "number",
     );
 
-    assert.equal(await relay.seedHttpSource("jma_eew", "recovery"), true);
+    assert.deepEqual(
+      await relay.seedHttpSource("jma_eew", "recovery"),
+      { completed: true, snapshotWorkStarted: false },
+    );
     assert.equal(
       batches,
       1,
@@ -1817,7 +1902,10 @@ test("HTTP fallback ingests only structurally valid changed snapshots", async ()
     );
 
     responseBody = {};
-    assert.equal(await relay.seedHttpSource("jma_eew", "recovery"), false);
+    assert.deepEqual(
+      await relay.seedHttpSource("jma_eew", "recovery"),
+      { completed: false, snapshotWorkStarted: false },
+    );
     assert.equal(
       batches,
       1,
@@ -2085,7 +2173,7 @@ test("health reports HTTP polling as ready only while every fallback source is f
   assert.equal(healthyBody.upstream.websocketStatus, "degraded");
   assert.equal(healthyBody.upstream.sources.jma_eew.transport, "http-polling");
 
-  values.set("upstream-last-http-success-ms:jma_eew", now - 16_000);
+  values.set("upstream-last-http-success-ms:jma_eew", now - 181_000);
   const stale = await relay.statusResponse();
   assert.equal(stale.status, 503, "one stale fallback source fails readiness closed");
   const staleBody = await stale.json();
@@ -2528,7 +2616,7 @@ test("coalesces live freshness checkpoints without hiding pending ingest", async
 
     values.delete("pending-ingest:jma_eew:uncommitted");
     await relay.markHttpSourceSuccessful("jma_eew");
-    now += 9_999;
+    now += 59_999;
     await relay.markHttpSourceSuccessful("jma_eew");
     now += 1;
     await relay.markHttpSourceSuccessful("jma_eew");
@@ -2536,7 +2624,7 @@ test("coalesces live freshness checkpoints without hiding pending ingest", async
       writes.filter(([key]) => key === httpKey),
       [
         [httpKey, Date.parse("2026-08-13T00:02:00.000Z")],
-        [httpKey, Date.parse("2026-08-13T00:02:10.000Z")],
+        [httpKey, Date.parse("2026-08-13T00:03:00.000Z")],
       ],
       "alternate HTTP freshness remains inside its stale window without every-poll writes",
     );
