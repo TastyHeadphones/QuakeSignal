@@ -3,8 +3,10 @@ name: Monitor terminal DLQ fallback
 on:
   schedule:
     # A consumerless terminal Queue is bounded-retention evidence. Five minutes
-    # is deliberately a monitor cadence, not a high-frequency Queue poll.
-    - cron: "*/5 * * * *"
+    # is deliberately a monitor cadence, not a high-frequency Queue poll. Keep
+    # it off minute zero: GitHub documents that scheduled workflows are most
+    # likely to be delayed or dropped at the start of an hour.
+    - cron: "2-59/5 * * * *"
   workflow_dispatch:
 
 concurrency:
