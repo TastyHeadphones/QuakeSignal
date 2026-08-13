@@ -2774,6 +2774,104 @@ function isLiveSnapshotFingerprintStorageKey(key) {
   return typeof key === "string" && key.includes("live-snapshot-fingerprint");
 }
 
+function livePointEvent({ serial = 1, magnitude = 4.2 } = {}) {
+  return {
+    id: "jma_eew:resident-point-event",
+    sourceId: "jma_eew",
+    eventId: "resident-point-event",
+    serial,
+    kind: "eew",
+    originTimeUtc: "2026-08-14T00:00:00.000Z",
+    reportTimeUtc: "2026-08-14T00:00:00.000Z",
+    hypocenter: "Test Region",
+    latitude: 35,
+    longitude: 139,
+    magnitude,
+    depth: 10,
+    maxIntensity: "4",
+    isWarn: true,
+    isFinal: false,
+    isCancel: false,
+    isTraining: false,
+    tsunami: null,
+    raw: null,
+  };
+}
+
+function isLivePointJournalKey(key) {
+  return typeof key === "string" && key.startsWith("pending-ingest:");
+}
+
+function createLivePointEventHarness({ failD1Batches = () => false } = {}) {
+  const values = new Map();
+  const writes = [];
+  let alarmAt = null;
+  let d1BatchAttempts = 0;
+  const storage = {
+    async get(key) {
+      return values.get(key);
+    },
+    async put(key, value) {
+      writes.push(["put", key, value]);
+      values.set(key, value);
+    },
+    async delete(key) {
+      writes.push(["delete", key]);
+      values.delete(key);
+    },
+    async list({ prefix = "", limit = Infinity } = {}) {
+      return new Map(
+        [...values]
+          .filter(([key]) => key.startsWith(prefix))
+          .slice(0, limit),
+      );
+    },
+    async transaction(callback) {
+      return callback({
+        get: storage.get,
+        put: storage.put,
+        delete: storage.delete,
+      });
+    },
+    async getAlarm() {
+      return alarmAt;
+    },
+    async setAlarm(value) {
+      writes.push(["setAlarm", "alarm", value]);
+      alarmAt = value;
+    },
+  };
+  const database = {
+    prepare(sql) {
+      return {
+        bind(...bindings) {
+          return {
+            sql,
+            bindings,
+            async first() {
+              return null;
+            },
+          };
+        },
+      };
+    },
+    async batch(statements) {
+      d1BatchAttempts += 1;
+      if (failD1Batches()) throw new Error("simulated live point-event D1 failure");
+      return statements.map(() => ({ meta: { changes: 1 } }));
+    },
+  };
+  return {
+    values,
+    writes,
+    state: { storage, waitUntil() {} },
+    database,
+    get d1BatchAttempts() {
+      return d1BatchAttempts;
+    },
+  };
+}
+
 function createLiveSnapshotHarness({ failD1Batches = () => false } = {}) {
   const values = new Map();
   const writes = [];
@@ -2892,6 +2990,113 @@ function createLiveSnapshotHarness({ failD1Batches = () => false } = {}) {
     },
   };
 }
+
+test("a resident relay skips exact committed point-event replays without suppressing a changed revision", async () => {
+  const { QuakeRelay } = await workerModule();
+  const harness = createLivePointEventHarness();
+  const relay = new QuakeRelay(harness.state, { DB: harness.database });
+  // The test exercises the real D1 event transaction but does not need Queue
+  // hand-off behavior to prove Durable Object journal accounting.
+  relay.flushAlertDeliveryOutbox = async () => {};
+  const event = livePointEvent();
+  const journalWrites = () => harness.writes.filter(([, key]) =>
+    isLivePointJournalKey(key)
+  );
+
+  await relay.enqueueLiveIngest(event);
+  assert.equal(harness.d1BatchAttempts, 1);
+  assert.deepEqual(
+    journalWrites().map(([operation]) => operation),
+    ["put", "delete"],
+    "a first point event crosses the durable journal before and after D1",
+  );
+
+  const writesAfterCommit = harness.writes.slice();
+  await relay.enqueueLiveIngest({ ...event });
+  assert.deepEqual(
+    harness.writes,
+    writesAfterCommit,
+    "an exact post-D1 replay must not create a journal, alarm, or freshness write",
+  );
+  assert.equal(
+    harness.d1BatchAttempts,
+    1,
+    "an exact post-D1 replay must not repeat D1 persistence",
+  );
+
+  await relay.enqueueLiveIngest({ ...event, magnitude: 5.1 });
+  assert.equal(
+    harness.d1BatchAttempts,
+    2,
+    "a changed same-serial revision must still reach D1",
+  );
+  assert.deepEqual(
+    journalWrites().map(([operation]) => operation),
+    ["put", "delete", "put", "delete"],
+    "a genuine normalized change must receive fresh durable journal work",
+  );
+});
+
+test("a resident relay preserves a pending point event without duplicate journal writes or D1 retries", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalConsoleError = console.error;
+  let failD1 = true;
+  const harness = createLivePointEventHarness({ failD1Batches: () => failD1 });
+  const relay = new QuakeRelay(harness.state, { DB: harness.database });
+  relay.flushAlertDeliveryOutbox = async () => {};
+  const event = livePointEvent();
+  const journalKey = `pending-ingest:${event.sourceId}:${encodeURIComponent(event.id)}`;
+  try {
+    console.error = () => {};
+    await relay.enqueueLiveIngest(event);
+    assert.equal(harness.d1BatchAttempts, 1, "the first D1 attempt fails once");
+    assert.ok(harness.values.has(journalKey), "the failed event remains durable");
+    const writesBeforeReplay = harness.writes.slice();
+
+    await relay.enqueueLiveIngest({ ...event });
+    assert.deepEqual(
+      harness.writes,
+      writesBeforeReplay,
+      "an exact pending replay must not rewrite its journal or schedule a new alarm",
+    );
+    assert.equal(
+      harness.d1BatchAttempts,
+      1,
+      "an exact pending replay must wait for the original paced retry",
+    );
+
+    await relay.enqueueLiveIngest({ ...event, magnitude: 5.1 });
+    assert.equal(
+      harness.d1BatchAttempts,
+      2,
+      "a changed pending revision must not be mistaken for the exact replay",
+    );
+    assert.equal(
+      harness.writes.filter(([operation, key]) =>
+        operation === "put" && key === journalKey
+      ).length,
+      2,
+      "a changed revision replaces the pending durable intent exactly once",
+    );
+  } finally {
+    console.error = originalConsoleError;
+    failD1 = false;
+  }
+});
+
+test("the resident committed point-event replay cache is bounded", async () => {
+  const { QuakeRelay } = await workerModule();
+  const relay = new QuakeRelay({ storage: {}, waitUntil() {} }, {});
+  for (let index = 0; index < 513; index += 1) {
+    relay.rememberCommittedLiveEventFingerprint(String(index).padStart(64, "0"));
+  }
+  assert.equal(relay.committedLiveEventFingerprints.size, 512);
+  assert.equal(
+    relay.hasCommittedLiveEventFingerprint(String(0).padStart(64, "0")),
+    false,
+    "the least-recent fingerprint is evicted instead of retaining an unbounded map",
+  );
+});
 
 test("a repeated unchanged 50-entry live JMA EQLIST does not recreate per-event journals or D1 work", async () => {
   const { QuakeRelay } = await workerModule();

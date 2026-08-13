@@ -265,6 +265,13 @@ const LIVE_SNAPSHOT_OVERLOAD_PREFIX = "live-snapshot-overload:";
 const UPSTREAM_LIVE_SNAPSHOT_FINGERPRINT_PREFIX =
   "upstream-live-snapshot-fingerprint:";
 const PENDING_INGEST_RETRY_DELAY_MS = 5_000;
+// Point-event feeds normally publish one revision at a time, but an upstream
+// reconnect can replay the same revision rapidly. Keep a small resident cache
+// of *post-D1-commit* event fingerprints so those replays do not churn the
+// Durable Object journal. The cache is intentionally not durable: a restart
+// falls back to the journal/D1 correctness path rather than claiming work was
+// committed when it was not.
+const RECENT_COMMITTED_LIVE_EVENT_FINGERPRINT_LIMIT = 512;
 const LIVE_SNAPSHOT_FAILURE_RETRY_DELAY_MS = 60_000;
 const LIVE_SNAPSHOT_INGEST_BATCH_SIZE = 8;
 const LIVE_SNAPSHOT_RESUME_INTERVAL_MS = 5_000;
@@ -523,6 +530,12 @@ type ApnsFailureDisposition =
 interface PendingIngestRecord {
   event: QueuedEvent;
   writeId: string;
+  /**
+   * Exact normalized-event identity for a resident duplicate check. Older
+   * journal records legitimately omit it; they fall back to canonical event
+   * comparison during a rolling deploy.
+   */
+  fingerprint?: string;
 }
 
 type LiveSnapshotSource = "cenc_eqlist" | "jma_eqlist";
@@ -1230,13 +1243,50 @@ function snapshotEvent(event: NormalizedEvent): QueuedEvent {
   return queued;
 }
 
+/**
+ * Keep the exact semantic event shape independent of source-payload property
+ * order. `raw` never crosses the D1 or Queue boundary, so it must not affect
+ * whether a replay is safe to suppress.
+ */
+function canonicalQueuedEvent(event: QueuedEvent): string {
+  return JSON.stringify([
+    event.id,
+    event.sourceId,
+    event.eventId,
+    event.serial,
+    event.kind,
+    event.originTimeUtc,
+    event.reportTimeUtc,
+    event.hypocenter,
+    event.latitude,
+    event.longitude,
+    event.magnitude,
+    event.depth,
+    event.maxIntensity,
+    event.isWarn,
+    event.isFinal,
+    event.isCancel,
+    event.isTraining,
+    event.tsunami,
+  ]);
+}
+
+async function liveEventFingerprint(event: QueuedEvent): Promise<string> {
+  return sha256Hex(canonicalQueuedEvent(event));
+}
+
+function isLiveEventFingerprint(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+
 function isPendingIngestRecord(value: unknown): value is PendingIngestRecord {
   if (!value || typeof value !== "object") return false;
   const record = value as Partial<PendingIngestRecord>;
   return (
     typeof record.writeId === "string" &&
     record.writeId.length > 0 &&
-    isQueuedEvent(record.event)
+    isQueuedEvent(record.event) &&
+    (record.fingerprint === undefined || isLiveEventFingerprint(record.fingerprint))
   );
 }
 
@@ -3277,6 +3327,10 @@ export class QuakeRelay {
   // exhausted. Bound failed retries to the same checkpoint cadence.
   private readonly lastUpstreamCheckpointAttemptMs = new Map<WolfxSourceId, number>();
   private readonly lastHttpCheckpointAttemptMs = new Map<WolfxSourceId, number>();
+  // Only D1-committed point-event fingerprints enter this bounded resident
+  // LRU. It is an optimization for rapid upstream replay, never a durability
+  // boundary: an eviction or restart deliberately returns to the journal.
+  private readonly committedLiveEventFingerprints = new Map<string, true>();
   // Resuming a durable changed-snapshot cursor is paced in memory. A restart
   // may cause one early retry, but never a steady sub-minute polling loop;
   // the cursor itself remains the durable fail-closed fence.
@@ -3739,6 +3793,32 @@ export class QuakeRelay {
   }
 
   /**
+   * A hit proves this exact normalized point event already crossed D1 during
+   * this relay instance. Move it to the LRU tail without touching Durable
+   * Object storage; source freshness still follows the normal paced checkpoint
+   * path below.
+   */
+  private hasCommittedLiveEventFingerprint(fingerprint: string): boolean {
+    if (!this.committedLiveEventFingerprints.has(fingerprint)) return false;
+    this.committedLiveEventFingerprints.delete(fingerprint);
+    this.committedLiveEventFingerprints.set(fingerprint, true);
+    return true;
+  }
+
+  private rememberCommittedLiveEventFingerprint(fingerprint: string): void {
+    this.committedLiveEventFingerprints.delete(fingerprint);
+    this.committedLiveEventFingerprints.set(fingerprint, true);
+    while (
+      this.committedLiveEventFingerprints.size >
+      RECENT_COMMITTED_LIVE_EVENT_FINGERPRINT_LIMIT
+    ) {
+      const oldest = this.committedLiveEventFingerprints.keys().next().value;
+      if (oldest === undefined) return;
+      this.committedLiveEventFingerprints.delete(oldest);
+    }
+  }
+
+  /**
    * Persist live events before D1 ingestion. There is one coalescing journal
    * key per source/event so a burst of revisions retains the highest serial;
    * `writeId` prevents a drain of an older snapshot from deleting a newer one.
@@ -3746,13 +3826,35 @@ export class QuakeRelay {
   private async enqueueLiveIngest(event: NormalizedEvent): Promise<void> {
     const { raw: _raw, ...snapshot } = event;
     const key = `${PENDING_INGEST_PREFIX}${event.sourceId}:${encodeURIComponent(event.id)}`;
+    const fingerprint = await liveEventFingerprint(snapshot);
+    // Do not treat an in-memory sighting as proof. This cache is populated
+    // only after a D1 event/outbox transaction and its corresponding durable
+    // journal delete both succeed. A cache hit can skip journal churn, but it
+    // still takes the normal fail-closed freshness path.
+    if (this.hasCommittedLiveEventFingerprint(fingerprint)) {
+      await this.markSourceSuccessful(event.sourceId);
+      return;
+    }
     const record: PendingIngestRecord = {
       event: snapshot,
       writeId: crypto.randomUUID(),
+      fingerprint,
     };
     try {
-      await this.state.storage.transaction(async (transaction) => {
+      const journalOutcome = await this.state.storage.transaction(async (transaction) => {
         const current = await transaction.get<PendingIngestRecord>(key);
+        if (
+          isPendingIngestRecord(current) &&
+          (
+            current.fingerprint === fingerprint ||
+            // A relay updated in place can still find a pre-fingerprint record
+            // from the immediately preceding revision. It is an exact replay
+            // only when every persisted normalized field is identical.
+            canonicalQueuedEvent(current.event) === canonicalQueuedEvent(snapshot)
+          )
+        ) {
+          return "duplicate" as const;
+        }
         // A stale WebSocket frame must never overwrite an already-journaled
         // higher serial while the D1 write is waiting to retry.
         if (
@@ -3760,8 +3862,15 @@ export class QuakeRelay {
           record.event.serial >= current.event.serial
         ) {
           await transaction.put(key, record);
+          return "written" as const;
         }
+        return "retained" as const;
       });
+      // The original attempt already owns either an in-flight D1 drain or a
+      // durable retry alarm. Retrying an exact pending replay here would turn
+      // one upstream duplicate burst into a D1 retry loop even though no new
+      // event intent exists.
+      if (journalOutcome === "duplicate") return;
       await this.drainPendingIngestJournal();
     } catch (error) {
       console.error(
@@ -3845,14 +3954,24 @@ export class QuakeRelay {
             "live",
             outboxFlushLimit,
           );
-          await this.state.storage.transaction(async (transaction) => {
+          const journalDeleted = await this.state.storage.transaction(async (transaction) => {
             const current = await transaction.get<PendingIngestRecord>(key);
             // A newer record arrived while D1 committed the old one. Leave it
             // for the next loop; only the exact drained write may be removed.
             if (isPendingIngestRecord(current) && current.writeId === value.writeId) {
               await transaction.delete(key);
+              return true;
             }
+            return false;
           });
+          // The resident duplicate cache is intentionally populated only
+          // after both D1 and this journal-delete boundary succeed. If either
+          // fails, a later replay must retain the durable pending-work fence.
+          if (journalDeleted) {
+            this.rememberCommittedLiveEventFingerprint(
+              value.fingerprint ?? await liveEventFingerprint(value.event),
+            );
+          }
           // Freshness follows the durable D1/outbox transaction—not merely a
           // live WebSocket frame—so readiness exposes ingestion failures.
           await this.markSourceSuccessful(value.event.sourceId);
