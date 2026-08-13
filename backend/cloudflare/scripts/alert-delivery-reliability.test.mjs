@@ -342,6 +342,40 @@ test("rejects an over-limit health probe before it can activate the global relay
   assert.equal(relayTouched, false);
 });
 
+test("health returns a no-store structured 503 when the relay status call fails", async () => {
+  const { default: worker } = await workerModule();
+  const response = await worker.fetch(
+    new Request("https://quakesignal-api.example/healthz"),
+    {
+      DEVICE_API_RATE_LIMIT: {
+        async limit() {
+          return { success: true };
+        },
+      },
+      RELAY: {
+        idFromName() {
+          return "global";
+        },
+        get() {
+          return {
+            async fetch() {
+              throw new Error("Durable Object free-tier write quota exhausted");
+            },
+          };
+        },
+      },
+    },
+  );
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  const body = await response.json();
+  assert.equal(body.ok, false);
+  assert.equal(body.delivery.status, "degraded");
+  assert.equal(body.delivery.apnsConfigured, null);
+  assert.equal(body.upstream.status, "degraded");
+  assert.equal(body.upstream.staleSources.length, 7);
+});
+
 test("status probes preserve first boot but do not repeatedly run relay recovery", async () => {
   const { QuakeRelay } = await workerModule();
   const originalFetch = globalThis.fetch;
@@ -2056,6 +2090,67 @@ test("health reports HTTP polling as ready only while every fallback source is f
   assert.equal(stale.status, 503, "one stale fallback source fails readiness closed");
   const staleBody = await stale.json();
   assert.deepEqual(staleBody.upstream.staleSources, ["jma_eew"]);
+});
+
+test("health status reads the fallback marker without Durable Object writes", async () => {
+  const { QuakeRelay } = await workerModule();
+  const now = Date.now();
+  const values = new Map([["http-fallback-active", true]]);
+  let writeAttempts = 0;
+  const statement = {
+    bind() {
+      return this;
+    },
+    async first() {
+      return 0;
+    },
+  };
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async list() {
+        return new Map();
+      },
+      async put() {
+        writeAttempts += 1;
+        throw new Error("Durable Object free-tier write quota exhausted");
+      },
+      async delete() {
+        writeAttempts += 1;
+        throw new Error("Durable Object free-tier write quota exhausted");
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {
+    DB: { prepare: () => statement },
+  });
+  for (const source of [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ]) {
+    relay.statuses.set(source, "open");
+    relay.lastSuccessfulUpstreamMs.set(source, now);
+  }
+
+  for (const storedFallbackActive of [true, false]) {
+    values.set("http-fallback-active", storedFallbackActive);
+    const response = await relay.statusResponse();
+    assert.equal(response.status, 503, "missing APNs stays fail-closed");
+    const body = await response.json();
+    assert.equal(body.ok, false);
+    assert.equal(body.delivery.status, "not_configured");
+    assert.equal(body.upstream.status, "ready");
+    assert.equal(body.upstream.httpFallbackActive, storedFallbackActive);
+  }
+  assert.equal(writeAttempts, 0, "health must not refresh or clear a stored fallback marker");
 });
 
 test("serializes an opened route reset before its next close records backoff", async () => {
