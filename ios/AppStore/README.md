@@ -31,16 +31,28 @@ archiving. If `com.quakesignal.app` is unavailable in that team, change it in
 
 ### Build-number rule
 
-Build `1` is already uploaded. This release prepares `CFBundleVersion` `2` for
-the delayed TestFlight training control; the Worker allowlist deliberately
-keeps both `1,2` so installed build-1 testers remain valid. App Store Connect
-will reject a repeat upload with the same build number. Before a later upload,
-update `CURRENT_PROJECT_VERSION` in `project.yml`, the production
-`APP_ATTEST_ALLOWED_BUNDLE_VERSIONS` value in `backend/cloudflare/wrangler.jsonc`,
-and the intentional checked-in build guard in `.github/workflows/ios.yml` in
-the same reviewed release. Deploy that Worker configuration through the
-protected Cloudflare workflow before using the same numeric `build_number`
-input in **iOS → Run workflow**. Do not override only the workflow input.
+TestFlight build `1.0 (2)` is already uploaded to the internal QA group. It is
+an **InternalQA-only** archive: it deliberately includes **Schedule Background
+Test Alert**, a delayed-training feature that is deliberately absent from a
+public `Release` archive. Use build `2` only to collect the physical-device
+evidence in the TestFlight runbook. Do not attach it to the App Store version,
+select it for App Review, or release it publicly.
+
+App Store Connect will reject a repeat upload with the same build number. Once
+the physical evidence is complete and the protected production launch gate has
+been promoted, the next public candidate must be a newly signed public
+`Release` archive with a later `CFBundleVersion` (at least `3`). Coordinate its
+source and App Attest version boundary in one reviewed release: update
+`CURRENT_PROJECT_VERSION` in `project.yml`, make
+`APP_ATTEST_ALLOWED_BUNDLE_VERSIONS` in `backend/cloudflare/wrangler.jsonc`
+admit that exact build number, and update the intentional checked-in build
+guard in `.github/workflows/ios.yml`. Preserve or retire older allowlisted
+versions only deliberately. Deploy the corresponding Worker configuration
+through the protected Cloudflare workflow before using the same numeric
+`build_number` input in **iOS → Run workflow**. The present workflow guard
+intentionally accepts only `2`, so it must fail for the new build until that
+same reviewed release updates it. Do not override only the workflow input or
+reuse build `2`.
 
 ## Localized product-page names require release-owner approval
 
@@ -207,34 +219,41 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    create a duplicate. After the Cloudflare bootstrap has made the final URLs
    live, set its Privacy Policy and Support URLs to the values above and
    complete the draft `1.0` metadata.
-6. Archive with Xcode 26.6 or another currently supported stable release.
-7. Validate the archive, then upload it to TestFlight and App Store Connect.
-8. Complete age rating, content rights, privacy, export compliance, localized
+6. Use the existing `1.0 (2)` **InternalQA-only** TestFlight upload for the
+   production physical-device evidence in step 9. It contains **Schedule
+   Background Test Alert** and must not be used as the archive attached to the
+   App Store version or submitted as the public candidate.
+7. Complete age rating, content rights, privacy, export compliance, localized
    metadata, and screenshot fields.
    Before certifying content rights for Wolfx-supplied earthquake data, obtain
    and preserve written upstream permission using
    [`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md).
-9. Test the uploaded build in TestFlight on physical hardware before submitting
-   it to App Review. Follow the exact, privacy-safe
+8. Test the InternalQA-only build `1.0 (2)` in TestFlight on physical hardware
+   before the production launch promotion. Follow the exact, privacy-safe
    [`iOS TestFlight physical-device runbook`](../../docs/IOS_TESTFLIGHT_PHYSICAL_QA.md)
    for production App Attest registration, refresh, token-bound unsubscribe,
    key-owned empty-body unsubscribe, re-enrollment, and the controlled
    training-push path against
    `https://quakesignal-api.hopeso.workers.dev`; a Simulator or staging-bypass result is
    insufficient. The runbook makes clear that deterministic
-   background/terminated APNs evidence requires TestFlight build `1.0 (2)` or
-   later with **Schedule Background Test Alert**, plus a reviewed temporary
-   production test window. Build `1.0 (2)` is uploaded to the internal
-   TestFlight group and contains that control, but the evidence remains
-   incomplete until it is exercised on a physical device.
+   background/terminated APNs evidence requires the InternalQA build
+   `1.0 (2)`, or an explicitly later InternalQA build, with **Schedule
+   Background Test Alert**, plus a reviewed temporary production test window.
+   A public `Release` deliberately does not contain that control. The evidence
+   remains incomplete until it is exercised on a physical device.
    It also identifies the separate controlled evidence needed for a verified
    fresh-key rebind after reinstall/restore. Verify foreground live updates
    after the Wolfx WebSocket service has recovered. When a socket route is
    unavailable, also confirm that the app waits 90 seconds and then refreshes
    its display-only HTTPS snapshot at most once every five minutes, without
    presenting a local emergency alert for the recovered history.
-10. Have a release reviewer promote
+9. Have a release reviewer promote
     `APP_ATTEST_PRODUCTION_ENFORCED=true` and run the protected Cloudflare
-    launch deployment with `bootstrap_testflight` disabled. Only after that
-    launch promotion may the build be submitted to App Review or released
-    publicly.
+    launch deployment with `bootstrap_testflight` disabled. This does not make
+    build `2` public; it remains an InternalQA-only evidence build.
+10. Only after that launch promotion, prepare and validate the coordinated
+    newly numbered public `Release` candidate described in the build-number
+    rule, then archive it with Xcode 26.6 (or another currently supported
+    stable release) and upload it to TestFlight/App Store Connect. Attach only
+    that new public `Release` build to the App Store version before App Review
+    or public release.

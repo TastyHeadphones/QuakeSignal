@@ -309,9 +309,14 @@ clearly labelled training push to its owned production subscription per UTC
 day. The Worker returns `429` with `Retry-After` until the next UTC day after
 that slot is claimed, including when APNs later rejects the attempted training
 push. The delayed background/locked/terminated training check uses the same
-claim and requires TestFlight build `1.0 (2)` or later containing **Schedule
-Background Test Alert**. Build `1.0 (2)` is assigned to the internal QA group,
-but its physical-device evidence is still required before launch promotion.
+claim and requires the InternalQA TestFlight build `1.0 (2)`, or an explicitly
+later InternalQA build, containing **Schedule Background Test Alert**. Build
+`1.0 (2)` is assigned to the internal QA group and is not a public submission
+candidate because a public `Release` deliberately excludes that control. Its
+physical-device evidence is still required before launch promotion. After the
+promotion, create a newly numbered public `Release` build only after its source
+build number, Worker App Attest allowlist, and checked-in iOS workflow guard
+have been updated together in a reviewed release.
 
 For the first production Worker deployment, run the protected workflow from
 `main` with `deploy_production=true` and `bootstrap_testflight=true` while
