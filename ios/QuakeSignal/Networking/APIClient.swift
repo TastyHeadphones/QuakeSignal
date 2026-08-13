@@ -47,7 +47,24 @@ final class APIClient: Sendable {
     }
 
     func sendTestAlert(token: String) async throws {
-        let body = try JSONEncoder().encode(DeviceTokenRequest(token: token))
+        let body = try JSONEncoder().encode(DeviceTrainingTestRequest(token: token))
+        try await performProtectedRequest(
+            binding: AppAttestRequestBinding(
+                operation: .testPush,
+                method: "POST",
+                path: "/v1/devices/test"
+            ),
+            body: body
+        )
+    }
+
+    /// Schedules one fixed-delay, clearly labelled training notification for a
+    /// controlled TestFlight background/locked/terminated delivery check. The
+    /// Worker rejects it unless the reviewed production test window is open.
+    func scheduleDelayedTestAlert(token: String) async throws {
+        let body = try JSONEncoder().encode(
+            DeviceTrainingTestRequest(token: token, delivery: .delayedTraining)
+        )
         try await performProtectedRequest(
             binding: AppAttestRequestBinding(
                 operation: .testPush,

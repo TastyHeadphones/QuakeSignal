@@ -186,7 +186,7 @@ function seedChallenge(sqlite, challenge, now) {
     );
 }
 
-test("production training push claims are atomic, key-bound, UTC-bounded, and token-free", async () => {
+test("production training push claims shared by immediate and delayed modes are atomic, key-bound, UTC-bounded, and token-free", async () => {
   const {
     completeAttestedProductionTrainingTestPushClaim,
     productionTrainingTestPushLimitResponse,

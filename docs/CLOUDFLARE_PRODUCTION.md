@@ -278,7 +278,12 @@ When the monitor alerts:
   valid requests cannot both dispatch. A second request returns `429` with
   `Cache-Control: no-store`, `Retry-After` calculated to the next UTC midnight,
   and a `retryAtUtc` value. The slot counts an accepted outbound attempt even
-  when APNs later fails, so do not enable it for an ad-hoc retry loop.
+  when APNs later fails, so do not enable it for an ad-hoc retry loop. The
+  optional delayed TestFlight mode is a fixed 90-second appointment rather
+  than a general scheduler: it is reachable only after that same attested
+  request and D1 claim, rechecks that the original key still owns a production
+  registration immediately before APNs, cancels after 30 seconds of lateness,
+  and does not retry delivery failures.
 - Review Cloudflare request-log retention and sampling. Operational logs must
   use a token hash rather than raw APNs tokens, location, or response bodies.
 - Treat an APNs `410`/`Unregistered` result as deletion and remove stale

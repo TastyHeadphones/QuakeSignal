@@ -60,6 +60,7 @@ jobs:
           npm run test:alert-delivery-reliability
           npm run test:app-attest-registration-recovery
           npm run test:production-training-test-push-limit
+          npm run test:delayed-training-test-push
           npm run test:production-gates
           npm run test:render-staging-config
           npm run test:verify-apns-secret-config

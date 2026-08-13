@@ -6,6 +6,9 @@ struct SettingsView: View {
     @State private var notifications = NotificationManager.shared
     @State private var isSendingTest = false
     @State private var testResultMessage: String?
+    @State private var isSchedulingDelayedTest = false
+    @State private var delayedTestResultMessage: String?
+    @State private var showingDelayedTestConfirmation = false
     @State private var isUpdatingPushSubscription = false
     @State private var isSynchronizingPushPreferences = false
     @State private var needsPushPreferenceResync = false
@@ -100,6 +103,32 @@ struct SettingsView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+
+                    Button {
+                        showingDelayedTestConfirmation = true
+                    } label: {
+                        if isSchedulingDelayedTest {
+                            ProgressView()
+                        } else {
+                            Text("settings.delayedTestAlert")
+                        }
+                    }
+                    .disabled(
+                        isSchedulingDelayedTest ||
+                        !settings.pushSubscriptionEnabled ||
+                        settings.pushRegistrationState != .active ||
+                        notifications.deviceToken == nil
+                    )
+
+                    Text("settings.delayedTestAlert.detail")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    if let delayedTestResultMessage {
+                        Text(delayedTestResultMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("settings.section.language") {
@@ -136,6 +165,18 @@ struct SettingsView: View {
                 Button("settings.pushSubscription.remove.cancel", role: .cancel) {}
             } message: {
                 Text("settings.pushSubscription.remove.confirmation.message")
+            }
+            .confirmationDialog(
+                String(localized: "settings.delayedTestAlert.confirmation.title"),
+                isPresented: $showingDelayedTestConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("settings.delayedTestAlert.confirm") {
+                    Task { await scheduleDelayedTestAlert() }
+                }
+                Button("settings.pushSubscription.remove.cancel", role: .cancel) {}
+            } message: {
+                Text("settings.delayedTestAlert.confirmation.message")
             }
             .onChange(of: settings.minMagnitude) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.notifyAtNight) { _, _ in resyncPushPreferences() }
@@ -377,6 +418,25 @@ struct SettingsView: View {
             testResultMessage = L("settings.testAlert.failure", error.localizedDescription)
         }
         isSendingTest = false
+    }
+
+    private func scheduleDelayedTestAlert() async {
+        guard settings.pushRegistrationState == .active,
+              let token = notifications.deviceToken else {
+            return
+        }
+        isSchedulingDelayedTest = true
+        delayedTestResultMessage = nil
+        defer { isSchedulingDelayedTest = false }
+        do {
+            try await APIClient.shared.scheduleDelayedTestAlert(token: token)
+            delayedTestResultMessage = String(localized: "settings.delayedTestAlert.success")
+        } catch {
+            delayedTestResultMessage = L(
+                "settings.delayedTestAlert.failure",
+                error.localizedDescription
+            )
+        }
     }
 }
 

@@ -77,6 +77,13 @@
 "settings.testAlert" = "发送测试预警";
 "settings.testAlert.success" = "测试预警已发送。";
 "settings.testAlert.failure" = "测试预警发送失败：%1$@";
+"settings.delayedTestAlert" = "安排后台测试预警";
+"settings.delayedTestAlert.detail" = "将在 90 秒后安排一条明确标注为测试的预警。请离开 QuakeSignal，然后锁定或结束 iPhone 上的 App。";
+"settings.delayedTestAlert.confirmation.title" = "安排后台测试预警？";
+"settings.delayedTestAlert.confirmation.message" = "QuakeSignal 将在约 90 秒后安排一条测试通知。仅限在已审核的测试时段使用。";
+"settings.delayedTestAlert.confirm" = "安排测试预警";
+"settings.delayedTestAlert.success" = "后台测试预警已安排。请离开 QuakeSignal，然后锁定或结束 iPhone 上的 App。";
+"settings.delayedTestAlert.failure" = "无法安排后台测试预警：%1$@";
 "settings.pushSubscription.permissionDenied" = "iPhone 系统设置中已关闭通知。您仍可在下方删除现有的 QuakeSignal 提醒注册。";
 "settings.pushSubscription.waiting" = "正在等待 APNs 提供此设备的注册令牌。收到后即可重试。";
 "settings.pushSubscription.remove" = "删除提醒注册";

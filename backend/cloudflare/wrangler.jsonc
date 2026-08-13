@@ -31,7 +31,7 @@
     "APP_ATTEST_APP_ID": "5TT564H883.com.quakesignal.app",
     // CFBundleVersion, not the marketing version. Update this allow-list in
     // the same reviewed release that changes CURRENT_PROJECT_VERSION.
-    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1",
+    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2",
     // iOS 17–26 valid App Attest proofs do not have the iOS 27 release
     // metadata extension. Whenever an extension is present it is still
     // strictly checked for App Store/TestFlight category and this build ID.
@@ -123,6 +123,12 @@
       {
         "name": "RELAY",
         "class_name": "QuakeRelay"
+      },
+      {
+        // A private, one-shot scheduler per App Attest key for the reviewed
+        // delayed TestFlight training notification. It is never a public route.
+        "name": "TRAINING_PUSH_SCHEDULER",
+        "class_name": "TrainingPushScheduler"
       }
     ]
   },
@@ -130,6 +136,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["QuakeRelay"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["TrainingPushScheduler"]
     }
   ],
   "d1_databases": [

@@ -68,6 +68,48 @@ final class AppAttestWireFormatTests: XCTestCase {
         XCTAssertNotEqual(original, changed)
     }
 
+    func testDelayedTrainingRequestIsStrictlyEncodedAndChangesTheAttestedBody() throws {
+        let immediate = try JSONEncoder().encode(DeviceTrainingTestRequest(token: "device-token"))
+        let delayed = try JSONEncoder().encode(
+            DeviceTrainingTestRequest(token: "device-token", delivery: .delayedTraining)
+        )
+        let immediateObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: immediate) as? [String: String]
+        )
+        let delayedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: delayed) as? [String: String]
+        )
+        XCTAssertEqual(immediateObject, ["token": "device-token"])
+        XCTAssertEqual(
+            delayedObject,
+            ["token": "device-token", "delivery": "delayed-training"]
+        )
+
+        let challenge = AppAttestChallenge(
+            id: "challenge-123",
+            challenge: base64URL(Data(repeating: 7, count: 32)),
+            proofType: .assertion
+        )
+        let binding = AppAttestRequestBinding(
+            operation: .testPush,
+            method: "POST",
+            path: "/v1/devices/test"
+        )
+        let immediateProof = try AppAttestWireFormat.clientData(
+            keyID: "opaque-key",
+            challenge: challenge,
+            binding: binding,
+            body: immediate
+        )
+        let delayedProof = try AppAttestWireFormat.clientData(
+            keyID: "opaque-key",
+            challenge: challenge,
+            binding: binding,
+            body: delayed
+        )
+        XCTAssertNotEqual(immediateProof, delayedProof)
+    }
+
     func testIdentifierValidationRejectsHeaderInjection() {
         XCTAssertTrue(AppAttestWireFormat.isValidOpaqueIdentifier("AbCd-0123_opaque"))
         XCTAssertFalse(AppAttestWireFormat.isValidOpaqueIdentifier(""))

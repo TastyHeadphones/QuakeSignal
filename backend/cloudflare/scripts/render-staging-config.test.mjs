@@ -62,6 +62,14 @@ test("renders an isolated workers.dev config with development App Attest", async
         "quakesignal-api-staging-alert-delivery-dlq-fallback",
     });
     assert.equal("APP_ATTEST_DEVELOPMENT_BYPASS" in config.vars, false);
+    assert.deepEqual(config.durable_objects.bindings, [
+      { name: "RELAY", class_name: "QuakeRelay" },
+      { name: "TRAINING_PUSH_SCHEDULER", class_name: "TrainingPushScheduler" },
+    ]);
+    assert.deepEqual(config.migrations, [
+      { tag: "v1", new_sqlite_classes: ["QuakeRelay"] },
+      { tag: "v2", new_sqlite_classes: ["TrainingPushScheduler"] },
+    ]);
     assert.equal(
       config.queues.producers[0].queue,
       "quakesignal-api-staging-alert-delivery",

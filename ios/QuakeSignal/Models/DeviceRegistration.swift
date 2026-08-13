@@ -15,13 +15,34 @@ struct DeviceRegistrationRequest: Encodable {
     let notifyAtNight: Bool
 }
 
-/// The token-bearing request shared by the test-alert endpoint and the
-/// token-specific form of deletion. Keep this model separate from
-/// `DeviceDeletionRequest`: a deletion is also valid when the app no longer
-/// has an in-memory APNs token and the server identifies the registration from
-/// the App Attest credential instead.
-struct DeviceTokenRequest: Encodable, Equatable {
+/// The delayed mode is a fixed server-side TestFlight QA window, not a
+/// client-controlled delivery time. Keeping this as a distinct request model
+/// makes its exact, App-Attest-signed JSON contract explicit.
+struct DeviceTrainingTestRequest: Encodable, Equatable {
+    enum Delivery: String, Encodable {
+        case delayedTraining = "delayed-training"
+    }
+
     let token: String
+    let delivery: Delivery?
+
+    init(token: String, delivery: Delivery? = nil) {
+        self.token = token
+        self.delivery = delivery
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case token
+        case delivery
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(token, forKey: .token)
+        if let delivery {
+            try container.encode(delivery, forKey: .delivery)
+        }
+    }
 }
 
 /// A device deletion can be bound to an APNs token when one is still present,

@@ -179,7 +179,11 @@ static client secret. It binds the exact JSON bytes, method, path, and operation
 to a five-minute challenge; validates Apple's certificate chain, nonce, RP ID,
 AAGUID, credential ID, signature, and monotonic counter; and records the
 public key plus replay state transactionally with the device mutation. A valid
-key can delete or trigger a training push only for its own subscription.
+key can delete or trigger a training push only for its own subscription. The
+reviewed training action has only two client-selected modes: an immediate
+alert, or the fixed 90-second delayed TestFlight check. The latter is available
+only to an attested production registration and cannot select an arbitrary
+delivery time.
 
 An attested deletion may use the exact empty JSON object (`{}`) when the app no
 longer has an APNs token. It requires an assertion from a key that already owns
@@ -326,7 +330,11 @@ npx wrangler secret put APNS_BUNDLE_ID
   UTC midnight, and `retryAtUtc`; an APNs failure after a claim still consumes
   that day's single outbound training attempt. The claim retains only the
   opaque App Attest key ID and UTC timestamps—never an APNs token, proof, or
-  request body—and is purged after 14 days.
+  request body—and is purged after 14 days. The immediate and delayed modes
+  share this same claim. The delayed mode stores only the opaque key ID, due
+  time, and at-most-once state in a private per-key Durable Object; it rechecks
+  the current D1 ownership and the production flag before APNs, drops jobs more
+  than 30 seconds late, and never retries an APNs result.
 - Device registrations are refreshed by the client and expire after 90 days.
   The relay's daily maintenance pass removes stale registrations and matching
   delivery records, plus orphaned App Attest key, public verifier, receipt,

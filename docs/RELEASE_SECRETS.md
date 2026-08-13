@@ -111,7 +111,7 @@ account instead.
 | `CLOUDFLARE_STAGING_DEVICE_API_RATE_LIMIT_NAMESPACE_ID` | Environment variable | New, account-unique namespace ID for the staging `DEVICE_API_RATE_LIMIT` binding. |
 | `CLOUDFLARE_STAGING_DEVICE_MUTATION_RATE_LIMIT_NAMESPACE_ID` | Environment variable | A different new, account-unique namespace ID for the staging `DEVICE_MUTATION_RATE_LIMIT` binding. |
 | `CLOUDFLARE_STAGING_APP_ATTEST_CHALLENGE_RATE_LIMIT_NAMESPACE_ID` | Environment variable | A third, different account-unique namespace ID for the staging route-wide `APP_ATTEST_CHALLENGE_RATE_LIMIT` binding. |
-| `CLOUDFLARE_STAGING_ALLOWED_BUNDLE_VERSIONS` | Environment variable (optional) | Comma-separated Debug `CFBundleVersion` allowlist. Omit or leave blank to use `1`. |
+| `CLOUDFLARE_STAGING_ALLOWED_BUNDLE_VERSIONS` | Environment variable (optional) | Comma-separated Debug `CFBundleVersion` allowlist. Omit or leave blank to use the isolated baseline `1`; set `1,2` for the current build-2 client while build 1 remains installed. |
 | `CLOUDFLARE_STAGING_WORKER_URL` | Environment variable (required only for readiness verification) | Bare `https://<worker>.<account-subdomain>.workers.dev` URL. Set it after the first deployment before running the workflow with `verify_staging_apns=true`. |
 
 The checked-in staging template and renderer derive all three Queue names from
@@ -258,7 +258,10 @@ temporarily set to `true`, each existing App Attest key can make only one
 clearly labelled training push to its owned production subscription per UTC
 day. The Worker returns `429` with `Retry-After` until the next UTC day after
 that slot is claimed, including when APNs later rejects the attempted training
-push.
+push. The delayed background/locked/terminated training check uses the same
+claim and is available only in a later TestFlight build that contains
+**Schedule Background Test Alert**; the currently uploaded build cannot
+produce that evidence.
 
 For the first production Worker deployment, run the protected workflow from
 `main` with `deploy_production=true` and `bootstrap_testflight=true` while
