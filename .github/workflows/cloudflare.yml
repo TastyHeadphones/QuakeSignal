@@ -72,6 +72,10 @@ jobs:
         working-directory: backend/cloudflare
         run: npm run test:production-training-test-push-limit
 
+      - name: Test delayed training-push TestFlight safety boundary
+        working-directory: backend/cloudflare
+        run: npm run test:delayed-training-test-push
+
       - name: Test production-gate invariant
         working-directory: backend/cloudflare
         run: npm run test:production-gates

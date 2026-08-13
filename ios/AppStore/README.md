@@ -31,15 +31,16 @@ archiving. If `com.quakesignal.app` is unavailable in that team, change it in
 
 ### Build-number rule
 
-The initial upload uses `CFBundleVersion` `1`. App Store Connect will reject a
-repeat upload with the same build number. Before any later TestFlight upload,
-update `CURRENT_PROJECT_VERSION` in `project.yml` and the production
-`APP_ATTEST_ALLOWED_BUNDLE_VERSIONS` value in `backend/cloudflare/wrangler.jsonc`
-in the same reviewed release, then update the intentional `1` guard in
-`.github/workflows/ios.yml`. Deploy that Worker configuration through the
+Build `1` is already uploaded. This release prepares `CFBundleVersion` `2` for
+the delayed TestFlight training control; the Worker allowlist deliberately
+keeps both `1,2` so installed build-1 testers remain valid. App Store Connect
+will reject a repeat upload with the same build number. Before a later upload,
+update `CURRENT_PROJECT_VERSION` in `project.yml`, the production
+`APP_ATTEST_ALLOWED_BUNDLE_VERSIONS` value in `backend/cloudflare/wrangler.jsonc`,
+and the intentional checked-in build guard in `.github/workflows/ios.yml` in
+the same reviewed release. Deploy that Worker configuration through the
 protected Cloudflare workflow before using the same numeric `build_number`
-input in **iOS → Run workflow**. Do not override only the workflow input: the
-current workflow intentionally accepts only the checked-in initial build.
+input in **iOS → Run workflow**. Do not override only the workflow input.
 
 ## Localized product-page names require release-owner approval
 
@@ -220,8 +221,11 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    key-owned empty-body unsubscribe, re-enrollment, and the controlled
    training-push path against
    `https://quakesignal-api.hopeso.workers.dev`; a Simulator or staging-bypass result is
-   insufficient. The runbook also identifies the separate controlled evidence
-   needed for deterministic background/terminated APNs delivery and a verified
+   insufficient. The runbook makes clear that deterministic
+   background/terminated APNs evidence requires a later TestFlight build with
+   **Schedule Background Test Alert**, plus a reviewed temporary production
+   test window; the currently uploaded build does not include that control.
+   It also identifies the separate controlled evidence needed for a verified
    fresh-key rebind after reinstall/restore. Verify foreground live updates
    after the Wolfx WebSocket service has recovered. When a socket route is
    unavailable, also confirm that the app waits 90 seconds and then refreshes

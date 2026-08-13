@@ -77,6 +77,13 @@
 "settings.testAlert" = "Send Test Alert";
 "settings.testAlert.success" = "Test alert sent.";
 "settings.testAlert.failure" = "Couldn't send test alert: %1$@";
+"settings.delayedTestAlert" = "Schedule Background Test Alert";
+"settings.delayedTestAlert.detail" = "Schedules one clearly labelled test alert in 90 seconds. Leave QuakeSignal, then lock or terminate your iPhone.";
+"settings.delayedTestAlert.confirmation.title" = "Schedule background test alert?";
+"settings.delayedTestAlert.confirmation.message" = "QuakeSignal will schedule one test notification in about 90 seconds. Use this only during a reviewed test window.";
+"settings.delayedTestAlert.confirm" = "Schedule Test Alert";
+"settings.delayedTestAlert.success" = "Background test alert scheduled. Leave QuakeSignal, then lock or terminate your iPhone.";
+"settings.delayedTestAlert.failure" = "Couldn't schedule background test alert: %1$@";
 "settings.pushSubscription.permissionDenied" = "Notifications are disabled in iPhone Settings. You can still remove any existing QuakeSignal alert registration below.";
 "settings.pushSubscription.waiting" = "Waiting for APNs to provide this device's registration token. You can retry after it arrives.";
 "settings.pushSubscription.remove" = "Remove Alert Registration";

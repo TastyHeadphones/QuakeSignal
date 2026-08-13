@@ -251,6 +251,24 @@ function assertStagingPolicy(config, values) {
     fail("staging config must not enable APP_ATTEST_DEVELOPMENT_BYPASS");
   }
 
+  const durableObjectBindings = config.durable_objects?.bindings ?? [];
+  const durableObjectClasses = new Map(
+    durableObjectBindings.map(({ name, class_name }) => [name, class_name]),
+  );
+  const migrations = config.migrations ?? [];
+  if (
+    durableObjectBindings.length !== 2 ||
+    durableObjectClasses.get("RELAY") !== "QuakeRelay" ||
+    durableObjectClasses.get("TRAINING_PUSH_SCHEDULER") !== "TrainingPushScheduler" ||
+    migrations.length !== 2 ||
+    migrations[0]?.tag !== "v1" ||
+    migrations[0]?.new_sqlite_classes?.join(",") !== "QuakeRelay" ||
+    migrations[1]?.tag !== "v2" ||
+    migrations[1]?.new_sqlite_classes?.join(",") !== "TrainingPushScheduler"
+  ) {
+    fail("generated staging Durable Object bindings do not preserve the private training scheduler");
+  }
+
   const database = config.d1_databases?.[0];
   if (
     !database ||

@@ -27,7 +27,7 @@ on:
       build_number:
         description: Exact pre-approved CFBundleVersion from ios/project.yml and the Worker App Attest allow-list
         required: false
-        default: "1"
+        default: "2"
         type: string
 
 concurrency:
@@ -308,7 +308,7 @@ jobs:
             echo "::error::build_number must contain only digits"
             exit 1
           fi
-          if [ "$BUILD_NUMBER" != "1" ]; then
+          if [ "$BUILD_NUMBER" != "2" ]; then
             echo "::error::Update ios/project.yml and APP_ATTEST_ALLOWED_BUNDLE_VERSIONS in the reviewed Worker release before using a new CFBundleVersion"
             exit 1
           fi

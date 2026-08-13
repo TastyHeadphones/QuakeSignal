@@ -136,14 +136,41 @@ The training endpoint requires an existing, attested production registration
 owned by the caller's key. It cannot bootstrap a key or send to another
 device.
 
+### 6. Delayed background, locked, and terminated training notification
+
+This check requires a **later TestFlight build** containing **Schedule
+Background Test Alert** and a reviewed Worker revision containing the private
+delayed-training scheduler. The currently uploaded TestFlight build does not
+contain this control, so it cannot provide this evidence.
+
+During a separate, explicitly reviewed temporary window with
+`ENABLE_PRODUCTION_TEST_PUSH=true`, use an already active production
+registration:
+
+1. Do not first use **Send Test Alert** that UTC day: immediate and delayed
+   modes share the same one-attempt-per-App-Attest-key daily claim.
+2. Tap **Schedule Background Test Alert**, confirm the dialog, and expect the
+   visible scheduled-success text. Do not expose or record any token, key, or
+   request details.
+3. Immediately leave QuakeSignal, then lock or terminate it. The server fixes
+   the appointment at 90 seconds; the client cannot choose another time.
+4. Record the banner/sound and delivery time without reopening the app before
+   the expected alert. An alarm more than 30 seconds late is discarded rather
+   than delivered stale. Do not retry a missed or rejected attempt: the daily
+   claim is already consumed.
+5. The release operator returns `ENABLE_PRODUCTION_TEST_PUSH` to `false` in a
+   separately reviewed configuration deployment after the planned attempt.
+
 ## Evidence that still needs an additional controlled capability
 
-Two release requirements are not reproducibly testable by a person using the
-current TestFlight UI alone. Mark them as pending rather than inferring a pass.
+The fresh-key rebind requirement is not reproducibly testable by a person using
+the current TestFlight UI alone. Mark it as pending rather than inferring a
+pass. The background/locked/terminated requirement remains pending until the
+later-build check above has passed.
 
 | Requirement | Why the current UI is insufficient | Safe completion path |
 | --- | --- | --- |
-| Background, locked, and terminated APNs delivery | **Send Test Alert** originates from the foreground Settings screen and sends synchronously. Swiping Home or locking immediately after tapping is race-prone. | Add or use a separately reviewed, App-Attest-bound delayed training notification that gives the tester time to background/lock/terminate the app. Keep it disabled by default, test one enrolled device, and retain the one-per-key/UTC-day limit. |
+| Background, locked, and terminated APNs delivery | The currently uploaded TestFlight build has only synchronous **Send Test Alert**; swiping Home or locking immediately after tapping is race-prone. | Install a later TestFlight build that contains **Schedule Background Test Alert**, then use section 6 during a reviewed temporary test window. |
 | A verified fresh-key rebind after reinstall/restore | Reinstalling is a useful smoke test, but iOS does not guarantee that it will create the exact App Attest key-reset condition on demand. The Settings UI never exposes a key ID or proof type. | Use a controlled QA key-reset/restore scenario or narrowly scoped, sanitized reviewer evidence that shows a fresh production attestation rebound the same APNs token. Do not expose keys, tokens, proofs, or raw D1 rows to the tester. |
 
 For the reinstall smoke test itself, leave an active registration in place,
@@ -165,7 +192,7 @@ Copy this into the release ticket; redact all identifiers and personal data.
 | Token-bound unsubscribe + re-enrollment |  |  |  |
 | Key-owned empty-body unsubscribe + re-enrollment |  |  |  |
 | Controlled training notification |  |  |  |
-| Background/locked/terminated delivery | Pending unless separately controlled |  |  |
+| Background/locked/terminated delivery | Pending until section 6 passes on a later TestFlight build |  |  |
 | Fresh-key rebind after reinstall/restore | Pending unless separately evidenced |  |  |
 
 Do not promote the App Attest environment gate or submit the iOS app while a

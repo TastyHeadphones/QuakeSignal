@@ -77,6 +77,13 @@
 "settings.testAlert" = "テスト通知を送信";
 "settings.testAlert.success" = "テスト通知を送信しました。";
 "settings.testAlert.failure" = "テスト通知を送信できませんでした: %1$@";
+"settings.delayedTestAlert" = "バックグラウンドテスト通知を予約";
+"settings.delayedTestAlert.detail" = "90秒後に明確にテストと表示された通知を1件予約します。QuakeSignalを離れてから、iPhoneをロックまたは終了してください。";
+"settings.delayedTestAlert.confirmation.title" = "バックグラウンドテスト通知を予約しますか？";
+"settings.delayedTestAlert.confirmation.message" = "QuakeSignalは約90秒後にテスト通知を1件予約します。レビュー済みのテスト時間帯にのみ使用してください。";
+"settings.delayedTestAlert.confirm" = "テスト通知を予約";
+"settings.delayedTestAlert.success" = "バックグラウンドテスト通知を予約しました。QuakeSignalを離れてから、iPhoneをロックまたは終了してください。";
+"settings.delayedTestAlert.failure" = "バックグラウンドテスト通知を予約できませんでした: %1$@";
 "settings.pushSubscription.permissionDenied" = "iPhoneの「設定」で通知が無効になっています。下から既存のQuakeSignal通知登録を削除できます。";
 "settings.pushSubscription.waiting" = "APNsからこのデバイスの登録トークンを取得しています。届いたら再試行できます。";
 "settings.pushSubscription.remove" = "通知登録を削除";

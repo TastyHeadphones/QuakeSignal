@@ -69,6 +69,12 @@ export interface AlertDeliveryQueueNameEnvironment {
 interface Env extends AlertDeliveryQueueNameEnvironment {
   DB: D1Database;
   RELAY: DurableObjectNamespace;
+  /**
+   * A deliberately narrow per-App-Attest-key scheduler. It stores no APNs
+   * token and gives an internal TestFlight tester time to background, lock, or
+   * terminate the app before one reviewed training notification is attempted.
+   */
+  TRAINING_PUSH_SCHEDULER: DurableObjectNamespace;
   ALERT_DELIVERY_QUEUE: Queue<AlertDeliveryMessage>;
   DEVICE_API_RATE_LIMIT: RateLimit;
   DEVICE_MUTATION_RATE_LIMIT: RateLimit;
@@ -189,6 +195,21 @@ const DELIVERY_DEDUP_RETENTION_MS = 14 * 24 * 60 * 60_000;
 // only long enough for operational review and bounded cleanup after its UTC
 // day has ended.
 const PRODUCTION_TRAINING_TEST_PUSH_CLAIM_RETENTION_MS = 14 * 24 * 60 * 60_000;
+// A fixed server-side delay prevents a client from choosing an arbitrary
+// background job time. Ninety seconds is enough for a person to leave the
+// foreground and lock or terminate the TestFlight app, while remaining a
+// narrowly bounded, single-purpose operation.
+export const DELAYED_TRAINING_TEST_PUSH_DELAY_SECONDS = 90;
+const DELAYED_TRAINING_TEST_PUSH_DELAY_MS =
+  DELAYED_TRAINING_TEST_PUSH_DELAY_SECONDS * 1_000;
+// An alarm can wake late after an infrastructure interruption. Cancel rather
+// than deliver a stale training alert long after the tester left the app.
+export const DELAYED_TRAINING_TEST_PUSH_MAX_LATE_SECONDS = 30;
+const DELAYED_TRAINING_TEST_PUSH_MAX_LATE_MS =
+  DELAYED_TRAINING_TEST_PUSH_MAX_LATE_SECONDS * 1_000;
+const DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY =
+  "delayed-training-test-push:v1";
+const TRAINING_TEST_EVENT_ID = "test:0";
 const DEVICE_PURGE_INTERVAL_MS = 24 * 60 * 60_000;
 // Kept only long enough to import records written by the pre-D1 outbox
 // implementation. New work is always persisted in D1 with its event write.
@@ -2218,7 +2239,7 @@ async function sha256Hex(value: string): Promise<string> {
   ).join("");
 }
 
-async function apnsCollapseID(event: NormalizedEvent): Promise<string> {
+async function apnsCollapseID(event: Pick<NormalizedEvent, "id">): Promise<string> {
   // A hash keeps the header bounded (APNs allows at most 64 bytes) while
   // producing the same identifier for new, update, final, and cancel states.
   return `quake-${(await sha256Hex(event.id)).slice(0, 56)}`;
@@ -5378,6 +5399,180 @@ export class QuakeRelay {
   }
 }
 
+interface DelayedTrainingTestPushJob {
+  appAttestKeyId: string;
+  dueAtMs: number;
+  state: "scheduled" | "attempted";
+}
+
+function isDelayedTrainingTestPushJob(
+  value: unknown,
+): value is DelayedTrainingTestPushJob {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  const key = canonicalizeAppAttestKeyId(candidate.appAttestKeyId);
+  return key?.keyId === candidate.appAttestKeyId &&
+    typeof candidate.dueAtMs === "number" &&
+    Number.isSafeInteger(candidate.dueAtMs) && candidate.dueAtMs > 0 &&
+    (candidate.state === "scheduled" || candidate.state === "attempted") &&
+    Object.keys(candidate).length === 3;
+}
+
+export function delayedTrainingTestPushDueAt(nowMs = Date.now()): number {
+  if (!Number.isSafeInteger(nowMs) || nowMs > Number.MAX_SAFE_INTEGER - DELAYED_TRAINING_TEST_PUSH_DELAY_MS) {
+    throw new RangeError("delayed training test requires a valid current time");
+  }
+  return nowMs + DELAYED_TRAINING_TEST_PUSH_DELAY_MS;
+}
+
+function trainingTestEvent(device: DeviceRecord, now = new Date().toISOString()): NormalizedEvent {
+  return {
+    id: TRAINING_TEST_EVENT_ID, sourceId: device.sources[0] ?? "jma_eew", eventId: "TEST-EVENT",
+    serial: 1, kind: "eew", originTimeUtc: now, reportTimeUtc: now,
+    hypocenter: "Test Region", latitude: 35, longitude: 135, magnitude: 5.5,
+    depth: 10, maxIntensity: "5-", isWarn: true, isFinal: false,
+    isCancel: false, isTraining: true, tsunami: null, raw: null,
+  };
+}
+
+/**
+ * One private DO per canonical App Attest key. Its only persisted state is a
+ * 90-second appointment and an at-most-once marker; it never stores an APNs
+ * token, proof, request body, preferences, or earthquake payload.
+ */
+export class TrainingPushScheduler {
+  constructor(
+    private readonly state: DurableObjectState,
+    private readonly env: Env,
+  ) {}
+
+  async fetch(request: Request): Promise<Response> {
+    if (new URL(request.url).pathname !== "/schedule" || request.method !== "POST") {
+      return json({ error: "not found" }, 404, noStoreHeaders());
+    }
+    let body: unknown;
+    try { body = await request.json(); } catch { return json({ error: "invalid delayed training test request" }, 400, noStoreHeaders()); }
+    const candidate = body && typeof body === "object" && !Array.isArray(body)
+      ? body as Record<string, unknown> : null;
+    const key = canonicalizeAppAttestKeyId(candidate?.appAttestKeyId);
+    if (!candidate || !key || Object.keys(candidate).length !== 1 || !Object.hasOwn(candidate, "appAttestKeyId") || key.keyId !== candidate.appAttestKeyId) {
+      return json({ error: "invalid delayed training test request" }, 400, noStoreHeaders());
+    }
+    try {
+      return json({ scheduledAtUtc: await this.schedule(key.keyId) }, 202, noStoreHeaders());
+    } catch {
+      return json({ error: "delayed training test is temporarily unavailable" }, 503, noStoreHeaders());
+    }
+  }
+
+  async alarm(): Promise<void> {
+    const job = await this.state.storage.get<unknown>(DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY);
+    if (!isDelayedTrainingTestPushJob(job)) {
+      if (job !== undefined) await this.state.storage.delete(DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY);
+      return;
+    }
+    if (job.state === "attempted") {
+      await this.state.storage.delete(DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY);
+      return;
+    }
+    if (Date.now() < job.dueAtMs) {
+      await this.state.storage.setAlarm(job.dueAtMs);
+      return;
+    }
+    if (Date.now() > job.dueAtMs + DELAYED_TRAINING_TEST_PUSH_MAX_LATE_MS) {
+      // A delayed alarm is not a reason to surprise a tester with an old
+      // notification. The accepted D1 daily claim remains consumed.
+      await this.state.storage.delete(DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY);
+      return;
+    }
+    // Durable Object alarms are at-least-once. Cross this persistent boundary
+    // before any D1, relay, or APNs I/O so retries cannot deliver twice.
+    await this.state.storage.put(DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY, { ...job, state: "attempted" } satisfies DelayedTrainingTestPushJob);
+    try {
+      // Obtain the cached provider authorization before the final ownership
+      // lookup. That lookup therefore occurs immediately before the APNs
+      // request and sees a deletion or key rebind that happened while the
+      // scheduler was waiting on the relay.
+      const [apnsAuthorization, collapseId] = await Promise.all([
+        cachedApnsAuthorizationFromRelay(this.env),
+        // Do every asynchronous preparation before the final ownership
+        // lookup. Once that D1 query returns a current registration, this DO
+        // immediately begins the APNs request without another await point at
+        // which a deletion/rebind event could interleave.
+        apnsCollapseID({ id: TRAINING_TEST_EVENT_ID }),
+      ]);
+      const row = await this.env.DB.prepare(
+        `SELECT * FROM devices WHERE app_attest_key_id = ? AND environment = 'production' LIMIT 1`,
+      ).bind(job.appAttestKeyId).first<DeviceRow>();
+      if (!row) return; // deleted or rebound after scheduling
+      // Authorization and the ownership lookup can each wait on an external
+      // service. Recheck the short training window after both have completed,
+      // immediately before beginning APNs, so a job that became stale while
+      // waiting is discarded rather than delivered late.
+      if (Date.now() > job.dueAtMs + DELAYED_TRAINING_TEST_PUSH_MAX_LATE_MS) return;
+      const device = rowToDevice(row);
+      // Disabling the reviewed deploy-time flag cancels any appointment that
+      // has not run yet. No background retry follows an APNs failure.
+      if (!productionTestPushAllowed(this.env, device) || !hasApnsConfiguration(this.env)) return;
+      const event = trainingTestEvent(device);
+      const result = await sendPush(
+        this.env,
+        device,
+        event,
+        "training",
+        apnsAuthorization,
+        collapseId,
+      );
+      if (!result.ok) return;
+    } catch {
+      // Deliberately log nothing: identifiers and APNs request data are not
+      // operational evidence for this one-off controlled test.
+    } finally {
+      await this.state.storage.delete(DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY);
+    }
+  }
+
+  private async schedule(appAttestKeyId: string): Promise<string> {
+    const existing = await this.state.storage.get<unknown>(DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY);
+    if (isDelayedTrainingTestPushJob(existing) && existing.state === "scheduled") {
+      return new Date(existing.dueAtMs).toISOString();
+    }
+    if (existing !== undefined) await this.state.storage.delete(DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY);
+    const dueAtMs = delayedTrainingTestPushDueAt();
+    await this.state.storage.put(DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY, {
+      appAttestKeyId, dueAtMs, state: "scheduled",
+    } satisfies DelayedTrainingTestPushJob);
+    try {
+      await this.state.storage.setAlarm(dueAtMs);
+    } catch (error) {
+      await this.state.storage.delete(DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY);
+      throw error;
+    }
+    return new Date(dueAtMs).toISOString();
+  }
+}
+
+export async function scheduleDelayedTrainingTestPush(env: Env, appAttestKeyId: string): Promise<string> {
+  const name = `v1:${await appAttestBodySha256(new TextEncoder().encode(appAttestKeyId))}`;
+  const scheduler = env.TRAINING_PUSH_SCHEDULER.get(
+    env.TRAINING_PUSH_SCHEDULER.idFromName(name),
+  );
+  const response = await scheduler.fetch(new Request("https://training-push.internal/schedule", {
+    method: "POST", headers: { "content-type": "application/json" },
+    // The private scheduler receives the canonical key only, never an APNs
+    // token, proof, request body, preferences, or real earthquake data.
+    body: JSON.stringify({ appAttestKeyId }),
+  }));
+  if (!response.ok) throw new Error("delayed training test scheduler rejected request");
+  const body: unknown = await response.json().catch(() => null);
+  const scheduledAtUtc = body && typeof body === "object" && !Array.isArray(body)
+    ? (body as { scheduledAtUtc?: unknown }).scheduledAtUtc : null;
+  if (typeof scheduledAtUtc !== "string" || !Number.isFinite(Date.parse(scheduledAtUtc))) {
+    throw new Error("delayed training test scheduler response was invalid");
+  }
+  return scheduledAtUtc;
+}
+
 type DeviceRateLimitActorKind =
   | "app_attest_key"
   | "device_token"
@@ -6718,6 +6913,47 @@ function isTokenRequest(
   return "token" in value;
 }
 
+type DeviceTestPushRequest =
+  | { kind: "immediate"; token: string }
+  | { kind: "delayed"; token: string };
+
+/**
+ * Keep the public test-push shape strict. The delayed mode has a fixed server
+ * delay rather than accepting client-selected times, and its exact JSON bytes
+ * are already bound into the existing `test-push` App Attest assertion.
+ */
+function deviceTestPushRequestFromBody(
+  payload: DeviceRequestPayload,
+): DeviceTestPushRequest | Response {
+  const { body } = payload;
+  if (!isValidDeviceToken(body.token)) {
+    return json({ error: "token is required" }, 400, noStoreHeaders());
+  }
+  const names = Object.keys(body);
+  if (names.length === 1 && Object.hasOwn(body, "token")) {
+    return { kind: "immediate", token: body.token };
+  }
+  if (
+    names.length === 2 &&
+    Object.hasOwn(body, "token") &&
+    Object.hasOwn(body, "delivery") &&
+    body.delivery === "delayed-training"
+  ) {
+    return { kind: "delayed", token: body.token };
+  }
+  return json(
+    { error: "invalid test alert request" },
+    400,
+    noStoreHeaders(),
+  );
+}
+
+function isDeviceTestPushRequest(
+  value: DeviceTestPushRequest | Response,
+): value is DeviceTestPushRequest {
+  return !(value instanceof Response);
+}
+
 function isEmptyDeviceDeletionRequest(body: Record<string, unknown>): boolean {
   // A no-token delete is deliberately the exact empty JSON object. Keeping
   // this distinct from malformed/unknown request shapes makes the App Attest
@@ -7102,8 +7338,8 @@ export async function handleDeviceTestPush(
   payload: DeviceRequestPayload,
   authorization: AuthorizedDeviceMutation,
 ): Promise<Response> {
-  const body = await deviceTokenFromBody(payload);
-  if (!isTokenRequest(body)) return body;
+  const body = deviceTestPushRequestFromBody(payload);
+  if (!isDeviceTestPushRequest(body)) return body;
   const rateLimitResponse = await enforceDeviceMutationRateLimit(
     request,
     env,
@@ -7136,6 +7372,16 @@ export async function handleDeviceTestPush(
     return json(
       { error: "APNs credentials are not configured" },
       503,
+      noStoreHeaders(),
+    );
+  }
+  if (body.kind === "delayed" && device.environment !== "production") {
+    // The delayed path exists only to obtain production TestFlight evidence.
+    // Keep sandbox development tests on the synchronous, visibly interactive
+    // path so a staging Worker cannot accumulate scheduled background work.
+    return json(
+      { error: "delayed test alerts require a production TestFlight device" },
+      403,
       noStoreHeaders(),
     );
   }
@@ -7185,6 +7431,46 @@ export async function handleDeviceTestPush(
       (await completeAttestedAuthorization(env.DB, authorization)) !== "completed"
     ) {
       return appAttestConflictResponse();
+    }
+  }
+  if (body.kind === "delayed") {
+    // The production branch above completed the existing App Attest assertion
+    // and one-per-key-per-UTC-day D1 claim before scheduling. A failed
+    // scheduler write deliberately consumes that same daily slot, matching the
+    // existing policy that an APNs failure is still one outbound attempt.
+    if (authorization.mode !== "attested") {
+      return json(
+        { error: "production test alerts require app integrity verification" },
+        403,
+        noStoreHeaders(),
+      );
+    }
+    try {
+      return json(
+        {
+          accepted: true,
+          scheduledAtUtc: await scheduleDelayedTrainingTestPush(
+            env,
+            authorization.keyId,
+          ),
+        },
+        202,
+        noStoreHeaders(),
+      );
+    } catch (error) {
+      // No request data, APNs token, or App Attest identifier is logged. The
+      // accepted claim remains the durable at-most-one attempt boundary.
+      console.error(
+        JSON.stringify({
+          outcome: "delayed_training_test_push_schedule_failed",
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        }),
+      );
+      return json(
+        { error: "delayed test alert is temporarily unavailable" },
+        503,
+        noStoreHeaders(),
+      );
     }
   }
   const now = new Date().toISOString();
@@ -7273,7 +7559,7 @@ async function handleRequest(
         },
         {
           heading: "Storage and deletion",
-          body: "Subscription settings and the associated App Attest integrity record are stored in Cloudflare D1. Removing notification registration from the app deletes the matching device registration, even when this launch has no APNs token, if an existing App Attest key can prove it owns that subscription. A new key cannot claim a legacy subscription with an empty request. After reinstall or device restore, a fresh Apple attestation plus the exact APNs token may safely rebind that one token and retire its old key record; assertions and tokenless requests cannot transfer another key's subscription. If it was the last registration using an App Attest key, that associated verifier, receipt, and assertion-counter record is deleted. A reviewed production training test creates a separate token-free claim containing only the opaque App Attest key ID and UTC timestamps; it is retained for at most 14 days to enforce one production training attempt per key per UTC day. Each App Attest challenge expires in no more than five minutes and expired records are removed by routine cleanup. A daily retention job purges registrations that are not refreshed for 90 days with their orphaned integrity records. Sanitized delivery-failure token hashes are retained for at most 14 days for reliability investigations. Disabling notifications or location access stops new collection but does not reliably send a deletion request, so use the in-app removal control when possible.",
+          body: "Subscription settings and the associated App Attest integrity record are stored in Cloudflare D1. Removing notification registration from the app deletes the matching device registration, even when this launch has no APNs token, if an existing App Attest key can prove it owns that subscription. A new key cannot claim a legacy subscription with an empty request. After reinstall or device restore, a fresh Apple attestation plus the exact APNs token may safely rebind that one token and retire its old key record; assertions and tokenless requests cannot transfer another key's subscription. If it was the last registration using an App Attest key, that associated verifier, receipt, and assertion-counter record is deleted. A reviewed production training test creates a separate token-free claim containing only the opaque App Attest key ID and UTC timestamps; it is retained for at most 14 days to enforce one production training attempt per key per UTC day. Its optional fixed-delay check also creates one private scheduler record containing only that opaque App Attest key ID, a due time, and an at-most-once attempted state; it contains no APNs token, request body, proof, preferences, location, or earthquake payload. That temporary record is deleted after its one scheduled attempt or cancellation; an alarm more than 30 seconds late is deleted without delivery. Each App Attest challenge expires in no more than five minutes and expired records are removed by routine cleanup. A daily retention job purges registrations that are not refreshed for 90 days with their orphaned integrity records. Sanitized delivery-failure token hashes are retained for at most 14 days for reliability investigations. Disabling notifications or location access stops new collection but does not reliably send a deletion request, so use the in-app removal control when possible.",
         },
         {
           heading: "Third-party services",

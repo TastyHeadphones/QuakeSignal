@@ -78,6 +78,10 @@
       {
         "name": "RELAY",
         "class_name": "QuakeRelay"
+      },
+      {
+        "name": "TRAINING_PUSH_SCHEDULER",
+        "class_name": "TrainingPushScheduler"
       }
     ]
   },
@@ -85,6 +89,10 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["QuakeRelay"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["TrainingPushScheduler"]
     }
   ],
   "d1_databases": [
