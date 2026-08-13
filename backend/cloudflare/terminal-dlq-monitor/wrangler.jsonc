@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "quakesignal-terminal-dlq-monitor",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-13",
+  // This is a cron-only operational monitor. It deliberately has neither a
+  // workers.dev hostname nor a route, and no D1, Queue, APNs, or service
+  // binding. Its Fetch handler is only a defensive 404.
+  "workers_dev": false,
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "vars": {
+    // The production monitor itself is deployed in a separate Cloudflare
+    // account. This target name is deliberately fixed in source, not an
+    // operator-controlled URL or Queue name.
+    "MONITOR_TARGET": "production"
+  },
+  // Make a deploy fail closed when the independently provisioned runtime
+  // credentials have not reached this Worker. Values are supplied only through
+  // one atomic `wrangler deploy --secrets-file` invocation in the protected
+  // deployment workflow.
+  "secrets": {
+    "required": [
+      "CLOUDFLARE_TARGET_ACCOUNT_ID",
+      "CLOUDFLARE_MONITOR_API_TOKEN",
+      "GITHUB_APP_ID",
+      "GITHUB_APP_INSTALLATION_ID",
+      "GITHUB_APP_PRIVATE_KEY_PKCS8"
+    ]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

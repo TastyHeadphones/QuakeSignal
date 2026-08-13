@@ -14,7 +14,7 @@ quakesignal-alert-delivery Queue ──► bounded Queue consumer ──► rela
                                       token-free Durable Object fallback ──► replay D1 incident
                                                        │ Durable Object unavailable
                                                        ▼
-                            quakesignal-alert-delivery-dlq-fallback (consumerless, scheduled Queue monitor)
+                            quakesignal-alert-delivery-dlq-fallback (consumerless, independent Cron Queue monitor)
 ```
 
 The Queue messages contain a normalized earthquake snapshot, notification
@@ -73,11 +73,13 @@ exists, `/healthz` returns `503` with
 storage are unavailable, the DLQ message remains retriable. Its bounded DLQ
 consumer policy finally routes the original message to the intentionally
 consumerless `quakesignal-alert-delivery-dlq-fallback` Queue. Cloudflare Queue
-backlog is not available to this Worker, so the scheduled GitHub Actions
-terminal-DLQ monitor reads only the Queue's aggregate Cloudflare metrics and
-opens one labelled recovery issue on any retained evidence. Configure its
-dedicated read-only monitor Environment and follow the recovery runbook before Cloudflare's
-consumerless-DLQ retention ends; see
+backlog is not available to this Worker, so the separate cron-only
+[`terminal-DLQ monitor`](terminal-dlq-monitor/) reads only the Queue's aggregate
+Cloudflare metrics and opens one labelled recovery issue on any retained
+evidence. Its GitHub Actions counterpart is a best-effort secondary check, not
+the sole cadence control. Configure the independent monitor, its heartbeat
+alert, and the recovery runbook before Cloudflare's consumerless-DLQ retention
+ends; see
 [`docs/CLOUDFLARE_PRODUCTION.md`](../../docs/CLOUDFLARE_PRODUCTION.md#terminal-dlq-fallback-recovery).
 
 Each page has a persisted deadline. New, updated, cancelled, and training EEW
@@ -123,8 +125,10 @@ npx wrangler queues create quakesignal-alert-delivery-dlq-fallback
 ```
 
 Before either protected production deployment phase, configure and manually
-verify the scheduled GitHub Actions terminal-DLQ monitor for the exact
-consumerless `quakesignal-alert-delivery-dlq-fallback` Queue. A release operator may set the
+verify the independent cron-only terminal-DLQ monitor for the exact
+consumerless `quakesignal-alert-delivery-dlq-fallback` Queue. The GitHub
+Actions monitor remains a secondary check because GitHub can delay or drop
+scheduled workflow runs. A release operator may set the
 protected `cloudflare-production` Environment variable
 `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true` only after
 verifying the monitor reaches a staffed responder and reviewing the

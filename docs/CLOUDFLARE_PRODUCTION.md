@@ -86,16 +86,21 @@ release evidence; repeat the production proof against
    DLQ, and the intentionally consumerless
    `quakesignal-alert-delivery-dlq-fallback` terminal-evidence Queue. Use a
    Workers plan that supports the expected alert volume and add billing/usage
-   alerts. The checked-in **Monitor terminal DLQ fallback** workflow runs every
-   five minutes and can also be dispatched manually. It uses the separate,
-   least-privilege `cloudflare-terminal-dlq-monitor` Environment to list the
-   exact Queue and read its aggregate Cloudflare metrics; it never reads, logs,
-   acknowledges, retries, purges, or redrives Queue messages. A nonzero backlog
-   or oldest-message timestamp opens or updates one labelled GitHub recovery
-   issue and makes the workflow fail. Before either the TestFlight bootstrap or
-   launch deployment, a release operator must verify that the monitor can reach
-   a staffed responder and review the retention-aware recovery procedure below,
-   then set protected
+   alerts. Deploy the separate, cron-only
+   [`terminal-DLQ monitor`](../backend/cloudflare/terminal-dlq-monitor/) with a
+   five-minute Cloudflare Cron Trigger. It uses only a **Queues Read** token to
+   list the exact Queue and read aggregate metrics, then uses a GitHub App
+   limited to **Issues: write** on this repository to open or update one
+   labelled recovery issue. It never reads, logs, acknowledges, retries,
+   purges, or redrives Queue messages. The checked-in **Monitor terminal DLQ
+   fallback** GitHub workflow remains a manually-dispatchable, best-effort
+   secondary check: GitHub documents that scheduled workflow runs can be
+   delayed or dropped, so it is not sufficient as the sole cadence control.
+   A nonzero backlog, oldest-message timestamp, or direct-monitor probe failure
+   is an urgent incident. Before either the TestFlight bootstrap or launch
+   deployment, a release operator must verify the direct monitor, its
+   independent missed-heartbeat/Cron-failure escalation, and the staffed
+   recovery procedure below, then set protected
    Environment variable `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true`.
    The protected deployment workflow fails closed without that explicit operator
    attestation. The Worker cannot query Queue depth; a nonzero backlog is an
@@ -151,8 +156,9 @@ release evidence; repeat the production proof against
    `APP_ATTEST_PRODUCTION_ENFORCED=true` and re-run the protected workflow with
    `bootstrap_testflight` disabled for the **launch promotion**. That variable
    records an approved test; it is not an App Attest credential.
-7. After the separate `cloudflare-terminal-dlq-monitor` Environment has passed
-   both its protected-`main` manual probe and an unattended scheduled probe,
+7. After the independent terminal-DLQ monitor has passed its protected deploy,
+   three on-cadence Cloudflare Cron executions, independent missed-heartbeat
+   escalation, and staffed-responder review,
    put `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
    `CLOUDFLARE_WORKER_URL=https://quakesignal-api.hopeso.workers.dev`, the App
    Attest review gate, and
@@ -189,21 +195,23 @@ also unavailable. Treat a labelled GitHub recovery issue from **Monitor
 terminal DLQ fallback** as a production incident, even when the Cloudflare
 metric reports only an oldest-message timestamp.
 
-Before setting
+Before setting or re-affirming
 `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true`, verify all of the
-following:
+following. Earlier GitHub-only scheduled probes are useful secondary evidence,
+but are not enough by themselves because GitHub can delay or drop schedules.
 
-1. The monitor's dedicated `cloudflare-terminal-dlq-monitor` Environment has
-   only `CLOUDFLARE_MONITOR_API_TOKEN` (Cloudflare **Queues Read** scope) and
-   `CLOUDFLARE_ACCOUNT_ID`, and a manual dispatch from protected `main`
-   successfully identifies exactly one
-   `quakesignal-alert-delivery-dlq-fallback` Queue and reports aggregate
-   metrics. The monitor requires Cloudflare **Queues Read** permission; its
-   reviewed script makes only Queue-list and Queue-metrics requests.
-2. The dedicated monitor Environment permits protected `main` but has **no
-   required reviewers**, so a scheduled run can obtain its two read-only
-   values without an unattended approval bottleneck. It must not contain the
-   `cloudflare-production` deployment token or any other production secret.
+1. The separate `quakesignal-terminal-dlq-monitor` Worker has no public route,
+   delivery binding, D1, Queue, APNs, or deployment binding. It is deployed in
+   a **separate Cloudflare account** because Workers Scripts: Edit is
+   account-wide; its runtime monitor token has only Cloudflare **Queues Read**
+   against the production Queue account; and its GitHub App is installed only
+   on this repository with only **Issues: write**. Follow the complete setup
+   and verification instructions in
+   [`backend/cloudflare/terminal-dlq-monitor/README.md`](../backend/cloudflare/terminal-dlq-monitor/README.md).
+2. After Cron propagation, three successive on-cadence Cloudflare Cron Events
+   complete successfully, and a separate missed-heartbeat/Cron-failure alert
+   reaches a staffed responder. Test the escalation only in an isolated
+   nonproduction monitor; do not inject test evidence into production.
 3. The labelled GitHub issue reaches a staffed responder. It contains only the
    Queue name and aggregate count/timestamp; Queue message bodies, device data,
    APNs keys, Cloudflare tokens, and raw API responses must never be added to
@@ -241,8 +249,9 @@ When the monitor alerts:
   persistence is awaiting recovery and the Worker has retained only sanitized,
   token-free evidence in Durable Object storage. Do not delete that marker
   manually; the relay replays it before ordinary outbox work. The separate
-  scheduled terminal-DLQ monitor alerts on the terminal consumerless Queue's
-  aggregate Cloudflare backlog metric—this is not exposed through `/healthz`.
+  Cloudflare Cron terminal-DLQ monitor alerts on the terminal consumerless
+  Queue's aggregate Cloudflare backlog metric—this is not exposed through
+  `/healthz`; the GitHub schedule is a secondary audit only.
   `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED` is a protected
   operator attestation that this monitor and a retention-aware recovery
   procedure were reviewed; it is not a Queue-depth check. If the

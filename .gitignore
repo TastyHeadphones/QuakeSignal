@@ -3,6 +3,7 @@ node_modules/
 .wrangler/
 .playwright-cli/
 backend/cloudflare/worker-configuration.d.ts
+backend/cloudflare/terminal-dlq-monitor/worker-configuration.d.ts
 backend/cloudflare/*.cpuprofile
 backend/dist/
 backend/data/
