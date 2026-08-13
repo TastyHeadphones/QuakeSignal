@@ -204,7 +204,13 @@ const UPSTREAM_RECONNECT_FAILURE_PREFIX = "upstream-reconnect-failures:";
 const UPSTREAM_RECONNECT_NOT_BEFORE_PREFIX = "upstream-reconnect-not-before-ms:";
 const UPSTREAM_DEGRADED_SINCE_PREFIX = "upstream-degraded-since-ms:";
 const LAST_HTTP_SEED_MS_KEY = "last-http-seed-ms";
-const HTTP_SEED_LEASE_UNTIL_KEY = "http-seed-lease-until-ms";
+// Pre-cursor relay revisions own this numeric key and may clear it when their
+// sweep finishes. Newer relays only read it as a rolling-deploy hand-off
+// fence, never write or delete it.
+const LEGACY_HTTP_SEED_LEASE_UNTIL_KEY = "http-seed-lease-until-ms";
+// Keep the fenced cursor lease isolated from legacy relay revisions so one
+// cannot clear another revision's ownership record during a rolling deploy.
+const HTTP_SEED_LEASE_V2_KEY = "http-seed-lease-v2";
 const HTTP_FALLBACK_ACTIVE_KEY = "http-fallback-active";
 // A journal entry is persisted before live WebSocket work touches D1. It
 // survives a Durable Object restart and lets the next alarm retry a failed
@@ -1090,12 +1096,36 @@ function isHttpSeedLease(value: unknown): value is HttpSeedLease {
   );
 }
 
-/** Read the legacy numeric lease too, so a rolling deployment fails closed. */
 function httpSeedLeaseUntil(value: unknown): number | null {
+  return isHttpSeedLease(value) ? value.untilMs : null;
+}
+
+function legacyHttpSeedLeaseUntil(value: unknown): number | null {
+  // The immediately preceding cursor revision wrote the structured ownership
+  // record to the old key. Accept it too during the rolling-deploy hand-off;
+  // this revision still never writes or clears either legacy shape.
   if (isHttpSeedLease(value)) return value.untilMs;
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? value
     : null;
+}
+
+/**
+ * A legacy numeric lease is a read-only hand-off fence: its owning revision
+ * can clear it at any time, so the cursor relay must never use it as storage
+ * for its own ownership record.
+ */
+async function httpSeedLeaseFenceUntil(
+  storage: DurableKeyValueStore,
+): Promise<number> {
+  const [currentLease, legacyLease] = await Promise.all([
+    storage.get<unknown>(HTTP_SEED_LEASE_V2_KEY),
+    storage.get<unknown>(LEGACY_HTTP_SEED_LEASE_UNTIL_KEY),
+  ]);
+  return Math.max(
+    httpSeedLeaseUntil(currentLease) ?? 0,
+    legacyHttpSeedLeaseUntil(legacyLease) ?? 0,
+  );
 }
 
 function snapshotEvent(event: NormalizedEvent): QueuedEvent {
@@ -4201,15 +4231,8 @@ export class QuakeRelay {
    * fallback owns the next paced source request.
    */
   private async nextHttpFallbackAlarmAt(now: number): Promise<number | null> {
-    const seedLease = await this.state.storage.get<unknown>(
-      HTTP_SEED_LEASE_UNTIL_KEY,
-    );
-    const seedLeaseUntil = httpSeedLeaseUntil(seedLease);
-    if (
-      typeof seedLeaseUntil === "number" &&
-      Number.isFinite(seedLeaseUntil) &&
-      seedLeaseUntil > now
-    ) {
+    const seedLeaseUntil = await httpSeedLeaseFenceUntil(this.state.storage);
+    if (seedLeaseUntil > now) {
       return seedLeaseUntil;
     }
     const lastSeedMs = await this.state.storage.get<number>(LAST_HTTP_SEED_MS_KEY);
@@ -4320,7 +4343,7 @@ export class QuakeRelay {
     const storage = this.state.storage;
     const advance = async (target: DurableKeyValueStore): Promise<boolean> => {
       if (ownerId !== undefined) {
-        const lease = await target.get<unknown>(HTTP_SEED_LEASE_UNTIL_KEY);
+        const lease = await target.get<unknown>(HTTP_SEED_LEASE_V2_KEY);
         if (!isHttpSeedLease(lease) || lease.ownerId !== ownerId) return false;
       }
       await target.put(HTTP_SEED_SOURCE_CURSOR_KEY, next);
@@ -5147,15 +5170,13 @@ export class QuakeRelay {
     if (typeof storage.transaction !== "function") {
       // Focused unit fakes do not model Durable Object transactions. Real DO
       // storage always takes this atomic branch.
-      const current = await storage.get<unknown>(HTTP_SEED_LEASE_UNTIL_KEY);
-      if ((httpSeedLeaseUntil(current) ?? 0) > now) return null;
-      await storage.put(HTTP_SEED_LEASE_UNTIL_KEY, lease);
+      if (await httpSeedLeaseFenceUntil(storage) > now) return null;
+      await storage.put(HTTP_SEED_LEASE_V2_KEY, lease);
       return lease.ownerId;
     }
     return storage.transaction(async (transaction) => {
-      const current = await transaction.get<unknown>(HTTP_SEED_LEASE_UNTIL_KEY);
-      if ((httpSeedLeaseUntil(current) ?? 0) > now) return null;
-      await transaction.put(HTTP_SEED_LEASE_UNTIL_KEY, lease);
+      if (await httpSeedLeaseFenceUntil(transaction) > now) return null;
+      await transaction.put(HTTP_SEED_LEASE_V2_KEY, lease);
       return lease.ownerId;
     });
   }
@@ -5169,15 +5190,19 @@ export class QuakeRelay {
     const storage = this.state.storage;
     const renew = async (target: DurableKeyValueStore): Promise<boolean> => {
       const now = Date.now();
-      const current = await target.get<unknown>(HTTP_SEED_LEASE_UNTIL_KEY);
+      const [current, legacyLease] = await Promise.all([
+        target.get<unknown>(HTTP_SEED_LEASE_V2_KEY),
+        target.get<unknown>(LEGACY_HTTP_SEED_LEASE_UNTIL_KEY),
+      ]);
       if (
         !isHttpSeedLease(current) ||
         current.ownerId !== ownerId ||
-        current.untilMs <= now
+        current.untilMs <= now ||
+        (legacyHttpSeedLeaseUntil(legacyLease) ?? 0) > now
       ) {
         return false;
       }
-      await target.put(HTTP_SEED_LEASE_UNTIL_KEY, {
+      await target.put(HTTP_SEED_LEASE_V2_KEY, {
         ownerId,
         untilMs: now + HTTP_FALLBACK_SWEEP_LEASE_MS,
       } satisfies HttpSeedLease);
@@ -5190,9 +5215,9 @@ export class QuakeRelay {
   private async releaseHttpSeedLease(ownerId: string): Promise<void> {
     const storage = this.state.storage;
     const release = async (target: DurableKeyValueStore): Promise<void> => {
-      const current = await target.get<unknown>(HTTP_SEED_LEASE_UNTIL_KEY);
+      const current = await target.get<unknown>(HTTP_SEED_LEASE_V2_KEY);
       if (isHttpSeedLease(current) && current.ownerId === ownerId) {
-        await target.delete(HTTP_SEED_LEASE_UNTIL_KEY);
+        await target.delete(HTTP_SEED_LEASE_V2_KEY);
       }
     };
     if (typeof storage.transaction !== "function") {

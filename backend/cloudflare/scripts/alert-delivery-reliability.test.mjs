@@ -895,6 +895,16 @@ test("coalesces concurrent HTTP sweeps and treats a silent open socket as degrad
   const second = relay.seedFromHttp("recovery");
   await sourceStarted;
   assert.equal(sourceCalls, 1, "one relay instance must coalesce concurrent sweeps");
+  assert.equal(
+    values.has("http-seed-lease-until-ms"),
+    false,
+    "the cursor lease must not reuse the legacy numeric lease key",
+  );
+  assert.equal(
+    typeof values.get("http-seed-lease-v2")?.ownerId,
+    "string",
+    "the cursor relay records ownership under a versioned lease key",
+  );
   const secondRelay = new QuakeRelay(state, {});
   for (const source of [
     "jma_eew",
@@ -932,6 +942,92 @@ test("coalesces concurrent HTTP sweeps and treats a silent open socket as degrad
     false,
     "a silent-but-open socket must not block degraded transport recovery",
   );
+});
+
+test("a legacy numeric seed lease is a read-only rolling-deploy hand-off fence", async () => {
+  const { QuakeRelay } = await workerModule();
+  const legacyUntil = Date.now() + 60_000;
+  const values = new Map([["http-seed-lease-until-ms", legacyUntil]]);
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async put(key, value) {
+        values.set(key, value);
+      },
+      async delete(key) {
+        values.delete(key);
+      },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
+      async transaction(callback) {
+        return callback({
+          get: this.get.bind(this),
+          put: this.put.bind(this),
+          delete: this.delete.bind(this),
+        });
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+
+  assert.equal(
+    await relay.acquireHttpSeedLease(),
+    null,
+    "an active legacy owner must finish before the cursor relay begins",
+  );
+  assert.equal(
+    await relay.nextHttpFallbackAlarmAt(Date.now()),
+    legacyUntil,
+    "the fallback scheduler waits for the legacy hand-off fence",
+  );
+  assert.equal(
+    values.get("http-seed-lease-until-ms"),
+    legacyUntil,
+    "the cursor relay never mutates the legacy owner record",
+  );
+  assert.equal(
+    values.has("http-seed-lease-v2"),
+    false,
+    "the cursor relay must not create a lease while the legacy fence is live",
+  );
+});
+
+test("a legacy object seed lease from the preceding cursor revision is also fenced", async () => {
+  const { QuakeRelay } = await workerModule();
+  const legacyUntil = Date.now() + 60_000;
+  const values = new Map([[
+    "http-seed-lease-until-ms",
+    { ownerId: "preceding-cursor-release", untilMs: legacyUntil },
+  ]]);
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); },
+      async list() { return new Map(); },
+      async transaction(callback) {
+        return callback({
+          get: this.get.bind(this),
+          put: this.put.bind(this),
+          delete: this.delete.bind(this),
+        });
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+
+  assert.equal(await relay.acquireHttpSeedLease(), null);
+  assert.equal(await relay.nextHttpFallbackAlarmAt(Date.now()), legacyUntil);
+  assert.deepEqual(values.get("http-seed-lease-until-ms"), {
+    ownerId: "preceding-cursor-release",
+    untilMs: legacyUntil,
+  });
+  assert.equal(values.has("http-seed-lease-v2"), false);
 });
 
 test("HTTP recovery rotates after a failed source attempt instead of starving later feeds", async () => {
@@ -1022,7 +1118,7 @@ test("a stale HTTP seed owner cannot overwrite a successor's pacing or source cu
   relay.renewHttpSeedLease = async (ownerId) => {
     renewCalls += 1;
     if (renewCalls === 1) return originalRenew.call(relay, ownerId);
-    values.set("http-seed-lease-until-ms", {
+    values.set("http-seed-lease-v2", {
       ownerId: "successor",
       untilMs: Date.now() + 60_000,
     });
@@ -1036,7 +1132,7 @@ test("a stale HTTP seed owner cannot overwrite a successor's pacing or source cu
 
   assert.equal(values.get("http-seed-source-cursor"), 5);
   assert.equal(values.get("last-http-seed-ms"), 12345);
-  assert.equal(values.get("http-seed-lease-until-ms").ownerId, "successor");
+  assert.equal(values.get("http-seed-lease-v2").ownerId, "successor");
 });
 
 test("a due HTTP recovery alarm reserves the whole D1 turn for one source slice", async () => {
