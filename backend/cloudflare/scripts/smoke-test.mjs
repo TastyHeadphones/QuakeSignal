@@ -75,10 +75,15 @@ assert.equal(detail.status, 410, "detail data endpoint must stay disabled");
 const live = await fetch(`${baseURL}/v1/live`);
 assert.equal(live.status, 410, "live relay endpoint must stay disabled");
 
+// Use a syntactically valid token for integrity-boundary probes. Otherwise a
+// request correctly stops at public input validation (400) before it reaches
+// the App Attest authorization guard that this smoke test is meant to prove.
+const unattestedDeviceToken = "a".repeat(64);
+
 const invalidRegistration = await fetch(`${baseURL}/v1/devices`, {
   method: "POST",
   headers: { "content-type": "application/json" },
-  body: JSON.stringify({ token: "short" }),
+  body: JSON.stringify({ token: unattestedDeviceToken }),
 });
 assert.equal(
   invalidRegistration.status,
@@ -132,7 +137,7 @@ assert.equal(
 const invalidDeletion = await fetch(`${baseURL}/v1/devices`, {
   method: "DELETE",
   headers: { "content-type": "application/json" },
-  body: JSON.stringify({ token: "short" }),
+  body: JSON.stringify({ token: unattestedDeviceToken }),
 });
 assert.equal(
   invalidDeletion.status,
@@ -148,7 +153,7 @@ assert.equal(
 const invalidTestPush = await fetch(`${baseURL}/v1/devices/test`, {
   method: "POST",
   headers: { "content-type": "application/json" },
-  body: JSON.stringify({ token: "short" }),
+  body: JSON.stringify({ token: unattestedDeviceToken }),
 });
 assert.equal(
   invalidTestPush.status,
