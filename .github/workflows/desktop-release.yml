@@ -623,6 +623,15 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ vars.MACOS_APP_STORE_APPLICATION_IDENTITY }}
           VITE_MAC_APP_STORE: "true"
         run: |
+          set -euo pipefail
+          # Tauri preserves the source mode for bundle.macOS.files. The
+          # provisioning profile is written from a protected secret with mode
+          # 0600 above, but its embedded copy must be readable by a user other
+          # than root after productbuild installs the app (ITMS-90255).
+          chmod 0644 src-tauri/macos-app-store.provisionprofile
+          # This also applies to CodeResources and other files created while
+          # Tauri/codesign assembles the signed bundle.
+          umask 022
           npm run tauri -- bundle --bundles app --target ${{ env.RUST_TARGET }} --features macos-app-store --config src-tauri/tauri.macos-app-store.conf.json
 
       - name: Package and verify Mac App Store artifact
@@ -694,6 +703,106 @@ jobs:
             fi
           }
 
+          assert_app_bundle_permissions() {
+            local bundle="$1"
+            local path
+            local -a unreadable_files=()
+            local -a unsearchable_directories=()
+
+            # App Store packages install as root. Consequently, group access
+            # is not enough: every regular file needs the "other" read bit,
+            # and every directory needs the "other" execute/search bit.
+            while IFS= read -r -d '' path; do
+              unreadable_files+=("$path")
+            done < <(find "$bundle" -type f ! -perm -0004 -print0)
+
+            while IFS= read -r -d '' path; do
+              unsearchable_directories+=("$path")
+            done < <(find "$bundle" -type d ! -perm -0001 -print0)
+
+            if [ "${#unreadable_files[@]}" -eq 0 ] && [ "${#unsearchable_directories[@]}" -eq 0 ]; then
+              return 0
+            fi
+
+            echo "::error::Mac App Store app contains entries that a non-root user cannot read or search; refusing to package an ITMS-90255 candidate."
+            if [ "${#unreadable_files[@]}" -gt 0 ]; then
+              for path in "${unreadable_files[@]}"; do
+                stat -f '  unreadable file: %Sp %N' "$path"
+              done
+            fi
+            if [ "${#unsearchable_directories[@]}" -gt 0 ]; then
+              for path in "${unsearchable_directories[@]}"; do
+                stat -f '  unsearchable directory: %Sp %N' "$path"
+              done
+            fi
+            return 1
+          }
+
+          assert_package_payload_permissions() {
+            local package_path="$1"
+            local bom
+            local mode
+            local path
+            local permission_bits
+            local -a boms=()
+            local -a unreadable_files=()
+            local -a unsearchable_directories=()
+
+            # Check the package BOM as well as the bundle before productbuild.
+            # This asserts the exact permissions that will be submitted, while
+            # avoiding any post-signing mutation of the app bundle.
+            while IFS= read -r bom; do
+              if [ -n "$bom" ]; then
+                boms+=("$bom")
+              fi
+            done < <(pkgutil --bom "$package_path")
+
+            if [ "${#boms[@]}" -eq 0 ]; then
+              echo "::error::Could not inspect Mac App Store package permissions: no BOM was found."
+              return 1
+            fi
+
+            for bom in "${boms[@]}"; do
+              while IFS=$'\t' read -r mode path; do
+                [ -n "$path" ] || continue
+                permission_bits="${mode: -3}"
+                if (( (8#$permission_bits & 4) == 0 )); then
+                  unreadable_files+=("$path ($mode; BOM $bom)")
+                fi
+              done < <(lsbom -f -p mf "$bom")
+
+              while IFS=$'\t' read -r mode path; do
+                # The synthetic component root has mode 0 in a BOM and is not
+                # an installed directory. Every real directory must be
+                # searchable by a non-root user.
+                [ "$path" = "." ] && continue
+                [ -n "$path" ] || continue
+                permission_bits="${mode: -3}"
+                if (( (8#$permission_bits & 1) == 0 )); then
+                  unsearchable_directories+=("$path ($mode; BOM $bom)")
+                fi
+              done < <(lsbom -d -p mf "$bom")
+            done
+
+            if [ "${#unreadable_files[@]}" -eq 0 ] && [ "${#unsearchable_directories[@]}" -eq 0 ]; then
+              return 0
+            fi
+
+            echo "::error::Mac App Store package payload contains entries that a non-root user cannot read or search (ITMS-90255)."
+            if [ "${#unreadable_files[@]}" -gt 0 ]; then
+              for path in "${unreadable_files[@]}"; do
+                printf '  unreadable payload file: %s\n' "$path"
+              done
+            fi
+            if [ "${#unsearchable_directories[@]}" -gt 0 ]; then
+              for path in "${unsearchable_directories[@]}"; do
+                printf '  unsearchable payload directory: %s\n' "$path"
+              done
+            fi
+            return 1
+          }
+
+          assert_app_bundle_permissions "$app"
           codesign --verify --deep --strict --verbose=2 "$app"
           if ! codesign -dvv "$app" 2>&1 | grep -Fqx "TeamIdentifier=$expected_team"; then
             echo "::error::Mac App Store app is not signed for the expected Apple team"
@@ -729,6 +838,7 @@ jobs:
           mkdir -p "$package_dir"
           xcrun productbuild --sign "$MACOS_APP_STORE_INSTALLER_IDENTITY" --component "$app" /Applications "$package"
           pkgutil --check-signature "$package"
+          assert_package_payload_permissions "$package"
           echo "MACOS_APP_STORE_PACKAGE=$package" >> "$GITHUB_ENV"
 
       - name: Materialize App Store Connect API key immediately before upload
