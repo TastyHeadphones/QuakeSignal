@@ -210,6 +210,9 @@ allow one to ten screenshots and list the accepted display-size resolutions.
 7. Validate the archive, then upload it to TestFlight and App Store Connect.
 8. Complete age rating, content rights, privacy, export compliance, localized
    metadata, and screenshot fields.
+   Before certifying content rights for Wolfx-supplied earthquake data, obtain
+   and preserve written upstream permission using
+   [`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md).
 9. Test the uploaded build in TestFlight on physical hardware before submitting
    it to App Review. Verify the production App Attest registration, refresh,
    token-bound unsubscribe, and controlled test-push path against

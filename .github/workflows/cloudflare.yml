@@ -60,6 +60,10 @@ jobs:
         working-directory: backend/cloudflare
         run: npm run test:alert-delivery-reliability
 
+      - name: Test delayed Worker readiness gate
+        working-directory: backend/cloudflare
+        run: npm run test:worker-readiness
+
       - name: Test App Attest key-rotation registration recovery
         working-directory: backend/cloudflare
         run: npm run test:app-attest-registration-recovery
@@ -214,5 +218,8 @@ jobs:
           WORKER_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
         run: |
           set -euo pipefail
-          curl --fail --show-error --silent --retry 3 "$WORKER_URL/healthz"
+          # A sustained Wolfx WebSocket rejection can take up to 90 seconds
+          # to promote the bounded HTTP alternate transport. This script still
+          # fails closed for missing APNs or any stale source.
+          npm run wait:worker-readiness -- "$WORKER_URL"
           npm run test:remote -- "$WORKER_URL"

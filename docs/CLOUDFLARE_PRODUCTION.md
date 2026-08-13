@@ -245,7 +245,15 @@ When the monitor alerts:
   monitor/recovery path is changed or unverified, set it to
   `false` so both bootstrap and launch deployment fail closed.
   A generic HEAD probe is not sufficient. `/healthz` intentionally returns
-  `503` for any required stale/closed source.
+  `503` for any required source that is stale across both transports. It can
+  return `200` with `upstream.transport: "http-polling"` and
+  `upstream.websocketStatus: "degraded"` only after the relay's bounded,
+  validated HTTP alternate transport has been active for a sustained
+  WebSocket outage; treat that as degraded operational mode and investigate
+  the WebSocket path rather than suppressing the alert.
+  Protected deployment and iOS archive workflows allow up to three minutes
+  for this readiness transition, but still fail immediately if APNs signing
+  material is missing or any source remains stale.
 - Require a real App Attest assertion and enforce both native Cloudflare
   rate-limit bindings before enabling any public registration endpoint. CORS
   is not an abuse control.

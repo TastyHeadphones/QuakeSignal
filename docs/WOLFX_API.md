@@ -10,6 +10,11 @@ Contact for the upstream service: contact@mtf.edu.kg. Review their Privacy Polic
 and TOS (linked at the bottom of https://wolfx.jp) before shipping an app that
 depends on it.
 
+For App Store distribution, use the release-owner permission request in
+[`WOLFX_PERMISSION_REQUEST.md`](WOLFX_PERMISSION_REQUEST.md) and preserve the
+written answer before certifying third-party-content rights in App Store
+Connect. The app must never expose a public secondary API for Wolfx data.
+
 Every endpoint is available two ways:
 - **HTTP GET**, returns the current/latest snapshot as JSON — good for polling
   and for the app's direct foreground "pull to refresh".
@@ -169,4 +174,9 @@ non-empty on the first entry.
   every message as a brand-new event.
 - **No documented rate limit** was published; be a good citizen anyway — one
   persistent WebSocket per endpoint from the backend, not per-device polling.
+  If every backend WebSocket route remains unavailable for 90 seconds, the
+  private relay switches to a bounded emergency HTTP alternate transport: one
+  source request at a time, at least 600 ms apart. It validates and deduplicates
+  each snapshot before durable ingestion, and returns to WebSocket transport
+  only after every route recovers. This is not a public secondary API.
 - **No auth/API key required** for any of the endpoints used here.

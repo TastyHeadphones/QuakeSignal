@@ -63,6 +63,7 @@ jobs:
           npm run test:production-gates
           npm run test:render-staging-config
           npm run test:verify-apns-secret-config
+          npm run test:worker-readiness
           npm audit --audit-level=high
 
   deploy-staging:
@@ -207,5 +208,8 @@ jobs:
           }
           NODE
           npm run verify:apns-secrets -- --config "$STAGING_WRANGLER_CONFIG"
-          curl --fail --show-error --silent --retry 3 "$STAGING_WORKER_URL/healthz"
+          # Wolfx may reject Worker-origin WebSocket Upgrades. Allow the
+          # reviewed 90-second bounded HTTP alternate transport to warm, but
+          # require full APNs/upstream readiness before remote smoke tests.
+          npm run wait:worker-readiness -- "$STAGING_WORKER_URL"
           npm run test:remote -- "$STAGING_WORKER_URL"
