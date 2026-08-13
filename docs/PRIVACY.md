@@ -113,6 +113,7 @@ stored for your device:
 | Created and updated timestamps | Housekeeping |
 | App Attest integrity record: opaque key identifier, public verification key, Apple attestation receipt, assertion counter, integrity timestamps, and any Apple-supplied build/version distribution category | Proving that a registration, removal, or test-push request came from the signed app instance and preventing forged or replayed requests |
 | Production training-test claim: opaque App Attest key identifier and UTC claim/expiry timestamps, only while a reviewed production training test is enabled | Enforcing one clearly labelled production training attempt per App Attest key per UTC day; this contains no APNs token, proof, or request body |
+| Optional delayed-training scheduler record: opaque App Attest key identifier, fixed due time, and at-most-once attempted state | Scheduling one reviewed background training notification. It contains no APNs token, request body, App Attest proof, preferences, location, or earthquake payload, and is deleted after its one attempt or cancellation; an alarm more than 30 seconds late is deleted without delivery. |
 
 The subscription data is stored in the `devices` table and the integrity data
 in the `app_attest_keys` and short-lived `app_attest_challenges` tables in
@@ -151,13 +152,17 @@ When the last associated registration is removed, that App Attest verifier,
 receipt, and assertion-counter record is deleted too. A reviewed production
 training test creates a separate token-free claim containing only the opaque
 App Attest key ID and UTC timestamps; it is retained for at most 14 days to
-enforce one production training attempt per key per UTC day. APNs also removes
-invalidated tokens, and the daily retention job removes registrations that have
-not been refreshed for 90 days along with those orphaned integrity records;
-delivery-failure token hashes are purged after 14 days. You can also open an
-issue to request deletion. Deleting the app or switching off iOS notifications
-alone cannot reliably communicate a deletion request to the service, so use the
-in-app control before deleting the app or resetting its Keychain state.
+enforce one production training attempt per key per UTC day. Its optional
+fixed-delay check creates a private scheduler record containing only that key
+ID, a due time, and an at-most-once attempted state. It is deleted after the
+one scheduled attempt or cancellation, and an alarm more than 30 seconds late
+is deleted without delivery. APNs also removes invalidated tokens, and the
+daily retention job removes registrations that have not been refreshed for 90
+days along with those orphaned integrity records; delivery-failure token hashes
+are purged after 14 days. You can also open an issue to request deletion.
+Deleting the app or switching off iOS notifications alone cannot reliably
+communicate a deletion request to the service, so use the in-app control before
+deleting the app or resetting its Keychain state.
 
 **If the app's integrity key is reset.** Apple can replace an App Attest key
 after reinstall or device restore. A newly attested signed app instance that
