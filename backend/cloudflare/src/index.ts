@@ -140,7 +140,6 @@ interface DeviceRow {
 }
 
 const HTTP_BASE = "https://api.wolfx.jp";
-const WS_BASE = "wss://ws-api.wolfx.jp";
 const EEW_SOURCES: WolfxSourceId[] = [
   "jma_eew",
   "sc_eew",
@@ -2472,6 +2471,11 @@ export class QuakeRelay {
   private readonly state: DurableObjectState;
   private readonly env: Env;
   private readonly upstreams = new Map<UpstreamRoute, WebSocket>();
+  // An Upgrade fetch does not produce a WebSocket until its asynchronous
+  // handshake completes. Keep the attempt separately from `upstreams` so two
+  // overlapping status/alarm invocations cannot start duplicate connections
+  // for the same Wolfx route.
+  private readonly connectingRoutes = new Set<UpstreamRoute>();
   private readonly statuses = new Map<WolfxSourceId, string>();
   private readonly lastSuccessfulUpstreamMs = new Map<WolfxSourceId, number>();
   private pendingIngestDrain: Promise<void> | null = null;
@@ -2609,11 +2613,15 @@ export class QuakeRelay {
       // A fresh Durable Object instance needs its in-memory watcher sockets,
       // but a persisted alarm means the expensive durable work is already
       // scheduled and must not be repeated by a health probe.
-      this.ensureUpstreams();
+      // Read the durable alarm before starting an asynchronous Upgrade. A
+      // rejected handshake can schedule its short retry before this method
+      // otherwise gets to read storage, but that must not suppress the first
+      // HTTP seed for a genuinely uninitialized relay.
       const alarm = await this.state.storage.getAlarm();
+      this.ensureUpstreams();
       if (alarm === null) {
         try {
-          await this.ensureStarted();
+          await this.ensureStarted(alarm);
         } catch (error) {
           // A failed first start used to make every health probe retry D1
           // immediately. Leave a bounded alarm retry behind before reporting
@@ -2667,7 +2675,15 @@ export class QuakeRelay {
     }
   }
 
-  private async ensureStarted(): Promise<void> {
+  private async ensureStarted(
+    alarmAtStart?: number | null,
+  ): Promise<void> {
+    // Capture this before starting the asynchronous WebSocket Upgrade. See
+    // `ensureStatusStarted`: a fast rejected handshake must not make the
+    // initial snapshot seed disappear behind its reconnect alarm.
+    const alarm = alarmAtStart === undefined
+      ? await this.state.storage.getAlarm()
+      : alarmAtStart;
     this.ensureUpstreams();
     // This must precede every path that can enqueue an outbox row. A recovered
     // D1 incident write is the terminal decision for the original page.
@@ -2676,7 +2692,6 @@ export class QuakeRelay {
     await this.drainPendingIngestJournal();
     await this.flushAlertDeliveryOutbox();
     await this.purgeExpiredDevicesIfDue();
-    const alarm = await this.state.storage.getAlarm();
     if (alarm === null) {
       const initialSeedComplete = await this.state.storage.get<boolean>(
         INITIAL_HTTP_SEED_COMPLETE_KEY,
@@ -3385,7 +3400,10 @@ export class QuakeRelay {
   private ensureUpstreams(): void {
     for (const route of UPSTREAM_ROUTES) {
       const current = this.upstreams.get(route);
-      if (current && (current.readyState === 0 || current.readyState === 1)) {
+      if (
+        this.connectingRoutes.has(route) ||
+        (current && (current.readyState === 0 || current.readyState === 1))
+      ) {
         continue;
       }
       this.connect(route);
@@ -3577,27 +3595,109 @@ export class QuakeRelay {
   }
 
   private connect(route: UpstreamRoute): void {
+    if (this.connectingRoutes.has(route)) return;
     this.setRouteStatus(route, "connecting");
-    const socket = new WebSocket(`${WS_BASE}/${route}`);
-    this.upstreams.set(route, socket);
+    this.connectingRoutes.add(route);
+    // `fetch(... Upgrade)` is the documented alternative client path for
+    // Workers. It gives us a response status for a rejected Wolfx handshake,
+    // unlike the constructor's generic `error` event, while still retaining a
+    // standard WebSocket after a successful Upgrade.
+    this.state.waitUntil(this.connectWithUpgrade(route));
+  }
 
-    socket.addEventListener("open", () => {
-      this.setRouteStatus(route, "open");
-      this.state.waitUntil(this.markRouteSuccessful(route));
-      const queries =
-        route === "all_eew"
-          ? [
-              "query_jmaeew",
-              "query_sceew",
-              "query_cenceew",
-              "query_fjeew",
-              "query_cqeew",
-            ]
-          : route === "cenc_eqlist"
-            ? ["query_cenceqlist"]
-            : ["query_jmaeqlist"];
-      for (const query of queries) socket.send(query);
-    });
+  private async connectWithUpgrade(route: UpstreamRoute): Promise<void> {
+    let socket: WebSocket | null = null;
+    try {
+      const response = await fetch(`https://ws-api.wolfx.jp/${route}`, {
+        headers: { Upgrade: "websocket" },
+      });
+      socket = response.webSocket;
+      if (!socket) {
+        // An unsuccessful Upgrade can carry an arbitrary upstream body. We do
+        // not retain or log it; cancel it promptly and record only status.
+        try {
+          await response.body?.cancel();
+        } catch {
+          // The rejected handshake remains authoritative even if the upstream
+          // body has already been closed by the runtime.
+        }
+        this.scheduleUpgradeReconnect(route, "wolfx_upstream_upgrade_rejected", {
+          httpStatus: Number.isSafeInteger(response.status)
+            ? response.status
+            : null,
+        });
+        return;
+      }
+
+      // The fetch promise resolves after the HTTP Upgrade, so there is no
+      // constructor-style `open` event to use as the activation boundary.
+      // Store and subscribe before accept() so a very fast close/error cannot
+      // be lost, then explicitly mark ready and issue the Wolfx snapshots.
+      this.upstreams.set(route, socket);
+      this.attachUpstreamSocketListeners(route, socket);
+      socket.accept();
+      if (this.upstreams.get(route) !== socket) {
+        return;
+      }
+      this.activateUpstreamSocket(route, socket);
+    } catch (error) {
+      if (socket && this.upstreams.get(route) === socket) {
+        this.upstreams.delete(route);
+        try {
+          socket.close(1011);
+        } catch {
+          // A failed accept/send can already have closed the socket. The
+          // scheduled reconnect below remains the authoritative recovery.
+        }
+      }
+      this.scheduleUpgradeReconnect(route, "wolfx_upstream_upgrade_error", {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+    } finally {
+      this.connectingRoutes.delete(route);
+    }
+  }
+
+  private scheduleUpgradeReconnect(
+    route: UpstreamRoute,
+    outcome: "wolfx_upstream_upgrade_rejected" | "wolfx_upstream_upgrade_error",
+    detail: { httpStatus: number | null } | { errorName: string },
+  ): void {
+    const reconnectAtMs = Date.now() + UPSTREAM_RECONNECT_DELAY_MS;
+    console.warn(
+      JSON.stringify({
+        outcome,
+        route,
+        ...detail,
+        reconnectAtUtc: new Date(reconnectAtMs).toISOString(),
+      }),
+    );
+    this.setRouteStatus(route, "error");
+    this.state.waitUntil(this.state.storage.setAlarm(reconnectAtMs));
+  }
+
+  private activateUpstreamSocket(route: UpstreamRoute, socket: WebSocket): void {
+    this.setRouteStatus(route, "open");
+    this.state.waitUntil(this.markRouteSuccessful(route));
+    const queries =
+      route === "all_eew"
+        ? [
+            "query_jmaeew",
+            "query_sceew",
+            "query_cenceew",
+            "query_fjeew",
+            "query_cqeew",
+          ]
+        : route === "cenc_eqlist"
+          ? ["query_cenceqlist"]
+          : ["query_jmaeqlist"];
+    for (const query of queries) socket.send(query);
+  }
+
+  private attachUpstreamSocketListeners(
+    route: UpstreamRoute,
+    socket: WebSocket,
+  ): void {
     socket.addEventListener("message", (event) => {
       if (typeof event.data !== "string") return;
       try {
