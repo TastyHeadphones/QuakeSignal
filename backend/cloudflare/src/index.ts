@@ -180,8 +180,9 @@ const LOC_KEYS: Record<NotifyReason, { title: string; body: string }> = {
 };
 
 // A Worker may have only a small number of simultaneous outgoing connections.
-// Keep HTTP seed work below the six-connection limit while the three Wolfx
-// watcher sockets are establishing their handshakes.
+// Keep initial HTTP seed work below the six-connection limit while the three
+// Wolfx watcher sockets are establishing their handshakes. The sustained
+// fallback uses one request at a time, with a separate temporal rate bound.
 const APNS_MAX_CONCURRENT_DELIVERIES = 2;
 const HTTP_SEED_MAX_CONCURRENT_REQUESTS = 2;
 // Keep one queue message comfortably below Workers' subrequest limits: a page
@@ -200,10 +201,14 @@ const LEGACY_PENDING_DELIVERY_PREFIX = "pending-delivery:";
 const LAST_DEVICE_PURGE_KEY = "last-device-purge-ms";
 const INITIAL_HTTP_SEED_COMPLETE_KEY = "initial-http-seed-complete";
 const UPSTREAM_LAST_SUCCESS_PREFIX = "upstream-last-success-ms:";
+const UPSTREAM_LAST_HTTP_SUCCESS_PREFIX = "upstream-last-http-success-ms:";
+const UPSTREAM_HTTP_FINGERPRINT_PREFIX = "upstream-http-fingerprint:";
 const UPSTREAM_RECONNECT_FAILURE_PREFIX = "upstream-reconnect-failures:";
 const UPSTREAM_RECONNECT_NOT_BEFORE_PREFIX = "upstream-reconnect-not-before-ms:";
 const UPSTREAM_DEGRADED_SINCE_PREFIX = "upstream-degraded-since-ms:";
 const LAST_HTTP_SEED_MS_KEY = "last-http-seed-ms";
+const HTTP_SEED_LEASE_UNTIL_KEY = "http-seed-lease-until-ms";
+const HTTP_FALLBACK_ACTIVE_KEY = "http-fallback-active";
 // A journal entry is persisted before live WebSocket work touches D1. It
 // survives a Durable Object restart and lets the next alarm retry a failed
 // event write without pretending the upstream is healthy.
@@ -236,8 +241,27 @@ const ROUTINE_RELAY_ALARM_DELAY_MS = 60_000;
 // across Durable Object eviction.
 const UPSTREAM_RECONNECT_INITIAL_DELAY_MS = 5_000;
 const UPSTREAM_RECONNECT_MAX_DELAY_MS = 5 * 60_000;
+const UPSTREAM_UPGRADE_TIMEOUT_MS = 10_000;
 const HTTP_RECOVERY_SEED_GRACE_MS = 90_000;
-const HTTP_RECOVERY_SEED_INTERVAL_MS = 5 * 60_000;
+// Wolfx does not publish a formal request quota for these feeds. Keep the
+// emergency alternate transport strictly below two HTTP requests per second:
+// one source starts every 600ms, so a seven-source sweep takes about 4.2s.
+// This is only active after the live WebSocket transport has been degraded for
+// the grace period; it is not client polling or a public relay.
+const HTTP_FALLBACK_REQUEST_INTERVAL_MS = 600;
+const HTTP_FALLBACK_SWEEP_LEASE_MS = 90_000;
+// Initial snapshots give a new relay a durable baseline. They are intentionally
+// retried much more slowly than the active emergency fallback: a partially
+// unavailable HTTP feed must not turn ordinary startup into permanent polling
+// while the preferred WebSocket transport is healthy.
+const INITIAL_HTTP_SEED_RETRY_INTERVAL_MS = 5 * 60_000;
+const HTTP_FALLBACK_RESPONSE_TIMEOUT_MS = 8_000;
+const HTTP_FALLBACK_MAX_SNAPSHOT_BYTES = 256 * 1024;
+// A complete sweep normally takes about 4.2s. Fifteen seconds gives the
+// scheduler/jitter enough room while failing closed quickly after any source
+// stops producing valid snapshots.
+const HTTP_FALLBACK_STALE_AFTER_MS = 15_000;
+const MAX_HTTP_SNAPSHOT_EVENTS = 50;
 // HTTP recovery must not turn a historical snapshot into a notification
 // replay. It is only allowed to surface a fresh event/revision that arrived
 // while a WebSocket route was unavailable.
@@ -406,6 +430,113 @@ class MissingApnsConfigurationError extends Error {
   constructor() {
     super("APNs credentials are not configured");
   }
+}
+
+export class HttpSnapshotTimeoutError extends Error {
+  constructor() {
+    super("Wolfx HTTP snapshot timed out");
+    this.name = "HttpSnapshotTimeoutError";
+  }
+}
+
+export class HttpSnapshotBodyTooLargeError extends Error {
+  constructor() {
+    super("Wolfx HTTP snapshot exceeds the relay size limit");
+    this.name = "HttpSnapshotBodyTooLargeError";
+  }
+}
+
+export class WolfxUpgradeTimeoutError extends Error {
+  constructor() {
+    super("Wolfx WebSocket Upgrade timed out");
+    this.name = "WolfxUpgradeTimeoutError";
+  }
+}
+
+/**
+ * Bound the alternate transport so one stalled response cannot consume the
+ * relay's single polling lane indefinitely. The timeout wins even when a
+ * transport ignores abort; aborting also releases a normal fetch/body stream.
+ */
+export async function withHttpSnapshotTimeout<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  timeoutMs = HTTP_FALLBACK_RESPONSE_TIMEOUT_MS,
+): Promise<T> {
+  const controller = new AbortController();
+  let timeoutId: number | null = null;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new HttpSnapshotTimeoutError();
+      // Reject first so a fetch/body reader that ignores abort cannot retain
+      // the relay's sole polling lane indefinitely.
+      reject(error);
+      controller.abort(error);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([operation(controller.signal), timeout]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/** Bound an outbound Upgrade so a black-holed connection becomes degraded. */
+export async function withWolfxUpgradeTimeout<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  timeoutMs = UPSTREAM_UPGRADE_TIMEOUT_MS,
+): Promise<T> {
+  const controller = new AbortController();
+  let timeoutId: number | null = null;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new WolfxUpgradeTimeoutError();
+      reject(error);
+      controller.abort(error);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([operation(controller.signal), timeout]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/** Read one trusted-format JSON snapshot without buffering an unlimited body. */
+export async function readBoundedHttpSnapshotJson(
+  response: Response,
+  maxBytes = HTTP_FALLBACK_MAX_SNAPSHOT_BYTES,
+): Promise<unknown> {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    await response.body?.cancel();
+    throw new HttpSnapshotBodyTooLargeError();
+  }
+  if (!response.body) throw new SyntaxError("Wolfx HTTP snapshot has no body");
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new HttpSnapshotBodyTooLargeError();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
 }
 
 export interface DeliveryReadinessInput {
@@ -740,8 +871,8 @@ export function upstreamReconnectDelayMs(
 }
 
 /**
- * A prior recovery attempt is durable so a short routine relay alarm cannot
- * turn an upstream-side rejection into a repeated HTTP polling loop.
+ * A persisted timestamp prevents overlapping Durable Object alarms from
+ * starting more than one bounded HTTP fallback request in the same window.
  */
 export function isHttpRecoverySeedDue(
   lastSeedMs: number | undefined,
@@ -751,8 +882,68 @@ export function isHttpRecoverySeedDue(
     typeof lastSeedMs !== "number" ||
     !Number.isFinite(lastSeedMs) ||
     lastSeedMs > now ||
-    now - lastSeedMs >= HTTP_RECOVERY_SEED_INTERVAL_MS
+    now - lastSeedMs >= HTTP_FALLBACK_REQUEST_INTERVAL_MS
   );
+}
+
+function isInitialHttpSeedDue(
+  lastSeedMs: number | undefined,
+  now = Date.now(),
+): boolean {
+  return (
+    typeof lastSeedMs !== "number" ||
+    !Number.isFinite(lastSeedMs) ||
+    lastSeedMs > now ||
+    now - lastSeedMs >= INITIAL_HTTP_SEED_RETRY_INTERVAL_MS
+  );
+}
+
+/**
+ * HTTP success is a separate transport signal. It is useful only when a
+ * valid snapshot has completed ingestion and no live event for the source is
+ * waiting for its durable D1 write.
+ */
+export function isHttpFallbackSourceStale(
+  lastHttpSuccessMs: number | undefined,
+  hasPendingLiveIngest: boolean,
+  now = Date.now(),
+): boolean {
+  return (
+    hasPendingLiveIngest ||
+    typeof lastHttpSuccessMs !== "number" ||
+    !Number.isFinite(lastHttpSuccessMs) ||
+    lastHttpSuccessMs > now ||
+    now - lastHttpSuccessMs > HTTP_FALLBACK_STALE_AFTER_MS
+  );
+}
+
+/**
+ * Serialize alternate-transport requests so their start times are at least
+ * `minimumSpacingMs` apart. The injected clock/sleeper make the policy easy
+ * to test without making the test suite wait for a real HTTP sweep.
+ */
+export async function mapWithMinimumSpacing<T, Result>(
+  values: readonly T[],
+  minimumSpacingMs: number,
+  mapper: (value: T, index: number) => Promise<Result>,
+  now: () => number = Date.now,
+  sleep: (milliseconds: number) => Promise<void> = (milliseconds) =>
+    new Promise((resolve) => setTimeout(resolve, milliseconds)),
+): Promise<Result[]> {
+  if (!Number.isSafeInteger(minimumSpacingMs) || minimumSpacingMs < 0) {
+    throw new RangeError("minimum spacing must be a non-negative safe integer");
+  }
+  const results: Result[] = [];
+  let previousStartedAt: number | null = null;
+  for (let index = 0; index < values.length; index += 1) {
+    if (previousStartedAt !== null) {
+      const waitMs = Math.max(0, minimumSpacingMs - (now() - previousStartedAt));
+      if (waitMs > 0) await sleep(waitMs);
+    }
+    previousStartedAt = now();
+    results.push(await mapper(values[index], index));
+  }
+  return results;
 }
 
 /**
@@ -1244,6 +1435,179 @@ function normalizeMessages(
         message as WolfxEqlistMessage,
       ).map(({ entry }) => normalizeJmaEqlistEntry(entry));
   }
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isNonEmptyText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isNormalizableCoordinate(value: unknown): boolean {
+  const number = typeof value === "string" ? Number(value) : value;
+  return typeof number === "number" && Number.isFinite(number);
+}
+
+function hasValidNormalizedEventTimes(
+  events: readonly NormalizedEvent[],
+): boolean {
+  return events.every((event) =>
+    typeof event.originTimeUtc === "string" &&
+    Number.isFinite(Date.parse(event.originTimeUtc)) &&
+    typeof event.reportTimeUtc === "string" &&
+    Number.isFinite(Date.parse(event.reportTimeUtc)) &&
+    Number.isFinite(event.latitude) &&
+    Number.isFinite(event.longitude) &&
+    Number.isFinite(event.magnitude) &&
+    typeof event.hypocenter === "string" &&
+    event.hypocenter.trim().length > 0
+  );
+}
+
+function isStructurallyValidEqlistEntry(
+  sourceId: "cenc_eqlist" | "jma_eqlist",
+  entry: unknown,
+): boolean {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+  const value = entry as Record<string, unknown>;
+  if (
+    !isNonEmptyText(value.EventID) ||
+    !isNonEmptyText(value.time) ||
+    !isNonEmptyText(value.location) ||
+    !isNonEmptyText(value.magnitude) ||
+    !isNonEmptyText(value.latitude) ||
+    !isNonEmptyText(value.longitude) ||
+    !isNormalizableCoordinate(value.latitude) ||
+    !isNormalizableCoordinate(value.longitude)
+  ) {
+    return false;
+  }
+  if (sourceId === "cenc_eqlist") {
+    return (
+      (value.type === "automatic" || value.type === "reviewed") &&
+      isNonEmptyText(value.ReportTime) &&
+      isNonEmptyText(value.placeName) &&
+      isNonEmptyText(value.depth) &&
+      isNonEmptyText(value.intensity)
+    );
+  }
+  return (
+    isNonEmptyText(value.Title) &&
+    isNonEmptyText(value.time_full) &&
+    isNonEmptyText(value.shindo) &&
+    isNonEmptyText(value.depth) &&
+    typeof value.info === "string"
+  );
+}
+
+function isStructurallyValidEqlistSnapshot(
+  sourceId: "cenc_eqlist" | "jma_eqlist",
+  message: Record<string, unknown>,
+  normalizedEvents: readonly NormalizedEvent[],
+): boolean {
+  if (!isNonEmptyText(message.md5) || normalizedEvents.length === 0) return false;
+  const entries = extractEqlistEntries(message as WolfxEqlistMessage);
+  const rankedKeys = Object.keys(message).filter((key) => key.startsWith("No"));
+  if (
+    entries.length !== normalizedEvents.length ||
+    entries.length > MAX_HTTP_SNAPSHOT_EVENTS ||
+    rankedKeys.length !== entries.length ||
+    rankedKeys.some((key) => !/^No(?:[1-9]|[1-4]\d|50)$/.test(key)) ||
+    entries.some(({ rank, entry }) =>
+      !Number.isSafeInteger(rank) ||
+      rank < 1 ||
+      rank > MAX_HTTP_SNAPSHOT_EVENTS ||
+      !isStructurallyValidEqlistEntry(sourceId, entry)
+    )
+  ) {
+    return false;
+  }
+  return hasValidNormalizedEventTimes(normalizedEvents);
+}
+
+/**
+ * A successful HTTP status alone is not enough to make alert transport ready.
+ * Require the documented per-source shape and at least one normalized event.
+ * Wolfx's current earthquake feeds retain their latest report rather than
+ * publishing a documented empty/idle object, so an empty object fails closed.
+ */
+export function isStructurallyValidHttpSnapshot(
+  sourceId: WolfxSourceId,
+  message: unknown,
+  normalizedEvents: readonly NormalizedEvent[],
+): boolean {
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    return false;
+  }
+  if (
+    normalizedEvents.length === 0 ||
+    normalizedEvents.some((event) =>
+      event.sourceId !== sourceId ||
+      typeof event.eventId !== "string" ||
+      event.eventId.length === 0 ||
+      !Number.isSafeInteger(event.serial) ||
+      event.serial < 0
+    )
+  ) {
+    return false;
+  }
+
+  if (EEW_SOURCES.includes(sourceId)) {
+    if (normalizedEvents.length !== 1 || !hasValidNormalizedEventTimes(normalizedEvents)) {
+      return false;
+    }
+    const value = message as Record<string, unknown>;
+    const base =
+      isNonEmptyText(value.EventID) &&
+      isNonEmptyText(value.OriginTime) &&
+      isFiniteNumber(value.Latitude) &&
+      isFiniteNumber(value.Longitude);
+    if (!base) return false;
+    switch (sourceId) {
+      case "jma_eew":
+        return (
+          Number.isSafeInteger(value.Serial) &&
+          (value.Serial as number) >= 0 &&
+          isNonEmptyText(value.AnnouncedTime) &&
+          isNonEmptyText(value.Hypocenter) &&
+          isFiniteNumber(value.Magunitude)
+        );
+      case "sc_eew":
+      case "fj_eew":
+        return (
+          Number.isSafeInteger(value.ReportNum) &&
+          (value.ReportNum as number) >= 0 &&
+          isNonEmptyText(value.ReportTime) &&
+          isNonEmptyText(value.HypoCenter) &&
+          isFiniteNumber(value.Magunitude)
+        );
+      case "cenc_eew":
+      case "cq_eew":
+        return (
+          Number.isSafeInteger(value.ReportNum) &&
+          (value.ReportNum as number) >= 0 &&
+          isNonEmptyText(value.ReportTime) &&
+          isNonEmptyText(value.HypoCenter) &&
+          isFiniteNumber(value.Magnitude)
+        );
+    }
+  }
+
+  if (sourceId !== "cenc_eqlist" && sourceId !== "jma_eqlist") return false;
+  return isStructurallyValidEqlistSnapshot(
+    sourceId,
+    message as Record<string, unknown>,
+    normalizedEvents,
+  );
+}
+
+async function httpSnapshotFingerprint(message: unknown): Promise<string> {
+  // `Response.json()` has already limited this to JSON-compatible data. A
+  // fingerprint is persisted only after every normalized event has committed,
+  // so a D1 failure cannot suppress a later retry of the same snapshot.
+  return await sha256Hex(JSON.stringify(message));
 }
 
 function sourceFromMessage(message: unknown): WolfxSourceId | null {
@@ -2535,6 +2899,8 @@ export class QuakeRelay {
   private readonly connectingRoutes = new Set<UpstreamRoute>();
   private readonly statuses = new Map<WolfxSourceId, string>();
   private readonly lastSuccessfulUpstreamMs = new Map<WolfxSourceId, number>();
+  private readonly lastSuccessfulHttpPollMs = new Map<WolfxSourceId, number>();
+  private httpSeedInFlight: Promise<void> | null = null;
   private pendingIngestDrain: Promise<void> | null = null;
   /**
    * A status probe must not repeatedly run the complete outbox/reconciliation
@@ -2728,11 +3094,14 @@ export class QuakeRelay {
       const lastHttpSeedMs = await this.state.storage.get<number>(
         LAST_HTTP_SEED_MS_KEY,
       );
-      if (
-        (!initialSeedComplete && isHttpRecoverySeedDue(lastHttpSeedMs)) ||
-        (initialSeedComplete && await this.shouldRunHttpRecoverySeed())
+      const httpFallbackActive = await this.refreshHttpFallbackActive();
+      if (httpFallbackActive && isHttpRecoverySeedDue(lastHttpSeedMs)) {
+        await this.seedFromHttp("recovery");
+      } else if (
+        !initialSeedComplete &&
+        isInitialHttpSeedDue(lastHttpSeedMs)
       ) {
-        await this.seedFromHttp(initialSeedComplete ? "recovery" : "initial");
+        await this.seedFromHttp("initial");
       }
       await this.ensureUpstreams();
     } finally {
@@ -2763,7 +3132,16 @@ export class QuakeRelay {
       const initialSeedComplete = await this.state.storage.get<boolean>(
         INITIAL_HTTP_SEED_COMPLETE_KEY,
       );
-      await this.seedFromHttp(initialSeedComplete ? "recovery" : "initial");
+      const lastHttpSeedMs = await this.state.storage.get<number>(
+        LAST_HTTP_SEED_MS_KEY,
+      );
+      if (!initialSeedComplete) {
+        if (isInitialHttpSeedDue(lastHttpSeedMs)) {
+          await this.seedFromHttp("initial");
+        }
+      } else if (await this.shouldRunHttpRecoverySeed()) {
+        await this.seedFromHttp("recovery");
+      }
       // A socket can close while the initial HTTP seed is still in flight.
       // Re-read the requested alarm so that fast reconnect wins over the
       // ordinary one-minute wakeup just as it does in `alarm()`.
@@ -3463,6 +3841,25 @@ export class QuakeRelay {
     const now = Date.now();
     for (const route of UPSTREAM_ROUTES) {
       const current = this.upstreams.get(route);
+      // A transport can remain nominally open while heartbeats/data stop.
+      // Treat a stale route as a failed route: close it, persist degradation,
+      // and let the same bounded reconnect/fallback policy recover it.
+      if (current?.readyState === 1 && !this.routeIsOpen(route)) {
+        this.upstreams.delete(route);
+        try {
+          current.close(1011);
+        } catch {
+          // The stale socket may already be closing; the durable recovery
+          // request below remains the authoritative state transition.
+        }
+        await this.scheduleUpstreamReconnect(
+          route,
+          "wolfx_upstream_websocket_stale",
+          {},
+          "closed",
+        );
+        continue;
+      }
       if (
         this.connectingRoutes.has(route) ||
         (current && (current.readyState === 0 || current.readyState === 1))
@@ -3486,28 +3883,118 @@ export class QuakeRelay {
   private routeIsOpen(route: UpstreamRoute): boolean {
     const sources: WolfxSourceId[] =
       route === "all_eew" ? EEW_SOURCES : [route];
-    return sources.every((source) => this.statuses.get(source) === "open");
+    const now = Date.now();
+    return sources.every((source) => !isUpstreamSourceStale(
+      this.statuses.get(source) ?? "connecting",
+      this.lastSuccessfulUpstreamMs.get(source),
+      false,
+      now,
+    ));
+  }
+
+  private allRoutesOpen(): boolean {
+    return UPSTREAM_ROUTES.every((route) => this.routeIsOpen(route));
+  }
+
+  private async allRoutesHaveBeenDegradedForGrace(now: number): Promise<boolean> {
+    if (UPSTREAM_ROUTES.some((route) => this.routeIsOpen(route))) return false;
+    const degradedSince = await Promise.all(
+      UPSTREAM_ROUTES.map((route) =>
+        this.state.storage.get<number>(
+          `${UPSTREAM_DEGRADED_SINCE_PREFIX}${route}`,
+        )
+      ),
+    );
+    return degradedSince.every(
+      (degradedAt) =>
+        typeof degradedAt === "number" &&
+        Number.isFinite(degradedAt) &&
+        degradedAt > 0 &&
+        degradedAt <= now - HTTP_RECOVERY_SEED_GRACE_MS,
+    );
+  }
+
+  /**
+   * Enter the HTTP alternate transport only after every live WebSocket route
+   * has remained down through the grace period. Once active, retain it during
+   * partial socket recovery so one still-broken source cannot make health
+   * optimistic; remove it only after all routes are demonstrably open again.
+   */
+  private async refreshHttpFallbackActive(): Promise<boolean> {
+    const current = await this.state.storage.get<boolean>(HTTP_FALLBACK_ACTIVE_KEY);
+    if (this.allRoutesOpen()) {
+      if (current) await this.state.storage.put(HTTP_FALLBACK_ACTIVE_KEY, false);
+      return false;
+    }
+    if (current === true) return true;
+    if (!await this.allRoutesHaveBeenDegradedForGrace(Date.now())) return false;
+    await this.state.storage.put(HTTP_FALLBACK_ACTIVE_KEY, true);
+    return true;
+  }
+
+  /**
+   * Wake at the exact alternate-transport activation boundary rather than
+   * waiting for a later 60-second maintenance alarm. A currently active
+   * fallback owns the next paced source request.
+   */
+  private async nextHttpFallbackAlarmAt(now: number): Promise<number | null> {
+    const seedLeaseUntil = await this.state.storage.get<number>(
+      HTTP_SEED_LEASE_UNTIL_KEY,
+    );
+    if (
+      typeof seedLeaseUntil === "number" &&
+      Number.isFinite(seedLeaseUntil) &&
+      seedLeaseUntil > now
+    ) {
+      return seedLeaseUntil;
+    }
+    const active = await this.state.storage.get<boolean>(HTTP_FALLBACK_ACTIVE_KEY);
+    if (active === true) return now + HTTP_FALLBACK_REQUEST_INTERVAL_MS;
+    if (UPSTREAM_ROUTES.some((route) => this.routeIsOpen(route))) return null;
+    const degradedSince = await Promise.all(
+      UPSTREAM_ROUTES.map((route) =>
+        this.state.storage.get<number>(
+          `${UPSTREAM_DEGRADED_SINCE_PREFIX}${route}`,
+        )
+      ),
+    );
+    if (
+      degradedSince.some(
+        (degradedAt) =>
+          typeof degradedAt !== "number" ||
+          !Number.isFinite(degradedAt) ||
+          degradedAt <= 0,
+      )
+    ) {
+      return null;
+    }
+    const activationAt = Math.max(...(degradedSince as number[])) +
+      HTTP_RECOVERY_SEED_GRACE_MS;
+    return activationAt > now ? activationAt : now + 1;
+  }
+
+  private async nextUpstreamReconnectAlarmAt(now: number): Promise<number | null> {
+    const candidates = await Promise.all(
+      UPSTREAM_ROUTES.map((route) =>
+        this.state.storage.get<number>(
+          `${UPSTREAM_RECONNECT_NOT_BEFORE_PREFIX}${route}`,
+        )
+      ),
+    );
+    const upcoming = candidates.filter(
+      (value): value is number =>
+        typeof value === "number" && Number.isFinite(value) && value > now,
+    );
+    return upcoming.length > 0 ? Math.min(...upcoming) : null;
   }
 
   private async shouldRunHttpRecoverySeed(): Promise<boolean> {
     const now = Date.now();
     const lastSeedMs = await this.state.storage.get<number>(LAST_HTTP_SEED_MS_KEY);
-    if (!isHttpRecoverySeedDue(lastSeedMs, now)) return false;
-
-    for (const route of UPSTREAM_ROUTES) {
-      if (this.routeIsOpen(route)) continue;
-      const degradedSinceMs = await this.state.storage.get<number>(
-        `${UPSTREAM_DEGRADED_SINCE_PREFIX}${route}`,
-      );
-      if (
-        typeof degradedSinceMs === "number" &&
-        Number.isFinite(degradedSinceMs) &&
-        degradedSinceMs <= now - HTTP_RECOVERY_SEED_GRACE_MS
-      ) {
-        return true;
-      }
-    }
-    return false;
+    return (
+      isHttpRecoverySeedDue(lastSeedMs, now) &&
+      await this.refreshHttpFallbackActive()
+    );
   }
 
   private sourcesNeedingHttpRecovery(): WolfxSourceId[] {
@@ -3629,34 +4116,65 @@ export class QuakeRelay {
       }),
     };
     const now = Date.now();
+    // Keep the persisted alternate-transport marker honest after all live
+    // sockets recover, even if the routine alarm has not fired yet.
+    const httpFallbackActive = await this.refreshHttpFallbackActive();
     const sourceHealth = await Promise.all(
       ALL_WOLFX_SOURCES.map(async (source) => {
-        const [persisted, pendingJournal] = await Promise.all([
+        const [persisted, persistedHttp, pendingJournal] = await Promise.all([
           this.state.storage.get<number>(
             `${UPSTREAM_LAST_SUCCESS_PREFIX}${source}`,
+          ),
+          this.state.storage.get<number>(
+            `${UPSTREAM_LAST_HTTP_SUCCESS_PREFIX}${source}`,
           ),
           this.state.storage.list({
             prefix: `${PENDING_INGEST_PREFIX}${source}:`,
             limit: 1,
           }),
         ]);
-        const lastSuccessMs = this.lastSuccessfulUpstreamMs.get(source) ?? persisted;
+        const lastWebSocketSuccessMs = this.lastSuccessfulUpstreamMs.get(source) ??
+          persisted;
+        const lastHttpSuccessMs = this.lastSuccessfulHttpPollMs.get(source) ??
+          persistedHttp;
         const status = this.statuses.get(source) ?? "connecting";
         const hasPendingLiveIngest = pendingJournal.size > 0;
-        const stale = isUpstreamSourceStale(
+        const websocketStale = isUpstreamSourceStale(
           status,
-          lastSuccessMs,
+          lastWebSocketSuccessMs,
           hasPendingLiveIngest,
           now,
         );
+        const httpStale = isHttpFallbackSourceStale(
+          lastHttpSuccessMs,
+          hasPendingLiveIngest,
+          now,
+        );
+        const transport = !websocketStale
+          ? "websocket"
+          : httpFallbackActive && !httpStale
+            ? "http-polling"
+            : "unavailable";
+        const lastSuccessMs = transport === "http-polling"
+          ? lastHttpSuccessMs
+          : lastWebSocketSuccessMs;
         return {
           source,
           status,
+          transport,
           lastSuccessUtc: lastSuccessMs
             ? new Date(lastSuccessMs).toISOString()
             : null,
+          lastWebSocketSuccessUtc: lastWebSocketSuccessMs
+            ? new Date(lastWebSocketSuccessMs).toISOString()
+            : null,
+          lastHttpSuccessUtc: lastHttpSuccessMs
+            ? new Date(lastHttpSuccessMs).toISOString()
+            : null,
           pendingLiveIngest: hasPendingLiveIngest,
-          stale,
+          websocketStale,
+          httpStale,
+          stale: transport === "unavailable",
         };
       }),
     );
@@ -3666,8 +4184,22 @@ export class QuakeRelay {
     const pendingIngestSources = sourceHealth
       .filter((source) => source.pendingLiveIngest)
       .map((source) => source.source);
+    const websocketStatus = sourceHealth.every((source) => !source.websocketStale)
+      ? "ready"
+      : "degraded";
+    const activeTransports = new Set(sourceHealth.map((source) => source.transport));
+    const transport = staleSources.length > 0
+      ? "degraded"
+      : activeTransports.size === 1 && activeTransports.has("websocket")
+        ? "websocket"
+        : activeTransports.size === 1 && activeTransports.has("http-polling")
+          ? "http-polling"
+          : "mixed";
     const upstream = {
       status: staleSources.length === 0 ? "ready" : "degraded",
+      transport,
+      websocketStatus,
+      httpFallbackActive,
       staleSources,
       pendingIngestSources,
       sources: Object.fromEntries(
@@ -3675,8 +4207,13 @@ export class QuakeRelay {
           source.source,
           {
             status: source.status,
+            transport: source.transport,
             lastSuccessUtc: source.lastSuccessUtc,
+            lastWebSocketSuccessUtc: source.lastWebSocketSuccessUtc,
+            lastHttpSuccessUtc: source.lastHttpSuccessUtc,
             pendingLiveIngest: source.pendingLiveIngest,
+            websocketStale: source.websocketStale,
+            httpStale: source.httpStale,
             stale: source.stale,
           },
         ]),
@@ -3747,16 +4284,36 @@ export class QuakeRelay {
     return this.serializeRelayAlarm(async () => {
       const now = Date.now();
       const existing = await this.state.storage.getAlarm();
-      await this.state.storage.setAlarm(preferredRelayAlarmAt(existing, now));
+      const routineAlarmAt = preferredRelayAlarmAt(null, now);
+      const [fallbackAlarmAt, reconnectAlarmAt] = await Promise.all([
+        this.nextHttpFallbackAlarmAt(now),
+        this.nextUpstreamReconnectAlarmAt(now),
+      ]);
+      const requestedAlarmAt = Math.min(
+        routineAlarmAt,
+        ...(fallbackAlarmAt === null ? [] : [fallbackAlarmAt]),
+        ...(reconnectAlarmAt === null ? [] : [reconnectAlarmAt]),
+      );
+      const alarmAt =
+        typeof existing === "number" &&
+        Number.isFinite(existing) &&
+        existing > now &&
+        existing < requestedAlarmAt
+          ? existing
+          : requestedAlarmAt;
+      await this.state.storage.setAlarm(alarmAt);
     });
   }
 
   private async connectWithUpgrade(route: UpstreamRoute): Promise<void> {
     let socket: WebSocket | null = null;
     try {
-      const response = await fetch(`https://ws-api.wolfx.jp/${route}`, {
-        headers: { Upgrade: "websocket" },
-      });
+      const response = await withWolfxUpgradeTimeout((signal) =>
+        fetch(`https://ws-api.wolfx.jp/${route}`, {
+          signal,
+          headers: { Upgrade: "websocket" },
+        })
+      );
       socket = response.webSocket;
       if (!socket) {
         // An unsuccessful Upgrade can carry an arbitrary upstream body. We do
@@ -3816,7 +4373,8 @@ export class QuakeRelay {
       | "wolfx_upstream_upgrade_rejected"
       | "wolfx_upstream_upgrade_error"
       | "wolfx_upstream_websocket_closed"
-      | "wolfx_upstream_websocket_error",
+      | "wolfx_upstream_websocket_error"
+      | "wolfx_upstream_websocket_stale",
     detail: Record<string, unknown>,
     status: "closed" | "error" = "error",
   ): Promise<void> {
@@ -4013,44 +4571,157 @@ export class QuakeRelay {
     await this.state.storage.put(`${UPSTREAM_LAST_SUCCESS_PREFIX}${source}`, now);
   }
 
+  private async markHttpSourceSuccessful(source: WolfxSourceId): Promise<void> {
+    const pendingForSource = await this.state.storage.list({
+      prefix: `${PENDING_INGEST_PREFIX}${source}:`,
+      limit: 1,
+    });
+    // Do not let an HTTP response cover up a WebSocket event that reached the
+    // relay but has not crossed the D1 durability boundary yet.
+    if (pendingForSource.size > 0) return;
+    const now = Date.now();
+    await this.state.storage.put(
+      `${UPSTREAM_LAST_HTTP_SUCCESS_PREFIX}${source}`,
+      now,
+    );
+    // Status intentionally trusts the in-memory value first. Publish it only
+    // after durable storage succeeds, otherwise an evicted/failed write could
+    // make this instance claim a fresh alternate transport it cannot recover.
+    this.lastSuccessfulHttpPollMs.set(source, now);
+  }
+
+  private async seedHttpSource(
+    source: WolfxSourceId,
+    mode: "initial" | "recovery",
+  ): Promise<boolean> {
+    try {
+      const message = await withHttpSnapshotTimeout(async (signal) => {
+        const response = await fetch(`${HTTP_BASE}/${source}.json`, {
+          signal,
+          // Snapshot freshness is the alternate transport's readiness proof.
+          // Never let an edge-cached historical Wolfx response refresh it.
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          await response.body?.cancel();
+          throw new Error(`Wolfx snapshot HTTP ${response.status}`);
+        }
+        return await readBoundedHttpSnapshotJson(response);
+      });
+      const normalizedEvents = normalizeMessages(source, message);
+      if (!isStructurallyValidHttpSnapshot(source, message, normalizedEvents)) {
+        console.warn(
+          JSON.stringify({
+            outcome: "wolfx_http_snapshot_invalid",
+            source,
+          }),
+        );
+        return false;
+      }
+      const fingerprint = await httpSnapshotFingerprint(message);
+      const storedFingerprint = await this.state.storage.get<string>(
+        `${UPSTREAM_HTTP_FINGERPRINT_PREFIX}${source}`,
+      );
+      if (storedFingerprint !== fingerprint) {
+        // Commit every normalized event before keeping the fingerprint. A D1
+        // failure leaves the previous value in place, so the next paced poll
+        // retries the exact snapshot instead of silently dropping a revision.
+        for (const event of normalizedEvents) {
+          await this.ingest(event, mode);
+        }
+        await this.state.storage.put(
+          `${UPSTREAM_HTTP_FINGERPRINT_PREFIX}${source}`,
+          fingerprint,
+        );
+      }
+      await this.markHttpSourceSuccessful(source);
+      return true;
+    } catch (error) {
+      // Never include raw upstream bodies or error messages in logs. The
+      // source and error type are enough to diagnose a degraded transport.
+      console.warn(
+        JSON.stringify({
+          outcome: "wolfx_http_snapshot_unavailable",
+          source,
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        }),
+      );
+      return false;
+    }
+  }
+
   private async seedFromHttp(mode: "initial" | "recovery"): Promise<void> {
+    if (this.httpSeedInFlight) return this.httpSeedInFlight;
+    const seed = this.runHttpSeed(mode).finally(() => {
+      if (this.httpSeedInFlight === seed) this.httpSeedInFlight = null;
+    });
+    this.httpSeedInFlight = seed;
+    return seed;
+  }
+
+  /**
+   * Take a short durable lease before a whole sweep. The in-memory promise
+   * coalesces concurrent events in one DO instance; the lease also prevents a
+   * rare eviction/retry boundary from starting a second seven-source sweep
+   * while the first still has external I/O in flight.
+   */
+  private async acquireHttpSeedLease(): Promise<boolean> {
+    const now = Date.now();
+    const leaseUntil = now + HTTP_FALLBACK_SWEEP_LEASE_MS;
+    const storage = this.state.storage;
+    if (typeof storage.transaction !== "function") {
+      // Focused unit fakes do not model Durable Object transactions. Real DO
+      // storage always takes this atomic branch.
+      const current = await storage.get<number>(HTTP_SEED_LEASE_UNTIL_KEY);
+      if (typeof current === "number" && current > now) return false;
+      await storage.put(HTTP_SEED_LEASE_UNTIL_KEY, leaseUntil);
+      return true;
+    }
+    return storage.transaction(async (transaction) => {
+      const current = await transaction.get<number>(HTTP_SEED_LEASE_UNTIL_KEY);
+      if (
+        typeof current === "number" &&
+        Number.isFinite(current) &&
+        current > now
+      ) {
+        return false;
+      }
+      await transaction.put(HTTP_SEED_LEASE_UNTIL_KEY, leaseUntil);
+      return true;
+    });
+  }
+
+  private async runHttpSeed(mode: "initial" | "recovery"): Promise<void> {
+    if (!await this.acquireHttpSeedLease()) return;
     const sources =
       mode === "initial" ? ALL_WOLFX_SOURCES : this.sourcesNeedingHttpRecovery();
-    if (sources.length === 0) return;
+    if (sources.length === 0) {
+      await this.state.storage.put(HTTP_SEED_LEASE_UNTIL_KEY, 0);
+      return;
+    }
 
     try {
-      const outcomes = await mapWithConcurrency(
-        sources,
-        HTTP_SEED_MAX_CONCURRENT_REQUESTS,
-        async (source) => {
-          try {
-            const response = await fetch(`${HTTP_BASE}/${source}.json`);
-            if (!response.ok) {
-              // We do not consume an unsuccessful snapshot response. Explicitly
-              // release its body so it cannot retain an outbound connection
-              // while the bounded seed pool continues with another source.
-              await response.body?.cancel();
-              return false;
-            }
-            const message: unknown = await response.json();
-            for (const event of normalizeMessages(source, message)) {
-              await this.ingest(event, mode);
-            }
-            await this.markSourceSuccessful(source);
-            return true;
-          } catch (error) {
-            console.warn(`Unable to seed ${source}`, error);
-            return false;
-          }
-        },
-      );
+      const outcomes = mode === "initial"
+        ? await mapWithConcurrency(
+          sources,
+          HTTP_SEED_MAX_CONCURRENT_REQUESTS,
+          (source) => this.seedHttpSource(source, mode),
+        )
+        : await mapWithMinimumSpacing(
+          sources,
+          HTTP_FALLBACK_REQUEST_INTERVAL_MS,
+          (source) => this.seedHttpSource(source, mode),
+        );
       if (mode === "initial" && outcomes.every(Boolean)) {
         await this.state.storage.put(INITIAL_HTTP_SEED_COMPLETE_KEY, true);
       }
     } finally {
-      // Record attempts, not just success, so a persistent 503 does not make
-      // every routine alarm recreate the bounded HTTP recovery pool.
-      await this.state.storage.put(LAST_HTTP_SEED_MS_KEY, Date.now());
+      // Record attempt start/completion even on failure. The alarm scheduler
+      // reads this durable value before starting another paced fallback poll.
+      await Promise.all([
+        this.state.storage.put(LAST_HTTP_SEED_MS_KEY, Date.now()),
+        this.state.storage.put(HTTP_SEED_LEASE_UNTIL_KEY, 0),
+      ]);
     }
   }
 

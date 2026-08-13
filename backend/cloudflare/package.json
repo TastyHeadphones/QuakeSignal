@@ -16,6 +16,8 @@
     "test:alert-delivery-reliability": "node --test scripts/alert-delivery-reliability.test.mjs",
     "test:app-attest-registration-recovery": "node --experimental-sqlite --test scripts/app-attest-registration-recovery.test.mjs",
     "test:production-training-test-push-limit": "node --experimental-sqlite --test scripts/production-training-test-push-limit.test.mjs",
+    "wait:worker-readiness": "node scripts/wait-for-worker-readiness.mjs",
+    "test:worker-readiness": "node --test scripts/wait-for-worker-readiness.test.mjs",
     "test:attested-key-bound-deletion": "node scripts/local-attested-key-bound-deletion-test.mjs",
     "test:local-request-validation": "node scripts/local-request-validation-test.mjs",
     "test:remote": "node scripts/smoke-test.mjs"

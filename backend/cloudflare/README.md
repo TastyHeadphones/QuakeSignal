@@ -305,15 +305,17 @@ npx wrangler secret put APNS_BUNDLE_ID
   failure automatically, because the underlying configuration may still be
   broken.
 - `/healthz` is a readiness endpoint: it is route-rate-limited before entering
-  the global relay and returns `503` for missing APNs
-  configuration or invalid local signing key, a stale pending outbox row,
+  the global relay and returns `503` for missing APNs configuration or invalid
+  local signing key, a stale pending outbox row,
   DLQ/Durable-Object-persistence-fallback/retry/quarantine incident, or any
-  required Wolfx source whose WebSocket
-  route is closed/errored, whose durable live-ingest journal still contains an
-  uncommitted event, or whose persisted last-success timestamp is older than
-  three minutes. HTTP recovery records fresh missed revisions (and newly
-  observed events only inside a 10-minute freshness window) but never replays
-  an entire historical backfill.
+  required Wolfx source with neither a current WebSocket nor a current valid
+  HTTP-alternate snapshot. After all three WebSocket routes have been degraded
+  for 90 seconds, the relay may report `upstream.transport: "http-polling"`
+  (with `websocketStatus: "degraded"`) only while every affected source has a
+  structurally valid, durably ingested HTTP snapshot less than 15 seconds old.
+  The fallback polls one source at least 600 ms apart, accepts only fresh
+  revisions inside the existing 10-minute alert window, and never turns a
+  historical backfill into an alert.
 - Keep `ENABLE_PRODUCTION_TEST_PUSH=false` unless a reviewed training-alert
   exercise explicitly requires production-device test delivery. When it is
   deliberately set to `true`, an existing App Attest key may make exactly one

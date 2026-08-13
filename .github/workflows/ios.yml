@@ -260,8 +260,10 @@ jobs:
           IOS_RELEASE_API_BASE_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
         run: |
           set -euo pipefail
-          curl --fail --show-error --silent --retry 3 \
-            "$IOS_RELEASE_API_BASE_URL/healthz"
+          # A newly deployed Worker may need the bounded 90-second Wolfx HTTP
+          # fallback grace before it becomes fully ready. Require the complete
+          # APNs/upstream contract rather than accepting a superficial 200.
+          npm run wait:worker-readiness -- "$IOS_RELEASE_API_BASE_URL"
           # A legacy Worker can return a superficial 200 from /healthz while
           # lacking App Attest, delivery readiness, and the App Store legal
           # routes. Require the full production smoke contract before signing

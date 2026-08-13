@@ -41,6 +41,9 @@ be one multi-platform/Universal Purchase record.
 Before uploading a build or submitting the macOS version, create the `1.0.0`
 platform version to match `desktop/src-tauri/tauri.conf.json`, then complete
 the age rating, content rights, export-compliance and App Privacy answers.
+Before certifying content rights for Wolfx-supplied data, obtain and preserve
+written upstream permission using
+[`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md).
 Upload the signed Mac App Store build, the icon, this directory's approved
 screenshots, and the localized metadata. For a later upload, first increase the
 checked-in desktop version and use a higher App Store build. Confirm the Mac

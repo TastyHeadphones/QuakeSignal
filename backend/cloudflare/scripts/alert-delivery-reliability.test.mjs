@@ -733,39 +733,400 @@ test("rejected and failed Upgrade handshakes cancel, log safely, and retry", asy
   }
 });
 
-test("only starts periodic HTTP recovery after a sustained websocket outage", async () => {
-  const { QuakeRelay, isHttpRecoverySeedDue } = await workerModule();
+test("activates paced HTTP fallback only after every websocket route has sustained outage", async () => {
+  const {
+    QuakeRelay,
+    isHttpFallbackSourceStale,
+    isHttpRecoverySeedDue,
+    mapWithMinimumSpacing,
+  } = await workerModule();
   const now = Date.now();
   const values = new Map([
-    ["last-http-seed-ms", now - 5 * 60_000],
-    ["upstream-degraded-since-ms:jma_eqlist", now - 80_000],
+    ["last-http-seed-ms", now - 601],
+    ["upstream-degraded-since-ms:all_eew", now - 100_000],
+    ["upstream-degraded-since-ms:cenc_eqlist", now - 80_000],
+    ["upstream-degraded-since-ms:jma_eqlist", now - 100_000],
   ]);
   const state = {
     storage: {
       async get(key) {
         return values.get(key);
       },
+      async put(key, value) {
+        values.set(key, value);
+      },
+      async transaction(callback) {
+        return callback({
+          get: this.get.bind(this),
+          put: this.put.bind(this),
+        });
+      },
     },
     waitUntil() {},
   };
   const relay = new QuakeRelay(state, {});
-  relay.statuses.set("jma_eqlist", "error");
 
   assert.equal(
     await relay.shouldRunHttpRecoverySeed(),
     false,
-    "the first 90 seconds of a websocket outage must not poll HTTP",
+    "one route inside its 90-second grace window keeps HTTP fallback off",
   );
-  values.set("upstream-degraded-since-ms:jma_eqlist", now - 90_001);
-  assert.equal(await relay.shouldRunHttpRecoverySeed(), true);
+  values.set("upstream-degraded-since-ms:cenc_eqlist", now - 100_000);
+  assert.equal(
+    await relay.shouldRunHttpRecoverySeed(),
+    true,
+    "all three routes past the grace window activate alternate transport",
+  );
+  assert.equal(values.get("http-fallback-active"), true);
   values.set("last-http-seed-ms", Date.now());
   assert.equal(
     await relay.shouldRunHttpRecoverySeed(),
     false,
-    "the durable interval prevents the routine one-minute alarm from polling",
+    "a durable 600ms interval prevents overlapping fallback requests",
   );
-  assert.equal(isHttpRecoverySeedDue(now - 5 * 60_000, now), true);
-  assert.equal(isHttpRecoverySeedDue(now - 5 * 60_000 + 1, now), false);
+
+  assert.equal(isHttpRecoverySeedDue(now - 600, now), true);
+  assert.equal(isHttpRecoverySeedDue(now - 599, now), false);
+  assert.equal(isHttpFallbackSourceStale(now - 14_000, false, now), false);
+  assert.equal(isHttpFallbackSourceStale(now - 16_000, false, now), true);
+  assert.equal(isHttpFallbackSourceStale(now, true, now), true);
+
+  let clock = 0;
+  const starts = [];
+  const sleeps = [];
+  const results = await mapWithMinimumSpacing(
+    ["first", "second", "third"],
+    600,
+    async (source) => {
+      starts.push(clock);
+      return source;
+    },
+    () => clock,
+    async (milliseconds) => {
+      sleeps.push(milliseconds);
+      clock += milliseconds;
+    },
+  );
+  assert.deepEqual(results, ["first", "second", "third"]);
+  assert.deepEqual(starts, [0, 600, 1_200]);
+  assert.deepEqual(sleeps, [600, 600]);
+});
+
+test("HTTP and Upgrade timeout guards reject even when transport ignores abort", async () => {
+  const { withHttpSnapshotTimeout, withWolfxUpgradeTimeout } = await workerModule();
+  const never = () => new Promise(() => {});
+  await assert.rejects(
+    withHttpSnapshotTimeout(never, 1),
+    { name: "HttpSnapshotTimeoutError" },
+  );
+  await assert.rejects(
+    withWolfxUpgradeTimeout(never, 1),
+    { name: "WolfxUpgradeTimeoutError" },
+  );
+});
+
+test("coalesces concurrent HTTP sweeps and treats a silent open socket as degraded", async () => {
+  const { QuakeRelay } = await workerModule();
+  const values = new Map();
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async put(key, value) {
+        values.set(key, value);
+      },
+      async transaction(callback) {
+        return callback({
+          get: this.get.bind(this),
+          put: this.put.bind(this),
+        });
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  for (const source of [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ]) {
+    relay.statuses.set(source, source === "jma_eqlist" ? "error" : "open");
+    relay.lastSuccessfulUpstreamMs.set(source, Date.now());
+  }
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  let markSourceStarted;
+  const sourceStarted = new Promise((resolve) => {
+    markSourceStarted = resolve;
+  });
+  let sourceCalls = 0;
+  relay.seedHttpSource = async () => {
+    sourceCalls += 1;
+    markSourceStarted();
+    await gate;
+    return true;
+  };
+  const first = relay.seedFromHttp("recovery");
+  const second = relay.seedFromHttp("recovery");
+  await sourceStarted;
+  assert.equal(sourceCalls, 1, "one relay instance must coalesce concurrent sweeps");
+  const secondRelay = new QuakeRelay(state, {});
+  for (const source of [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ]) {
+    secondRelay.statuses.set(source, source === "jma_eqlist" ? "error" : "open");
+    secondRelay.lastSuccessfulUpstreamMs.set(source, Date.now());
+  }
+  let secondInstanceCalls = 0;
+  secondRelay.seedHttpSource = async () => {
+    secondInstanceCalls += 1;
+    return true;
+  };
+  await secondRelay.seedFromHttp("recovery");
+  assert.equal(
+    secondInstanceCalls,
+    0,
+    "the durable lease prevents a replacement instance from overlapping a sweep",
+  );
+  release();
+  await Promise.all([first, second]);
+  assert.equal(sourceCalls, 1);
+
+  const staleSocket = { readyState: 1, close() {} };
+  relay.upstreams.set("jma_eqlist", staleSocket);
+  relay.statuses.set("jma_eqlist", "open");
+  relay.lastSuccessfulUpstreamMs.set("jma_eqlist", Date.now() - 181_000);
+  assert.equal(
+    relay.routeIsOpen("jma_eqlist"),
+    false,
+    "a silent-but-open socket must not block degraded transport recovery",
+  );
+});
+
+test("HTTP fallback ingests only structurally valid changed snapshots", async () => {
+  const { QuakeRelay, isStructurallyValidHttpSnapshot } = await workerModule();
+  const originalFetch = globalThis.fetch;
+  const values = new Map();
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async put(key, value) {
+        values.set(key, value);
+      },
+      async list() {
+        return new Map();
+      },
+    },
+    waitUntil() {},
+  };
+  const validSnapshot = {
+    EventID: "http-snapshot-1",
+    Serial: 1,
+    AnnouncedTime: "2026/08/13 12:00:05",
+    OriginTime: "2026/08/13 12:00:00",
+    Hypocenter: "Test coast",
+    Latitude: 35.1,
+    Longitude: 140.2,
+    Magunitude: 4.2,
+  };
+  assert.equal(
+    isStructurallyValidHttpSnapshot("jma_eew", validSnapshot, [{
+      sourceId: "jma_eew",
+      eventId: "http-snapshot-1",
+      serial: 1,
+      originTimeUtc: "2026-08-13T03:00:00.000Z",
+      reportTimeUtc: "2026-08-13T03:00:05.000Z",
+      latitude: 35.1,
+      longitude: 140.2,
+      magnitude: 4.2,
+      hypocenter: "Test coast",
+    }]),
+    true,
+  );
+  assert.equal(
+    isStructurallyValidHttpSnapshot("jma_eew", { EventID: "x", Serial: 1 }, [{
+      sourceId: "jma_eew",
+      eventId: "x",
+      serial: 1,
+      originTimeUtc: "2026-08-13T03:00:00.000Z",
+      reportTimeUtc: "2026-08-13T03:00:05.000Z",
+      latitude: 35.1,
+      longitude: 140.2,
+      magnitude: 4.2,
+      hypocenter: "Test coast",
+    }]),
+    false,
+    "minimal EventID-shaped objects must not become alternate-transport proof",
+  );
+  assert.equal(
+    isStructurallyValidHttpSnapshot("jma_eew", {}, []),
+    false,
+    "an empty or unnormalized response must never make the fallback healthy",
+  );
+
+  let responseBody = validSnapshot;
+  const snapshotFetches = [];
+  globalThis.fetch = async (_url, init) => {
+    snapshotFetches.push(init);
+    return Response.json(responseBody);
+  };
+  try {
+    const relay = new QuakeRelay(state, {});
+    const ingested = [];
+    relay.ingest = async (event, mode) => {
+      ingested.push({ event, mode });
+    };
+
+    assert.equal(await relay.seedHttpSource("jma_eew", "recovery"), true);
+    assert.equal(ingested.length, 1);
+    assert.equal(ingested[0].mode, "recovery");
+    assert.equal(
+      snapshotFetches[0].cache,
+      "no-store",
+      "a fresh HTTP readiness signal must bypass Worker edge caching",
+    );
+    assert.equal(
+      typeof values.get("upstream-http-fingerprint:jma_eew"),
+      "string",
+      "a successful durable ingest records its exact snapshot fingerprint",
+    );
+    assert.equal(
+      typeof values.get("upstream-last-http-success-ms:jma_eew"),
+      "number",
+    );
+
+    assert.equal(await relay.seedHttpSource("jma_eew", "recovery"), true);
+    assert.equal(
+      ingested.length,
+      1,
+      "an unchanged HTTP snapshot must not repeat a D1/outbox ingest",
+    );
+
+    responseBody = {};
+    assert.equal(await relay.seedHttpSource("jma_eew", "recovery"), false);
+    assert.equal(
+      ingested.length,
+      1,
+      "an invalid response must not reach the durable ingest path",
+    );
+
+    const malformedList = {
+      md5: "not-a-real-list",
+      No51: {
+        Title: "report",
+        EventID: "too-many",
+        time: "2026/08/13 12:00",
+        time_full: "2026/08/13 12:00:00",
+        location: "Test coast",
+        magnitude: "4.2",
+        shindo: "2",
+        depth: "10km",
+        latitude: "35.1",
+        longitude: "140.2",
+        info: "",
+      },
+    };
+    assert.equal(
+      isStructurallyValidHttpSnapshot("jma_eqlist", malformedList, [{
+        sourceId: "jma_eqlist",
+        eventId: "too-many",
+        serial: 1,
+        originTimeUtc: "2026-08-13T03:00:00.000Z",
+        reportTimeUtc: "2026-08-13T03:00:00.000Z",
+        latitude: 35.1,
+        longitude: 140.2,
+        magnitude: 4.2,
+        hypocenter: "Test coast",
+      }]),
+      false,
+      "No51 must be rejected before it can create unbounded D1/outbox work",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("health reports HTTP polling as ready only while every fallback source is fresh", async () => {
+  const { QuakeRelay } = await workerModule();
+  const now = Date.now();
+  const values = new Map([["http-fallback-active", true]]);
+  for (const source of [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ]) {
+    values.set(`upstream-last-http-success-ms:${source}`, now);
+  }
+  const statement = {
+    bind() {
+      return this;
+    },
+    async first() {
+      return 0;
+    },
+  };
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async list() {
+        return new Map();
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {
+    DB: { prepare: () => statement },
+    APNS_PRIVATE_KEY: "test-key",
+    APNS_KEY_ID: "test-key-id",
+    APNS_TEAM_ID: "test-team-id",
+    APNS_BUNDLE_ID: "com.quakesignal.app",
+  });
+  relay.apnsAuthorization = async () => "bearer cached-test";
+  for (const source of [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ]) {
+    relay.statuses.set(source, "error");
+  }
+
+  const healthy = await relay.statusResponse();
+  assert.equal(healthy.status, 200);
+  const healthyBody = await healthy.json();
+  assert.equal(healthyBody.upstream.transport, "http-polling");
+  assert.equal(healthyBody.upstream.websocketStatus, "degraded");
+  assert.equal(healthyBody.upstream.sources.jma_eew.transport, "http-polling");
+
+  values.set("upstream-last-http-success-ms:jma_eew", now - 16_000);
+  const stale = await relay.statusResponse();
+  assert.equal(stale.status, 503, "one stale fallback source fails readiness closed");
+  const staleBody = await stale.json();
+  assert.deepEqual(staleBody.upstream.staleSources, ["jma_eew"]);
 });
 
 test("serializes an opened route reset before its next close records backoff", async () => {
