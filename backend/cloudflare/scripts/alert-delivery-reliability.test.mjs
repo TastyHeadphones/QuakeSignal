@@ -494,7 +494,11 @@ test("a first status probe still performs operational bootstrap when no alarm ex
     );
     await relay.fetch(new Request("https://relay.internal/status"));
     assert.ok(d1Batches > 0, "first status retains durable startup work");
-    assert.ok(httpSeedRequests > 0, "first status retains upstream seed bootstrap");
+    assert.equal(
+      httpSeedRequests,
+      0,
+      "the initial snapshot is deferred to its own immediate relay alarm",
+    );
     assert.equal(upgradeRequests, 3, "first status opens one Upgrade per route");
     assert.notEqual(alarmAt, null, "first status schedules routine recovery");
   } finally {
@@ -755,10 +759,17 @@ test("activates paced HTTP fallback only after every websocket route has sustain
       async put(key, value) {
         values.set(key, value);
       },
+      async delete(key) {
+        values.delete(key);
+      },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
       async transaction(callback) {
         return callback({
           get: this.get.bind(this),
           put: this.put.bind(this),
+          delete: this.delete.bind(this),
         });
       },
     },
@@ -836,10 +847,17 @@ test("coalesces concurrent HTTP sweeps and treats a silent open socket as degrad
       async put(key, value) {
         values.set(key, value);
       },
+      async delete(key) {
+        values.delete(key);
+      },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
       async transaction(callback) {
         return callback({
           get: this.get.bind(this),
           put: this.put.bind(this),
+          delete: this.delete.bind(this),
         });
       },
     },
@@ -916,6 +934,633 @@ test("coalesces concurrent HTTP sweeps and treats a silent open socket as degrad
   );
 });
 
+test("HTTP recovery rotates after a failed source attempt instead of starving later feeds", async () => {
+  const { QuakeRelay } = await workerModule();
+  const values = new Map();
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async put(key, value) {
+        values.set(key, value);
+      },
+      async delete(key) {
+        values.delete(key);
+      },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
+      async transaction(callback) {
+        return callback({
+          get: this.get.bind(this),
+          put: this.put.bind(this),
+          delete: this.delete.bind(this),
+        });
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  const attempts = [];
+  relay.seedHttpSource = async (source) => {
+    attempts.push(source);
+    return false;
+  };
+
+  await relay.runHttpSeed("recovery");
+  await relay.runHttpSeed("recovery");
+
+  assert.deepEqual(
+    attempts,
+    ["jma_eew", "sc_eew"],
+    "a cursor-free timeout/invalid response yields to the next degraded source",
+  );
+});
+
+test("a stale HTTP seed owner cannot overwrite a successor's pacing or source cursor", async () => {
+  const { QuakeRelay } = await workerModule();
+  const values = new Map();
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async put(key, value) {
+        values.set(key, value);
+      },
+      async delete(key) {
+        values.delete(key);
+      },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
+      async transaction(callback) {
+        return callback({
+          get: this.get.bind(this),
+          put: this.put.bind(this),
+          delete: this.delete.bind(this),
+        });
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  for (const source of [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ]) {
+    relay.statuses.set(source, "error");
+  }
+  const originalRenew = relay.renewHttpSeedLease;
+  let renewCalls = 0;
+  relay.renewHttpSeedLease = async (ownerId) => {
+    renewCalls += 1;
+    if (renewCalls === 1) return originalRenew.call(relay, ownerId);
+    values.set("http-seed-lease-until-ms", {
+      ownerId: "successor",
+      untilMs: Date.now() + 60_000,
+    });
+    values.set("http-seed-source-cursor", 5);
+    values.set("last-http-seed-ms", 12345);
+    return false;
+  };
+  relay.seedHttpSource = async () => true;
+
+  await relay.runHttpSeed("recovery");
+
+  assert.equal(values.get("http-seed-source-cursor"), 5);
+  assert.equal(values.get("last-http-seed-ms"), 12345);
+  assert.equal(values.get("http-seed-lease-until-ms").ownerId, "successor");
+});
+
+test("a due HTTP recovery alarm reserves the whole D1 turn for one source slice", async () => {
+  const { QuakeRelay } = await workerModule();
+  const values = new Map([
+    ["http-fallback-active", true],
+    ["last-http-seed-ms", Date.now() - 601],
+    ["initial-http-seed-complete", true],
+  ]);
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async put(key, value) {
+        values.set(key, value);
+      },
+      async delete(key) {
+        values.delete(key);
+      },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
+      async transaction(callback) {
+        return callback({
+          get: this.get.bind(this),
+          put: this.put.bind(this),
+          delete: this.delete.bind(this),
+        });
+      },
+      async getAlarm() { return null; },
+      async setAlarm() {},
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  const maintenance = [];
+  for (const source of [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ]) {
+    relay.statuses.set(source, "error");
+  }
+  relay.reconcileDlqPersistenceFallbacks = async () => maintenance.push("dlq");
+  relay.migrateLegacyPendingDeliveries = async () => maintenance.push("legacy");
+  relay.drainPendingIngestJournal = async () => maintenance.push("journal");
+  relay.flushAlertDeliveryOutbox = async (limit) => maintenance.push(`outbox:${limit}`);
+  relay.purgeExpiredDevicesIfDue = async () => maintenance.push("purge");
+  relay.ensureUpstreams = async () => {};
+  relay.scheduleRoutineRelayAlarm = async () => {};
+  const sources = [];
+  relay.seedHttpSource = async (source) => {
+    sources.push(source);
+    return false;
+  };
+
+  await relay.alarm();
+
+  assert.deepEqual(sources, ["jma_eew"], "one alarm attempts one fallback source");
+  assert.deepEqual(
+    maintenance,
+    ["outbox:4"],
+    "only a D1-safe four-row outbox handoff shares the fallback turn",
+  );
+});
+
+test("sustained fallback keeps source turns bounded and does not run D1 maintenance", async () => {
+  const { QuakeRelay } = await workerModule();
+  const values = new Map([["http-fallback-active", true]]);
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); },
+      async list() { return new Map(); },
+      async getAlarm() { return null; },
+      async setAlarm() {},
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  const calls = [];
+  relay.nextDueHttpSeedMode = async () => "recovery";
+  relay.ensureUpstreams = async () => calls.push("upstreams");
+  relay.seedFromHttp = async () => calls.push("source");
+  relay.reconcileDlqPersistenceFallbacks = async (limit) => calls.push(`dlq:${limit}`);
+  relay.drainPendingIngestJournal = async (limit, outboxLimit) =>
+    calls.push(`journal:${limit}:${outboxLimit}`);
+  relay.flushAlertDeliveryOutbox = async (limit) => calls.push(`outbox:${limit}`);
+  relay.scheduleRoutineRelayAlarm = async () => {};
+
+  await relay.alarm();
+  await relay.alarm();
+  await relay.alarm();
+
+  assert.deepEqual(calls, [
+    "upstreams", "source", "outbox:4", "upstreams",
+    "upstreams", "source", "outbox:4", "upstreams",
+    "upstreams", "source", "outbox:4", "upstreams",
+  ]);
+});
+
+test("a fallible fallback outbox handoff defers without an automatic alarm retry", async () => {
+  const { QuakeRelay } = await workerModule();
+  const values = new Map([["http-fallback-active", true]]);
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); },
+      async list() { return new Map(); },
+      async getAlarm() { return null; },
+      async setAlarm() {},
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  let reconnectAttempts = 0;
+  relay.nextDueHttpSeedMode = async () => "recovery";
+  relay.ensureUpstreams = async () => { reconnectAttempts += 1; };
+  relay.seedFromHttp = async () => {};
+  relay.flushAlertDeliveryOutbox = async () => {
+    throw new Error("simulated D1 outbox failure");
+  };
+  relay.scheduleRoutineRelayAlarm = async () => {};
+
+  await relay.alarm();
+  assert.ok(reconnectAttempts >= 1);
+  assert.ok(
+    values.get("http-fallback-retry-not-before-ms") >= Date.now() + 4_000,
+    "the fallback persists a slow retry and resolves the alarm handler",
+  );
+});
+
+test("an active fallback defers a recovery cursor even when its scheduler label is initial", async () => {
+  const { QuakeRelay } = await workerModule();
+  const values = new Map([["http-fallback-active", true]]);
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); },
+      async list() { return new Map(); },
+      async getAlarm() { return null; },
+      async setAlarm() {},
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  let sourceAttempts = 0;
+  let outboxAttempts = 0;
+  relay.pendingHttpSnapshotSources = async () => ["jma_eqlist"];
+  relay.ensureUpstreams = async () => {};
+  relay.seedFromHttp = async () => { sourceAttempts += 1; };
+  relay.flushAlertDeliveryOutbox = async () => {
+    outboxAttempts += 1;
+    throw new Error("simulated cursor handoff D1 failure");
+  };
+  relay.scheduleRoutineRelayAlarm = async () => {};
+
+  assert.equal(
+    await relay.nextDueHttpSeedMode(),
+    "initial",
+    "pending work resumes immediately with the scheduler's cursor label",
+  );
+  await relay.alarm();
+  assert.equal(sourceAttempts, 1);
+  assert.equal(outboxAttempts, 1);
+  assert.ok(
+    values.get("http-fallback-retry-not-before-ms") >= Date.now() + 4_000,
+    "active fallback, not the cursor label, controls automatic-retry safety",
+  );
+
+  await relay.alarm();
+  assert.equal(sourceAttempts, 1, "retry window permits reconnect only");
+  assert.equal(outboxAttempts, 1);
+});
+
+test("a successful active-fallback cursor clears an expired retry marker before scheduling", async () => {
+  const { QuakeRelay } = await workerModule();
+  const now = Date.now();
+  const values = new Map([
+    ["http-fallback-active", true],
+    ["http-fallback-retry-not-before-ms", now - 1],
+    ["last-http-seed-ms", now - 601],
+  ]);
+  let alarmAt = null;
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); },
+      async list() { return new Map(); },
+      async getAlarm() { return alarmAt; },
+      async setAlarm(value) { alarmAt = value; },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  const maintenance = [];
+  relay.pendingHttpSnapshotSources = async () => ["jma_eqlist"];
+  relay.ensureUpstreams = async () => {};
+  relay.seedFromHttp = async () => {
+    values.set("last-http-seed-ms", Date.now());
+  };
+  relay.flushAlertDeliveryOutbox = async () => {};
+  relay.reconcileDlqPersistenceFallbacks = async () => maintenance.push("dlq");
+  relay.migrateLegacyPendingDeliveries = async () => maintenance.push("legacy");
+  relay.drainPendingIngestJournal = async () => maintenance.push("journal");
+  relay.purgeExpiredDevicesIfDue = async () => maintenance.push("purge");
+
+  const startedAt = Date.now();
+  await relay.alarm();
+
+  assert.equal(values.has("http-fallback-retry-not-before-ms"), false);
+  assert.deepEqual(maintenance, []);
+  assert.ok(
+    typeof alarmAt === "number" && alarmAt >= startedAt + 400,
+    "the next fallback slice stays paced instead of waking immediately",
+  );
+});
+
+test("a recovered WebSocket transport still defers a failing unfinished HTTP cursor", async () => {
+  const { QuakeRelay } = await workerModule();
+  const values = new Map([["last-http-seed-ms", Date.now() - 601]]);
+  let alarmAt = null;
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); },
+      async list() { return new Map(); },
+      async getAlarm() { return alarmAt; },
+      async setAlarm(value) { alarmAt = value; },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  for (const source of [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ]) {
+    relay.statuses.set(source, "open");
+    relay.lastSuccessfulUpstreamMs.set(source, Date.now());
+  }
+  let reconnectAttempts = 0;
+  let sourceAttempts = 0;
+  let outboxAttempts = 0;
+  relay.pendingHttpSnapshotSources = async () => ["jma_eqlist"];
+  relay.ensureUpstreams = async () => { reconnectAttempts += 1; };
+  relay.seedFromHttp = async () => { sourceAttempts += 1; };
+  relay.flushAlertDeliveryOutbox = async () => {
+    outboxAttempts += 1;
+    throw new Error("simulated recovered-cursor D1 failure");
+  };
+
+  await relay.alarm();
+  assert.equal(sourceAttempts, 1);
+  assert.equal(outboxAttempts, 1);
+  assert.ok(
+    values.get("http-fallback-retry-not-before-ms") >= Date.now() + 4_000,
+  );
+
+  await relay.alarm();
+  assert.equal(sourceAttempts, 1, "retry window keeps the cursor out of automatic retry");
+  assert.equal(outboxAttempts, 1);
+  assert.equal(reconnectAttempts, 2, "the only permitted work during the retry window is reconnect maintenance");
+  assert.ok(typeof alarmAt === "number" && alarmAt >= Date.now() + 3_000);
+});
+
+test("a D1 failure while persisting an HTTP cursor uses the durable fallback retry", async () => {
+  const { QuakeRelay } = await workerModule();
+  const values = new Map([
+    ["http-fallback-active", true],
+    ["last-http-seed-ms", Date.now() - 601],
+    ["pending-http-snapshot:jma_eqlist", {
+      version: 1,
+      source: "jma_eqlist",
+      mode: "recovery",
+      fingerprint: "d1-failure-cursor",
+      events: [{
+        id: "jma_eqlist:d1-failure",
+        sourceId: "jma_eqlist",
+        eventId: "d1-failure",
+        serial: 1,
+        kind: "report",
+        originTimeUtc: "2026-08-13T03:00:00.000Z",
+        reportTimeUtc: "2026-08-13T03:00:00.000Z",
+        hypocenter: "Test coast",
+        latitude: 35.1,
+        longitude: 140.2,
+        magnitude: 4.2,
+        depth: 10,
+        maxIntensity: null,
+        isWarn: false,
+        isFinal: true,
+        isCancel: false,
+        isTraining: false,
+        tsunami: null,
+      }],
+      nextIndex: 0,
+    }],
+  ]);
+  let alarmAt = null;
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
+      async transaction(callback) {
+        return callback({
+          get: this.get.bind(this),
+          put: this.put.bind(this),
+          delete: this.delete.bind(this),
+        });
+      },
+      async getAlarm() { return alarmAt; },
+      async setAlarm(value) { alarmAt = value; },
+    },
+    waitUntil() {},
+  };
+  let batchAttempts = 0;
+  const relay = new QuakeRelay(state, {
+    DB: {
+      prepare() {
+        return {
+          bind() {
+            return { async all() { return { results: [] }; } };
+          },
+        };
+      },
+      async batch() {
+        batchAttempts += 1;
+        throw new Error("simulated HTTP snapshot D1 batch failure");
+      },
+    },
+  });
+  let reconnectAttempts = 0;
+  let outboxAttempts = 0;
+  relay.ensureUpstreams = async () => { reconnectAttempts += 1; };
+  relay.flushAlertDeliveryOutbox = async () => { outboxAttempts += 1; };
+
+  await relay.alarm();
+  assert.equal(batchAttempts, 1);
+  assert.equal(outboxAttempts, 0, "failed persistence never reaches Queue handoff");
+  assert.ok(values.get("http-fallback-retry-not-before-ms") >= Date.now() + 4_000);
+
+  await relay.alarm();
+  assert.equal(batchAttempts, 1, "retry window does not repeat the D1 cursor slice");
+  assert.equal(outboxAttempts, 0);
+  assert.equal(reconnectAttempts, 2);
+});
+
+test("a grace-boundary recovery selection enables the same durable retry protection", async () => {
+  const { QuakeRelay } = await workerModule();
+  const values = new Map();
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); },
+      async list() { return new Map(); },
+      async getAlarm() { return null; },
+      async setAlarm() {},
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  let refreshCalls = 0;
+  let sourceAttempts = 0;
+  let outboxAttempts = 0;
+  relay.refreshHttpFallbackActive = async () => ++refreshCalls > 1;
+  relay.nextDueHttpSeedMode = async () => "recovery";
+  relay.ensureUpstreams = async () => {};
+  relay.seedFromHttp = async () => { sourceAttempts += 1; };
+  relay.flushAlertDeliveryOutbox = async () => {
+    outboxAttempts += 1;
+    throw new Error("simulated grace-boundary D1 handoff failure");
+  };
+  relay.scheduleRoutineRelayAlarm = async () => {};
+
+  await relay.alarm();
+  assert.equal(sourceAttempts, 1);
+  assert.equal(outboxAttempts, 1);
+  assert.ok(values.get("http-fallback-retry-not-before-ms") >= Date.now() + 4_000);
+
+  await relay.alarm();
+  assert.equal(sourceAttempts, 1);
+  assert.equal(outboxAttempts, 1);
+});
+
+test("a deferred fallback turn does not touch D1 again before its retry time", async () => {
+  const { QuakeRelay } = await workerModule();
+  const now = Date.now();
+  const values = new Map([
+    ["http-fallback-active", true],
+    ["http-fallback-retry-not-before-ms", now + 5_000],
+    ["last-http-seed-ms", now - 601],
+  ]);
+  let alarmAt = null;
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); },
+      async list() { return new Map(); },
+      async getAlarm() { return alarmAt; },
+      async setAlarm(value) { alarmAt = value; },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  let reconnectAttempts = 0;
+  let sourceAttempts = 0;
+  let outboxAttempts = 0;
+  relay.ensureUpstreams = async () => { reconnectAttempts += 1; };
+  relay.seedFromHttp = async () => { sourceAttempts += 1; };
+  relay.flushAlertDeliveryOutbox = async () => {
+    outboxAttempts += 1;
+  };
+
+  await relay.alarm();
+  assert.equal(reconnectAttempts, 1);
+  assert.equal(sourceAttempts, 0);
+  assert.equal(outboxAttempts, 0);
+  assert.ok(typeof alarmAt === "number" && alarmAt >= now + 4_000);
+});
+
+test("a partial initial baseline retries cursor-free failures on the five-minute cadence", async () => {
+  const { QuakeRelay } = await workerModule();
+  const now = Date.now();
+  const values = new Map([["last-http-seed-ms", now - 601]]);
+  for (const source of [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+  ]) {
+    values.set(`upstream-http-fingerprint:${source}`, "valid-fingerprint");
+  }
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+
+  assert.equal(
+    await relay.nextDueHttpSeedMode(),
+    null,
+    "one missing source without a durable cursor waits for the initial retry interval",
+  );
+  assert.equal(
+    await relay.nextHttpFallbackAlarmAt(now),
+    null,
+    "the routine alarm, not a 600ms fallback loop, owns the retry wakeup",
+  );
+});
+
+test("a cold Queue-facing relay defers its first HTTP baseline to the alarm", async () => {
+  const { QuakeRelay } = await workerModule();
+  const values = new Map();
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async put(key, value) {
+        values.set(key, value);
+      },
+      async delete(key) {
+        values.delete(key);
+      },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
+      async getAlarm() { return null; },
+      async setAlarm() {},
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  const maintenance = [];
+  relay.ensureUpstreams = async () => {};
+  relay.reconcileDlqPersistenceFallbacks = async () => maintenance.push("dlq");
+  relay.migrateLegacyPendingDeliveries = async () => maintenance.push("legacy");
+  relay.drainPendingIngestJournal = async () => maintenance.push("journal");
+  relay.flushAlertDeliveryOutbox = async () => maintenance.push("outbox");
+  relay.purgeExpiredDevicesIfDue = async () => maintenance.push("purge");
+  relay.scheduleRoutineRelayAlarm = async () => {};
+  const modes = [];
+  relay.seedFromHttp = async (mode) => modes.push(mode);
+
+  const response = await relay.fetch(new Request("https://relay.internal/outbox/legacy", {
+    method: "POST",
+    body: "{}",
+  }));
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(modes, []);
+  assert.deepEqual(maintenance, ["dlq", "legacy", "journal", "outbox", "purge"]);
+});
+
 test("HTTP fallback ingests only structurally valid changed snapshots", async () => {
   const { QuakeRelay, isStructurallyValidHttpSnapshot } = await workerModule();
   const originalFetch = globalThis.fetch;
@@ -928,8 +1573,18 @@ test("HTTP fallback ingests only structurally valid changed snapshots", async ()
       async put(key, value) {
         values.set(key, value);
       },
-      async list() {
-        return new Map();
+      async delete(key) {
+        values.delete(key);
+      },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
+      async transaction(callback) {
+        return callback({
+          get: this.get.bind(this),
+          put: this.put.bind(this),
+          delete: this.delete.bind(this),
+        });
       },
     },
     waitUntil() {},
@@ -986,15 +1641,29 @@ test("HTTP fallback ingests only structurally valid changed snapshots", async ()
     return Response.json(responseBody);
   };
   try {
-    const relay = new QuakeRelay(state, {});
-    const ingested = [];
-    relay.ingest = async (event, mode) => {
-      ingested.push({ event, mode });
+    let batches = 0;
+    const database = {
+      prepare() {
+        return {
+          bind() {
+            return {
+              async all() {
+                return { results: [] };
+              },
+            };
+          },
+        };
+      },
+      async batch(statements) {
+        batches += 1;
+        return statements.map(() => ({ meta: { changes: 1 } }));
+      },
     };
+    const relay = new QuakeRelay(state, { DB: database });
+    relay.flushAlertDeliveryOutbox = async () => {};
 
     assert.equal(await relay.seedHttpSource("jma_eew", "recovery"), true);
-    assert.equal(ingested.length, 1);
-    assert.equal(ingested[0].mode, "recovery");
+    assert.equal(batches, 1, "a changed snapshot commits in one bounded D1 batch");
     assert.equal(
       snapshotFetches[0].cache,
       "no-store",
@@ -1012,7 +1681,7 @@ test("HTTP fallback ingests only structurally valid changed snapshots", async ()
 
     assert.equal(await relay.seedHttpSource("jma_eew", "recovery"), true);
     assert.equal(
-      ingested.length,
+      batches,
       1,
       "an unchanged HTTP snapshot must not repeat a D1/outbox ingest",
     );
@@ -1020,7 +1689,7 @@ test("HTTP fallback ingests only structurally valid changed snapshots", async ()
     responseBody = {};
     assert.equal(await relay.seedHttpSource("jma_eew", "recovery"), false);
     assert.equal(
-      ingested.length,
+      batches,
       1,
       "an invalid response must not reach the durable ingest path",
     );
@@ -1059,6 +1728,170 @@ test("HTTP fallback ingests only structurally valid changed snapshots", async ()
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("HTTP report lists resume in D1-safe slices and remain health-stale until complete", async () => {
+  const { QuakeRelay } = await workerModule();
+  const values = new Map();
+  const now = Date.now();
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async put(key, value) {
+        values.set(key, value);
+      },
+      async delete(key) {
+        values.delete(key);
+      },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
+      async transaction(callback) {
+        return callback({
+          get: this.get.bind(this),
+          put: this.put.bind(this),
+          delete: this.delete.bind(this),
+        });
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {
+    APNS_PRIVATE_KEY: "test-key",
+    APNS_KEY_ID: "test-key-id",
+    APNS_TEAM_ID: "test-team-id",
+    APNS_BUNDLE_ID: "com.quakesignal.app",
+  });
+  relay.apnsAuthorization = async () => "bearer cached-test";
+  for (const source of [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ]) {
+    relay.statuses.set(source, "open");
+    relay.lastSuccessfulUpstreamMs.set(source, now);
+  }
+  const snapshots = Array.from({ length: 50 }, (_, index) => ({
+    id: `jma_eqlist:bounded-${index + 1}`,
+    sourceId: "jma_eqlist",
+    eventId: `bounded-${index + 1}`,
+    serial: 1,
+    kind: "report",
+    originTimeUtc: "2026-08-13T03:00:00.000Z",
+    reportTimeUtc: "2026-08-13T03:00:00.000Z",
+    hypocenter: "Test coast",
+    latitude: 35.1,
+    longitude: 140.2,
+    magnitude: 4.2,
+    depth: 10,
+    maxIntensity: null,
+    isWarn: false,
+    isFinal: true,
+    isCancel: false,
+    isTraining: false,
+    tsunami: null,
+  }));
+  const key = "pending-http-snapshot:jma_eqlist";
+  values.set(key, {
+    version: 1,
+    source: "jma_eqlist",
+    mode: "recovery",
+    fingerprint: "bounded-fingerprint",
+    events: snapshots,
+    nextIndex: 0,
+  });
+  let readCalls = 0;
+  let writeStatements = 0;
+  relay.env.DB = {
+    prepare() {
+      return {
+        bind() {
+          return {
+            async first() {
+              return 0;
+            },
+            async all() {
+              readCalls += 1;
+              return { results: [] };
+            },
+          };
+        },
+      };
+    },
+    async batch(statements) {
+      writeStatements += statements.length;
+      return statements.map(() => ({ meta: { changes: 1 } }));
+    },
+  };
+  relay.flushAlertDeliveryOutbox = async () => {};
+  const before = await relay.statusResponse();
+  assert.equal(before.status, 503, "a partial HTTP cursor cannot report ready");
+  const beforeBody = await before.json();
+  assert.equal(
+    beforeBody.upstream.sources.jma_eqlist.pendingHttpSnapshot,
+    true,
+  );
+  assert.equal(
+    beforeBody.upstream.sources.jma_eqlist.stale,
+    true,
+    "a fresh WebSocket cannot hide a partly durable report list",
+  );
+  assert.equal(
+    beforeBody.upstream.sources.jma_eqlist.transport,
+    "websocket",
+    "the source reports its live transport without claiming its cursor complete",
+  );
+  for (let slice = 0; slice < 6; slice += 1) {
+    await relay.seedHttpSource("jma_eqlist", "initial");
+  }
+  const remaining = values.get(key);
+  assert.equal(remaining.nextIndex, 48, "six slices persist exactly 48 reports");
+  assert.equal(remaining.mode, "recovery", "resume never suppresses recovery semantics");
+  assert.equal(readCalls, 6, "each slice makes one D1 prior-state read");
+  assert.ok(writeStatements <= 6 * 24, "each D1 write batch remains bounded");
+  await relay.seedHttpSource("jma_eqlist", "initial");
+  assert.equal(values.has(key), false, "final slice commits the fingerprint and clears cursor");
+  assert.equal(
+    typeof values.get("upstream-http-fingerprint:jma_eqlist"),
+    "string",
+  );
+});
+
+test("routine alarms keep a bounded outbox hand-off budget before HTTP fallback", async () => {
+  const { QuakeRelay } = await workerModule();
+  const values = new Map();
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); },
+      async list() { return new Map(); },
+      async getAlarm() { return null; },
+      async setAlarm() {},
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  const calls = [];
+  relay.reconcileDlqPersistenceFallbacks = async () => {};
+  relay.migrateLegacyPendingDeliveries = async () => {};
+  relay.drainPendingIngestJournal = async () => {};
+  relay.flushAlertDeliveryOutbox = async (limit) => { calls.push(limit); };
+  relay.purgeExpiredDevicesIfDue = async () => {};
+  relay.refreshHttpFallbackActive = async () => false;
+  relay.pendingHttpSnapshotSources = async () => [];
+  relay.nextDueHttpSeedMode = async () => null;
+  relay.seedFromHttp = async () => {};
+  relay.ensureUpstreams = async () => {};
+  relay.scheduleRoutineRelayAlarm = async () => {};
+  await relay.alarm();
+  assert.deepEqual(calls, [8], "routine alarm never claims 50 rows before fallback work");
 });
 
 test("health reports HTTP polling as ready only while every fallback source is fresh", async () => {

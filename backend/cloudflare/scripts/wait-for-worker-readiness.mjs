@@ -4,6 +4,13 @@ import { resolve } from "node:path";
 const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_INTERVAL_MS = 5_000;
 
+class WorkerReadinessProbeTimeoutError extends Error {
+  constructor(timeoutMs) {
+    super(`Worker readiness health probe exceeded its ${timeoutMs}ms deadline`);
+    this.name = "WorkerReadinessProbeTimeoutError";
+  }
+}
+
 function healthUrl(baseUrl) {
   const url = new URL(baseUrl);
   if (url.protocol !== "https:" || url.pathname !== "/" || url.search || url.hash) {
@@ -47,6 +54,37 @@ function isReady(response, body) {
   );
 }
 
+async function probeHealthWithinDeadline(fetchImpl, url, timeoutMs) {
+  const controller = new AbortController();
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new WorkerReadinessProbeTimeoutError(timeoutMs));
+    }, timeoutMs);
+  });
+  const probe = (async () => {
+    const response = await fetchImpl(url, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    let body = null;
+    try {
+      body = await response.json();
+    } catch {
+      // Keep polling through a rolling deployment / legacy response, but
+      // include the HTTP status in the final failure summary.
+    }
+    return { response, body };
+  })();
+
+  try {
+    return await Promise.race([probe, timeout]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 /**
  * Wait through the relay's intentional 90-second WebSocket-to-HTTP fallback
  * grace. A 200 is accepted only when the full delivery/upstream readiness
@@ -70,15 +108,16 @@ export async function waitForWorkerReadiness(baseUrl, {
   const deadline = now() + timeoutMs;
   let last = null;
   while (true) {
+    const remainingBeforeAttempt = deadline - now();
+    if (remainingBeforeAttempt <= 0) {
+      throw new Error(`Worker readiness did not converge within ${timeoutMs}ms: ${JSON.stringify(last)}`);
+    }
     try {
-      const response = await fetchImpl(url, { cache: "no-store" });
-      let body = null;
-      try {
-        body = await response.json();
-      } catch {
-        // Keep polling through a rolling deployment / legacy response, but
-        // include the HTTP status in the final failure summary.
-      }
+      const { response, body } = await probeHealthWithinDeadline(
+        fetchImpl,
+        url,
+        remainingBeforeAttempt,
+      );
       last = readinessSummary(response, body);
       onAttempt(last);
       if (isReady(response, body)) return last;

@@ -83,3 +83,32 @@ test("rejects an incomplete or superficial 200 readiness response", async () => 
     /did not converge/,
   );
 });
+
+test("hard-bounds a health fetch that never settles at the overall deadline", async () => {
+  let signal;
+  let guardTimeout;
+  const readiness = waitForWorkerReadiness("https://example.workers.dev", {
+    timeoutMs: 20,
+    intervalMs: 1,
+    fetchImpl: (_url, init) => {
+      signal = init.signal;
+      return new Promise(() => {});
+    },
+  });
+
+  try {
+    await Promise.race([
+      assert.rejects(readiness, /did not converge within 20ms/),
+      new Promise((_, reject) => {
+        guardTimeout = setTimeout(
+          () => reject(new Error("readiness fetch was not bounded by the overall deadline")),
+          500,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(guardTimeout);
+  }
+
+  assert.equal(signal?.aborted, true);
+});

@@ -179,12 +179,7 @@ const LOC_KEYS: Record<NotifyReason, { title: string; body: string }> = {
   },
 };
 
-// A Worker may have only a small number of simultaneous outgoing connections.
-// Keep initial HTTP seed work below the six-connection limit while the three
-// Wolfx watcher sockets are establishing their handshakes. The sustained
-// fallback uses one request at a time, with a separate temporal rate bound.
 const APNS_MAX_CONCURRENT_DELIVERIES = 2;
-const HTTP_SEED_MAX_CONCURRENT_REQUESTS = 2;
 // Keep one queue message comfortably below Workers' subrequest limits: a page
 // has at most 20 APNs requests plus a small, fixed number of D1 operations.
 const DEVICE_DELIVERY_PAGE_SIZE = 20;
@@ -203,6 +198,8 @@ const INITIAL_HTTP_SEED_COMPLETE_KEY = "initial-http-seed-complete";
 const UPSTREAM_LAST_SUCCESS_PREFIX = "upstream-last-success-ms:";
 const UPSTREAM_LAST_HTTP_SUCCESS_PREFIX = "upstream-last-http-success-ms:";
 const UPSTREAM_HTTP_FINGERPRINT_PREFIX = "upstream-http-fingerprint:";
+const PENDING_HTTP_SNAPSHOT_PREFIX = "pending-http-snapshot:";
+const HTTP_SEED_SOURCE_CURSOR_KEY = "http-seed-source-cursor";
 const UPSTREAM_RECONNECT_FAILURE_PREFIX = "upstream-reconnect-failures:";
 const UPSTREAM_RECONNECT_NOT_BEFORE_PREFIX = "upstream-reconnect-not-before-ms:";
 const UPSTREAM_DEGRADED_SINCE_PREFIX = "upstream-degraded-since-ms:";
@@ -221,6 +218,12 @@ const PENDING_INGEST_RETRY_DELAY_MS = 5_000;
 const DLQ_PERSISTENCE_FALLBACK_PREFIX = "dlq-persistence-fallback:";
 const DLQ_PERSISTENCE_FALLBACK_REPLAY_BATCH_SIZE = 50;
 const OUTBOX_REPLAY_BATCH_SIZE = 50;
+// A normal relay alarm also reconciles journals and runs fallback ingestion.
+// Limiting routine Queue hand-off to eight rows leaves headroom below the
+// Workers Free 50-internal-subrequest budget: each row needs a claim, Queue
+// send, and hand-off write, plus the one outbox select. Follow-up alarms
+// continue the ordered durable outbox without loss.
+const ROUTINE_OUTBOX_FLUSH_BATCH_SIZE = 8;
 // Claiming a row before Queue.send prevents concurrent relay requests from
 // producing a fan-out storm. If a process dies before the Queue accepts the
 // message, this short lease makes the hand-off recoverable.
@@ -262,6 +265,21 @@ const HTTP_FALLBACK_MAX_SNAPSHOT_BYTES = 256 * 1024;
 // stops producing valid snapshots.
 const HTTP_FALLBACK_STALE_AFTER_MS = 15_000;
 const MAX_HTTP_SNAPSHOT_EVENTS = 50;
+// A list snapshot can contain all fifty ranked reports. Keep a single Durable
+// Object turn well below D1 Free's 50-query/subrequest budget even when a new
+// report creates an outbox row and Queue hand-off. The remaining verified
+// snapshot is durable DO work and resumes on the next paced alarm.
+const HTTP_SNAPSHOT_INGEST_BATCH_SIZE = 8;
+// A fallback-only alarm may hand off four pre-existing rows even if its one
+// HTTP source is unchanged. Together with the worst eight-event snapshot
+// slice this remains below the D1 Free per-invocation statement budget.
+const HTTP_FALLBACK_OUTBOX_FLUSH_BATCH_SIZE = 4;
+// A failed recovery slice must not escape `alarm()`: Durable Objects retry an
+// uncaught alarm automatically, which can be sooner than our source cadence.
+// Persist a short deferral so both the scheduler and any unexpected alarm
+// delivery respect one bounded D1 retry pace.
+const HTTP_FALLBACK_RETRY_NOT_BEFORE_KEY =
+  "http-fallback-retry-not-before-ms";
 // HTTP recovery must not turn a historical snapshot into a notification
 // replay. It is only allowed to surface a fresh event/revision that arrived
 // while a WebSocket route was unavailable.
@@ -425,6 +443,33 @@ interface PendingIngestRecord {
   event: QueuedEvent;
   writeId: string;
 }
+
+/**
+ * A validated HTTP snapshot can contain up to fifty ranked earthquake
+ * reports. Persist its normalized, token-free work cursor in the relay so one
+ * alarm invocation never tries to make all of the corresponding D1 calls.
+ * `fingerprint` fences an older in-flight relay turn from advancing or
+ * clearing a cursor that a later retry has already moved.
+ */
+interface PendingHttpSnapshotWork {
+  version: 1;
+  source: WolfxSourceId;
+  mode: "initial" | "recovery";
+  fingerprint: string;
+  events: QueuedEvent[];
+  nextIndex: number;
+}
+
+/** A fenced lease for one whole alternate-transport sweep. */
+interface HttpSeedLease {
+  ownerId: string;
+  untilMs: number;
+}
+
+type DurableKeyValueStore = Pick<
+  DurableObjectStorage,
+  "get" | "put" | "delete"
+>;
 
 class MissingApnsConfigurationError extends Error {
   constructor() {
@@ -1006,6 +1051,58 @@ function isQueuedEvent(value: unknown): value is QueuedEvent {
   );
 }
 
+function isPendingHttpSnapshotWork(
+  value: unknown,
+): value is PendingHttpSnapshotWork {
+  if (!value || typeof value !== "object") return false;
+  const work = value as Partial<PendingHttpSnapshotWork>;
+  return (
+    work.version === 1 &&
+    typeof work.source === "string" &&
+    (ALL_WOLFX_SOURCES as string[]).includes(work.source) &&
+    (work.mode === "initial" || work.mode === "recovery") &&
+    typeof work.fingerprint === "string" &&
+    work.fingerprint.length > 0 &&
+    Array.isArray(work.events) &&
+    work.events.length > 0 &&
+    work.events.length <= MAX_HTTP_SNAPSHOT_EVENTS &&
+    work.events.every((event) => isQueuedEvent(event) && event.sourceId === work.source) &&
+    typeof work.nextIndex === "number" &&
+    Number.isSafeInteger(work.nextIndex) &&
+    work.nextIndex >= 0 &&
+    work.nextIndex <= work.events.length
+  );
+}
+
+function httpSnapshotWorkStorageKey(source: WolfxSourceId): string {
+  return `${PENDING_HTTP_SNAPSHOT_PREFIX}${source}`;
+}
+
+function isHttpSeedLease(value: unknown): value is HttpSeedLease {
+  if (!value || typeof value !== "object") return false;
+  const lease = value as Partial<HttpSeedLease>;
+  return (
+    typeof lease.ownerId === "string" &&
+    lease.ownerId.length > 0 &&
+    typeof lease.untilMs === "number" &&
+    Number.isFinite(lease.untilMs) &&
+    lease.untilMs > 0
+  );
+}
+
+/** Read the legacy numeric lease too, so a rolling deployment fails closed. */
+function httpSeedLeaseUntil(value: unknown): number | null {
+  if (isHttpSeedLease(value)) return value.untilMs;
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : null;
+}
+
+function snapshotEvent(event: NormalizedEvent): QueuedEvent {
+  const { raw: _raw, ...queued } = event;
+  return queued;
+}
+
 function isPendingIngestRecord(value: unknown): value is PendingIngestRecord {
   if (!value || typeof value !== "object") return false;
   const record = value as Partial<PendingIngestRecord>;
@@ -1543,6 +1640,7 @@ export function isStructurallyValidHttpSnapshot(
   }
   if (
     normalizedEvents.length === 0 ||
+    new Set(normalizedEvents.map((event) => event.id)).size !== normalizedEvents.length ||
     normalizedEvents.some((event) =>
       event.sourceId !== sourceId ||
       typeof event.eventId !== "string" ||
@@ -1842,6 +1940,58 @@ async function persistEventAndOutbox(
   }
   await db.batch(statements);
   return { previous, message };
+}
+
+/**
+ * Persist a small, already-validated HTTP snapshot slice with two D1 binding
+ * calls: one read of the prior revisions and one atomic write batch. This is
+ * intentionally separate from the live WebSocket path, whose one-event
+ * journal gives tighter failure isolation. The HTTP alternate transport may
+ * contain fifty report entries, so issuing a get+batch per entry would exceed
+ * the Workers Free D1 invocation budget.
+ */
+async function persistHttpSnapshotEvents(
+  db: D1Database,
+  snapshots: readonly QueuedEvent[],
+  mode: "initial" | "recovery",
+): Promise<void> {
+  if (snapshots.length === 0) return;
+  if (snapshots.length > HTTP_SNAPSHOT_INGEST_BATCH_SIZE) {
+    throw new RangeError("HTTP snapshot persistence slice exceeds its D1-safe bound");
+  }
+  const ids = snapshots.map((event) => event.id);
+  if (new Set(ids).size !== ids.length) {
+    throw new TypeError("HTTP snapshot persistence slice contains duplicate event IDs");
+  }
+  const placeholders = ids.map(() => "?").join(", ");
+  const existing = await db
+    .prepare(`SELECT * FROM events WHERE id IN (${placeholders})`)
+    .bind(...ids)
+    .all<EventRow>();
+  const previousById = new Map(
+    existing.results.map((row) => [row.id, rowToEvent(row)]),
+  );
+  const now = new Date().toISOString();
+  const statements: D1PreparedStatement[] = [];
+  for (const snapshot of snapshots) {
+    const event: NormalizedEvent = { ...snapshot, raw: null };
+    const previous = previousById.get(event.id) ?? null;
+    const reason = determineReason(event, previous);
+    const message =
+      reason === null ||
+        mode === "initial" ||
+        (mode === "recovery" && !isRecentHttpRecoveryEvent(event))
+        ? null
+        : createAlertDeliveryMessage(event, reason);
+    statements.push(
+      eventUpsertStatement(db, event, now),
+      supersedeOlderOutboxRowsForEventStatement(db, event.id, now),
+    );
+    if (message) {
+      statements.push(outboxInsertStatement(db, message, message.deliveryId, now));
+    }
+  }
+  await db.batch(statements);
 }
 
 async function appendOutbox(
@@ -3020,7 +3170,7 @@ export class QuakeRelay {
       }
       const upgraded = upgradeLegacyAlertDeliveryMessage(body);
       await appendOutbox(this.env.DB, upgraded, upgraded.deliveryId);
-      await this.flushAlertDeliveryOutbox();
+      await this.flushAlertDeliveryOutbox(ROUTINE_OUTBOX_FLUSH_BATCH_SIZE);
       return Response.json({ ok: true });
     }
     return Response.json({ error: "not found" }, { status: 404 });
@@ -3080,29 +3230,81 @@ export class QuakeRelay {
 
   async alarm(): Promise<void> {
     try {
+      const fallbackActive = await this.refreshHttpFallbackActive();
+      const pendingHttpSnapshot =
+        (await this.pendingHttpSnapshotSources()).length > 0;
+      const httpSnapshotTurnProtected = fallbackActive || pendingHttpSnapshot;
+      if (
+        httpSnapshotTurnProtected &&
+        !await this.httpFallbackTurnIsDue(Date.now())
+      ) {
+        // Keep reconnect maintenance alive while a failed fallback slice is
+        // waiting for its durable retry time, but do not fall through to
+        // ordinary D1 maintenance or another HTTP source attempt.
+        await this.ensureUpstreams();
+        return;
+      }
+      // HTTP recovery has a strict whole-invocation D1 budget. It must own an
+      // alarm by itself: an eight-event snapshot slice can use one prior-state
+      // read plus up to 24 sequential batch statements, followed by at most a
+      // four-row hand-off. Do not combine that work with ordinary purge,
+      // journal, DLQ, or outbox maintenance in the same Worker invocation.
+      const httpSeedMode = await this.nextDueHttpSeedMode();
+      if (httpSeedMode !== null) {
+        // `nextDueHttpSeedMode()` refreshes the transport state itself. It can
+        // cross the outage grace boundary after the sample above, so its
+        // recovery result is authoritative for alarm-retry safety.
+        const effectiveHttpSnapshotProtection =
+          httpSnapshotTurnProtected || httpSeedMode === "recovery";
+        // Reconnect work is independent of D1 and must run before a fallible
+        // hand-off. A D1 outage must never turn the alternate transport into
+        // a loop that stops attempting to restore the preferred WebSockets.
+        await this.ensureUpstreams();
+        try {
+          await this.seedFromHttp(httpSeedMode);
+          // A prolonged alternate transport must still drain pages created by
+          // a previous recovery slice (or ordinary traffic before the
+          // outage). This deliberately small hand-off shares the fallback
+          // turn's budget; it is not contingent on the current HTTP source
+          // changing. DLQ/journal reconciliation remains ordinary relay work:
+          // serial D1 maintenance here would steal the low-latency fallback
+          // poll from an active emergency transport.
+          await this.flushAlertDeliveryOutbox(
+            HTTP_FALLBACK_OUTBOX_FLUSH_BATCH_SIZE,
+          );
+          if (effectiveHttpSnapshotProtection) {
+            // Pending cursors are scheduled as `initial` regardless of the
+            // work's original mode. A successful active-fallback slice must
+            // clear a stale deferral for either label, otherwise the final
+            // scheduler can request an immediate wake that falls through to
+            // ordinary D1 maintenance before the next paced source slice.
+            await this.state.storage.delete(HTTP_FALLBACK_RETRY_NOT_BEFORE_KEY);
+          }
+        } catch (error) {
+          // A pending cursor is scheduled as `initial` so its work can resume
+          // before the outage grace period, but its stored work may still be
+          // recovery-mode. It remains durability-critical after WebSockets
+          // recover too. Do not let an incomplete cursor return to Durable
+          // Object automatic alarm retries merely because the active HTTP
+          // transport flag has cleared.
+          if (
+            !effectiveHttpSnapshotProtection &&
+            (await this.pendingHttpSnapshotSources()).length === 0
+          ) throw error;
+          await this.deferHttpFallbackTurn(error);
+          return;
+        }
+        await this.ensureUpstreams();
+        return;
+      }
       // Recover a D1-persistence fallback before ordinary outbox replay. If
       // D1 has recovered, this atomically terminalizes the original outbox row
       // first, so its expired lease cannot resurrect a failed alert page.
       await this.reconcileDlqPersistenceFallbacks();
       await this.migrateLegacyPendingDeliveries();
       await this.drainPendingIngestJournal();
-      await this.flushAlertDeliveryOutbox();
+      await this.flushAlertDeliveryOutbox(ROUTINE_OUTBOX_FLUSH_BATCH_SIZE);
       await this.purgeExpiredDevicesIfDue();
-      const initialSeedComplete = await this.state.storage.get<boolean>(
-        INITIAL_HTTP_SEED_COMPLETE_KEY,
-      );
-      const lastHttpSeedMs = await this.state.storage.get<number>(
-        LAST_HTTP_SEED_MS_KEY,
-      );
-      const httpFallbackActive = await this.refreshHttpFallbackActive();
-      if (httpFallbackActive && isHttpRecoverySeedDue(lastHttpSeedMs)) {
-        await this.seedFromHttp("recovery");
-      } else if (
-        !initialSeedComplete &&
-        isInitialHttpSeedDue(lastHttpSeedMs)
-      ) {
-        await this.seedFromHttp("initial");
-      }
       await this.ensureUpstreams();
     } finally {
       // Preserve a short journal-retry alarm requested during this run rather
@@ -3121,32 +3323,20 @@ export class QuakeRelay {
       ? await this.state.storage.getAlarm()
       : alarmAtStart;
     await this.ensureUpstreams();
+    // Baseline HTTP seeding always belongs to the relay alarm, never to a
+    // caller's `/deliver` or acknowledgement invocation. A Queue delivery can
+    // have its own sizable D1 page, so mixing an eight-event snapshot slice
+    // here would violate the whole-invocation D1 budget. With no existing
+    // alarm, `scheduleRoutineRelayAlarm()` below requests the immediate
+    // baseline wakeup instead.
     // This must precede every path that can enqueue an outbox row. A recovered
     // D1 incident write is the terminal decision for the original page.
     await this.reconcileDlqPersistenceFallbacks();
     await this.migrateLegacyPendingDeliveries();
     await this.drainPendingIngestJournal();
-    await this.flushAlertDeliveryOutbox();
+    await this.flushAlertDeliveryOutbox(ROUTINE_OUTBOX_FLUSH_BATCH_SIZE);
     await this.purgeExpiredDevicesIfDue();
-    if (alarm === null) {
-      const initialSeedComplete = await this.state.storage.get<boolean>(
-        INITIAL_HTTP_SEED_COMPLETE_KEY,
-      );
-      const lastHttpSeedMs = await this.state.storage.get<number>(
-        LAST_HTTP_SEED_MS_KEY,
-      );
-      if (!initialSeedComplete) {
-        if (isInitialHttpSeedDue(lastHttpSeedMs)) {
-          await this.seedFromHttp("initial");
-        }
-      } else if (await this.shouldRunHttpRecoverySeed()) {
-        await this.seedFromHttp("recovery");
-      }
-      // A socket can close while the initial HTTP seed is still in flight.
-      // Re-read the requested alarm so that fast reconnect wins over the
-      // ordinary one-minute wakeup just as it does in `alarm()`.
-      await this.scheduleRoutineRelayAlarm();
-    }
+    if (alarm === null) await this.scheduleRoutineRelayAlarm();
   }
 
   /**
@@ -3208,10 +3398,16 @@ export class QuakeRelay {
    * marker only after the D1 batch commits and only when no concurrent Queue
    * retry replaced it with a newer writeId.
    */
-  private async reconcileDlqPersistenceFallbacks(): Promise<void> {
+  private async reconcileDlqPersistenceFallbacks(
+    limit = DLQ_PERSISTENCE_FALLBACK_REPLAY_BATCH_SIZE,
+  ): Promise<void> {
+    if (!Number.isSafeInteger(limit) || limit < 1 ||
+      limit > DLQ_PERSISTENCE_FALLBACK_REPLAY_BATCH_SIZE) {
+      throw new RangeError("DLQ fallback replay limit must be a positive bounded safe integer");
+    }
     const pending = await this.state.storage.list<unknown>({
       prefix: DLQ_PERSISTENCE_FALLBACK_PREFIX,
-      limit: DLQ_PERSISTENCE_FALLBACK_REPLAY_BATCH_SIZE,
+      limit,
     });
     for (const [key, value] of pending) {
       if (!isDlqPersistenceFallbackRecord(value)) {
@@ -3314,9 +3510,29 @@ export class QuakeRelay {
     }
   }
 
-  private drainPendingIngestJournal(): Promise<void> {
+  private drainPendingIngestJournal(
+    maxEntries: number | null = null,
+    outboxFlushLimit: number | null = ROUTINE_OUTBOX_FLUSH_BATCH_SIZE,
+  ): Promise<void> {
+    if (
+      maxEntries !== null &&
+      (!Number.isSafeInteger(maxEntries) || maxEntries < 1 ||
+        maxEntries > OUTBOX_REPLAY_BATCH_SIZE)
+    ) {
+      throw new RangeError("live-ingest drain limit must be null or a positive bounded safe integer");
+    }
+    if (
+      outboxFlushLimit !== null &&
+      (!Number.isSafeInteger(outboxFlushLimit) || outboxFlushLimit < 1 ||
+        outboxFlushLimit > OUTBOX_REPLAY_BATCH_SIZE)
+    ) {
+      throw new RangeError("live-ingest outbox limit must be null or a positive bounded safe integer");
+    }
     if (this.pendingIngestDrain) return this.pendingIngestDrain;
-    const drain = this.runPendingIngestJournal().finally(() => {
+    const drain = this.runPendingIngestJournal(
+      maxEntries,
+      outboxFlushLimit,
+    ).finally(() => {
       if (this.pendingIngestDrain === drain) {
         this.pendingIngestDrain = null;
       }
@@ -3325,11 +3541,19 @@ export class QuakeRelay {
     return drain;
   }
 
-  private async runPendingIngestJournal(): Promise<void> {
+  private async runPendingIngestJournal(
+    maxEntries: number | null,
+    outboxFlushLimit: number | null,
+  ): Promise<void> {
+    let remaining = maxEntries;
     while (true) {
+      if (remaining !== null && remaining <= 0) return;
+      const limit = remaining === null
+        ? OUTBOX_REPLAY_BATCH_SIZE
+        : Math.min(remaining, OUTBOX_REPLAY_BATCH_SIZE);
       const pending = await this.state.storage.list<unknown>({
         prefix: PENDING_INGEST_PREFIX,
-        limit: OUTBOX_REPLAY_BATCH_SIZE,
+        limit,
       });
       if (pending.size === 0) return;
 
@@ -3350,7 +3574,11 @@ export class QuakeRelay {
           return;
         }
         try {
-          await this.ingest({ ...value.event, raw: null }, "live");
+          await this.ingest(
+            { ...value.event, raw: null },
+            "live",
+            outboxFlushLimit,
+          );
           await this.state.storage.transaction(async (transaction) => {
             const current = await transaction.get<PendingIngestRecord>(key);
             // A newer record arrived while D1 committed the old one. Leave it
@@ -3362,6 +3590,7 @@ export class QuakeRelay {
           // Freshness follows the durable D1/outbox transaction—not merely a
           // live WebSocket frame—so readiness exposes ingestion failures.
           await this.markSourceSuccessful(value.event.sourceId);
+          if (remaining !== null) remaining -= 1;
         } catch (error) {
           console.error(
             JSON.stringify({
@@ -3388,7 +3617,12 @@ export class QuakeRelay {
    * produce an at-least-once replay after the short claim lease; device-level
    * deduplication and APNs collapse IDs make that narrow recovery safe.
    */
-  private async flushAlertDeliveryOutbox(): Promise<void> {
+  private async flushAlertDeliveryOutbox(
+    limit = ROUTINE_OUTBOX_FLUSH_BATCH_SIZE,
+  ): Promise<void> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > OUTBOX_REPLAY_BATCH_SIZE) {
+      throw new RangeError("outbox flush limit must be a positive bounded safe integer");
+    }
     const now = new Date().toISOString();
     const rows = await this.env.DB
       .prepare(
@@ -3406,7 +3640,7 @@ export class QuakeRelay {
          ORDER BY created_at_utc ASC
          LIMIT ?`,
       )
-      .bind(now, now, OUTBOX_REPLAY_BATCH_SIZE)
+      .bind(now, now, limit)
       .all<AlertOutboxRow>();
     for (const row of rows.results) {
       const message = outboxRowToMessage(row);
@@ -3924,6 +4158,11 @@ export class QuakeRelay {
     const current = await this.state.storage.get<boolean>(HTTP_FALLBACK_ACTIVE_KEY);
     if (this.allRoutesOpen()) {
       if (current) await this.state.storage.put(HTTP_FALLBACK_ACTIVE_KEY, false);
+      // A partially durable HTTP report list remains health-stale even after
+      // WebSockets recover. Preserve its retry pacing until it completes.
+      if ((await this.pendingHttpSnapshotSources()).length === 0) {
+        await this.state.storage.delete(HTTP_FALLBACK_RETRY_NOT_BEFORE_KEY);
+      }
       return false;
     }
     if (current === true) return true;
@@ -3932,15 +4171,40 @@ export class QuakeRelay {
     return true;
   }
 
+  private async httpFallbackTurnIsDue(now: number): Promise<boolean> {
+    const notBefore = await this.state.storage.get<number>(
+      HTTP_FALLBACK_RETRY_NOT_BEFORE_KEY,
+    );
+    return !(
+      typeof notBefore === "number" &&
+      Number.isFinite(notBefore) &&
+      notBefore > now
+    );
+  }
+
+  private async deferHttpFallbackTurn(error: unknown): Promise<void> {
+    await this.state.storage.put(
+      HTTP_FALLBACK_RETRY_NOT_BEFORE_KEY,
+      Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+    );
+    console.warn(
+      JSON.stringify({
+        outcome: "wolfx_http_fallback_turn_deferred",
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      }),
+    );
+  }
+
   /**
    * Wake at the exact alternate-transport activation boundary rather than
    * waiting for a later 60-second maintenance alarm. A currently active
    * fallback owns the next paced source request.
    */
   private async nextHttpFallbackAlarmAt(now: number): Promise<number | null> {
-    const seedLeaseUntil = await this.state.storage.get<number>(
+    const seedLease = await this.state.storage.get<unknown>(
       HTTP_SEED_LEASE_UNTIL_KEY,
     );
+    const seedLeaseUntil = httpSeedLeaseUntil(seedLease);
     if (
       typeof seedLeaseUntil === "number" &&
       Number.isFinite(seedLeaseUntil) &&
@@ -3948,8 +4212,39 @@ export class QuakeRelay {
     ) {
       return seedLeaseUntil;
     }
+    const lastSeedMs = await this.state.storage.get<number>(LAST_HTTP_SEED_MS_KEY);
+    const lastSeedAt = typeof lastSeedMs === "number" && Number.isFinite(lastSeedMs)
+      ? lastSeedMs
+      : now;
     const active = await this.state.storage.get<boolean>(HTTP_FALLBACK_ACTIVE_KEY);
-    if (active === true) return now + HTTP_FALLBACK_REQUEST_INTERVAL_MS;
+    const pendingSources = await this.pendingHttpSnapshotSources();
+    if (active === true || pendingSources.length > 0) {
+      const notBefore = await this.state.storage.get<number>(
+        HTTP_FALLBACK_RETRY_NOT_BEFORE_KEY,
+      );
+      if (typeof notBefore === "number" && Number.isFinite(notBefore)) {
+        return notBefore > now ? notBefore : now + 1;
+      }
+    }
+    if (pendingSources.length > 0) {
+      // Resume a D1-bounded snapshot slice promptly even before the live
+      // WebSocket outage has crossed the alternate-transport grace period.
+      // The snapshot remains health-stale until its final cursor commits.
+      return isHttpRecoverySeedDue(lastSeedMs, now)
+        ? now + 1
+        : lastSeedAt + HTTP_FALLBACK_REQUEST_INTERVAL_MS;
+    }
+    if (active === true) {
+      return isHttpRecoverySeedDue(lastSeedMs, now)
+        ? now + 1
+        : lastSeedAt + HTTP_FALLBACK_REQUEST_INTERVAL_MS;
+    }
+    const initialSeedComplete = await this.state.storage.get<boolean>(
+      INITIAL_HTTP_SEED_COMPLETE_KEY,
+    );
+    if (!initialSeedComplete) {
+      if (isInitialHttpSeedDue(lastSeedMs, now)) return now + 1;
+    }
     if (UPSTREAM_ROUTES.some((route) => this.routeIsOpen(route))) return null;
     const degradedSince = await Promise.all(
       UPSTREAM_ROUTES.map((route) =>
@@ -3995,6 +4290,66 @@ export class QuakeRelay {
       isHttpRecoverySeedDue(lastSeedMs, now) &&
       await this.refreshHttpFallbackActive()
     );
+  }
+
+  private async nextHttpSeedSource(
+    candidates: readonly WolfxSourceId[],
+  ): Promise<WolfxSourceId | null> {
+    if (candidates.length === 0) return null;
+    const storedIndex = await this.state.storage.get<number>(
+      HTTP_SEED_SOURCE_CURSOR_KEY,
+    );
+    const start = typeof storedIndex === "number" &&
+        Number.isSafeInteger(storedIndex) && storedIndex >= 0
+      ? storedIndex % ALL_WOLFX_SOURCES.length
+      : 0;
+    for (let offset = 0; offset < ALL_WOLFX_SOURCES.length; offset += 1) {
+      const index = (start + offset) % ALL_WOLFX_SOURCES.length;
+      const candidate = ALL_WOLFX_SOURCES[index];
+      if (candidates.includes(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  private async advanceHttpSeedSource(
+    source: WolfxSourceId,
+    ownerId?: string,
+  ): Promise<boolean> {
+    const index = ALL_WOLFX_SOURCES.indexOf(source);
+    const next = (index + 1) % ALL_WOLFX_SOURCES.length;
+    const storage = this.state.storage;
+    const advance = async (target: DurableKeyValueStore): Promise<boolean> => {
+      if (ownerId !== undefined) {
+        const lease = await target.get<unknown>(HTTP_SEED_LEASE_UNTIL_KEY);
+        if (!isHttpSeedLease(lease) || lease.ownerId !== ownerId) return false;
+      }
+      await target.put(HTTP_SEED_SOURCE_CURSOR_KEY, next);
+      return true;
+    };
+    if (typeof storage.transaction !== "function") return advance(storage);
+    return storage.transaction((transaction) => advance(transaction));
+  }
+
+  /**
+   * Select at most one HTTP source for an alarm invocation. The resulting
+   * snapshot slice has an explicit D1 budget, so it cannot be combined with
+   * ordinary relay maintenance in the same turn.
+   */
+  private async nextDueHttpSeedMode(): Promise<"initial" | "recovery" | null> {
+    const now = Date.now();
+    const lastSeedMs = await this.state.storage.get<number>(LAST_HTTP_SEED_MS_KEY);
+    if ((await this.pendingHttpSnapshotSources()).length > 0) {
+      return isHttpRecoverySeedDue(lastSeedMs, now) ? "initial" : null;
+    }
+    if (await this.refreshHttpFallbackActive()) {
+      if (!await this.httpFallbackTurnIsDue(now)) return null;
+      return isHttpRecoverySeedDue(lastSeedMs, now) ? "recovery" : null;
+    }
+    const initialSeedComplete = await this.state.storage.get<boolean>(
+      INITIAL_HTTP_SEED_COMPLETE_KEY,
+    );
+    if (initialSeedComplete) return null;
+    return isInitialHttpSeedDue(lastSeedMs, now) ? "initial" : null;
   }
 
   private sourcesNeedingHttpRecovery(): WolfxSourceId[] {
@@ -4121,7 +4476,7 @@ export class QuakeRelay {
     const httpFallbackActive = await this.refreshHttpFallbackActive();
     const sourceHealth = await Promise.all(
       ALL_WOLFX_SOURCES.map(async (source) => {
-        const [persisted, persistedHttp, pendingJournal] = await Promise.all([
+        const [persisted, persistedHttp, pendingJournal, pendingHttpWork] = await Promise.all([
           this.state.storage.get<number>(
             `${UPSTREAM_LAST_SUCCESS_PREFIX}${source}`,
           ),
@@ -4132,6 +4487,7 @@ export class QuakeRelay {
             prefix: `${PENDING_INGEST_PREFIX}${source}:`,
             limit: 1,
           }),
+          this.state.storage.get<unknown>(httpSnapshotWorkStorageKey(source)),
         ]);
         const lastWebSocketSuccessMs = this.lastSuccessfulUpstreamMs.get(source) ??
           persisted;
@@ -4139,6 +4495,10 @@ export class QuakeRelay {
           persistedHttp;
         const status = this.statuses.get(source) ?? "connecting";
         const hasPendingLiveIngest = pendingJournal.size > 0;
+        // A malformed cursor is still an unfinished durability signal. Fail
+        // closed until an alarm clears/rebuilds it; never let a prior fresh
+        // HTTP timestamp hide corrupt alternate-transport work.
+        const hasPendingHttpSnapshot = pendingHttpWork !== undefined;
         const websocketStale = isUpstreamSourceStale(
           status,
           lastWebSocketSuccessMs,
@@ -4147,7 +4507,7 @@ export class QuakeRelay {
         );
         const httpStale = isHttpFallbackSourceStale(
           lastHttpSuccessMs,
-          hasPendingLiveIngest,
+          hasPendingLiveIngest || hasPendingHttpSnapshot,
           now,
         );
         const transport = !websocketStale
@@ -4172,9 +4532,14 @@ export class QuakeRelay {
             ? new Date(lastHttpSuccessMs).toISOString()
             : null,
           pendingLiveIngest: hasPendingLiveIngest,
+          pendingHttpSnapshot: hasPendingHttpSnapshot,
           websocketStale,
           httpStale,
-          stale: transport === "unavailable",
+          // A partially persisted HTTP snapshot is deliberately not ready
+          // even when WebSocket traffic has recovered: otherwise /healthz
+          // could declare success before the alternate transport's durable
+          // cursor has finished committing its bounded event slices.
+          stale: transport === "unavailable" || hasPendingHttpSnapshot,
         };
       }),
     );
@@ -4182,7 +4547,7 @@ export class QuakeRelay {
       .filter((source) => source.stale)
       .map((source) => source.source);
     const pendingIngestSources = sourceHealth
-      .filter((source) => source.pendingLiveIngest)
+      .filter((source) => source.pendingLiveIngest || source.pendingHttpSnapshot)
       .map((source) => source.source);
     const websocketStatus = sourceHealth.every((source) => !source.websocketStale)
       ? "ready"
@@ -4212,6 +4577,7 @@ export class QuakeRelay {
             lastWebSocketSuccessUtc: source.lastWebSocketSuccessUtc,
             lastHttpSuccessUtc: source.lastHttpSuccessUtc,
             pendingLiveIngest: source.pendingLiveIngest,
+            pendingHttpSnapshot: source.pendingHttpSnapshot,
             websocketStale: source.websocketStale,
             httpStale: source.httpStale,
             stale: source.stale,
@@ -4567,8 +4933,11 @@ export class QuakeRelay {
     // this source drains successfully.
     if (pendingForSource.size > 0) return;
     const now = Date.now();
-    this.lastSuccessfulUpstreamMs.set(source, now);
     await this.state.storage.put(`${UPSTREAM_LAST_SUCCESS_PREFIX}${source}`, now);
+    // Match the HTTP path: a failed durable write must not make this live
+    // relay instance claim a source is fresh when a later eviction cannot
+    // recover that proof.
+    this.lastSuccessfulUpstreamMs.set(source, now);
   }
 
   private async markHttpSourceSuccessful(source: WolfxSourceId): Promise<void> {
@@ -4593,9 +4962,26 @@ export class QuakeRelay {
   private async seedHttpSource(
     source: WolfxSourceId,
     mode: "initial" | "recovery",
+    leaseOwnerId?: string,
   ): Promise<boolean> {
+    const workKey = httpSnapshotWorkStorageKey(source);
+    const storedWorkValue = await this.state.storage.get<unknown>(workKey);
+    const storedWork = isPendingHttpSnapshotWork(storedWorkValue)
+      ? storedWorkValue
+      : null;
+    // Finish a durable, validated cursor before fetching another snapshot.
+    // This gives one 50-entry report list a bounded ~5s continuation window
+    // rather than replacing it mid-transaction, and keeps its recovery
+    // notification semantics intact across alarm invocations/eviction. D1 and
+    // Durable Object storage failures intentionally propagate to `alarm()`:
+    // swallowing them would turn a pending cursor into a rapid retry loop.
+    if (storedWork) {
+      return this.persistHttpSnapshotWork(workKey, storedWork, leaseOwnerId);
+    }
+
+    let message: unknown;
     try {
-      const message = await withHttpSnapshotTimeout(async (signal) => {
+      message = await withHttpSnapshotTimeout(async (signal) => {
         const response = await fetch(`${HTTP_BASE}/${source}.json`, {
           signal,
           // Snapshot freshness is the alternate transport's readiness proof.
@@ -4608,34 +4994,6 @@ export class QuakeRelay {
         }
         return await readBoundedHttpSnapshotJson(response);
       });
-      const normalizedEvents = normalizeMessages(source, message);
-      if (!isStructurallyValidHttpSnapshot(source, message, normalizedEvents)) {
-        console.warn(
-          JSON.stringify({
-            outcome: "wolfx_http_snapshot_invalid",
-            source,
-          }),
-        );
-        return false;
-      }
-      const fingerprint = await httpSnapshotFingerprint(message);
-      const storedFingerprint = await this.state.storage.get<string>(
-        `${UPSTREAM_HTTP_FINGERPRINT_PREFIX}${source}`,
-      );
-      if (storedFingerprint !== fingerprint) {
-        // Commit every normalized event before keeping the fingerprint. A D1
-        // failure leaves the previous value in place, so the next paced poll
-        // retries the exact snapshot instead of silently dropping a revision.
-        for (const event of normalizedEvents) {
-          await this.ingest(event, mode);
-        }
-        await this.state.storage.put(
-          `${UPSTREAM_HTTP_FINGERPRINT_PREFIX}${source}`,
-          fingerprint,
-        );
-      }
-      await this.markHttpSourceSuccessful(source);
-      return true;
     } catch (error) {
       // Never include raw upstream bodies or error messages in logs. The
       // source and error type are enough to diagnose a degraded transport.
@@ -4648,6 +5006,120 @@ export class QuakeRelay {
       );
       return false;
     }
+
+    let normalizedEvents: NormalizedEvent[];
+    try {
+      normalizedEvents = normalizeMessages(source, message);
+      if (!isStructurallyValidHttpSnapshot(source, message, normalizedEvents)) {
+        console.warn(
+          JSON.stringify({
+            outcome: "wolfx_http_snapshot_invalid",
+            source,
+          }),
+        );
+        return false;
+      }
+    } catch (error) {
+      // Treat malformed source data as unavailable, but deliberately keep
+      // durable persistence outside this catch so D1 errors reach the bounded
+      // fallback deferral path.
+      console.warn(
+        JSON.stringify({
+          outcome: "wolfx_http_snapshot_invalid",
+          source,
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        }),
+      );
+      return false;
+    }
+
+    const fingerprint = await httpSnapshotFingerprint(message);
+    const storedFingerprint = await this.state.storage.get<string>(
+      `${UPSTREAM_HTTP_FINGERPRINT_PREFIX}${source}`,
+    );
+    if (storedFingerprint === fingerprint) {
+      await this.markHttpSourceSuccessful(source);
+      return true;
+    }
+
+    const work: PendingHttpSnapshotWork = {
+      version: 1,
+      source,
+      mode,
+      fingerprint,
+      events: normalizedEvents.map(snapshotEvent),
+      nextIndex: 0,
+    };
+    await this.state.storage.put(workKey, work);
+    return this.persistHttpSnapshotWork(workKey, work, leaseOwnerId);
+  }
+
+  private async persistHttpSnapshotWork(
+    workKey: string,
+    work: PendingHttpSnapshotWork,
+    leaseOwnerId?: string,
+  ): Promise<boolean> {
+    const start = work.nextIndex;
+    const end = Math.min(
+      work.events.length,
+      start + HTTP_SNAPSHOT_INGEST_BATCH_SIZE,
+    );
+    await persistHttpSnapshotEvents(
+      this.env.DB,
+      work.events.slice(start, end),
+      work.mode,
+    );
+    // A D1 batch is bounded, but it can still take long enough for an
+    // evicted/replacement relay to acquire an expired sweep lease. Do not
+    // advance the durable cursor on behalf of that stale owner; its writes
+    // are idempotent and the current owner will retry this same slice.
+    if (
+      leaseOwnerId !== undefined &&
+      !await this.renewHttpSeedLease(leaseOwnerId)
+    ) {
+      return false;
+    }
+    const advanced = await this.advanceHttpSnapshotWork(workKey, work, end);
+    if (!advanced) return false;
+    if (end < work.events.length) return false;
+    await this.markHttpSourceSuccessful(work.source);
+    return true;
+  }
+
+  /**
+   * Advance a verified snapshot cursor only if this is still the current
+   * fingerprint/cursor. A later relay turn can resume or repair a partial job
+   * while D1 I/O is in flight; it must win rather than being overwritten by
+   * the older work after that call resolves.
+   */
+  private async advanceHttpSnapshotWork(
+    workKey: string,
+    work: PendingHttpSnapshotWork,
+    nextIndex: number,
+  ): Promise<boolean> {
+    const storage = this.state.storage;
+    const advance = async (target: DurableKeyValueStore): Promise<boolean> => {
+      const current = await target.get<unknown>(workKey);
+      if (
+        !isPendingHttpSnapshotWork(current) ||
+        current.fingerprint !== work.fingerprint ||
+        current.nextIndex !== work.nextIndex
+      ) {
+        return false;
+      }
+      if (nextIndex < work.events.length) {
+        await target.put(workKey, { ...work, nextIndex });
+      } else {
+        await target.put(
+          `${UPSTREAM_HTTP_FINGERPRINT_PREFIX}${work.source}`,
+          work.fingerprint,
+        );
+        await target.delete(workKey);
+      }
+      return true;
+    };
+    if (typeof storage.transaction !== "function") return advance(storage);
+    return storage.transaction((transaction) => advance(transaction));
   }
 
   private async seedFromHttp(mode: "initial" | "recovery"): Promise<void> {
@@ -4665,69 +5137,176 @@ export class QuakeRelay {
    * rare eviction/retry boundary from starting a second seven-source sweep
    * while the first still has external I/O in flight.
    */
-  private async acquireHttpSeedLease(): Promise<boolean> {
+  private async acquireHttpSeedLease(): Promise<string | null> {
     const now = Date.now();
-    const leaseUntil = now + HTTP_FALLBACK_SWEEP_LEASE_MS;
+    const lease: HttpSeedLease = {
+      ownerId: crypto.randomUUID(),
+      untilMs: now + HTTP_FALLBACK_SWEEP_LEASE_MS,
+    };
     const storage = this.state.storage;
     if (typeof storage.transaction !== "function") {
       // Focused unit fakes do not model Durable Object transactions. Real DO
       // storage always takes this atomic branch.
-      const current = await storage.get<number>(HTTP_SEED_LEASE_UNTIL_KEY);
-      if (typeof current === "number" && current > now) return false;
-      await storage.put(HTTP_SEED_LEASE_UNTIL_KEY, leaseUntil);
-      return true;
+      const current = await storage.get<unknown>(HTTP_SEED_LEASE_UNTIL_KEY);
+      if ((httpSeedLeaseUntil(current) ?? 0) > now) return null;
+      await storage.put(HTTP_SEED_LEASE_UNTIL_KEY, lease);
+      return lease.ownerId;
     }
     return storage.transaction(async (transaction) => {
-      const current = await transaction.get<number>(HTTP_SEED_LEASE_UNTIL_KEY);
-      if (
-        typeof current === "number" &&
-        Number.isFinite(current) &&
-        current > now
-      ) {
-        return false;
-      }
-      await transaction.put(HTTP_SEED_LEASE_UNTIL_KEY, leaseUntil);
-      return true;
+      const current = await transaction.get<unknown>(HTTP_SEED_LEASE_UNTIL_KEY);
+      if ((httpSeedLeaseUntil(current) ?? 0) > now) return null;
+      await transaction.put(HTTP_SEED_LEASE_UNTIL_KEY, lease);
+      return lease.ownerId;
     });
   }
 
-  private async runHttpSeed(mode: "initial" | "recovery"): Promise<void> {
-    if (!await this.acquireHttpSeedLease()) return;
-    const sources =
-      mode === "initial" ? ALL_WOLFX_SOURCES : this.sourcesNeedingHttpRecovery();
-    if (sources.length === 0) {
-      await this.state.storage.put(HTTP_SEED_LEASE_UNTIL_KEY, 0);
+  /**
+   * A source attempt is bounded (8s HTTP + D1 batch); renewing immediately
+   * before every one keeps a slow multi-source sweep fenced without allowing a
+   * stale owner to overwrite a successor after its original 90-second lease.
+   */
+  private async renewHttpSeedLease(ownerId: string): Promise<boolean> {
+    const storage = this.state.storage;
+    const renew = async (target: DurableKeyValueStore): Promise<boolean> => {
+      const now = Date.now();
+      const current = await target.get<unknown>(HTTP_SEED_LEASE_UNTIL_KEY);
+      if (
+        !isHttpSeedLease(current) ||
+        current.ownerId !== ownerId ||
+        current.untilMs <= now
+      ) {
+        return false;
+      }
+      await target.put(HTTP_SEED_LEASE_UNTIL_KEY, {
+        ownerId,
+        untilMs: now + HTTP_FALLBACK_SWEEP_LEASE_MS,
+      } satisfies HttpSeedLease);
+      return true;
+    };
+    if (typeof storage.transaction !== "function") return renew(storage);
+    return storage.transaction((transaction) => renew(transaction));
+  }
+
+  private async releaseHttpSeedLease(ownerId: string): Promise<void> {
+    const storage = this.state.storage;
+    const release = async (target: DurableKeyValueStore): Promise<void> => {
+      const current = await target.get<unknown>(HTTP_SEED_LEASE_UNTIL_KEY);
+      if (isHttpSeedLease(current) && current.ownerId === ownerId) {
+        await target.delete(HTTP_SEED_LEASE_UNTIL_KEY);
+      }
+    };
+    if (typeof storage.transaction !== "function") {
+      await release(storage);
       return;
     }
+    await storage.transaction((transaction) => release(transaction));
+  }
 
-    try {
-      const outcomes = mode === "initial"
-        ? await mapWithConcurrency(
-          sources,
-          HTTP_SEED_MAX_CONCURRENT_REQUESTS,
-          (source) => this.seedHttpSource(source, mode),
+  private async pendingHttpSnapshotSources(): Promise<WolfxSourceId[]> {
+    const pending = await this.state.storage.list<unknown>({
+      prefix: PENDING_HTTP_SNAPSHOT_PREFIX,
+      limit: ALL_WOLFX_SOURCES.length,
+    });
+    const sources: WolfxSourceId[] = [];
+    for (const [key, value] of pending) {
+      if (
+        !isPendingHttpSnapshotWork(value) ||
+        key !== httpSnapshotWorkStorageKey(value.source)
+      ) {
+        // An unreadable cursor cannot prove an HTTP source fresh. Remove only
+        // this retryable public-data work item so the next validated snapshot
+        // can rebuild it; log no upstream body/content.
+        console.error(JSON.stringify({ outcome: "invalid_wolfx_http_snapshot_work" }));
+        await this.state.storage.delete(key);
+        continue;
+      }
+      sources.push(value.source);
+    }
+    return [...new Set(sources)];
+  }
+
+  private async initialHttpSeedIsComplete(): Promise<boolean> {
+    if ((await this.pendingHttpSnapshotSources()).length > 0) return false;
+    const fingerprints = await Promise.all(
+      ALL_WOLFX_SOURCES.map((source) =>
+        this.state.storage.get<string>(
+          `${UPSTREAM_HTTP_FINGERPRINT_PREFIX}${source}`,
         )
-        : await mapWithMinimumSpacing(
-          sources,
-          HTTP_FALLBACK_REQUEST_INTERVAL_MS,
-          (source) => this.seedHttpSource(source, mode),
-        );
-      if (mode === "initial" && outcomes.every(Boolean)) {
+      ),
+    );
+    return fingerprints.every(
+      (fingerprint) => typeof fingerprint === "string" && fingerprint.length > 0,
+    );
+  }
+
+  private async runHttpSeed(mode: "initial" | "recovery"): Promise<void> {
+    const ownerId = await this.acquireHttpSeedLease();
+    if (ownerId === null) return;
+    const pendingSources = await this.pendingHttpSnapshotSources();
+    let source: WolfxSourceId | null = pendingSources[0] ?? null;
+    if (source === null && mode === "initial") {
+      const missingSources = (await Promise.all(
+        ALL_WOLFX_SOURCES.map(async (candidate) => ({
+          candidate,
+          fingerprint: await this.state.storage.get<string>(
+            `${UPSTREAM_HTTP_FINGERPRINT_PREFIX}${candidate}`,
+          ),
+        })),
+      )).filter(({ fingerprint }) =>
+        typeof fingerprint !== "string" || fingerprint.length === 0
+      ).map(({ candidate }) => candidate);
+      source = await this.nextHttpSeedSource(missingSources);
+    }
+    if (source === null && mode === "recovery") {
+      source = await this.nextHttpSeedSource(this.sourcesNeedingHttpRecovery());
+    }
+
+    let ownsLease = true;
+    try {
+      if (source === null) {
+        if (await this.initialHttpSeedIsComplete()) {
+          await this.state.storage.put(INITIAL_HTTP_SEED_COMPLETE_KEY, true);
+        }
+        return;
+      }
+      if (!await this.renewHttpSeedLease(ownerId)) {
+        ownsLease = false;
+        return;
+      }
+      await this.seedHttpSource(source, mode, ownerId);
+      if (!await this.renewHttpSeedLease(ownerId)) {
+        ownsLease = false;
+        return;
+      }
+      const stillPending = (await this.pendingHttpSnapshotSources()).includes(source);
+      if (!stillPending) {
+        // A failed or invalid HTTP attempt must not starve the other degraded
+        // feeds. A D1-failed snapshot remains pinned by its durable cursor,
+        // so only cursor-free attempts rotate the source order.
+        if (!await this.advanceHttpSeedSource(source, ownerId)) {
+          ownsLease = false;
+          return;
+        }
+      }
+      if (await this.initialHttpSeedIsComplete()) {
         await this.state.storage.put(INITIAL_HTTP_SEED_COMPLETE_KEY, true);
       }
     } finally {
       // Record attempt start/completion even on failure. The alarm scheduler
       // reads this durable value before starting another paced fallback poll.
-      await Promise.all([
-        this.state.storage.put(LAST_HTTP_SEED_MS_KEY, Date.now()),
-        this.state.storage.put(HTTP_SEED_LEASE_UNTIL_KEY, 0),
-      ]);
+      if (ownsLease) {
+        await Promise.all([
+          this.state.storage.put(LAST_HTTP_SEED_MS_KEY, Date.now()),
+          this.releaseHttpSeedLease(ownerId),
+        ]);
+      }
     }
   }
 
   private async ingest(
     event: NormalizedEvent,
     mode: "live" | "initial" | "recovery",
+    outboxFlushLimit: number | null = ROUTINE_OUTBOX_FLUSH_BATCH_SIZE,
   ): Promise<void> {
     const { message } = await persistEventAndOutbox(
       this.env.DB,
@@ -4744,7 +5323,9 @@ export class QuakeRelay {
     // The D1 transaction above is the durability boundary. A failed Queue
     // send leaves this row pending for the next alarm instead of losing a
     // future duplicate to event deduplication.
-    if (message) await this.flushAlertDeliveryOutbox();
+    if (message && outboxFlushLimit !== null) {
+      await this.flushAlertDeliveryOutbox(outboxFlushLimit);
+    }
   }
 
   private async apnsAuthorization(): Promise<string> {
