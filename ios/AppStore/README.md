@@ -214,20 +214,19 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    and preserve written upstream permission using
    [`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md).
 9. Test the uploaded build in TestFlight on physical hardware before submitting
-   it to App Review. Verify the production App Attest registration, refresh,
-   token-bound unsubscribe, and controlled test-push path against
+   it to App Review. Follow the exact, privacy-safe
+   [`iOS TestFlight physical-device runbook`](../../docs/IOS_TESTFLIGHT_PHYSICAL_QA.md)
+   for production App Attest registration, refresh, token-bound unsubscribe,
+   key-owned empty-body unsubscribe, re-enrollment, and the controlled
+   training-push path against
    `https://quakesignal-api.hopeso.workers.dev`; a Simulator or staging-bypass result is
-   insufficient. Also test unsubscribe after a registered launch in which APNs
-   has not supplied a token: its exact empty (`{}`) assertion must remove only
-   the subscription owned by the current App Attest key. Also verify that a
-   fresh production attestation plus the exact APNs token can rebind after a
-   Keychain reset/reinstall, while an assertion or empty body from a different
-   key is refused. Verify the support deletion path when APNs has not supplied
-   the token after a reset. Verify foreground live updates after the Wolfx
-   WebSocket service has recovered. When a socket route is unavailable, also
-   confirm that the app waits 90 seconds and then refreshes its display-only
-   HTTPS snapshot at most once every five minutes, without presenting a local
-   emergency alert for the recovered history.
+   insufficient. The runbook also identifies the separate controlled evidence
+   needed for deterministic background/terminated APNs delivery and a verified
+   fresh-key rebind after reinstall/restore. Verify foreground live updates
+   after the Wolfx WebSocket service has recovered. When a socket route is
+   unavailable, also confirm that the app waits 90 seconds and then refreshes
+   its display-only HTTPS snapshot at most once every five minutes, without
+   presenting a local emergency alert for the recovered history.
 10. Have a release reviewer promote
     `APP_ATTEST_PRODUCTION_ENFORCED=true` and run the protected Cloudflare
     launch deployment with `bootstrap_testflight` disabled. Only after that

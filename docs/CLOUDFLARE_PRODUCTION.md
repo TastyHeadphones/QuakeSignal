@@ -141,12 +141,16 @@ release evidence; repeat the production proof against
    submission. Keep the app unlisted while the proof is performed.
 
    Then test on physical iOS hardware and TestFlight; Simulator-only validation
-   is insufficient. Verify token ownership, token-bound and empty-body
-   key-owned unsubscription, reinstall/key-rotation recovery, and the reviewed
-   training-push controls. Only after that evidence is recorded may a reviewer
-   set `APP_ATTEST_PRODUCTION_ENFORCED=true` and re-run the protected workflow
-   with `bootstrap_testflight` disabled for the **launch promotion**. That
-   variable records an approved test; it is not an App Attest credential.
+   is insufficient. Follow the exact
+   [`iOS TestFlight physical-device runbook`](IOS_TESTFLIGHT_PHYSICAL_QA.md)
+   for token ownership, token-bound and empty-body key-owned unsubscription,
+   reinstall/key-rotation recovery, and the reviewed training-push controls.
+   It also prevents a foreground-only test from being misrecorded as proof of
+   background/terminated delivery or a fresh-key rebind. Only after that
+   evidence is recorded may a reviewer set
+   `APP_ATTEST_PRODUCTION_ENFORCED=true` and re-run the protected workflow with
+   `bootstrap_testflight` disabled for the **launch promotion**. That variable
+   records an approved test; it is not an App Attest credential.
 7. After the separate `cloudflare-terminal-dlq-monitor` Environment has passed
    both its protected-`main` manual probe and an unattended scheduled probe,
    put `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,

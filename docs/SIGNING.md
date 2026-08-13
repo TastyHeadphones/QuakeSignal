@@ -34,13 +34,40 @@ The `macos-direct` job runs in the protected `macos-direct-release` GitHub
 Environment. It requires these environment secrets and variables:
 
 - `MACOS_DEVELOPER_ID_CERTIFICATE` — base64-encoded Developer ID Application
-  `.p12` certificate
+  `.p12` certificate (**environment secret**)
 - `MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD` — the `.p12` export password
-- `MACOS_NOTARY_API_KEY` — App Store Connect API private key contents
-- `MACOS_NOTARY_API_KEY_ID` — App Store Connect API key ID
+  (**environment secret**)
+- `MACOS_NOTARY_API_KEY` — App Store Connect **team** API private key contents
+  (**environment secret**)
+- `MACOS_NOTARY_API_KEY_ID` — App Store Connect team API key ID
+  (**environment secret**; the workflow reads `secrets`, not `vars`)
 - `MACOS_NOTARY_API_ISSUER` — App Store Connect API issuer ID
+  (**environment secret**; the workflow reads `secrets`, not `vars`)
 - `MACOS_DEVELOPER_ID_SIGNING_IDENTITY` — Environment variable containing the
   Developer ID Application signing identity
+
+#### Account Holder preparation
+
+The direct lane needs a locally exportable **Developer ID Application**
+certificate. It cannot use an Apple Distribution certificate, a 3rd Party Mac
+Developer Installer certificate, a Mac App Store provisioning profile, or a
+cloud-managed-only certificate in place of the `.p12` input above.
+
+Before the direct lane can be configured, the UniSphereco LLC Account Holder
+must confirm that the Apple Developer Program membership and current agreements
+are active, create a Developer ID Application certificate from a certificate
+signing request in Certificates, Identifiers & Profiles, install it together
+with its private key, and export the resulting identity as the `.p12` named
+above. Apple reserves creation of a standard Developer ID certificate for the
+Account Holder. The workflow later proves the actual signing authority is
+`Developer ID Application`; it does not accept an App Store signing identity.
+
+Notarization uses a **team** App Store Connect API key. Individual API keys
+cannot use `notarytool`. The Account Holder must request App Store Connect API
+access initially, but a team key whose role can notarize software (for example,
+App Manager) can be reused after that approval. Keep its one-time-download
+private `.p8` outside the repository and store it only as the protected
+environment secret above.
 
 Tauri signs the universal app with hardened runtime, submits it to Apple for
 notarization through the API key, and staples the resulting ticket to the DMG.
