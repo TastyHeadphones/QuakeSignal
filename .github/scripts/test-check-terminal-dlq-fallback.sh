@@ -19,15 +19,20 @@ run_case() {
   local expected_alert="${3:-}"
   local tmp_dir
   local server_pid
+  local server_log
   local port
   local status
 
   tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/quakesignal-terminal-dlq-test.XXXXXX")"
-  SCENARIO="$scenario" node --input-type=module - <<'NODE' > "$tmp_dir/port" &
+  server_log="$tmp_dir/server.log"
+  PORT_FILE="$tmp_dir/port" SCENARIO="$scenario" node --input-type=module - <<'NODE' > /dev/null 2> "$server_log" &
 import http from "node:http";
+import { writeFileSync } from "node:fs";
 
 const queueId = "0123456789abcdef0123456789abcdef";
 const scenario = process.env.SCENARIO;
+const portFile = process.env.PORT_FILE;
+if (!portFile) throw new Error("PORT_FILE is required");
 const queues = (() => {
   if (scenario === "missing") return [];
   if (scenario === "duplicate") {
@@ -58,23 +63,32 @@ const server = http.createServer((request, response) => {
   response.end(JSON.stringify({ success: false }));
 });
 
-server.listen(0, "127.0.0.1", () => process.stdout.write(String(server.address().port)));
+server.listen(0, "127.0.0.1", () => {
+  writeFileSync(portFile, String(server.address().port));
+});
 NODE
   server_pid=$!
 
-  for _ in $(seq 1 50); do
+  for ((attempt = 0; attempt < 100; attempt += 1)); do
     if [[ -s "$tmp_dir/port" ]]; then
       break
     fi
     sleep 0.05
   done
   [[ -s "$tmp_dir/port" ]] || {
+    [[ -s "$server_log" ]] && cat "$server_log" >&2
     kill "$server_pid" 2>/dev/null || true
     wait "$server_pid" 2>/dev/null || true
     rm -rf "$tmp_dir"
     fail "mock API did not start"
   }
   port="$(<"$tmp_dir/port")"
+  [[ "$port" =~ ^[1-9][0-9]{0,4}$ ]] && (( port <= 65535 )) || {
+    kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
+    rm -rf "$tmp_dir"
+    fail "mock API returned an invalid port"
+  }
 
   set +e
   GITHUB_OUTPUT="$tmp_dir/output" \
