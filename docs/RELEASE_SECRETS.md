@@ -259,9 +259,9 @@ clearly labelled training push to its owned production subscription per UTC
 day. The Worker returns `429` with `Retry-After` until the next UTC day after
 that slot is claimed, including when APNs later rejects the attempted training
 push. The delayed background/locked/terminated training check uses the same
-claim and is available only in a later TestFlight build that contains
-**Schedule Background Test Alert**; the currently uploaded build cannot
-produce that evidence.
+claim and requires TestFlight build `1.0 (2)` or later containing **Schedule
+Background Test Alert**. Build `1.0 (2)` is assigned to the internal QA group,
+but its physical-device evidence is still required before launch promotion.
 
 For the first production Worker deployment, run the protected workflow from
 `main` with `deploy_production=true` and `bootstrap_testflight=true` while

@@ -138,10 +138,11 @@ device.
 
 ### 6. Delayed background, locked, and terminated training notification
 
-This check requires a **later TestFlight build** containing **Schedule
+This check requires TestFlight build `1.0 (2)` or later containing **Schedule
 Background Test Alert** and a reviewed Worker revision containing the private
-delayed-training scheduler. The currently uploaded TestFlight build does not
-contain this control, so it cannot provide this evidence.
+delayed-training scheduler. Build `1.0 (2)` is assigned to the internal QA
+group and contains this control. The requirement remains pending until the
+following physical-device check has passed.
 
 During a separate, explicitly reviewed temporary window with
 `ENABLE_PRODUCTION_TEST_PUSH=true`, use an already active production
@@ -166,11 +167,11 @@ registration:
 The fresh-key rebind requirement is not reproducibly testable by a person using
 the current TestFlight UI alone. Mark it as pending rather than inferring a
 pass. The background/locked/terminated requirement remains pending until the
-later-build check above has passed.
+build-2-or-later check above has passed.
 
 | Requirement | Why the current UI is insufficient | Safe completion path |
 | --- | --- | --- |
-| Background, locked, and terminated APNs delivery | The currently uploaded TestFlight build has only synchronous **Send Test Alert**; swiping Home or locking immediately after tapping is race-prone. | Install a later TestFlight build that contains **Schedule Background Test Alert**, then use section 6 during a reviewed temporary test window. |
+| Background, locked, and terminated APNs delivery | Build `1.0 (2)` provides **Schedule Background Test Alert**, but no physical-device result has been recorded yet. | Install build `1.0 (2)` or later, then use section 6 during a reviewed temporary test window. |
 | A verified fresh-key rebind after reinstall/restore | Reinstalling is a useful smoke test, but iOS does not guarantee that it will create the exact App Attest key-reset condition on demand. The Settings UI never exposes a key ID or proof type. | Use a controlled QA key-reset/restore scenario or narrowly scoped, sanitized reviewer evidence that shows a fresh production attestation rebound the same APNs token. Do not expose keys, tokens, proofs, or raw D1 rows to the tester. |
 
 For the reinstall smoke test itself, leave an active registration in place,
@@ -192,7 +193,7 @@ Copy this into the release ticket; redact all identifiers and personal data.
 | Token-bound unsubscribe + re-enrollment |  |  |  |
 | Key-owned empty-body unsubscribe + re-enrollment |  |  |  |
 | Controlled training notification |  |  |  |
-| Background/locked/terminated delivery | Pending until section 6 passes on a later TestFlight build |  |  |
+| Background/locked/terminated delivery | Pending until section 6 passes on build `1.0 (2)` or later |  |  |
 | Fresh-key rebind after reinstall/restore | Pending unless separately evidenced |  |  |
 
 Do not promote the App Attest environment gate or submit the iOS app while a

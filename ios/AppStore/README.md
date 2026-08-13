@@ -222,9 +222,11 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    training-push path against
    `https://quakesignal-api.hopeso.workers.dev`; a Simulator or staging-bypass result is
    insufficient. The runbook makes clear that deterministic
-   background/terminated APNs evidence requires a later TestFlight build with
-   **Schedule Background Test Alert**, plus a reviewed temporary production
-   test window; the currently uploaded build does not include that control.
+   background/terminated APNs evidence requires TestFlight build `1.0 (2)` or
+   later with **Schedule Background Test Alert**, plus a reviewed temporary
+   production test window. Build `1.0 (2)` is uploaded to the internal
+   TestFlight group and contains that control, but the evidence remains
+   incomplete until it is exercised on a physical device.
    It also identifies the separate controlled evidence needed for a verified
    fresh-key rebind after reinstall/restore. Verify foreground live updates
    after the Wolfx WebSocket service has recovered. When a socket route is
