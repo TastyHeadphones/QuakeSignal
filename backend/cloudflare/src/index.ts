@@ -199,12 +199,12 @@ const PRODUCTION_TRAINING_TEST_PUSH_CLAIM_RETENTION_MS = 14 * 24 * 60 * 60_000;
 // background job time. Ninety seconds is enough for a person to leave the
 // foreground and lock or terminate the TestFlight app, while remaining a
 // narrowly bounded, single-purpose operation.
-export const DELAYED_TRAINING_TEST_PUSH_DELAY_SECONDS = 90;
+const DELAYED_TRAINING_TEST_PUSH_DELAY_SECONDS = 90;
 const DELAYED_TRAINING_TEST_PUSH_DELAY_MS =
   DELAYED_TRAINING_TEST_PUSH_DELAY_SECONDS * 1_000;
 // An alarm can wake late after an infrastructure interruption. Cancel rather
 // than deliver a stale training alert long after the tester left the app.
-export const DELAYED_TRAINING_TEST_PUSH_MAX_LATE_SECONDS = 30;
+const DELAYED_TRAINING_TEST_PUSH_MAX_LATE_SECONDS = 30;
 const DELAYED_TRAINING_TEST_PUSH_MAX_LATE_MS =
   DELAYED_TRAINING_TEST_PUSH_MAX_LATE_SECONDS * 1_000;
 const DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY =

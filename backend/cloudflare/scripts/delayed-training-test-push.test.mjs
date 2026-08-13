@@ -9,6 +9,8 @@ import { build } from "esbuild";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const cloudflareDirectory = resolve(scriptDirectory, "..");
+const expectedDelaySeconds = 90;
+const expectedMaximumLatenessSeconds = 30;
 let workerModulePromise;
 
 async function workerModule() {
@@ -217,15 +219,11 @@ test("the privacy page discloses the delayed scheduler's minimal data and deleti
 
 test("delayed training appointments use one fixed bounded server delay and retain no device token", async () => {
   const {
-    DELAYED_TRAINING_TEST_PUSH_DELAY_SECONDS,
-    DELAYED_TRAINING_TEST_PUSH_MAX_LATE_SECONDS,
     TrainingPushScheduler,
     delayedTrainingTestPushDueAt,
   } = await workerModule();
   const now = Date.parse("2026-08-13T00:00:00.000Z");
-  assert.equal(DELAYED_TRAINING_TEST_PUSH_DELAY_SECONDS, 90);
-  assert.equal(DELAYED_TRAINING_TEST_PUSH_MAX_LATE_SECONDS, 30);
-  assert.equal(delayedTrainingTestPushDueAt(now) - now, 90_000);
+  assert.equal(delayedTrainingTestPushDueAt(now) - now, expectedDelaySeconds * 1_000);
   assert.throws(() => delayedTrainingTestPushDueAt(Number.MAX_SAFE_INTEGER));
 
   const keyId = canonicalKey();
@@ -319,7 +317,6 @@ test("the final ownership lookup has no later preparation await before APNs", as
 
 test("a job that becomes late while authorization is pending is discarded before APNs", async () => {
   const {
-    DELAYED_TRAINING_TEST_PUSH_MAX_LATE_SECONDS,
     TrainingPushScheduler,
   } = await workerModule();
   const keyId = canonicalKey(6);
@@ -351,7 +348,7 @@ test("a job that becomes late while authorization is pending is discarded before
   const startedAtMs = Date.parse("2026-08-13T00:00:00.000Z");
   state.records.set(storageKey, {
     ...job,
-    dueAtMs: startedAtMs - (DELAYED_TRAINING_TEST_PUSH_MAX_LATE_SECONDS * 1_000 - 1),
+    dueAtMs: startedAtMs - (expectedMaximumLatenessSeconds * 1_000 - 1),
   });
 
   const originalNow = Date.now;
