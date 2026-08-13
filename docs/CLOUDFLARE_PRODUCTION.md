@@ -85,8 +85,13 @@ release evidence; repeat the production proof against
    before deploying the queue-enabled Worker: the primary delivery Queue, its
    DLQ, and the intentionally consumerless
    `quakesignal-alert-delivery-dlq-fallback` terminal-evidence Queue. Use a
-   Workers plan that supports the expected alert volume and add billing/usage
-   alerts. Deploy the separate, cron-only
+   **Workers Paid** plan and add billing/usage alerts. This relay keeps live
+   WebSocket and emergency HTTP-fallback freshness checkpoints in Durable
+   Object SQLite. Cloudflare's Free plan permits only 100,000 rows written per
+   day; after that limit, further write operations fail until the 00:00 UTC
+   reset, so it is not a safe production capacity tier for this alert service.
+   See [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/).
+   Deploy the separate, cron-only
    [`terminal-DLQ monitor`](../backend/cloudflare/terminal-dlq-monitor/) with a
    five-minute Cloudflare Cron Trigger. It uses only a **Queues Read** token to
    list the exact Queue and read aggregate metrics, then uses a GitHub App

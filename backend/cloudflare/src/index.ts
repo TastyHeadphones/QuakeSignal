@@ -264,6 +264,13 @@ const OUTBOX_QUEUE_LEASE_MS = 72 * 60 * 60_000;
 const OUTBOX_ENQUEUE_FAILURE_RETRY_MS = 60_000;
 const OUTBOX_STALE_AFTER_MS = 2 * 60 * 60_000;
 const UPSTREAM_STALE_AFTER_MS = 3 * 60_000;
+// A live WebSocket relay can receive frequent heartbeats for seven sources.
+// Checkpoint their already-confirmed freshness at most once a minute: the
+// active Durable Object retains the exact in-memory timestamp, while the
+// durable checkpoint remains comfortably inside the three-minute stale window
+// after an eviction. This avoids consuming the Durable Objects Free daily
+// write allowance merely by observing healthy upstream heartbeats.
+const UPSTREAM_FRESHNESS_CHECKPOINT_INTERVAL_MS = 60_000;
 const ROUTINE_RELAY_ALARM_DELAY_MS = 60_000;
 // A Worker-origin 503 must not turn one upstream rejection into a tight
 // reconnect/HTTP-seed loop. The first retry remains prompt for a transient
@@ -291,6 +298,10 @@ const HTTP_FALLBACK_MAX_SNAPSHOT_BYTES = 256 * 1024;
 // scheduler/jitter enough room while failing closed quickly after any source
 // stops producing valid snapshots.
 const HTTP_FALLBACK_STALE_AFTER_MS = 15_000;
+// Alternate HTTP transport is polled every 600ms across a seven-source sweep.
+// A ten-second durable checkpoint remains inside its 15-second stale window,
+// while avoiding one storage write for every otherwise unchanged poll.
+const HTTP_FRESHNESS_CHECKPOINT_INTERVAL_MS = 10_000;
 const MAX_HTTP_SNAPSHOT_EVENTS = 50;
 // A list snapshot can contain all fifty ranked reports. Keep a single Durable
 // Object turn well below D1 Free's 50-query/subrequest budget even when a new
@@ -3101,6 +3112,20 @@ export class QuakeRelay {
   private readonly statuses = new Map<WolfxSourceId, string>();
   private readonly lastSuccessfulUpstreamMs = new Map<WolfxSourceId, number>();
   private readonly lastSuccessfulHttpPollMs = new Map<WolfxSourceId, number>();
+  // These maps are a per-instance cache of successfully committed durable
+  // freshness checkpoints. They are populated from storage on the first
+  // heartbeat after an eviction, so a restart never fabricates a checkpoint.
+  private readonly lastPersistedUpstreamSuccessMs = new Map<WolfxSourceId, number>();
+  private readonly lastPersistedHttpSuccessMs = new Map<WolfxSourceId, number>();
+  // A failed write must not publish fresh in-memory evidence, but retrying it
+  // for every heartbeat would create an error storm after a storage quota is
+  // exhausted. Bound failed retries to the same checkpoint cadence.
+  private readonly lastUpstreamCheckpointAttemptMs = new Map<WolfxSourceId, number>();
+  private readonly lastHttpCheckpointAttemptMs = new Map<WolfxSourceId, number>();
+  // WebSocket message handlers use waitUntil and may overlap while awaiting
+  // storage. Serialize one source/transport freshness update so a burst of
+  // heartbeats cannot all observe the same old checkpoint and write it again.
+  private readonly freshnessUpdates = new Map<string, Promise<void>>();
   private httpSeedInFlight: Promise<void> | null = null;
   private pendingIngestDrain: Promise<void> | null = null;
   /**
@@ -4979,40 +5004,118 @@ export class QuakeRelay {
     await Promise.all(sources.map((source) => this.markSourceSuccessful(source)));
   }
 
-  private async markSourceSuccessful(source: WolfxSourceId): Promise<void> {
-    const pendingForSource = await this.state.storage.list({
-      prefix: `${PENDING_INGEST_PREFIX}${source}:`,
-      limit: 1,
-    });
-    // A heartbeat can prove that a socket is open, but not that its preceding
-    // event was durably committed. Leave readiness stale until the journal for
-    // this source drains successfully.
-    if (pendingForSource.size > 0) return;
-    const now = Date.now();
-    await this.state.storage.put(`${UPSTREAM_LAST_SUCCESS_PREFIX}${source}`, now);
-    // Match the HTTP path: a failed durable write must not make this live
-    // relay instance claim a source is fresh when a later eviction cannot
-    // recover that proof.
-    this.lastSuccessfulUpstreamMs.set(source, now);
+  private serializeFreshnessUpdate(
+    key: string,
+    operation: () => Promise<void>,
+  ): Promise<void> {
+    const previous = this.freshnessUpdates.get(key) ?? Promise.resolve();
+    const update = previous.then(operation, operation);
+    this.freshnessUpdates.set(key, update);
+    // Keep an error from one heartbeat from blocking later evidence. The
+    // caller still receives the same rejection through `update` so failed
+    // persistence remains fail-closed rather than being silently swallowed.
+    void update.then(
+      () => {
+        if (this.freshnessUpdates.get(key) === update) {
+          this.freshnessUpdates.delete(key);
+        }
+      },
+      () => {
+        if (this.freshnessUpdates.get(key) === update) {
+          this.freshnessUpdates.delete(key);
+        }
+      },
+    );
+    return update;
   }
 
-  private async markHttpSourceSuccessful(source: WolfxSourceId): Promise<void> {
-    const pendingForSource = await this.state.storage.list({
-      prefix: `${PENDING_INGEST_PREFIX}${source}:`,
-      limit: 1,
+  private async checkpointFreshness(
+    source: WolfxSourceId,
+    storageKey: string,
+    checkpoints: Map<WolfxSourceId, number>,
+    attempts: Map<WolfxSourceId, number>,
+    intervalMs: number,
+    now: number,
+  ): Promise<boolean> {
+    let checkpoint = checkpoints.get(source);
+    if (checkpoint === undefined) {
+      const persisted = await this.state.storage.get<number>(storageKey);
+      if (typeof persisted === "number" && Number.isFinite(persisted)) {
+        checkpoint = persisted;
+        checkpoints.set(source, persisted);
+      }
+    }
+    if (
+      typeof checkpoint === "number" &&
+      Number.isFinite(checkpoint) &&
+      checkpoint <= now &&
+      now - checkpoint < intervalMs
+    ) {
+      return true;
+    }
+    const lastAttempt = attempts.get(source);
+    if (
+      typeof lastAttempt === "number" &&
+      Number.isFinite(lastAttempt) &&
+      lastAttempt <= now &&
+      now - lastAttempt < intervalMs
+    ) {
+      return false;
+    }
+    attempts.set(source, now);
+    await this.state.storage.put(storageKey, now);
+    // Do not update this cache until storage confirms the write. A failed
+    // checkpoint must not make the active relay look fresh after eviction.
+    checkpoints.set(source, now);
+    return true;
+  }
+
+  private markSourceSuccessful(source: WolfxSourceId): Promise<void> {
+    return this.serializeFreshnessUpdate(`websocket:${source}`, async () => {
+      const pendingForSource = await this.state.storage.list({
+        prefix: `${PENDING_INGEST_PREFIX}${source}:`,
+        limit: 1,
+      });
+      // A heartbeat can prove that a socket is open, but not that its preceding
+      // event was durably committed. Leave readiness stale until the journal for
+      // this source drains successfully.
+      if (pendingForSource.size > 0) return;
+      const now = Date.now();
+      const checkpointAvailable = await this.checkpointFreshness(
+        source,
+        `${UPSTREAM_LAST_SUCCESS_PREFIX}${source}`,
+        this.lastPersistedUpstreamSuccessMs,
+        this.lastUpstreamCheckpointAttemptMs,
+        UPSTREAM_FRESHNESS_CHECKPOINT_INTERVAL_MS,
+        now,
+      );
+      if (checkpointAvailable) this.lastSuccessfulUpstreamMs.set(source, now);
     });
-    // Do not let an HTTP response cover up a WebSocket event that reached the
-    // relay but has not crossed the D1 durability boundary yet.
-    if (pendingForSource.size > 0) return;
-    const now = Date.now();
-    await this.state.storage.put(
-      `${UPSTREAM_LAST_HTTP_SUCCESS_PREFIX}${source}`,
-      now,
-    );
-    // Status intentionally trusts the in-memory value first. Publish it only
-    // after durable storage succeeds, otherwise an evicted/failed write could
-    // make this instance claim a fresh alternate transport it cannot recover.
-    this.lastSuccessfulHttpPollMs.set(source, now);
+  }
+
+  private markHttpSourceSuccessful(source: WolfxSourceId): Promise<void> {
+    return this.serializeFreshnessUpdate(`http:${source}`, async () => {
+      const pendingForSource = await this.state.storage.list({
+        prefix: `${PENDING_INGEST_PREFIX}${source}:`,
+        limit: 1,
+      });
+      // Do not let an HTTP response cover up a WebSocket event that reached the
+      // relay but has not crossed the D1 durability boundary yet.
+      if (pendingForSource.size > 0) return;
+      const now = Date.now();
+      const checkpointAvailable = await this.checkpointFreshness(
+        source,
+        `${UPSTREAM_LAST_HTTP_SUCCESS_PREFIX}${source}`,
+        this.lastPersistedHttpSuccessMs,
+        this.lastHttpCheckpointAttemptMs,
+        HTTP_FRESHNESS_CHECKPOINT_INTERVAL_MS,
+        now,
+      );
+      // Status intentionally trusts the in-memory value first. Publish it only
+      // after durable storage succeeds, otherwise an evicted/failed write could
+      // make this instance claim a fresh alternate transport it cannot recover.
+      if (checkpointAvailable) this.lastSuccessfulHttpPollMs.set(source, now);
+    });
   }
 
   private async seedHttpSource(

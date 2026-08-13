@@ -2457,6 +2457,136 @@ test("an undrained live-ingest journal immediately makes its source stale", asyn
   );
 });
 
+test("coalesces live freshness checkpoints without hiding pending ingest", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalNow = Date.now;
+  let now = Date.parse("2026-08-13T00:00:00.000Z");
+  const values = new Map();
+  const writes = [];
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) {
+        writes.push([key, value]);
+        values.set(key, value);
+      },
+      async list({ prefix = "" } = {}) {
+        return new Map([...values].filter(([key]) => key.startsWith(prefix)));
+      },
+    },
+    waitUntil() {},
+  };
+  const upstreamKey = "upstream-last-success-ms:jma_eew";
+  const httpKey = "upstream-last-http-success-ms:jma_eew";
+  const relay = new QuakeRelay(state, {});
+  try {
+    Date.now = () => now;
+    await Promise.all(
+      Array.from({ length: 8 }, () => relay.markSourceSuccessful("jma_eew")),
+    );
+    assert.deepEqual(
+      writes.filter(([key]) => key === upstreamKey),
+      [[upstreamKey, now]],
+      "concurrent heartbeats commit one initial checkpoint",
+    );
+
+    now += 30_000;
+    const restartedRelay = new QuakeRelay(state, {});
+    await restartedRelay.markSourceSuccessful("jma_eew");
+    assert.equal(
+      writes.filter(([key]) => key === upstreamKey).length,
+      1,
+      "a fresh durable checkpoint survives an eviction without another write",
+    );
+    assert.equal(
+      restartedRelay.lastSuccessfulUpstreamMs.get("jma_eew"),
+      now,
+      "the new live heartbeat remains fresh in memory",
+    );
+
+    now += 30_000;
+    await relay.markSourceSuccessful("jma_eew");
+    assert.equal(
+      writes.filter(([key]) => key === upstreamKey).length,
+      2,
+      "the WebSocket checkpoint is renewed once per minute",
+    );
+
+    const previousLiveSuccess = relay.lastSuccessfulUpstreamMs.get("jma_eew");
+    values.set("pending-ingest:jma_eew:uncommitted", { event: "pending" });
+    now += 60_000;
+    await relay.markSourceSuccessful("jma_eew");
+    assert.equal(
+      writes.filter(([key]) => key === upstreamKey).length,
+      2,
+      "a heartbeat never overwrites the pending-ingest readiness fence",
+    );
+    assert.equal(
+      relay.lastSuccessfulUpstreamMs.get("jma_eew"),
+      previousLiveSuccess,
+    );
+
+    values.delete("pending-ingest:jma_eew:uncommitted");
+    await relay.markHttpSourceSuccessful("jma_eew");
+    now += 9_999;
+    await relay.markHttpSourceSuccessful("jma_eew");
+    now += 1;
+    await relay.markHttpSourceSuccessful("jma_eew");
+    assert.deepEqual(
+      writes.filter(([key]) => key === httpKey),
+      [
+        [httpKey, Date.parse("2026-08-13T00:02:00.000Z")],
+        [httpKey, Date.parse("2026-08-13T00:02:10.000Z")],
+      ],
+      "alternate HTTP freshness remains inside its stale window without every-poll writes",
+    );
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test("failed freshness checkpoints do not publish in-memory success", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalNow = Date.now;
+  let now = Date.parse("2026-08-13T00:00:00.000Z");
+  let putAttempts = 0;
+  const state = {
+    storage: {
+      async get() { return undefined; },
+      async list() { return new Map(); },
+      async put() {
+        putAttempts += 1;
+        throw new Error("Durable Object free-tier write quota exhausted");
+      },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  try {
+    Date.now = () => now;
+    await assert.rejects(
+      () => relay.markSourceSuccessful("jma_eew"),
+      /write quota exhausted/,
+    );
+    await relay.markSourceSuccessful("jma_eew");
+    assert.equal(
+      putAttempts,
+      1,
+      "a quota failure is retried at the checkpoint cadence, not every heartbeat",
+    );
+    assert.equal(relay.lastSuccessfulUpstreamMs.has("jma_eew"), false);
+
+    now += 60_000;
+    await assert.rejects(
+      () => relay.markSourceSuccessful("jma_eew"),
+      /write quota exhausted/,
+    );
+    assert.equal(putAttempts, 2);
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
 test("bounds HTTP seeding concurrency and preserves source order", async () => {
   const { mapWithConcurrency } = await workerModule();
   let active = 0;
