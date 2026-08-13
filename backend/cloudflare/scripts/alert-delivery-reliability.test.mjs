@@ -2879,6 +2879,7 @@ function createLiveSnapshotHarness({ failD1Batches = () => false } = {}) {
   const backgroundErrors = [];
   let alarmAt = null;
   let d1BatchAttempts = 0;
+  const d1Batches = [];
   const storage = {
     async get(key) {
       return values.get(key);
@@ -2939,6 +2940,7 @@ function createLiveSnapshotHarness({ failD1Batches = () => false } = {}) {
     },
     async batch(statements) {
       d1BatchAttempts += 1;
+      d1Batches.push(statements);
       if (failD1Batches()) {
         throw new Error("simulated live EQLIST D1 failure");
       }
@@ -2966,6 +2968,9 @@ function createLiveSnapshotHarness({ failD1Batches = () => false } = {}) {
     Socket,
     get d1BatchAttempts() {
       return d1BatchAttempts;
+    },
+    get d1Batches() {
+      return d1Batches;
     },
     get alarmAt() {
       return alarmAt;
@@ -3374,13 +3379,14 @@ test("live snapshot active/latest source-key mismatches remain fail-closed", asy
   }
 });
 
-test("a third distinct live list records one overload marker without later snapshot-write churn", async () => {
+test("a third distinct live list is durably retained before bounded source backpressure", async () => {
   const { QuakeRelay } = await workerModule();
   const originalConsoleError = console.error;
   const originalConsoleWarn = console.warn;
   const originalNow = Date.now;
   let now = Date.parse("2026-08-14T00:00:00.000Z");
   const route = "jma_eqlist";
+  const overflowKey = `pending-live-snapshot-overflow:${route}`;
   const overloadKey = `live-snapshot-overload:${route}`;
   const harness = createLiveSnapshotHarness();
   const relay = new QuakeRelay(harness.state, { DB: harness.database });
@@ -3390,6 +3396,7 @@ test("a third distinct live list records one overload marker without later snaps
     typeof key === "string" &&
     (key.startsWith("pending-live-snapshot:") ||
       key.startsWith("pending-live-snapshot-latest:") ||
+      key.startsWith("pending-live-snapshot-overflow:") ||
       key.startsWith("live-snapshot-overload:"))
   ).length;
   try {
@@ -3409,6 +3416,12 @@ test("a third distinct live list records one overload marker without later snaps
     assert.ok(
       harness.values.has(overloadKey),
       "the third distinct list must leave one durable overload marker",
+    );
+    const overflow = harness.values.get(overflowKey);
+    assert.equal(
+      overflow?.events?.[0]?.eventId,
+      "live-jma-eqlist-variant-3",
+      "the third accepted frame must be durable before the source is closed",
     );
     assert.equal(
       harness.writes.filter(([operation, key]) =>
@@ -3435,11 +3448,177 @@ test("a third distinct live list records one overload marker without later snaps
     assert.equal(
       harness.d1BatchAttempts,
       d1BatchesAfterOverload,
-      "an overloaded source must wait for its paced cursor instead of starting more D1 slices",
+      "frames after backpressure must wait for the paced retained cursors",
     );
   } finally {
     console.error = originalConsoleError;
     console.warn = originalConsoleWarn;
+    Date.now = originalNow;
+  }
+});
+
+test("a failed live-list slice retains all three admitted snapshots until they commit in order", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalConsoleError = console.error;
+  const originalConsoleWarn = console.warn;
+  const originalNow = Date.now;
+  let now = Date.parse("2026-08-14T00:00:00.000Z");
+  let failD1 = true;
+  const route = "jma_eqlist";
+  const activeKey = `pending-live-snapshot:${route}`;
+  const latestKey = `pending-live-snapshot-latest:${route}`;
+  const overflowKey = `pending-live-snapshot-overflow:${route}`;
+  const overloadKey = `live-snapshot-overload:${route}`;
+  const harness = createLiveSnapshotHarness({ failD1Batches: () => failD1 });
+  const relay = new QuakeRelay(harness.state, { DB: harness.database });
+  const socket = new harness.Socket();
+  try {
+    Date.now = () => now;
+    console.error = () => {};
+    console.warn = () => {};
+    relay.upstreams.set(route, socket);
+    relay.attachUpstreamSocketListeners(route, socket);
+
+    for (const variant of [1, 2, 3]) {
+      socket.emit("message", {
+        data: JSON.stringify(distinctJmaEqlistSnapshot(variant)),
+      });
+      await harness.drainBackground();
+    }
+
+    assert.equal(harness.d1BatchAttempts, 1, "only the first active slice reaches failed D1");
+    assert.equal(
+      harness.values.get(activeKey)?.events?.[0]?.eventId,
+      "live-jma-eqlist-variant-1",
+    );
+    assert.equal(
+      harness.values.get(latestKey)?.events?.[0]?.eventId,
+      "live-jma-eqlist-variant-2",
+    );
+    assert.equal(
+      harness.values.get(overflowKey)?.events?.[0]?.eventId,
+      "live-jma-eqlist-variant-3",
+    );
+    assert.ok(harness.values.has(overloadKey), "overload remains a freshness fence");
+
+    failD1 = false;
+    for (let pass = 0; pass < 30 && harness.pendingLiveSnapshots().length > 0; pass += 1) {
+      now += 60_000;
+      await relay.drainPendingLiveSnapshotWorks();
+    }
+
+    assert.equal(
+      harness.pendingLiveSnapshots().length,
+      0,
+      "every admitted list must drain before the source can accept a resync",
+    );
+    assert.ok(
+      harness.values.has(overloadKey),
+      "the marker stays until a later valid source resync proves freshness",
+    );
+    const persistedFirstEventIds = harness.d1Batches
+      .flatMap((statements) => statements)
+      .filter((statement) => statement.sql?.includes("INSERT INTO events"))
+      .map((statement) => statement.bindings?.[2])
+      .filter((eventId) => typeof eventId === "string");
+    const first = persistedFirstEventIds.indexOf("live-jma-eqlist-variant-1");
+    const second = persistedFirstEventIds.indexOf("live-jma-eqlist-variant-2");
+    const third = persistedFirstEventIds.indexOf("live-jma-eqlist-variant-3");
+    assert.ok(first >= 0 && second > first && third > second);
+  } finally {
+    console.error = originalConsoleError;
+    console.warn = originalConsoleWarn;
+    Date.now = originalNow;
+  }
+});
+
+test("the relay alarm repairs newer live-list slots left without an active cursor", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalNow = Date.now;
+  const now = Date.parse("2026-08-14T00:00:00.000Z");
+  const route = "jma_eqlist";
+  const activeKey = `pending-live-snapshot:${route}`;
+  const latestKey = `pending-live-snapshot-latest:${route}`;
+  const overflowKey = `pending-live-snapshot-overflow:${route}`;
+  const harness = createLiveSnapshotHarness();
+  const relay = new QuakeRelay(harness.state, { DB: harness.database });
+  const latest = {
+    ...storedLiveSnapshotWork(route, now),
+    fingerprint: "resume-latest",
+    events: [{ ...storedLiveSnapshotWork(route, now).events[0], eventId: "resume-latest" }],
+    retryAtMs: now + 5_000,
+  };
+  const overflow = {
+    ...storedLiveSnapshotWork(route, now + 1),
+    fingerprint: "resume-overflow",
+    events: [{ ...storedLiveSnapshotWork(route, now + 1).events[0], eventId: "resume-overflow" }],
+    retryAtMs: now + 5_000,
+  };
+  try {
+    Date.now = () => now;
+    harness.values.set(latestKey, latest);
+    harness.values.set(overflowKey, overflow);
+    relay.refreshHttpFallbackActive = async () => false;
+    relay.pendingHttpSnapshotWorks = async () => [];
+    relay.nextDueHttpSeedMode = async () => null;
+    relay.ensureUpstreams = async () => {};
+    relay.reconcileDlqPersistenceFallbacks = async () => {};
+    relay.migrateLegacyPendingDeliveries = async () => {};
+    relay.drainPendingIngestJournal = async () => {};
+    relay.flushAlertDeliveryOutbox = async () => {};
+    relay.purgeExpiredDevicesIfDue = async () => {};
+    relay.scheduleRoutineRelayAlarm = async () => {};
+
+    await relay.alarm();
+
+    assert.equal(harness.values.get(activeKey)?.fingerprint, "resume-latest");
+    assert.equal(harness.values.get(latestKey)?.fingerprint, "resume-overflow");
+    assert.equal(
+      harness.values.has(overflowKey),
+      false,
+      "the alarm must atomically shift overflow behind the newly active cursor",
+    );
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test("a marker-only live-list overload remains stale without starving ordinary maintenance", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalNow = Date.now;
+  const now = Date.parse("2026-08-14T00:00:00.000Z");
+  const route = "jma_eqlist";
+  const harness = createLiveSnapshotHarness();
+  const relay = new QuakeRelay(harness.state, { DB: harness.database });
+  const maintenance = [];
+  try {
+    Date.now = () => now;
+    harness.values.set(`live-snapshot-overload:${route}`, {
+      version: 1,
+      source: route,
+      reason: "overload",
+      observedAtMs: now,
+    });
+    relay.refreshHttpFallbackActive = async () => false;
+    relay.pendingHttpSnapshotWorks = async () => [];
+    relay.nextDueHttpSeedMode = async () => null;
+    relay.ensureUpstreams = async () => {};
+    relay.reconcileDlqPersistenceFallbacks = async () => maintenance.push("dlq");
+    relay.migrateLegacyPendingDeliveries = async () => maintenance.push("legacy");
+    relay.drainPendingIngestJournal = async () => maintenance.push("journal");
+    relay.flushAlertDeliveryOutbox = async () => maintenance.push("outbox");
+    relay.purgeExpiredDevicesIfDue = async () => maintenance.push("purge");
+    relay.scheduleRoutineRelayAlarm = async () => {};
+
+    await relay.alarm();
+
+    assert.deepEqual(
+      maintenance,
+      ["dlq", "legacy", "journal", "outbox", "purge"],
+      "marker-only state must not block unrelated recovery or alert delivery",
+    );
+    assert.ok(harness.values.has(`live-snapshot-overload:${route}`));
+  } finally {
     Date.now = originalNow;
   }
 });

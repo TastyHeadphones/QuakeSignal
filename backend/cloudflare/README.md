@@ -331,12 +331,15 @@ npx wrangler secret put APNS_BUNDLE_ID
   unchanged ranked earthquake-list WebSocket frames are committed through one
   bounded snapshot cursor and then deduplicated by a post-D1 fingerprint, so
   they do not create one journal row per list entry. Each list source holds at
-  most an active cursor and one newer replacement; a third distinct snapshot
-  before either commits marks that source overloaded and `/healthz` fails
-  closed rather than silently spending one write per frame or claiming complete
-  alert coverage. The relay closes that list socket and reconnects for a fresh
-  full snapshot after the bounded work drains, rather than silently dropping a
-  third list. A bare WebSocket Upgrade does not reset reconnect backoff or
+  most an active cursor plus two newer accepted snapshots. The third distinct
+  frame is made durable before it marks the source overloaded and `/healthz`
+  fails closed; only then does the relay close that list socket. Later frames
+  after explicit backpressure are not admitted, so the path remains bounded
+  rather than spending one write per frame. The relay drains active → latest →
+  overflow before a fresh complete resync can clear the overload marker. This
+  guarantees durability for frames admitted before the close; it cannot turn a
+  finite relay window into an upstream replay log, so health remains failed
+  closed until that resync. A bare WebSocket Upgrade does not reset reconnect backoff or
   publish freshness; only valid Wolfx traffic does, and a route must stay live
   for one minute before its exponential reconnect history is cleared. This is
   not an unlimited-capacity claim: unusual sustained changed-event, reconnect, or recovery

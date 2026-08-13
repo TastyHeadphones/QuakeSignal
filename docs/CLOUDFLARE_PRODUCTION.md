@@ -102,12 +102,14 @@ release evidence; repeat the production proof against
    before clearing exponential reconnect state, so an upgrade-then-close flap
    cannot repeatedly return to the five-second retry floor. Repeated unchanged
    ranked earthquake-list frames are deduplicated only after their bounded D1
-   cursor commits. A source may retain one active list plus one newer
-   replacement; a third distinct list before either finishes enters an
-   explicit fail-closed overload state instead of silently writing one cursor
-   per frame. The relay closes that list socket and reconnects for a new full
-   snapshot once the bounded work drains, rather than silently discarding a
-   third list. This bounded cadence does not make the Free tier unlimited: unusual sustained event
+   cursor commits. A source may retain one active list plus two newer accepted
+   snapshots; the third distinct list is persisted before it enters an
+   explicit fail-closed overload state and the relay closes that list socket.
+   Later frames after backpressure are not admitted, rather than writing one
+   cursor per frame. The relay drains active → latest → overflow before a new
+   full resync can clear the overload marker. It preserves all frames admitted
+   before backpressure, but cannot replace an upstream replay log; readiness
+   stays failed closed until that resync. This bounded cadence does not make the Free tier unlimited: unusual sustained event
    ingestion, reconnect/recovery activity, or other durable work can still
    exhaust the daily write quota. Monitor Durable Object usage
    and treat quota errors or health degradation as an operational incident;

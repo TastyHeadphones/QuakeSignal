@@ -261,6 +261,13 @@ const PENDING_INGEST_PREFIX = "pending-ingest:";
 // fifty journal puts and fifty deletes.
 const PENDING_LIVE_SNAPSHOT_PREFIX = "pending-live-snapshot:";
 const PENDING_LIVE_SNAPSHOT_LATEST_PREFIX = "pending-live-snapshot-latest:";
+// A source can receive one more complete ranked-list frame while the active
+// cursor and its newest replacement are both waiting on D1. Retain that third
+// *accepted* frame before applying WebSocket backpressure, rather than
+// silently dropping an earthquake report that exists only in that frame.
+// Frames after the source is closed are intentionally not admitted: this is a
+// fixed three-slot durable boundary, not a write-per-frame queue.
+const PENDING_LIVE_SNAPSHOT_OVERFLOW_PREFIX = "pending-live-snapshot-overflow:";
 const LIVE_SNAPSHOT_OVERLOAD_PREFIX = "live-snapshot-overload:";
 const UPSTREAM_LIVE_SNAPSHOT_FINGERPRINT_PREFIX =
   "upstream-live-snapshot-fingerprint:";
@@ -561,13 +568,19 @@ interface LiveSnapshotAdvanceResult {
   hasNextWork: boolean;
 }
 
+interface LiveSnapshotSlots {
+  active: PendingLiveSnapshotWork | undefined;
+  latest: PendingLiveSnapshotWork | undefined;
+  overflow: PendingLiveSnapshotWork | undefined;
+}
+
 /**
- * A bounded ranked-list relay can preserve one active snapshot and one newer
- * replacement. A third distinct snapshot before either commits is a capacity
- * signal: persist it once, fail readiness closed, and stop accepting further
- * frames until the existing durable work drains and a later frame restarts the
- * source. This prevents a high-rate list from trading alert correctness for
- * unbounded Durable Object writes.
+ * A bounded ranked-list relay can preserve one active snapshot plus two newer
+ * accepted replacements. The third distinct frame is persisted in the
+ * overflow slot together with this marker before the list socket is closed.
+ * Later frames are not admitted after explicit transport backpressure. This
+ * prevents write-per-frame churn without silently losing the final frame that
+ * crossed the relay boundary before backpressure took effect.
  */
 interface LiveSnapshotOverload {
   version: 1;
@@ -1333,6 +1346,10 @@ function liveSnapshotWorkStorageKey(
 
 function liveSnapshotLatestStorageKey(source: LiveSnapshotSource): string {
   return `${PENDING_LIVE_SNAPSHOT_LATEST_PREFIX}${source}`;
+}
+
+function liveSnapshotOverflowStorageKey(source: LiveSnapshotSource): string {
+  return `${PENDING_LIVE_SNAPSHOT_OVERFLOW_PREFIX}${source}`;
 }
 
 function liveSnapshotOverloadStorageKey(source: LiveSnapshotSource): string {
@@ -3602,6 +3619,11 @@ export class QuakeRelay {
         await this.ensureUpstreams();
         return;
       }
+      // Repair only durable slot shapes left by an interrupted older revision.
+      // The normal active → latest → overflow transitions are transactional;
+      // this lets an alarm resume a valid newer slot even if no subsequent
+      // WebSocket frame arrives after a rolling deploy or eviction.
+      await this.repairPendingLiveSnapshotSlots();
       if (await this.hasAnyActiveLiveSnapshotWork()) {
         // A live ranked-list cursor has the same bounded-D1 requirement as an
         // HTTP cursor. Whether it is due now or waiting for its five-second
@@ -4028,19 +4050,110 @@ export class QuakeRelay {
     );
   }
 
+  /**
+   * Decode the fixed per-source live-list slots. Invalid durable values are an
+   * integrity fence, never a cue to overwrite already accepted event intent.
+   */
+  private decodeLiveSnapshotSlots(
+    source: LiveSnapshotSource,
+    activeValue: unknown,
+    latestValue: unknown,
+    overflowValue: unknown,
+  ): LiveSnapshotSlots | null {
+    const decode = (value: unknown): PendingLiveSnapshotWork | undefined | null => {
+      if (value === undefined) return undefined;
+      return isPendingLiveSnapshotWork(value) && value.source === source
+        ? value
+        : null;
+    };
+    const active = decode(activeValue);
+    const latest = decode(latestValue);
+    const overflow = decode(overflowValue);
+    if (active === null || latest === null || overflow === null) {
+      console.error(JSON.stringify({ outcome: "invalid_live_snapshot_record" }));
+      return null;
+    }
+    return { active, latest, overflow };
+  }
+
+  /**
+   * A normal slot transition is atomic, but a rolling deploy or older
+   * interrupted revision can leave a newer slot without an active cursor.
+   * Repair that shape only from the serialized writer/alarm path. Status
+   * readers remain strictly read-only and fail closed.
+   */
+  private async readAndRepairLiveSnapshotSlots(
+    source: LiveSnapshotSource,
+  ): Promise<LiveSnapshotSlots | null> {
+    const workKey = liveSnapshotWorkStorageKey(source);
+    const latestKey = liveSnapshotLatestStorageKey(source);
+    const overflowKey = liveSnapshotOverflowStorageKey(source);
+    const repair = async (
+      target: DurableKeyValueStore,
+    ): Promise<LiveSnapshotSlots | null> => {
+      const [activeValue, latestValue, overflowValue] = await Promise.all([
+        target.get<unknown>(workKey),
+        target.get<unknown>(latestKey),
+        target.get<unknown>(overflowKey),
+      ]);
+      const slots = this.decodeLiveSnapshotSlots(
+        source,
+        activeValue,
+        latestValue,
+        overflowValue,
+      );
+      if (!slots || slots.active || (!slots.latest && !slots.overflow)) {
+        return slots;
+      }
+
+      const active = slots.latest ?? slots.overflow;
+      if (!active) return slots;
+      await target.put(workKey, active);
+      if (slots.latest) {
+        if (slots.overflow) {
+          await target.put(latestKey, slots.overflow);
+          await target.delete(overflowKey);
+        } else {
+          await target.delete(latestKey);
+        }
+        return {
+          active,
+          latest: slots.overflow,
+          overflow: undefined,
+        };
+      }
+      await target.delete(overflowKey);
+      return { active, latest: undefined, overflow: undefined };
+    };
+    if (typeof this.state.storage.transaction === "function") {
+      return this.state.storage.transaction((transaction) => repair(transaction));
+    }
+    return repair(this.state.storage);
+  }
+
+  private async repairPendingLiveSnapshotSlots(): Promise<void> {
+    for (const source of ["cenc_eqlist", "jma_eqlist"] as const) {
+      await this.liveSnapshotDrain(source, async () => {
+        await this.readAndRepairLiveSnapshotSlots(source);
+      });
+    }
+  }
+
   private async hasPendingLiveSnapshot(
     source: LiveSnapshotSource,
   ): Promise<boolean> {
-    const [active, latest, overload] = await Promise.all([
+    const [active, latest, overflow, overload] = await Promise.all([
       this.state.storage.get<unknown>(liveSnapshotWorkStorageKey(source)),
       this.state.storage.get<unknown>(liveSnapshotLatestStorageKey(source)),
+      this.state.storage.get<unknown>(liveSnapshotOverflowStorageKey(source)),
       this.state.storage.get<unknown>(liveSnapshotOverloadStorageKey(source)),
     ]);
     // Presence, rather than successful decoding, is the readiness fence. An
     // alarm can repair only known-good records; a malformed key must remain
     // visible until an operator resolves it rather than being hidden by a
     // heartbeat or HTTP response.
-    return active !== undefined || latest !== undefined || overload !== undefined;
+    return active !== undefined || latest !== undefined || overflow !== undefined ||
+      overload !== undefined;
   }
 
   private async hasAnyActiveLiveSnapshotWork(): Promise<boolean> {
@@ -4123,11 +4236,11 @@ export class QuakeRelay {
    * Journal one complete EQLIST WebSocket frame before its first D1 write. A
    * duplicate first checks the committed fingerprint and active work, so it
    * does not recreate fifty one-event journals after the prior frame drained.
-   * One source has at most one active cursor and one latest replacement. The
-   * active cursor is never overwritten once durable, even before its first D1
-   * slice; the newest later list waits in a single coalescing slot until that
-   * cursor commits. This bounds changed-frame storage without dropping event
-   * intent that has already crossed the Durable Object boundary.
+   * One source has at most one active cursor plus two newer accepted frames.
+   * The active cursor is never overwritten once durable, even before its first
+   * D1 slice. The third distinct frame is retained in an overflow slot before
+   * explicit WebSocket backpressure closes the source, which bounds changed
+   * frame storage without dropping intent that reached this relay.
    */
   private enqueueLiveSnapshot(
     source: LiveSnapshotSource,
@@ -4137,30 +4250,14 @@ export class QuakeRelay {
       const fingerprint = await liveSnapshotFingerprint(normalizedEvents);
       const workKey = liveSnapshotWorkStorageKey(source);
       const latestKey = liveSnapshotLatestStorageKey(source);
+      const overflowKey = liveSnapshotOverflowStorageKey(source);
       const overloadKey = liveSnapshotOverloadStorageKey(source);
-      const [activeValue, latestValue, overloadValue, committed] = await Promise.all([
-        this.state.storage.get<unknown>(workKey),
-        this.state.storage.get<unknown>(latestKey),
+      const [slots, overloadValue, committed] = await Promise.all([
+        this.readAndRepairLiveSnapshotSlots(source),
         this.state.storage.get<unknown>(overloadKey),
         this.state.storage.get<string>(liveSnapshotFingerprintStorageKey(source)),
       ]);
-      if (
-        activeValue !== undefined &&
-        (!isPendingLiveSnapshotWork(activeValue) || activeValue.source !== source)
-      ) {
-        // A malformed durable cursor is an integrity failure, not a reason to
-        // overwrite unknown event intent with a new frame. Health remains
-        // fail-closed through the raw pending-key probe.
-        console.error(JSON.stringify({ outcome: "invalid_live_snapshot_record" }));
-        return;
-      }
-      if (
-        latestValue !== undefined &&
-        (!isPendingLiveSnapshotWork(latestValue) || latestValue.source !== source)
-      ) {
-        console.error(JSON.stringify({ outcome: "invalid_live_snapshot_latest" }));
-        return;
-      }
+      if (!slots) return;
       if (
         overloadValue !== undefined &&
         (!isLiveSnapshotOverload(overloadValue) || overloadValue.source !== source)
@@ -4168,34 +4265,16 @@ export class QuakeRelay {
         console.error(JSON.stringify({ outcome: "invalid_live_snapshot_overload" }));
         return;
       }
-      let active = activeValue as PendingLiveSnapshotWork | undefined;
-      let latest = latestValue as PendingLiveSnapshotWork | undefined;
+      let { active, latest, overflow } = slots;
       const overload = overloadValue as LiveSnapshotOverload | undefined;
 
-      // This cannot occur during a normal final-cursor transaction, but make
-      // recovery robust against an interrupted older revision: promote the
-      // one valid durable replacement before considering the incoming frame.
-      if (!active && latest) {
-        const promote = async (target: DurableKeyValueStore): Promise<void> => {
-          await target.put(workKey, latest);
-          await target.delete(latestKey);
-        };
-        if (typeof this.state.storage.transaction === "function") {
-          await this.state.storage.transaction((transaction) => promote(transaction));
-        } else {
-          await promote(this.state.storage);
-        }
-        active = latest;
-        latest = undefined;
-      }
-
       if (overload) {
-        if (active || latest) {
+        if (active || latest || overflow) {
           // Existing D1-safe work remains the only accepted intent while the
-          // source is overloaded. Close the direct list socket and recover a
-          // fresh complete snapshot after these cursors drain; do not keep
-          // accepting and silently replacing frames that cannot fit in the
-          // bounded durable window.
+          // source is overloaded. Close the direct list socket and recover
+          // with a fresh complete snapshot after these three bounded cursors
+          // drain; do not keep accepting and replacing frames that cannot fit
+          // in the durable window.
           if (overload.reason === "overload") {
             await this.backpressureLiveSnapshotSource(source);
           }
@@ -4203,7 +4282,7 @@ export class QuakeRelay {
           return;
         }
       }
-      if (!active && !latest && committed === fingerprint) {
+      if (!active && !latest && !overflow && committed === fingerprint) {
         // A later valid frame exactly matching the committed snapshot is safe
         // evidence that the bounded overload window has ended. Clear the
         // stale marker before allowing a freshness checkpoint.
@@ -4212,7 +4291,11 @@ export class QuakeRelay {
         return;
       }
 
-      if (active?.fingerprint !== fingerprint && latest?.fingerprint !== fingerprint) {
+      if (
+        active?.fingerprint !== fingerprint &&
+        latest?.fingerprint !== fingerprint &&
+        overflow?.fingerprint !== fingerprint
+      ) {
         const createdAtMs = Date.now();
         const work: PendingLiveSnapshotWork = {
           version: 1,
@@ -4243,17 +4326,29 @@ export class QuakeRelay {
           // and is promoted only after the active cursor commits all slices.
           await this.state.storage.put(latestKey, work);
           latest = work;
-        } else {
-          // A third distinct frame cannot be represented without either
-          // discarding durable event intent or writing once per frame. Record
-          // a single overload marker and fail closed until existing cursors
-          // drain; subsequent frames cause no additional storage churn.
-          await this.state.storage.put(overloadKey, {
-            version: 1,
-            source,
-            reason: "overload",
-            observedAtMs: createdAtMs,
-          } satisfies LiveSnapshotOverload);
+        } else if (!overflow) {
+          // Persist the third accepted frame atomically with the overload
+          // marker *before* closing the socket. That preserves its event
+          // intent while bounding source admission to three complete lists.
+          const overflowAndBackpressure = async (
+            target: DurableKeyValueStore,
+          ): Promise<void> => {
+            await target.put(overflowKey, work);
+            await target.put(overloadKey, {
+              version: 1,
+              source,
+              reason: "overload",
+              observedAtMs: createdAtMs,
+            } satisfies LiveSnapshotOverload);
+          };
+          if (typeof this.state.storage.transaction === "function") {
+            await this.state.storage.transaction((transaction) =>
+              overflowAndBackpressure(transaction)
+            );
+          } else {
+            await overflowAndBackpressure(this.state.storage);
+          }
+          overflow = work;
           console.error(JSON.stringify({
             outcome: "live_snapshot_overload",
             source,
@@ -4388,7 +4483,9 @@ export class QuakeRelay {
         return { advanced: true, hasNextWork: true };
       }
       const latestKey = liveSnapshotLatestStorageKey(work.source);
+      const overflowKey = liveSnapshotOverflowStorageKey(work.source);
       const latestValue = await target.get<unknown>(latestKey);
+      const overflowValue = await target.get<unknown>(overflowKey);
       if (
         latestValue !== undefined &&
         (!isPendingLiveSnapshotWork(latestValue) ||
@@ -4400,7 +4497,16 @@ export class QuakeRelay {
         console.error(JSON.stringify({ outcome: "invalid_live_snapshot_latest" }));
         return { advanced: false, hasNextWork: false };
       }
+      if (
+        overflowValue !== undefined &&
+        (!isPendingLiveSnapshotWork(overflowValue) ||
+          overflowValue.source !== work.source)
+      ) {
+        console.error(JSON.stringify({ outcome: "invalid_live_snapshot_overflow" }));
+        return { advanced: false, hasNextWork: false };
+      }
       const latest = latestValue as PendingLiveSnapshotWork | undefined;
+      const overflow = overflowValue as PendingLiveSnapshotWork | undefined;
       await target.put(
         liveSnapshotFingerprintStorageKey(work.source),
         work.fingerprint,
@@ -4411,7 +4517,20 @@ export class QuakeRelay {
           nextIndex: 0,
           retryAtMs: Date.now() + LIVE_SNAPSHOT_RESUME_INTERVAL_MS,
         });
-        await target.delete(latestKey);
+        if (overflow) {
+          await target.put(latestKey, overflow);
+          await target.delete(overflowKey);
+        } else {
+          await target.delete(latestKey);
+        }
+        return { advanced: true, hasNextWork: true };
+      } else if (overflow) {
+        await target.put(workKey, {
+          ...overflow,
+          nextIndex: 0,
+          retryAtMs: Date.now() + LIVE_SNAPSHOT_RESUME_INTERVAL_MS,
+        });
+        await target.delete(overflowKey);
         return { advanced: true, hasNextWork: true };
       } else {
         await target.delete(workKey);
@@ -5383,6 +5502,7 @@ export class QuakeRelay {
           pendingHttpWork,
           pendingLiveSnapshotWork,
           pendingLiveSnapshotLatest,
+          pendingLiveSnapshotOverflow,
           pendingLiveSnapshotOverload,
         ] = await Promise.all([
           this.state.storage.get<number>(
@@ -5403,6 +5523,9 @@ export class QuakeRelay {
             ? this.state.storage.get<unknown>(liveSnapshotLatestStorageKey(source))
             : Promise.resolve(undefined),
           isLiveSnapshotSource(source)
+            ? this.state.storage.get<unknown>(liveSnapshotOverflowStorageKey(source))
+            : Promise.resolve(undefined),
+          isLiveSnapshotSource(source)
             ? this.state.storage.get<unknown>(liveSnapshotOverloadStorageKey(source))
             : Promise.resolve(undefined),
         ]);
@@ -5415,6 +5538,7 @@ export class QuakeRelay {
         const hasPendingLiveSnapshot =
           pendingLiveSnapshotWork !== undefined ||
           pendingLiveSnapshotLatest !== undefined ||
+          pendingLiveSnapshotOverflow !== undefined ||
           pendingLiveSnapshotOverload !== undefined;
         // A malformed cursor is still an unfinished durability signal. Fail
         // closed until an alarm clears/rebuilds it; never let a prior fresh
