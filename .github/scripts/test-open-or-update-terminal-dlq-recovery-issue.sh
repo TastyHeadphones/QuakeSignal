@@ -9,6 +9,7 @@ repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 issue_script="$repo_root/.github/scripts/open-or-update-terminal-dlq-recovery-issue.sh"
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/quakesignal-terminal-dlq-issue-test.XXXXXX")"
 server_pid=""
+server_log="$tmp_dir/server.log"
 
 cleanup() {
   if [[ -n "$server_pid" ]]; then
@@ -24,12 +25,15 @@ fail() {
   exit 1
 }
 
-node --input-type=module - <<'NODE' > "$tmp_dir/port" &
+PORT_FILE="$tmp_dir/port" node --input-type=module - <<'NODE' > /dev/null 2> "$server_log" &
 import http from "node:http";
+import { writeFileSync } from "node:fs";
 
 const label = "quakesignal-terminal-dlq-fallback";
 const marker = "<!-- quakesignal-terminal-dlq-fallback-monitor -->";
 const state = { labelExists: false, issues: [], updates: 0 };
+const portFile = process.env.PORT_FILE;
+if (!portFile) throw new Error("PORT_FILE is required");
 
 function reply(response, status, payload) {
   response.statusCode = status;
@@ -95,16 +99,23 @@ const server = http.createServer(async (request, response) => {
   reply(response, 404, { message: "Not Found" });
 });
 
-server.listen(0, "127.0.0.1", () => process.stdout.write(String(server.address().port)));
+server.listen(0, "127.0.0.1", () => {
+  writeFileSync(portFile, String(server.address().port));
+});
 NODE
 server_pid=$!
 
-for _ in $(seq 1 50); do
+for ((attempt = 0; attempt < 100; attempt += 1)); do
   [[ -s "$tmp_dir/port" ]] && break
   sleep 0.05
 done
-[[ -s "$tmp_dir/port" ]] || fail "mock GitHub API did not start"
+[[ -s "$tmp_dir/port" ]] || {
+  [[ -s "$server_log" ]] && cat "$server_log" >&2
+  fail "mock GitHub API did not start"
+}
 port="$(<"$tmp_dir/port")"
+[[ "$port" =~ ^[1-9][0-9]{0,4}$ ]] && (( port <= 65535 )) || \
+  fail "mock GitHub API returned an invalid port"
 api_url="http://127.0.0.1:${port}"
 
 run_writer() {
