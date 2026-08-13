@@ -4206,7 +4206,7 @@ export class QuakeRelay {
    * optimistic; remove it only after all routes are demonstrably open again.
    */
   private async refreshHttpFallbackActive(): Promise<boolean> {
-    const current = await this.state.storage.get<boolean>(HTTP_FALLBACK_ACTIVE_KEY);
+    const current = await this.readHttpFallbackActive();
     if (this.allRoutesOpen()) {
       if (current) await this.state.storage.put(HTTP_FALLBACK_ACTIVE_KEY, false);
       // A partially durable HTTP report list remains health-stale even after
@@ -4220,6 +4220,16 @@ export class QuakeRelay {
     if (!await this.allRoutesHaveBeenDegradedForGrace(Date.now())) return false;
     await this.state.storage.put(HTTP_FALLBACK_ACTIVE_KEY, true);
     return true;
+  }
+
+  /**
+   * Return only the persisted alternate-transport state. Unlike
+   * `refreshHttpFallbackActive`, this method never clears or activates the
+   * marker, so `/healthz` remains safe to serve when Durable Object writes are
+   * temporarily unavailable.
+   */
+  private async readHttpFallbackActive(): Promise<boolean> {
+    return (await this.state.storage.get<boolean>(HTTP_FALLBACK_ACTIVE_KEY)) === true;
   }
 
   private async httpFallbackTurnIsDue(now: number): Promise<boolean> {
@@ -4515,9 +4525,11 @@ export class QuakeRelay {
       }),
     };
     const now = Date.now();
-    // Keep the persisted alternate-transport marker honest after all live
-    // sockets recover, even if the routine alarm has not fired yet.
-    const httpFallbackActive = await this.refreshHttpFallbackActive();
+    // This status calculation is read-only. The alarm owns changes to this
+    // marker; in particular, a Durable Object write-quota failure must leave
+    // `/healthz` able to return a structured, fail-closed response rather
+    // than turning a status probe into an exception.
+    const httpFallbackActive = await this.readHttpFallbackActive();
     const sourceHealth = await Promise.all(
       ALL_WOLFX_SOURCES.map(async (source) => {
         const [persisted, persistedHttp, pendingJournal, pendingHttpWork] = await Promise.all([
@@ -7621,9 +7633,54 @@ async function handleRequest(
       "GET /healthz",
     );
     if (rateLimitResponse) return rateLimitResponse;
-    const relay = env.RELAY.get(env.RELAY.idFromName("global"));
-    const response = await relay.fetch("https://relay.internal/status");
-    return json(await response.json(), response.status);
+    try {
+      const relay = env.RELAY.get(env.RELAY.idFromName("global"));
+      const response = await relay.fetch("https://relay.internal/status");
+      return json(await response.json(), response.status);
+    } catch (error) {
+      // A relay storage outage (including exhausted Durable Object writes)
+      // must not turn readiness into a Worker exception. Do not expose the
+      // provider error; return an explicitly fail-closed, cache-bypassing
+      // health document so monitors can distinguish this from a healthy 200.
+      console.error(
+        JSON.stringify({
+          outcome: "relay_health_status_unavailable",
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        }),
+      );
+      return json(
+        {
+          ok: false,
+          mode: "notification-only",
+          error: "relay health status is temporarily unavailable",
+          upstreams: Object.fromEntries(
+            ALL_WOLFX_SOURCES.map((source) => [source, "unavailable"]),
+          ),
+          upstream: {
+            status: "degraded",
+            transport: "degraded",
+            websocketStatus: "degraded",
+            httpFallbackActive: null,
+            staleSources: ALL_WOLFX_SOURCES,
+            pendingIngestSources: ALL_WOLFX_SOURCES,
+            sources: {},
+          },
+          delivery: {
+            apnsConfigured: null,
+            activeDlqIncidents: null,
+            pendingDlqPersistenceFallbacks: null,
+            activePageFailures: null,
+            activeQuarantinedFailures: null,
+            activeRetryFailures: null,
+            pendingOutboxRows: null,
+            staleOutboxRows: null,
+            status: "degraded",
+          },
+        },
+        503,
+        noStoreHeaders(),
+      );
+    }
   }
   if (
     url.pathname === "/v1/live" ||
