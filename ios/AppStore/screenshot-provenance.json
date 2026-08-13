@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "status": "pending-public-release-candidate",
+  "purpose": "Evidence record for the App Store Connect primary screenshot upload set. This file does not approve the current assets for public submission.",
+  "requiredBeforeUpload": {
+    "configuration": "Release",
+    "minimumCFBundleVersion": 3,
+    "primaryDisplayClass": "6.5",
+    "locales": ["en-US", "ja", "zh-Hans"],
+    "frames": [
+      "01-home.jpg",
+      "02-reports.jpg",
+      "03-map.jpg",
+      "04-guide.jpg",
+      "05-alert-preferences.jpg"
+    ],
+    "evidence": [
+      "signed archive or IPA SHA-256",
+      "source commit",
+      "CFBundleVersion",
+      "simulator or device model and OS",
+      "capture timestamp",
+      "reviewer approval"
+    ]
+  },
+  "currentSet": {
+    "status": "draft-only",
+    "reason": "The committed frames are structurally validated listing drafts, but they were not captured from a signed public Release candidate with CFBundleVersion 3 or later."
+  }
+}

@@ -97,11 +97,22 @@ release evidence; repeat the production proof against
    freshness at most once per minute. A source with no current durable
    WebSocket or HTTP freshness proof is stale after three minutes, so
    `/healthz` fails closed rather than claiming an unverified alert path.
-   This bounded cadence does not make the Free tier unlimited: unusual
-   sustained event ingestion, reconnect/recovery activity, or other durable
-   work can still exhaust the daily write quota. Monitor Durable Object usage
+   A bare WebSocket Upgrade is not treated as source freshness or a reconnect
+   success. The relay requires a valid Wolfx frame and waits one stable minute
+   before clearing exponential reconnect state, so an upgrade-then-close flap
+   cannot repeatedly return to the five-second retry floor. Repeated unchanged
+   ranked earthquake-list frames are deduplicated only after their bounded D1
+   cursor commits. A source may retain one active list plus one newer
+   replacement; a third distinct list before either finishes enters an
+   explicit fail-closed overload state instead of silently writing one cursor
+   per frame. The relay closes that list socket and reconnects for a new full
+   snapshot once the bounded work drains, rather than silently discarding a
+   third list. This bounded cadence does not make the Free tier unlimited: unusual sustained event
+   ingestion, reconnect/recovery activity, or other durable work can still
+   exhaust the daily write quota. Monitor Durable Object usage
    and treat quota errors or health degradation as an operational incident;
-   choose a paid plan when the observed or expected volume requires it.
+   reduce/cap the offending path and keep alert readiness fail-closed rather
+   than relying on a paid-plan upgrade as recovery.
    Deploy the separate, cron-only
    [`terminal-DLQ monitor`](../backend/cloudflare/terminal-dlq-monitor/) with a
    five-minute Cloudflare Cron Trigger. It uses only a **Queues Read** token to

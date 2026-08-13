@@ -1,0 +1,7 @@
+QuakeSignal is an independent, non-official earthquake-information app. It reads public Wolfx Open API feeds and tells people to follow official local emergency guidance. Data can be delayed, incomplete, revised, or inaccurate; notifications are best-effort and are not a government emergency-alert service.
+
+No account, sign-in, payment, demo account, review credentials, location permission, or notification permission is required for review. The Home, List, Map, Guide, and Settings tabs are usable with a generic selected city and without granting either permission.
+
+Notifications are optional. If enabled, the app uses a coarse selected-city or rounded location and chosen thresholds to decide whether a nearby earthquake report may warrant a local alert. The public Release includes an ordinary, foreground-only **Send Test Alert** control when an opted-in device has an APNs token; it does not include the InternalQA-only delayed background-training control.
+
+The app links to its Privacy Policy, Support, and Terms from Settings. Its production service uses the public HTTPS endpoint https://quakesignal-api.hopeso.workers.dev; no private CA or client certificate is required.

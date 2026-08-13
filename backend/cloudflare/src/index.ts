@@ -66,7 +66,29 @@ export interface AlertDeliveryQueueNameEnvironment {
   ALERT_DELIVERY_DLQ_FALLBACK_NAME?: string;
 }
 
-interface Env extends AlertDeliveryQueueNameEnvironment {
+/**
+ * Non-secret App Attest inputs that determine which proofs the Worker accepts.
+ * They are deliberately separate from `Env` so the effective policy can be
+ * made visible through the read-only health contract and tested without
+ * creating Durable Object or D1 bindings.
+ */
+export interface AppAttestPolicyEnvironment {
+  /** Always `required` in the checked-in production Worker configuration. */
+  APP_ATTEST_ENFORCEMENT?: string;
+  /** Kept unset in production; may only enable an isolated local dev Worker. */
+  APP_ATTEST_DEVELOPMENT_BYPASS?: string;
+  /**
+   * Accept Apple development AAGUIDs only alongside `APP_ATTEST_ENFORCEMENT`
+   * set exactly to `development`. A production deployment treats this flag as
+   * absent even if it is set by mistake.
+   */
+  APP_ATTEST_DEVELOPMENT_ENVIRONMENT?: string;
+  APP_ATTEST_APP_ID?: string;
+  APP_ATTEST_ALLOWED_BUNDLE_VERSIONS?: string;
+  APP_ATTEST_REQUIRE_RELEASE_METADATA?: string;
+}
+
+interface Env extends AlertDeliveryQueueNameEnvironment, AppAttestPolicyEnvironment {
   DB: D1Database;
   RELAY: DurableObjectNamespace;
   /**
@@ -88,19 +110,6 @@ interface Env extends AlertDeliveryQueueNameEnvironment {
   APNS_TEAM_ID?: string;
   APNS_BUNDLE_ID?: string;
   ENABLE_PRODUCTION_TEST_PUSH?: string;
-  /** Always `required` in the checked-in production Worker configuration. */
-  APP_ATTEST_ENFORCEMENT?: string;
-  /** Kept unset in production; may only enable an isolated local dev Worker. */
-  APP_ATTEST_DEVELOPMENT_BYPASS?: string;
-  /**
-   * Accept Apple development AAGUIDs only alongside `APP_ATTEST_ENFORCEMENT`
-   * set exactly to `development`. A production deployment treats this flag as
-   * absent even if it is set by mistake.
-   */
-  APP_ATTEST_DEVELOPMENT_ENVIRONMENT?: string;
-  APP_ATTEST_APP_ID?: string;
-  APP_ATTEST_ALLOWED_BUNDLE_VERSIONS?: string;
-  APP_ATTEST_REQUIRE_RELEASE_METADATA?: string;
 }
 
 interface EventRow {
@@ -245,7 +254,20 @@ const HTTP_FALLBACK_NEXT_SWEEP_AT_KEY = "http-fallback-next-sweep-at-ms";
 // survives a Durable Object restart and lets the next alarm retry a failed
 // event write without pretending the upstream is healthy.
 const PENDING_INGEST_PREFIX = "pending-ingest:";
+// Earthquake-list WebSocket messages are complete ranked snapshots, not
+// individual EEW revisions. Keep their intent in one durable cursor and commit
+// a source fingerprint only after every contained event has crossed the D1
+// boundary. A repeated unchanged 50-entry list then costs a read, rather than
+// fifty journal puts and fifty deletes.
+const PENDING_LIVE_SNAPSHOT_PREFIX = "pending-live-snapshot:";
+const PENDING_LIVE_SNAPSHOT_LATEST_PREFIX = "pending-live-snapshot-latest:";
+const LIVE_SNAPSHOT_OVERLOAD_PREFIX = "live-snapshot-overload:";
+const UPSTREAM_LIVE_SNAPSHOT_FINGERPRINT_PREFIX =
+  "upstream-live-snapshot-fingerprint:";
 const PENDING_INGEST_RETRY_DELAY_MS = 5_000;
+const LIVE_SNAPSHOT_FAILURE_RETRY_DELAY_MS = 60_000;
+const LIVE_SNAPSHOT_INGEST_BATCH_SIZE = 8;
+const LIVE_SNAPSHOT_RESUME_INTERVAL_MS = 5_000;
 // If a DLQ message cannot be written to D1, its sanitized incident evidence is
 // first kept in global Durable Object storage. This prefix is deliberately
 // separate from live-ingest journaling so recovery can finalize the outbox
@@ -286,6 +308,11 @@ const ROUTINE_RELAY_ALARM_DELAY_MS = 60_000;
 // across Durable Object eviction.
 const UPSTREAM_RECONNECT_INITIAL_DELAY_MS = 5_000;
 const UPSTREAM_RECONNECT_MAX_DELAY_MS = 5 * 60_000;
+// A bare HTTP 101 only proves the HTTP Upgrade completed. Wait for a later
+// valid Wolfx liveness frame after this stable interval before clearing an
+// exponential reconnect history; otherwise a rapid open/close flap would
+// spend three reset writes before each next failure.
+const UPSTREAM_RECONNECT_STABLE_LIVENESS_MS = 60_000;
 const UPSTREAM_UPGRADE_TIMEOUT_MS = 10_000;
 const HTTP_RECOVERY_SEED_GRACE_MS = 90_000;
 // Wolfx does not publish a formal request quota for these feeds. During a
@@ -342,6 +369,9 @@ const MAX_DEVICE_TOKEN_LENGTH = 512;
 const MAX_DEVICE_TEXT_LENGTH = 120;
 const DEVICE_RATE_LIMIT_WINDOW_SECONDS = 60;
 const APP_ATTEST_APP_ID = "5TT564H883.com.quakesignal.app";
+// Keep this module-local: Workers accepts exported handlers/classes, but a
+// primitive module export would prevent the deployed module from starting.
+const APP_ATTEST_POLICY_FORMAT = "quakesignal-app-attest-policy/v1";
 const APP_ATTEST_DEVELOPMENT_BYPASS_VALUE = "development-unsupported";
 // APNs provider tokens are valid for up to one hour and Apple asks providers
 // not to refresh them more often than every 20 minutes. This is an in-memory
@@ -493,6 +523,44 @@ type ApnsFailureDisposition =
 interface PendingIngestRecord {
   event: QueuedEvent;
   writeId: string;
+}
+
+type LiveSnapshotSource = "cenc_eqlist" | "jma_eqlist";
+
+/**
+ * A complete WebSocket earthquake-list snapshot is journaled before the first
+ * D1 slice. `retryAtMs` makes a D1 failure a bounded alarm retry rather than a
+ * repeated WebSocket-frame write loop. The committed fingerprint is separate:
+ * it is written atomically with deletion only after the final D1 slice.
+ */
+interface PendingLiveSnapshotWork {
+  version: 1;
+  source: LiveSnapshotSource;
+  fingerprint: string;
+  events: QueuedEvent[];
+  nextIndex: number;
+  createdAtMs: number;
+  retryAtMs: number;
+}
+
+interface LiveSnapshotAdvanceResult {
+  advanced: boolean;
+  hasNextWork: boolean;
+}
+
+/**
+ * A bounded ranked-list relay can preserve one active snapshot and one newer
+ * replacement. A third distinct snapshot before either commits is a capacity
+ * signal: persist it once, fail readiness closed, and stop accepting further
+ * frames until the existing durable work drains and a later frame restarts the
+ * source. This prevents a high-rate list from trading alert correctness for
+ * unbounded Durable Object writes.
+ */
+interface LiveSnapshotOverload {
+  version: 1;
+  source: LiveSnapshotSource;
+  reason: "invalid" | "overload";
+  observedAtMs: number;
 }
 
 /**
@@ -1172,6 +1240,75 @@ function isPendingIngestRecord(value: unknown): value is PendingIngestRecord {
   );
 }
 
+function isLiveSnapshotSource(source: WolfxSourceId): source is LiveSnapshotSource {
+  return source === "cenc_eqlist" || source === "jma_eqlist";
+}
+
+function isPendingLiveSnapshotWork(
+  value: unknown,
+): value is PendingLiveSnapshotWork {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const work = value as Partial<PendingLiveSnapshotWork>;
+  return (
+    work.version === 1 &&
+    typeof work.source === "string" &&
+    (work.source === "cenc_eqlist" || work.source === "jma_eqlist") &&
+    typeof work.fingerprint === "string" &&
+    work.fingerprint.length > 0 &&
+    Array.isArray(work.events) &&
+    work.events.length > 0 &&
+    work.events.length <= MAX_HTTP_SNAPSHOT_EVENTS &&
+    new Set(work.events.map((event) => event.id)).size === work.events.length &&
+    work.events.every(
+      (event) => isQueuedEvent(event) && event.sourceId === work.source,
+    ) &&
+    typeof work.nextIndex === "number" &&
+    Number.isSafeInteger(work.nextIndex) &&
+    work.nextIndex >= 0 &&
+    work.nextIndex <= work.events.length &&
+    typeof work.createdAtMs === "number" &&
+    Number.isSafeInteger(work.createdAtMs) &&
+    work.createdAtMs > 0 &&
+    typeof work.retryAtMs === "number" &&
+    Number.isSafeInteger(work.retryAtMs) &&
+    work.retryAtMs > 0
+  );
+}
+
+function liveSnapshotWorkStorageKey(
+  source: LiveSnapshotSource,
+): string {
+  return `${PENDING_LIVE_SNAPSHOT_PREFIX}${source}`;
+}
+
+function liveSnapshotLatestStorageKey(source: LiveSnapshotSource): string {
+  return `${PENDING_LIVE_SNAPSHOT_LATEST_PREFIX}${source}`;
+}
+
+function liveSnapshotOverloadStorageKey(source: LiveSnapshotSource): string {
+  return `${LIVE_SNAPSHOT_OVERLOAD_PREFIX}${source}`;
+}
+
+function isLiveSnapshotOverload(
+  value: unknown,
+): value is LiveSnapshotOverload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const overload = value as Partial<LiveSnapshotOverload>;
+  return (
+    overload.version === 1 &&
+    (overload.source === "cenc_eqlist" || overload.source === "jma_eqlist") &&
+    (overload.reason === "invalid" || overload.reason === "overload") &&
+    typeof overload.observedAtMs === "number" &&
+    Number.isSafeInteger(overload.observedAtMs) &&
+    overload.observedAtMs > 0
+  );
+}
+
+function liveSnapshotFingerprintStorageKey(source: LiveSnapshotSource): string {
+  return `${UPSTREAM_LIVE_SNAPSHOT_FINGERPRINT_PREFIX}${source}`;
+}
+
+
 function isAlertDeliveryMessage(value: unknown): value is AlertDeliveryMessage {
   if (!value || typeof value !== "object") return false;
   const message = value as Partial<AlertDeliveryMessage>;
@@ -1767,6 +1904,21 @@ async function httpSnapshotFingerprint(message: unknown): Promise<string> {
   return await sha256Hex(JSON.stringify(message));
 }
 
+/**
+ * Wolfx list frames may change non-event envelope fields or rank ordering
+ * without changing the report revisions we persist. Fingerprint the bounded,
+ * normalized snapshot in a stable ID order so those harmless replays do not
+ * recreate Durable Object work after the prior list has committed.
+ */
+async function liveSnapshotFingerprint(
+  events: readonly NormalizedEvent[],
+): Promise<string> {
+  const canonical = events
+    .map(snapshotEvent)
+    .sort((left, right) => left.id.localeCompare(right.id));
+  return sha256Hex(JSON.stringify(canonical));
+}
+
 function sourceFromMessage(message: unknown): WolfxSourceId | null {
   if (!message || typeof message !== "object" || !("type" in message)) {
     return null;
@@ -2002,25 +2154,24 @@ async function persistEventAndOutbox(
 }
 
 /**
- * Persist a small, already-validated HTTP snapshot slice with two D1 binding
- * calls: one read of the prior revisions and one atomic write batch. This is
- * intentionally separate from the live WebSocket path, whose one-event
- * journal gives tighter failure isolation. The HTTP alternate transport may
- * contain fifty report entries, so issuing a get+batch per entry would exceed
- * the Workers Free D1 invocation budget.
+ * Persist a small, already-validated earthquake-list snapshot slice with two
+ * D1 binding calls: one read of the prior revisions and one atomic write batch.
+ * Both HTTP recovery and live list WebSockets use it because a ranked list can
+ * contain fifty reports; issuing a get+batch per entry would exceed the
+ * Workers Free D1 invocation budget.
  */
 async function persistHttpSnapshotEvents(
   db: D1Database,
   snapshots: readonly QueuedEvent[],
-  mode: "initial" | "recovery",
+  mode: "initial" | "recovery" | "live",
 ): Promise<void> {
   if (snapshots.length === 0) return;
   if (snapshots.length > HTTP_SNAPSHOT_INGEST_BATCH_SIZE) {
-    throw new RangeError("HTTP snapshot persistence slice exceeds its D1-safe bound");
+    throw new RangeError("snapshot persistence slice exceeds its D1-safe bound");
   }
   const ids = snapshots.map((event) => event.id);
   if (new Set(ids).size !== ids.length) {
-    throw new TypeError("HTTP snapshot persistence slice contains duplicate event IDs");
+    throw new TypeError("snapshot persistence slice contains duplicate event IDs");
   }
   const placeholders = ids.map(() => "?").join(", ");
   const existing = await db
@@ -3106,6 +3257,13 @@ export class QuakeRelay {
   // overlapping status/alarm invocations cannot start duplicate connections
   // for the same Wolfx route.
   private readonly connectingRoutes = new Set<UpstreamRoute>();
+  // A successful HTTP Upgrade is not upstream liveness. Track each socket's
+  // first valid Wolfx frame in memory and reset its durable exponential
+  // reconnect history only after it remains live for a bounded interval.
+  // This keeps an Upgrade-then-close flap from returning to the five-second
+  // retry floor and spending Durable Object rows indefinitely.
+  private readonly upstreamLivenessSinceMs = new Map<UpstreamRoute, number>();
+  private readonly stableReconnectBackoffResetRoutes = new Set<UpstreamRoute>();
   private readonly statuses = new Map<WolfxSourceId, string>();
   private readonly lastSuccessfulUpstreamMs = new Map<WolfxSourceId, number>();
   private readonly lastSuccessfulHttpPollMs = new Map<WolfxSourceId, number>();
@@ -3129,6 +3287,13 @@ export class QuakeRelay {
   private readonly freshnessUpdates = new Map<string, Promise<void>>();
   private httpSeedInFlight: Promise<void> | null = null;
   private pendingIngestDrain: Promise<void> | null = null;
+  // One source can publish the same complete ranked list more than once while
+  // its first bounded D1 slices are still settling. Keep one drain per source
+  // so duplicate frames share the durable cursor instead of racing it.
+  private readonly liveSnapshotDrains = new Map<
+    LiveSnapshotSource,
+    Promise<void>
+  >();
   /**
    * A status probe must not repeatedly run the complete outbox/reconciliation
    * startup path. Keep the lightweight instance bootstrap single-flight; an
@@ -3383,11 +3548,22 @@ export class QuakeRelay {
         await this.ensureUpstreams();
         return;
       }
+      if (await this.hasAnyActiveLiveSnapshotWork()) {
+        // A live ranked-list cursor has the same bounded-D1 requirement as an
+        // HTTP cursor. Whether it is due now or waiting for its five-second
+        // continuation, do not combine its recovery window with ordinary D1
+        // journal/outbox work. The final scheduler below retains the exact
+        // cursor retry deadline.
+        if (await this.drainPendingLiveSnapshotWorks()) return;
+        await this.ensureUpstreams();
+        return;
+      }
       // Recover a D1-persistence fallback before ordinary outbox replay. If
       // D1 has recovered, this atomically terminalizes the original outbox row
       // first, so its expired lease cannot resurrect a failed alert page.
       await this.reconcileDlqPersistenceFallbacks();
       await this.migrateLegacyPendingDeliveries();
+      if (await this.drainPendingLiveSnapshotWorks()) return;
       await this.drainPendingIngestJournal();
       await this.flushAlertDeliveryOutbox(ROUTINE_OUTBOX_FLUSH_BATCH_SIZE);
       await this.purgeExpiredDevicesIfDue();
@@ -3419,6 +3595,10 @@ export class QuakeRelay {
     // D1 incident write is the terminal decision for the original page.
     await this.reconcileDlqPersistenceFallbacks();
     await this.migrateLegacyPendingDeliveries();
+    if (await this.hasAnyActiveLiveSnapshotWork()) {
+      if (alarm === null) await this.scheduleRoutineRelayAlarm();
+      return;
+    }
     await this.drainPendingIngestJournal();
     await this.flushAlertDeliveryOutbox(ROUTINE_OUTBOX_FLUSH_BATCH_SIZE);
     await this.purgeExpiredDevicesIfDue();
@@ -3693,6 +3873,434 @@ export class QuakeRelay {
         }
       }
     }
+  }
+
+  /**
+   * Read validated complete-list work in creation order. Unlike a point-event
+   * journal, a complete ranked list is one durable unit: the final committed
+   * fingerprint is written only after every bounded D1 slice succeeds.
+   */
+  private async pendingLiveSnapshotWorks(
+    source?: LiveSnapshotSource,
+  ): Promise<Array<[string, PendingLiveSnapshotWork]>> {
+    const prefix = source === undefined
+      ? PENDING_LIVE_SNAPSHOT_PREFIX
+      : liveSnapshotWorkStorageKey(source);
+    const pending = await this.state.storage.list<unknown>({
+      prefix,
+    });
+    const works: Array<[string, PendingLiveSnapshotWork]> = [];
+    for (const [key, value] of pending) {
+      if (
+        !isPendingLiveSnapshotWork(value) ||
+        key !== liveSnapshotWorkStorageKey(value.source)
+      ) {
+        // Never delete an unreadable live snapshot. It is safer to leave
+        // readiness degraded than to silently lose reports that already reached
+        // the relay's durable boundary.
+        console.error(JSON.stringify({ outcome: "invalid_live_snapshot_record" }));
+        continue;
+      }
+      works.push([key, value]);
+    }
+    return works.sort(([, left], [, right]) =>
+      left.createdAtMs - right.createdAtMs ||
+      left.fingerprint.localeCompare(right.fingerprint)
+    );
+  }
+
+  private async hasPendingLiveSnapshot(
+    source: LiveSnapshotSource,
+  ): Promise<boolean> {
+    const [active, latest, overload] = await Promise.all([
+      this.state.storage.get<unknown>(liveSnapshotWorkStorageKey(source)),
+      this.state.storage.get<unknown>(liveSnapshotLatestStorageKey(source)),
+      this.state.storage.get<unknown>(liveSnapshotOverloadStorageKey(source)),
+    ]);
+    // Presence, rather than successful decoding, is the readiness fence. An
+    // alarm can repair only known-good records; a malformed key must remain
+    // visible until an operator resolves it rather than being hidden by a
+    // heartbeat or HTTP response.
+    return active !== undefined || latest !== undefined || overload !== undefined;
+  }
+
+  private async hasAnyActiveLiveSnapshotWork(): Promise<boolean> {
+    // A marker-only invalid/overload condition is deliberately health-stale,
+    // but it owns no D1 cursor. Let normal outbox, DLQ, and journal recovery
+    // continue in that state instead of starving unrelated delivery work.
+    return (await this.pendingLiveSnapshotWorks()).length > 0;
+  }
+
+  private flagLiveSnapshotBlocked(
+    source: LiveSnapshotSource,
+    reason: LiveSnapshotOverload["reason"],
+  ): Promise<void> {
+    return this.liveSnapshotDrain(source, async () => {
+      const key = liveSnapshotOverloadStorageKey(source);
+      const current = await this.state.storage.get<unknown>(key);
+      // The first durable failure is enough to fail readiness closed. Do not
+      // turn an invalid or overloaded upstream into a write-per-frame loop.
+      if (current !== undefined) return;
+      await this.state.storage.put(key, {
+        version: 1,
+        source,
+        reason,
+        observedAtMs: Date.now(),
+      } satisfies LiveSnapshotOverload);
+    });
+  }
+
+  private async backpressureLiveSnapshotSource(
+    source: LiveSnapshotSource,
+  ): Promise<void> {
+    const socket = this.upstreams.get(source);
+    if (!socket) return;
+    // Drop route ownership before close so its listener cannot schedule a
+    // duplicate recovery. This is explicit transport backpressure, not a
+    // hidden discard: health remains fail-closed under the overload marker and
+    // the next reconnect asks Wolfx for a fresh complete list after the two
+    // durable cursors finish.
+    this.upstreams.delete(source);
+    try {
+      socket.close(1013, "live snapshot backpressure");
+    } catch {
+      // The scheduled reconnect below is authoritative even if the runtime
+      // already closed the WebSocket before this explicit close request.
+    }
+    await this.scheduleUpstreamReconnect(
+      source,
+      "wolfx_upstream_websocket_error",
+      { reason: "live_snapshot_overload" },
+    );
+  }
+
+  private liveSnapshotDrain<T>(
+    source: LiveSnapshotSource,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.liveSnapshotDrains.get(source) ?? Promise.resolve();
+    const queued = previous.then(operation, operation);
+    const serial = queued.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.liveSnapshotDrains.set(source, serial);
+    void serial.then(
+      () => {
+        if (this.liveSnapshotDrains.get(source) === serial) {
+          this.liveSnapshotDrains.delete(source);
+        }
+      },
+      () => {
+        if (this.liveSnapshotDrains.get(source) === serial) {
+          this.liveSnapshotDrains.delete(source);
+        }
+      },
+    );
+    return queued;
+  }
+
+  /**
+   * Journal one complete EQLIST WebSocket frame before its first D1 write. A
+   * duplicate first checks the committed fingerprint and active work, so it
+   * does not recreate fifty one-event journals after the prior frame drained.
+   * One source has at most one active cursor and one latest replacement. The
+   * active cursor is never overwritten once durable, even before its first D1
+   * slice; the newest later list waits in a single coalescing slot until that
+   * cursor commits. This bounds changed-frame storage without dropping event
+   * intent that has already crossed the Durable Object boundary.
+   */
+  private enqueueLiveSnapshot(
+    source: LiveSnapshotSource,
+    normalizedEvents: readonly NormalizedEvent[],
+  ): Promise<void> {
+    return this.liveSnapshotDrain(source, async () => {
+      const fingerprint = await liveSnapshotFingerprint(normalizedEvents);
+      const workKey = liveSnapshotWorkStorageKey(source);
+      const latestKey = liveSnapshotLatestStorageKey(source);
+      const overloadKey = liveSnapshotOverloadStorageKey(source);
+      const [activeValue, latestValue, overloadValue, committed] = await Promise.all([
+        this.state.storage.get<unknown>(workKey),
+        this.state.storage.get<unknown>(latestKey),
+        this.state.storage.get<unknown>(overloadKey),
+        this.state.storage.get<string>(liveSnapshotFingerprintStorageKey(source)),
+      ]);
+      if (
+        activeValue !== undefined &&
+        (!isPendingLiveSnapshotWork(activeValue) || activeValue.source !== source)
+      ) {
+        // A malformed durable cursor is an integrity failure, not a reason to
+        // overwrite unknown event intent with a new frame. Health remains
+        // fail-closed through the raw pending-key probe.
+        console.error(JSON.stringify({ outcome: "invalid_live_snapshot_record" }));
+        return;
+      }
+      if (
+        latestValue !== undefined &&
+        (!isPendingLiveSnapshotWork(latestValue) || latestValue.source !== source)
+      ) {
+        console.error(JSON.stringify({ outcome: "invalid_live_snapshot_latest" }));
+        return;
+      }
+      if (
+        overloadValue !== undefined &&
+        (!isLiveSnapshotOverload(overloadValue) || overloadValue.source !== source)
+      ) {
+        console.error(JSON.stringify({ outcome: "invalid_live_snapshot_overload" }));
+        return;
+      }
+      let active = activeValue as PendingLiveSnapshotWork | undefined;
+      let latest = latestValue as PendingLiveSnapshotWork | undefined;
+      const overload = overloadValue as LiveSnapshotOverload | undefined;
+
+      // This cannot occur during a normal final-cursor transaction, but make
+      // recovery robust against an interrupted older revision: promote the
+      // one valid durable replacement before considering the incoming frame.
+      if (!active && latest) {
+        const promote = async (target: DurableKeyValueStore): Promise<void> => {
+          await target.put(workKey, latest);
+          await target.delete(latestKey);
+        };
+        if (typeof this.state.storage.transaction === "function") {
+          await this.state.storage.transaction((transaction) => promote(transaction));
+        } else {
+          await promote(this.state.storage);
+        }
+        active = latest;
+        latest = undefined;
+      }
+
+      if (overload) {
+        if (active || latest) {
+          // Existing D1-safe work remains the only accepted intent while the
+          // source is overloaded. Close the direct list socket and recover a
+          // fresh complete snapshot after these cursors drain; do not keep
+          // accepting and silently replacing frames that cannot fit in the
+          // bounded durable window.
+          if (overload.reason === "overload") {
+            await this.backpressureLiveSnapshotSource(source);
+          }
+          await this.drainLiveSnapshotWorkForSource(source);
+          return;
+        }
+      }
+      if (!active && !latest && committed === fingerprint) {
+        // A later valid frame exactly matching the committed snapshot is safe
+        // evidence that the bounded overload window has ended. Clear the
+        // stale marker before allowing a freshness checkpoint.
+        if (overload) await this.state.storage.delete(overloadKey);
+        await this.markSourceSuccessful(source);
+        return;
+      }
+
+      if (active?.fingerprint !== fingerprint && latest?.fingerprint !== fingerprint) {
+        const createdAtMs = Date.now();
+        const work: PendingLiveSnapshotWork = {
+          version: 1,
+          source,
+          fingerprint,
+          events: normalizedEvents.map(snapshotEvent),
+          nextIndex: 0,
+          createdAtMs,
+          retryAtMs: createdAtMs,
+        };
+        if (!active) {
+          const replace = async (target: DurableKeyValueStore): Promise<void> => {
+            await target.put(workKey, work);
+            // A valid replacement and marker clear must be atomic: a crash
+            // between separate operations could otherwise make old freshness
+            // look ready before the new event snapshot is durable.
+            if (overload) await target.delete(overloadKey);
+          };
+          if (typeof this.state.storage.transaction === "function") {
+            await this.state.storage.transaction((transaction) => replace(transaction));
+          } else {
+            await replace(this.state.storage);
+          }
+          active = work;
+        } else if (!latest) {
+          // Never overwrite an active cursor once it crossed the Durable
+          // Object boundary. The second slot is the newest full replacement
+          // and is promoted only after the active cursor commits all slices.
+          await this.state.storage.put(latestKey, work);
+          latest = work;
+        } else {
+          // A third distinct frame cannot be represented without either
+          // discarding durable event intent or writing once per frame. Record
+          // a single overload marker and fail closed until existing cursors
+          // drain; subsequent frames cause no additional storage churn.
+          await this.state.storage.put(overloadKey, {
+            version: 1,
+            source,
+            reason: "overload",
+            observedAtMs: createdAtMs,
+          } satisfies LiveSnapshotOverload);
+          console.error(JSON.stringify({
+            outcome: "live_snapshot_overload",
+            source,
+          }));
+          await this.backpressureLiveSnapshotSource(source);
+        }
+        // The durable cursor now owns recovery even if this instance is evicted
+        // before its first D1 slice. Ask for a prompt but bounded continuation.
+        await this.scheduleRelayAlarm(Date.now() + 1);
+      }
+      await this.drainLiveSnapshotWorkForSource(source);
+    });
+  }
+
+  /**
+   * Process at most one eight-event slice. Keeping this separate from normal
+   * outbox/journal maintenance prevents a fifty-report list from expanding an
+   * ordinary relay alarm into an unbounded D1 turn.
+   */
+  private async drainLiveSnapshotWorkForSource(
+    source: LiveSnapshotSource,
+  ): Promise<boolean> {
+    const now = Date.now();
+    const pending = await this.pendingLiveSnapshotWorks(source);
+    const due = pending.find(([, work]) => work.retryAtMs <= now);
+    if (!due) return false;
+    const [key, work] = due;
+    const start = work.nextIndex;
+    const end = Math.min(
+      work.events.length,
+      start + LIVE_SNAPSHOT_INGEST_BATCH_SIZE,
+    );
+    try {
+      await persistHttpSnapshotEvents(
+        this.env.DB,
+        work.events.slice(start, end),
+        "live",
+      );
+    } catch (error) {
+      await this.deferLiveSnapshotWork(key, work);
+      console.error(
+        JSON.stringify({
+          source: work.source,
+          outcome: "live_snapshot_d1_retry",
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        }),
+      );
+      return true;
+    }
+
+    const advanced = await this.advanceLiveSnapshotWork(key, work, end);
+    if (!advanced.advanced) return true;
+    if (advanced.hasNextWork) {
+      await this.scheduleRelayAlarm(Date.now() + LIVE_SNAPSHOT_RESUME_INTERVAL_MS);
+      return true;
+    }
+    // The advance transaction deleted the durability fence before this update,
+    // so this is the first point where source freshness may be published.
+    await this.markSourceSuccessful(work.source);
+    return true;
+  }
+
+  /**
+   * The relay alarm is not itself ordered with a WebSocket `waitUntil` after
+   * either path begins external D1 I/O. Select one due source, then enter that
+   * source's same in-memory serial queue used by frame ingestion. The durable
+   * cursor checks below remain the cross-instance crash fence.
+   */
+  private async drainPendingLiveSnapshotWorks(): Promise<boolean> {
+    const now = Date.now();
+    const due = (await this.pendingLiveSnapshotWorks()).find(
+      ([, work]) => work.retryAtMs <= now,
+    );
+    if (!due) return false;
+    return this.liveSnapshotDrain(
+      due[1].source,
+      () => this.drainLiveSnapshotWorkForSource(due[1].source),
+    );
+  }
+
+  private async deferLiveSnapshotWork(
+    workKey: string,
+    work: PendingLiveSnapshotWork,
+  ): Promise<void> {
+    const retryAtMs = Date.now() + LIVE_SNAPSHOT_FAILURE_RETRY_DELAY_MS;
+    const storage = this.state.storage;
+    const defer = async (target: DurableKeyValueStore): Promise<boolean> => {
+      const current = await target.get<unknown>(workKey);
+      if (
+        !isPendingLiveSnapshotWork(current) ||
+        current.fingerprint !== work.fingerprint ||
+        current.createdAtMs !== work.createdAtMs ||
+        current.nextIndex !== work.nextIndex
+      ) return false;
+      await target.put(workKey, { ...work, retryAtMs });
+      return true;
+    };
+    const deferred = typeof storage.transaction === "function"
+      ? await storage.transaction((transaction) => defer(transaction))
+      : await defer(storage);
+    if (deferred) await this.scheduleRelayAlarm(retryAtMs);
+  }
+
+  /**
+   * Move a cursor only if it is still the exact work that D1 just committed.
+   * The final transition writes the committed fingerprint and removes the work
+   * in one Durable Object transaction; crashing on either side cannot make an
+   * uncommitted list appear deduplicated.
+   */
+  private async advanceLiveSnapshotWork(
+    workKey: string,
+    work: PendingLiveSnapshotWork,
+    nextIndex: number,
+  ): Promise<LiveSnapshotAdvanceResult> {
+    const storage = this.state.storage;
+    const advance = async (
+      target: DurableKeyValueStore,
+    ): Promise<LiveSnapshotAdvanceResult> => {
+      const current = await target.get<unknown>(workKey);
+      if (
+        !isPendingLiveSnapshotWork(current) ||
+        current.fingerprint !== work.fingerprint ||
+        current.createdAtMs !== work.createdAtMs ||
+        current.nextIndex !== work.nextIndex
+      ) return { advanced: false, hasNextWork: false };
+      if (nextIndex < work.events.length) {
+        await target.put(workKey, {
+          ...work,
+          nextIndex,
+          retryAtMs: Date.now() + LIVE_SNAPSHOT_RESUME_INTERVAL_MS,
+        });
+        return { advanced: true, hasNextWork: true };
+      }
+      const latestKey = liveSnapshotLatestStorageKey(work.source);
+      const latestValue = await target.get<unknown>(latestKey);
+      if (
+        latestValue !== undefined &&
+        (!isPendingLiveSnapshotWork(latestValue) ||
+          latestValue.source !== work.source)
+      ) {
+        // Do not discard a completed snapshot or overwrite an unreadable
+        // replacement. Repeating the final D1-safe slice is idempotent and
+        // preserves a fail-closed recovery path until the record is repaired.
+        console.error(JSON.stringify({ outcome: "invalid_live_snapshot_latest" }));
+        return { advanced: false, hasNextWork: false };
+      }
+      const latest = latestValue as PendingLiveSnapshotWork | undefined;
+      await target.put(
+        liveSnapshotFingerprintStorageKey(work.source),
+        work.fingerprint,
+      );
+      if (latest) {
+        await target.put(workKey, {
+          ...latest,
+          nextIndex: 0,
+          retryAtMs: Date.now() + LIVE_SNAPSHOT_RESUME_INTERVAL_MS,
+        });
+        await target.delete(latestKey);
+        return { advanced: true, hasNextWork: true };
+      } else {
+        await target.delete(workKey);
+        return { advanced: true, hasNextWork: false };
+      }
+    };
+    if (typeof storage.transaction !== "function") return advance(storage);
+    return storage.transaction((transaction) => advance(transaction));
   }
 
   /**
@@ -4649,7 +5257,15 @@ export class QuakeRelay {
     const httpFallbackActive = await this.readHttpFallbackActive();
     const sourceHealth = await Promise.all(
       ALL_WOLFX_SOURCES.map(async (source) => {
-        const [persisted, persistedHttp, pendingJournal, pendingHttpWork] = await Promise.all([
+        const [
+          persisted,
+          persistedHttp,
+          pendingJournal,
+          pendingHttpWork,
+          pendingLiveSnapshotWork,
+          pendingLiveSnapshotLatest,
+          pendingLiveSnapshotOverload,
+        ] = await Promise.all([
           this.state.storage.get<number>(
             `${UPSTREAM_LAST_SUCCESS_PREFIX}${source}`,
           ),
@@ -4661,6 +5277,15 @@ export class QuakeRelay {
             limit: 1,
           }),
           this.state.storage.get<unknown>(httpSnapshotWorkStorageKey(source)),
+          isLiveSnapshotSource(source)
+            ? this.state.storage.get<unknown>(liveSnapshotWorkStorageKey(source))
+            : Promise.resolve(undefined),
+          isLiveSnapshotSource(source)
+            ? this.state.storage.get<unknown>(liveSnapshotLatestStorageKey(source))
+            : Promise.resolve(undefined),
+          isLiveSnapshotSource(source)
+            ? this.state.storage.get<unknown>(liveSnapshotOverloadStorageKey(source))
+            : Promise.resolve(undefined),
         ]);
         const lastWebSocketSuccessMs = this.lastSuccessfulUpstreamMs.get(source) ??
           persisted;
@@ -4668,6 +5293,10 @@ export class QuakeRelay {
           persistedHttp;
         const status = this.statuses.get(source) ?? "connecting";
         const hasPendingLiveIngest = pendingJournal.size > 0;
+        const hasPendingLiveSnapshot =
+          pendingLiveSnapshotWork !== undefined ||
+          pendingLiveSnapshotLatest !== undefined ||
+          pendingLiveSnapshotOverload !== undefined;
         // A malformed cursor is still an unfinished durability signal. Fail
         // closed until an alarm clears/rebuilds it; never let a prior fresh
         // HTTP timestamp hide corrupt alternate-transport work.
@@ -4675,12 +5304,12 @@ export class QuakeRelay {
         const websocketStale = isUpstreamSourceStale(
           status,
           lastWebSocketSuccessMs,
-          hasPendingLiveIngest,
+          hasPendingLiveIngest || hasPendingLiveSnapshot,
           now,
         );
         const httpStale = isHttpFallbackSourceStale(
           lastHttpSuccessMs,
-          hasPendingLiveIngest || hasPendingHttpSnapshot,
+          hasPendingLiveIngest || hasPendingHttpSnapshot || hasPendingLiveSnapshot,
           now,
         );
         const transport = !websocketStale
@@ -4705,6 +5334,7 @@ export class QuakeRelay {
             ? new Date(lastHttpSuccessMs).toISOString()
             : null,
           pendingLiveIngest: hasPendingLiveIngest,
+          pendingLiveSnapshot: hasPendingLiveSnapshot,
           pendingHttpSnapshot: hasPendingHttpSnapshot,
           websocketStale,
           httpStale,
@@ -4712,7 +5342,8 @@ export class QuakeRelay {
           // even when WebSocket traffic has recovered: otherwise /healthz
           // could declare success before the alternate transport's durable
           // cursor has finished committing its bounded event slices.
-          stale: transport === "unavailable" || hasPendingHttpSnapshot,
+          stale: transport === "unavailable" || hasPendingHttpSnapshot ||
+            hasPendingLiveSnapshot,
         };
       }),
     );
@@ -4720,7 +5351,10 @@ export class QuakeRelay {
       .filter((source) => source.stale)
       .map((source) => source.source);
     const pendingIngestSources = sourceHealth
-      .filter((source) => source.pendingLiveIngest || source.pendingHttpSnapshot)
+      .filter((source) =>
+        source.pendingLiveIngest || source.pendingLiveSnapshot ||
+        source.pendingHttpSnapshot
+      )
       .map((source) => source.source);
     const websocketStatus = sourceHealth.every((source) => !source.websocketStale)
       ? "ready"
@@ -4750,6 +5384,7 @@ export class QuakeRelay {
             lastWebSocketSuccessUtc: source.lastWebSocketSuccessUtc,
             lastHttpSuccessUtc: source.lastHttpSuccessUtc,
             pendingLiveIngest: source.pendingLiveIngest,
+            pendingLiveSnapshot: source.pendingLiveSnapshot,
             pendingHttpSnapshot: source.pendingHttpSnapshot,
             websocketStale: source.websocketStale,
             httpStale: source.httpStale,
@@ -4823,14 +5458,16 @@ export class QuakeRelay {
       const now = Date.now();
       const existing = await this.state.storage.getAlarm();
       const routineAlarmAt = preferredRelayAlarmAt(null, now);
-      const [fallbackAlarmAt, reconnectAlarmAt] = await Promise.all([
+      const [fallbackAlarmAt, reconnectAlarmAt, liveSnapshotAlarmAt] = await Promise.all([
         this.nextHttpFallbackAlarmAt(now),
         this.nextUpstreamReconnectAlarmAt(now),
+        this.nextLiveSnapshotAlarmAt(now),
       ]);
       const requestedAlarmAt = Math.min(
         routineAlarmAt,
         ...(fallbackAlarmAt === null ? [] : [fallbackAlarmAt]),
         ...(reconnectAlarmAt === null ? [] : [reconnectAlarmAt]),
+        ...(liveSnapshotAlarmAt === null ? [] : [liveSnapshotAlarmAt]),
       );
       if (
         typeof existing === "number" &&
@@ -4840,6 +5477,13 @@ export class QuakeRelay {
       ) return;
       await this.state.storage.setAlarm(requestedAlarmAt);
     });
+  }
+
+  private async nextLiveSnapshotAlarmAt(now: number): Promise<number | null> {
+    const pending = await this.pendingLiveSnapshotWorks();
+    if (pending.length === 0) return null;
+    const retryAtMs = Math.min(...pending.map(([, work]) => work.retryAtMs));
+    return retryAtMs <= now ? now + 1 : retryAtMs;
   }
 
   private async connectWithUpgrade(route: UpstreamRoute): Promise<void> {
@@ -4916,6 +5560,7 @@ export class QuakeRelay {
     status: "closed" | "error" = "error",
   ): Promise<void> {
     return this.serializeRelayAlarm(async () => {
+      this.clearUpstreamLiveness(route);
       const now = Date.now();
       const failureKey = `${UPSTREAM_RECONNECT_FAILURE_PREFIX}${route}`;
       const currentFailures = await this.state.storage.get<number>(failureKey);
@@ -4971,8 +5616,15 @@ export class QuakeRelay {
 
   private resetUpstreamReconnectBackoff(
     route: UpstreamRoute,
+    expectedSocket?: WebSocket,
   ): Promise<void> {
     return this.serializeRelayAlarm(async () => {
+      // A close/error can remove or replace the socket while a message's
+      // freshness write is still pending. Never let that old message clear
+      // the new failure state after it has lost ownership of the route.
+      if (expectedSocket && this.upstreams.get(route) !== expectedSocket) {
+        return;
+      }
       // Keep an existing fixed key set instead of deleting it so a post-success
       // socket event cannot race a stale absence check. If a route has never
       // failed, absence already means zero and does not need three new writes.
@@ -4991,9 +5643,12 @@ export class QuakeRelay {
   }
 
   private activateUpstreamSocket(route: UpstreamRoute, socket: WebSocket): void {
-    this.setRouteStatus(route, "open");
-    this.state.waitUntil(this.markRouteSuccessful(route));
-    this.state.waitUntil(this.resetUpstreamReconnectBackoff(route));
+    this.clearUpstreamLiveness(route);
+    this.setRouteStatus(route, "connecting");
+    // Do not treat the HTTP 101 as a usable upstream response. A peer can
+    // accept the Upgrade and immediately close; freshness and reconnect
+    // recovery begin only after a later valid Wolfx message reaches the
+    // listener below.
     const queries =
       route === "all_eew"
         ? [
@@ -5015,10 +5670,17 @@ export class QuakeRelay {
   ): void {
     socket.addEventListener("message", (event) => {
       if (typeof event.data !== "string") return;
+      // A deliberate backpressure close removes route ownership before the
+      // runtime finishes draining already-buffered WebSocket events. Never
+      // accept those orphaned frames after the relay has switched to a fresh
+      // reconnect/query cycle.
+      if (this.upstreams.get(route) !== socket) return;
       try {
         const message: unknown = JSON.parse(event.data);
         if (isHeartbeat(message) || isPong(message)) {
-          this.state.waitUntil(this.markRouteSuccessful(route));
+          this.state.waitUntil(
+            this.recordUpstreamLiveness(route, socket, "route"),
+          );
           return;
         }
         const source =
@@ -5027,9 +5689,38 @@ export class QuakeRelay {
             : route;
         if (!source) return;
         const normalizedEvents = normalizeMessages(source, message);
+        if (isLiveSnapshotSource(source) &&
+          !isStructurallyValidHttpSnapshot(source, message, normalizedEvents)) {
+          // A list route has no non-event payload that can prove source
+          // freshness. In particular, an empty/malformed ranked list must not
+          // turn a healthy socket into a fresh alert source.
+          console.warn(
+            JSON.stringify({
+              outcome: "wolfx_live_snapshot_invalid",
+              source,
+            }),
+          );
+          this.state.waitUntil(this.flagLiveSnapshotBlocked(source, "invalid"));
+          return;
+        }
         if (normalizedEvents.length === 0) {
           // A valid non-event frame still proves the WebSocket route is alive.
-          this.state.waitUntil(this.markSourceSuccessful(source));
+          this.state.waitUntil(
+            this.recordUpstreamLiveness(route, socket, source),
+          );
+          return;
+        }
+        // A normalized event proves transport liveness, but its source cannot
+        // become fresh until the journal crosses the D1/outbox boundary.
+        this.state.waitUntil(this.recordUpstreamLiveness(route, socket, null));
+        if (isLiveSnapshotSource(source)) {
+          // Ranked earthquake lists are full snapshots. Journal their complete
+          // normalized list once, then fingerprint only after every bounded D1
+          // slice commits; a repeated unchanged frame therefore makes no
+          // per-event Durable Object writes.
+          this.state.waitUntil(
+            this.enqueueLiveSnapshot(source, normalizedEvents),
+          );
           return;
         }
         for (const normalized of normalizedEvents) {
@@ -5091,6 +5782,55 @@ export class QuakeRelay {
     const sources: WolfxSourceId[] =
       route === "all_eew" ? EEW_SOURCES : [route];
     for (const source of sources) this.statuses.set(source, status);
+  }
+
+  private clearUpstreamLiveness(route: UpstreamRoute): void {
+    this.upstreamLivenessSinceMs.delete(route);
+    this.stableReconnectBackoffResetRoutes.delete(route);
+  }
+
+  /**
+   * Record evidence that a socket has carried a syntactically valid Wolfx
+   * frame. Freshness follows the frame type's existing durability rule; the
+   * route-level reconnect backoff is independently reset only after stable
+   * liveness so a brief open/frame/close cycle remains exponentially paced.
+   */
+  private async recordUpstreamLiveness(
+    route: UpstreamRoute,
+    socket: WebSocket,
+    freshness: "route" | WolfxSourceId | null,
+  ): Promise<void> {
+    if (this.upstreams.get(route) !== socket) return;
+    const now = Date.now();
+    const livenessSinceMs = this.upstreamLivenessSinceMs.get(route) ?? now;
+    this.upstreamLivenessSinceMs.set(route, livenessSinceMs);
+    this.setRouteStatus(route, "open");
+
+    if (freshness === "route") {
+      await this.markRouteSuccessful(route);
+    } else if (freshness !== null) {
+      await this.markSourceSuccessful(freshness);
+    }
+
+    // A close listener deletes the socket synchronously before it queues its
+    // durable recovery. Re-check ownership after any freshness I/O so a stale
+    // message cannot zero that recovery state.
+    if (
+      this.upstreams.get(route) !== socket ||
+      now - livenessSinceMs < UPSTREAM_RECONNECT_STABLE_LIVENESS_MS ||
+      this.stableReconnectBackoffResetRoutes.has(route)
+    ) {
+      return;
+    }
+    this.stableReconnectBackoffResetRoutes.add(route);
+    try {
+      await this.resetUpstreamReconnectBackoff(route, socket);
+    } catch (error) {
+      // Retry on a subsequent valid frame if Durable Object storage is
+      // temporarily unavailable; never claim a reset that did not persist.
+      this.stableReconnectBackoffResetRoutes.delete(route);
+      throw error;
+    }
   }
 
   private async markRouteSuccessful(route: UpstreamRoute): Promise<void> {
@@ -5171,10 +5911,13 @@ export class QuakeRelay {
         prefix: `${PENDING_INGEST_PREFIX}${source}:`,
         limit: 1,
       });
+      const pendingLiveSnapshot = isLiveSnapshotSource(source)
+        ? await this.hasPendingLiveSnapshot(source)
+        : false;
       // A heartbeat can prove that a socket is open, but not that its preceding
-      // event was durably committed. Leave readiness stale until the journal for
-      // this source drains successfully.
-      if (pendingForSource.size > 0) return;
+      // event or complete ranked list was durably committed. Leave readiness
+      // stale until the appropriate journal drains successfully.
+      if (pendingForSource.size > 0 || pendingLiveSnapshot) return;
       const now = Date.now();
       const checkpointAvailable = await this.checkpointFreshness(
         source,
@@ -5194,9 +5937,12 @@ export class QuakeRelay {
         prefix: `${PENDING_INGEST_PREFIX}${source}:`,
         limit: 1,
       });
+      const pendingLiveSnapshot = isLiveSnapshotSource(source)
+        ? await this.hasPendingLiveSnapshot(source)
+        : false;
       // Do not let an HTTP response cover up a WebSocket event that reached the
       // relay but has not crossed the D1 durability boundary yet.
-      if (pendingForSource.size > 0) return;
+      if (pendingForSource.size > 0 || pendingLiveSnapshot) return;
       const now = Date.now();
       const checkpointAvailable = await this.checkpointFreshness(
         source,
@@ -6198,13 +6944,13 @@ function appAttestConflictResponse(): Response {
   );
 }
 
-function appAttestRequired(env: Env): boolean {
+function appAttestRequired(env: AppAttestPolicyEnvironment): boolean {
   // Fail closed by default. A local-only worker can deliberately set
   // `disabled`; checked-in production configuration always uses `required`.
   return env.APP_ATTEST_ENFORCEMENT !== "disabled";
 }
 
-function appAttestDevelopmentBypassAllowed(env: Env): boolean {
+function appAttestDevelopmentBypassAllowed(env: AppAttestPolicyEnvironment): boolean {
   return (
     env.APP_ATTEST_ENFORCEMENT === "development" &&
     env.APP_ATTEST_DEVELOPMENT_BYPASS === "true"
@@ -6228,7 +6974,9 @@ export function appAttestVerificationEnvironment(
     : "production";
 }
 
-function appAttestAllowedBundleVersions(env: Env): Set<string> {
+export function appAttestAllowedBundleVersions(
+  env: AppAttestPolicyEnvironment,
+): Set<string> {
   const configured = env.APP_ATTEST_ALLOWED_BUNDLE_VERSIONS ?? "1";
   return new Set(
     configured
@@ -6236,6 +6984,89 @@ function appAttestAllowedBundleVersions(env: Env): Set<string> {
       .map((value) => value.trim())
       .filter((value) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(value)),
   );
+}
+
+/**
+ * The effective, non-secret App Attest deployment policy. This is a
+ * deployment-consistency signal only: on iOS releases whose valid proofs lack
+ * Apple's optional release-metadata extension, an allowed bundle version
+ * cannot be cryptographically observed on every request.
+ */
+export interface AppAttestPolicy {
+  appId: string;
+  protocolVersion: string;
+  required: boolean;
+  developmentBypassAllowed: boolean;
+  verificationEnvironment: AppAttestEnvironment;
+  requireReleaseMetadata: boolean;
+  allowedBundleVersions: string[];
+}
+
+export function effectiveAppAttestPolicy(
+  env: AppAttestPolicyEnvironment,
+): AppAttestPolicy {
+  return {
+    appId: env.APP_ATTEST_APP_ID ?? APP_ATTEST_APP_ID,
+    protocolVersion: APP_ATTEST_PROTOCOL_VERSION,
+    required: appAttestRequired(env),
+    developmentBypassAllowed: appAttestDevelopmentBypassAllowed(env),
+    verificationEnvironment: appAttestVerificationEnvironment(env),
+    requireReleaseMetadata: env.APP_ATTEST_REQUIRE_RELEASE_METADATA === "true",
+    allowedBundleVersions: [...appAttestAllowedBundleVersions(env)].sort(),
+  };
+}
+
+/**
+ * Fixed-order, UTF-8 policy serialization used for the public health
+ * fingerprint. Keep this deliberately simple rather than hashing a rendered
+ * JSON object: release automation in another runtime must produce the exact
+ * same bytes without relying on object-key insertion order.
+ */
+export function canonicalAppAttestPolicy(policy: AppAttestPolicy): string {
+  const allowedBundleVersions = [...new Set(policy.allowedBundleVersions)].sort();
+  return [
+    `app_id=${policy.appId}`,
+    `protocol_version=${policy.protocolVersion}`,
+    `required=${policy.required}`,
+    `development_bypass_allowed=${policy.developmentBypassAllowed}`,
+    `verification_environment=${policy.verificationEnvironment}`,
+    `require_release_metadata=${policy.requireReleaseMetadata}`,
+    `allowed_bundle_versions=${allowedBundleVersions.join(",")}`,
+    "",
+  ].join("\n");
+}
+
+/**
+ * A stable, public deployment fingerprint. It contains no key material,
+ * tokens, or device identity, and runs entirely in the outer Worker before a
+ * health request ever reaches the global Durable Object.
+ */
+export async function appAttestPolicyFingerprint(
+  policy: AppAttestPolicy,
+): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(canonicalAppAttestPolicy(policy)),
+  );
+  return `sha256:${base64URL(new Uint8Array(digest))}`;
+}
+
+interface AppAttestHealthPolicy {
+  format: typeof APP_ATTEST_POLICY_FORMAT;
+  fingerprint: string;
+  /** Needed for the release smoke test to prove the expected build is accepted. */
+  allowedBundleVersions: string[];
+}
+
+async function appAttestHealthPolicy(
+  env: AppAttestPolicyEnvironment,
+): Promise<AppAttestHealthPolicy> {
+  const policy = effectiveAppAttestPolicy(env);
+  return {
+    format: APP_ATTEST_POLICY_FORMAT,
+    fingerprint: await appAttestPolicyFingerprint(policy),
+    allowedBundleVersions: policy.allowedBundleVersions,
+  };
 }
 
 function appAttestExpectedBinding(
@@ -7860,10 +8691,25 @@ async function handleRequest(
       "GET /healthz",
     );
     if (rateLimitResponse) return rateLimitResponse;
+    // This read-only document is intentionally generated by the outer Worker,
+    // not `QuakeRelay.statusResponse()`: it adds no Durable Object read/write
+    // work and remains available when the relay cannot answer at all.
+    const appAttestPolicy = await appAttestHealthPolicy(env);
     try {
       const relay = env.RELAY.get(env.RELAY.idFromName("global"));
       const response = await relay.fetch("https://relay.internal/status");
-      return json(await response.json(), response.status);
+      const relayHealth = await response.json();
+      return json(
+        {
+          ...(typeof relayHealth === "object" && relayHealth !== null &&
+              !Array.isArray(relayHealth)
+            ? relayHealth
+            : {}),
+          appAttestPolicy,
+        },
+        response.status,
+        noStoreHeaders(),
+      );
     } catch (error) {
       // A relay storage outage (including exhausted Durable Object writes)
       // must not turn readiness into a Worker exception. Do not expose the
@@ -7903,6 +8749,7 @@ async function handleRequest(
             staleOutboxRows: null,
             status: "degraded",
           },
+          appAttestPolicy,
         },
         503,
         noStoreHeaders(),

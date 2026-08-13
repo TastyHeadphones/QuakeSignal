@@ -342,11 +342,113 @@ test("rejects an over-limit health probe before it can activate the global relay
   assert.equal(relayTouched, false);
 });
 
-test("health returns a no-store structured 503 when the relay status call fails", async () => {
-  const { default: worker } = await workerModule();
+test("health exposes a stable non-secret App Attest policy fingerprint without extra relay work", async () => {
+  const {
+    appAttestPolicyFingerprint,
+    canonicalAppAttestPolicy,
+    effectiveAppAttestPolicy,
+    default: worker,
+  } = await workerModule();
+  const policyFormat = "quakesignal-app-attest-policy/v1";
+  const policyEnvironment = {
+    APP_ATTEST_ENFORCEMENT: "required",
+    APP_ATTEST_APP_ID: "5TT564H883.com.quakesignal.app",
+    APP_ATTEST_ALLOWED_BUNDLE_VERSIONS: "2, 1, 2, invalid!",
+    APP_ATTEST_REQUIRE_RELEASE_METADATA: "false",
+  };
+  const effectivePolicy = effectiveAppAttestPolicy(policyEnvironment);
+  assert.deepEqual(effectivePolicy.allowedBundleVersions, ["1", "2"]);
+  assert.equal(
+    canonicalAppAttestPolicy(effectivePolicy),
+    [
+      "app_id=5TT564H883.com.quakesignal.app",
+      "protocol_version=1",
+      "required=true",
+      "development_bypass_allowed=false",
+      "verification_environment=production",
+      "require_release_metadata=false",
+      "allowed_bundle_versions=1,2",
+      "",
+    ].join("\n"),
+  );
+  assert.equal(
+    await appAttestPolicyFingerprint(effectivePolicy),
+    "sha256:uM0AU36V0txDnHa_U1i2aEDxrCtB_FeR566slmklTbg",
+  );
+  assert.equal(
+    await appAttestPolicyFingerprint(effectiveAppAttestPolicy({
+      ...policyEnvironment,
+      APP_ATTEST_ALLOWED_BUNDLE_VERSIONS: "1,2",
+    })),
+    "sha256:uM0AU36V0txDnHa_U1i2aEDxrCtB_FeR566slmklTbg",
+    "version order and duplicates must not change the effective deployment fingerprint",
+  );
+  assert.notEqual(
+    await appAttestPolicyFingerprint(effectiveAppAttestPolicy({
+      ...policyEnvironment,
+      APP_ATTEST_REQUIRE_RELEASE_METADATA: "true",
+    })),
+    "sha256:uM0AU36V0txDnHa_U1i2aEDxrCtB_FeR566slmklTbg",
+    "a material App Attest policy change must alter the deployment fingerprint",
+  );
+
+  let relayRequests = 0;
   const response = await worker.fetch(
     new Request("https://quakesignal-api.example/healthz"),
     {
+      ...policyEnvironment,
+      DEVICE_API_RATE_LIMIT: {
+        async limit() {
+          return { success: true };
+        },
+      },
+      RELAY: {
+        idFromName() {
+          return "global";
+        },
+        get() {
+          return {
+            async fetch(request) {
+              relayRequests += 1;
+              assert.equal(
+                new URL(typeof request === "string" ? request : request.url).pathname,
+                "/status",
+              );
+              return Response.json({ ok: true, mode: "notification-only" });
+            },
+          };
+        },
+      },
+    },
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(relayRequests, 1, "health must make only its one status request to the relay");
+  const body = await response.json();
+  assert.deepEqual(body.appAttestPolicy, {
+    format: policyFormat,
+    fingerprint: "sha256:uM0AU36V0txDnHa_U1i2aEDxrCtB_FeR566slmklTbg",
+    allowedBundleVersions: ["1", "2"],
+  });
+});
+
+test("health returns a no-store structured 503 when the relay status call fails", async () => {
+  const {
+    appAttestPolicyFingerprint,
+    effectiveAppAttestPolicy,
+    default: worker,
+  } = await workerModule();
+  const policyFormat = "quakesignal-app-attest-policy/v1";
+  const policyEnvironment = {
+    APP_ATTEST_ENFORCEMENT: "required",
+    APP_ATTEST_APP_ID: "5TT564H883.com.quakesignal.app",
+    APP_ATTEST_ALLOWED_BUNDLE_VERSIONS: "1,2",
+    APP_ATTEST_REQUIRE_RELEASE_METADATA: "false",
+  };
+  const response = await worker.fetch(
+    new Request("https://quakesignal-api.example/healthz"),
+    {
+      ...policyEnvironment,
       DEVICE_API_RATE_LIMIT: {
         async limit() {
           return { success: true };
@@ -374,6 +476,13 @@ test("health returns a no-store structured 503 when the relay status call fails"
   assert.equal(body.delivery.apnsConfigured, null);
   assert.equal(body.upstream.status, "degraded");
   assert.equal(body.upstream.staleSources.length, 7);
+  assert.deepEqual(body.appAttestPolicy, {
+    format: policyFormat,
+    fingerprint: await appAttestPolicyFingerprint(
+      effectiveAppAttestPolicy(policyEnvironment),
+    ),
+    allowedBundleVersions: ["1", "2"],
+  });
 });
 
 test("status probes preserve first boot but do not repeatedly run relay recovery", async () => {
@@ -634,7 +743,11 @@ test("activates one fetch-Upgraded Wolfx route only after accept", async () => {
       "query_fjeew",
       "query_cqeew",
     ]);
-    assert.equal(relay.statuses.get("jma_eew"), "open");
+    assert.equal(
+      relay.statuses.get("jma_eew"),
+      "connecting",
+      "the Upgrade alone is not valid upstream liveness",
+    );
     assert.equal(relay.upstreams.get("all_eew"), socket);
     assert.equal(relay.connectingRoutes.has("all_eew"), false);
     assert.deepEqual(alarms, []);
@@ -2363,6 +2476,818 @@ test("a websocket listener owns recovery when send fails after an Upgrade", asyn
   } finally {
     console.warn = originalConsoleWarn;
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("an Upgrade without Wolfx traffic keeps exponential reconnect pacing", async () => {
+  const { QuakeRelay, upstreamReconnectDelayMs } = await workerModule();
+  const originalConsoleWarn = console.warn;
+  const originalNow = Date.now;
+  let now = Date.parse("2026-08-14T00:00:00.000Z");
+  const values = new Map();
+  const writes = [];
+  const pending = new Set();
+  const failures = [];
+  let alarmAt = null;
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async put(key, value) {
+        writes.push([key, value]);
+        values.set(key, value);
+      },
+      async getAlarm() {
+        return alarmAt;
+      },
+      async setAlarm(value) {
+        writes.push(["alarm", value]);
+        alarmAt = value;
+      },
+    },
+    waitUntil(promise) {
+      let tracked;
+      tracked = Promise.resolve(promise)
+        .catch((error) => failures.push(error))
+        .finally(() => pending.delete(tracked));
+      pending.add(tracked);
+    },
+  };
+  class Socket {
+    readyState = 1;
+    listeners = new Map();
+
+    accept() {}
+
+    addEventListener(type, listener) {
+      this.listeners.set(type, listener);
+    }
+
+    send() {}
+
+    close() {
+      this.readyState = 3;
+    }
+
+    emit(type, event) {
+      this.listeners.get(type)?.(event);
+    }
+  }
+  const relay = new QuakeRelay(state, {});
+  const route = "jma_eqlist";
+  const failureKey = `upstream-reconnect-failures:${route}`;
+  const notBeforeKey = `upstream-reconnect-not-before-ms:${route}`;
+  const freshnessKey = `upstream-last-success-ms:${route}`;
+  const drain = async () => {
+    for (let pass = 0; pass < 20 && pending.size > 0; pass += 1) {
+      await Promise.all([...pending]);
+    }
+    assert.equal(pending.size, 0, "all listener recovery work settles");
+  };
+  try {
+    Date.now = () => now;
+    console.warn = () => {};
+    for (let failureCount = 1; failureCount <= 8; failureCount += 1) {
+      const socket = new Socket();
+      relay.upstreams.set(route, socket);
+      relay.attachUpstreamSocketListeners(route, socket);
+      relay.activateUpstreamSocket(route, socket);
+      assert.equal(
+        relay.lastSuccessfulUpstreamMs.has(route),
+        false,
+        "a bare HTTP Upgrade must not publish upstream freshness",
+      );
+      assert.equal(
+        relay.routeIsOpen(route),
+        false,
+        "a bare HTTP Upgrade must leave readiness fail-closed",
+      );
+
+      socket.emit("close", {
+        code: 1006,
+        wasClean: false,
+        reason: "",
+      });
+      await drain();
+      assert.equal(values.get(failureKey), failureCount);
+      const reconnectAtMs = values.get(notBeforeKey);
+      assert.equal(
+        reconnectAtMs - now,
+        upstreamReconnectDelayMs(failureCount, route),
+        "each immediate close advances the persisted exponential backoff",
+      );
+      now = reconnectAtMs + 1;
+    }
+
+    assert.deepEqual(failures, []);
+    assert.equal(
+      writes.some(([, value]) => value === 0),
+      false,
+      "an Upgrade-then-close flap never clears persisted reconnect state",
+    );
+    const steadyRetryDelayMs = upstreamReconnectDelayMs(32, route);
+    // Count the three persisted reconnect fields plus the alarm mutation,
+    // even though an existing earlier alarm can make the real total smaller.
+    const steadyWritesPerDay = Math.ceil(86_400_000 / steadyRetryDelayMs) * 4;
+    assert.ok(
+      steadyWritesPerDay < 100_000,
+      `the capped retry budget is ${steadyWritesPerDay} rows/day for one failed route`,
+    );
+    assert.equal(
+      writes.filter(([key]) => key === freshnessKey).length,
+      0,
+      "no freshness checkpoint is written without a valid Wolfx frame",
+    );
+  } finally {
+    console.warn = originalConsoleWarn;
+    Date.now = originalNow;
+  }
+});
+
+test("valid Wolfx liveness publishes freshness before resetting stable reconnect state", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalNow = Date.now;
+  let now = Date.parse("2026-08-14T00:00:00.000Z");
+  const values = new Map([
+    ["upstream-reconnect-failures:jma_eqlist", 3],
+    ["upstream-reconnect-not-before-ms:jma_eqlist", now + 20_000],
+    ["upstream-degraded-since-ms:jma_eqlist", now - 10_000],
+  ]);
+  const writes = [];
+  const pending = new Set();
+  const state = {
+    storage: {
+      async get(key) {
+        return values.get(key);
+      },
+      async list() {
+        return new Map();
+      },
+      async put(key, value) {
+        writes.push([key, value]);
+        values.set(key, value);
+      },
+    },
+    waitUntil(promise) {
+      let tracked;
+      tracked = Promise.resolve(promise).finally(() => pending.delete(tracked));
+      pending.add(tracked);
+    },
+  };
+  class Socket {
+    readyState = 1;
+    listeners = new Map();
+
+    accept() {}
+
+    addEventListener(type, listener) {
+      this.listeners.set(type, listener);
+    }
+
+    send() {}
+
+    emit(type, event) {
+      this.listeners.get(type)?.(event);
+    }
+  }
+  const route = "jma_eqlist";
+  const socket = new Socket();
+  const relay = new QuakeRelay(state, {});
+  const drain = async () => {
+    for (let pass = 0; pass < 20 && pending.size > 0; pass += 1) {
+      await Promise.all([...pending]);
+    }
+    assert.equal(pending.size, 0, "all liveness work settles");
+  };
+  try {
+    Date.now = () => now;
+    relay.upstreams.set(route, socket);
+    // A reconnect can retain a recent checkpoint from the preceding socket.
+    // The next bare 101 must still not turn that historical timestamp into a
+    // ready route before new Wolfx traffic arrives.
+    relay.lastSuccessfulUpstreamMs.set(route, now - 1_000);
+    relay.attachUpstreamSocketListeners(route, socket);
+    relay.activateUpstreamSocket(route, socket);
+    assert.equal(
+      relay.routeIsOpen(route),
+      false,
+      "a replacement Upgrade cannot reuse the prior socket's freshness",
+    );
+    socket.emit("message", { data: JSON.stringify({ type: "heartbeat" }) });
+    await drain();
+
+    assert.equal(relay.lastSuccessfulUpstreamMs.get(route), now);
+    assert.equal(relay.routeIsOpen(route), true);
+    assert.equal(values.get(`upstream-reconnect-failures:${route}`), 3);
+    assert.equal(
+      values.get(`upstream-reconnect-not-before-ms:${route}`),
+      now + 20_000,
+      "the first valid frame proves freshness but does not erase backoff",
+    );
+
+    now += 60_000;
+    socket.emit("message", { data: JSON.stringify({ type: "heartbeat" }) });
+    await drain();
+
+    assert.equal(values.get(`upstream-reconnect-failures:${route}`), 0);
+    assert.equal(values.get(`upstream-reconnect-not-before-ms:${route}`), 0);
+    assert.equal(values.get(`upstream-degraded-since-ms:${route}`), 0);
+    assert.deepEqual(
+      writes.filter(([key, value]) =>
+        key.startsWith("upstream-reconnect-") && value === 0
+      ).map(([key]) => key).sort(),
+      [
+        `upstream-reconnect-failures:${route}`,
+        `upstream-reconnect-not-before-ms:${route}`,
+      ],
+      "only the stable liveness window can clear reconnect state",
+    );
+    assert.deepEqual(
+      writes.filter(([key, value]) =>
+        key === `upstream-degraded-since-ms:${route}` && value === 0
+      ).map(([key]) => key),
+      [`upstream-degraded-since-ms:${route}`],
+    );
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+function jmaEqlistSnapshot(count = 50) {
+  const snapshot = {
+    type: "jma_eqlist",
+    md5: "live-jma-eqlist-snapshot-v1",
+  };
+  for (let index = 1; index <= count; index += 1) {
+    snapshot[`No${index}`] = {
+      Title: "report",
+      EventID: `live-jma-eqlist-${index}`,
+      time: "2026/08/14 09:00",
+      time_full: "2026/08/14 09:00:00",
+      location: `Test coast ${index}`,
+      magnitude: "4.2",
+      shindo: "2",
+      depth: "10km",
+      latitude: "35.1",
+      longitude: "140.2",
+      info: "",
+    };
+  }
+  return snapshot;
+}
+
+function distinctJmaEqlistSnapshot(variant, count = 50) {
+  const snapshot = jmaEqlistSnapshot(count);
+  snapshot.md5 = `live-jma-eqlist-snapshot-${variant}`;
+  snapshot.No1 = {
+    ...snapshot.No1,
+    EventID: `live-jma-eqlist-variant-${variant}`,
+    location: `Variant coast ${variant}`,
+  };
+  return snapshot;
+}
+
+function storedLiveSnapshotWork(source, now) {
+  return {
+    version: 1,
+    source,
+    fingerprint: `stored-${source}-fingerprint`,
+    events: [{
+      id: `${source}:stored`,
+      sourceId: source,
+      eventId: "stored",
+      serial: 1,
+      kind: "report",
+    }],
+    nextIndex: 0,
+    createdAtMs: now,
+    retryAtMs: now,
+  };
+}
+
+function isLiveSnapshotStorageKey(key) {
+  return typeof key === "string" && /^pending-live-snapshot(?:[:\-])/.test(key);
+}
+
+function isLiveSnapshotFingerprintStorageKey(key) {
+  return typeof key === "string" && key.includes("live-snapshot-fingerprint");
+}
+
+function createLiveSnapshotHarness({ failD1Batches = () => false } = {}) {
+  const values = new Map();
+  const writes = [];
+  const pending = new Set();
+  const backgroundErrors = [];
+  let alarmAt = null;
+  let d1BatchAttempts = 0;
+  const storage = {
+    async get(key) {
+      return values.get(key);
+    },
+    async put(key, value) {
+      writes.push(["put", key, value]);
+      values.set(key, value);
+    },
+    async delete(key) {
+      writes.push(["delete", key]);
+      values.delete(key);
+    },
+    async list({ prefix = "", limit = Infinity } = {}) {
+      return new Map(
+        [...values]
+          .filter(([key]) => key.startsWith(prefix))
+          .slice(0, limit),
+      );
+    },
+    async transaction(callback) {
+      return callback({
+        get: storage.get,
+        put: storage.put,
+        delete: storage.delete,
+      });
+    },
+    async getAlarm() {
+      return alarmAt;
+    },
+    async setAlarm(value) {
+      writes.push(["setAlarm", "alarm", value]);
+      alarmAt = value;
+    },
+  };
+  const state = {
+    storage,
+    waitUntil(promise) {
+      let tracked;
+      tracked = Promise.resolve(promise)
+        .catch((error) => backgroundErrors.push(error))
+        .finally(() => pending.delete(tracked));
+      pending.add(tracked);
+    },
+  };
+  const database = {
+    prepare(sql) {
+      return {
+        bind(...bindings) {
+          return {
+            sql,
+            bindings,
+            async all() {
+              return { results: [] };
+            },
+          };
+        },
+      };
+    },
+    async batch(statements) {
+      d1BatchAttempts += 1;
+      if (failD1Batches()) {
+        throw new Error("simulated live EQLIST D1 failure");
+      }
+      return statements.map(() => ({ meta: { changes: 1 } }));
+    },
+  };
+  class Socket {
+    readyState = 1;
+    listeners = new Map();
+
+    addEventListener(type, listener) {
+      this.listeners.set(type, listener);
+    }
+
+    emit(type, event) {
+      this.listeners.get(type)?.(event);
+    }
+  }
+
+  return {
+    values,
+    writes,
+    state,
+    database,
+    Socket,
+    get d1BatchAttempts() {
+      return d1BatchAttempts;
+    },
+    get alarmAt() {
+      return alarmAt;
+    },
+    clearScheduledAlarm() {
+      alarmAt = null;
+    },
+    pendingLiveSnapshots() {
+      return [...values].filter(([key]) => isLiveSnapshotStorageKey(key));
+    },
+    committedLiveSnapshotFingerprints() {
+      return [...values].filter(([key, value]) =>
+        isLiveSnapshotFingerprintStorageKey(key) && typeof value === "string"
+      );
+    },
+    async drainBackground() {
+      for (let pass = 0; pass < 30 && pending.size > 0; pass += 1) {
+        await Promise.all([...pending]);
+      }
+      assert.equal(pending.size, 0, "all live EQLIST WebSocket work settles");
+      assert.deepEqual(backgroundErrors, [], "the listener must not hide a background error");
+    },
+  };
+}
+
+test("a repeated unchanged 50-entry live JMA EQLIST does not recreate per-event journals or D1 work", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalNow = Date.now;
+  let now = Date.parse("2026-08-14T00:00:00.000Z");
+  const harness = createLiveSnapshotHarness();
+  const relay = new QuakeRelay(harness.state, { DB: harness.database });
+  const socket = new harness.Socket();
+  const route = "jma_eqlist";
+  const frame = jmaEqlistSnapshot();
+  const pendingSnapshotWrites = () => harness.writes.filter(([, key]) =>
+    isLiveSnapshotStorageKey(key)
+  ).length;
+  const perEventJournalWrites = () => harness.writes.filter(([, key]) =>
+    typeof key === "string" && key.startsWith("pending-ingest:")
+  ).length;
+  try {
+    Date.now = () => now;
+    relay.upstreams.set(route, socket);
+    relay.attachUpstreamSocketListeners(route, socket);
+    socket.emit("message", { data: JSON.stringify(frame) });
+    await harness.drainBackground();
+
+    // The initial waitUntil drains one D1-safe slice. Alarms resume the
+    // durable cursor; invoke that same internal alarm path with its due clock
+    // to finish all fifty entries without broad relay maintenance.
+    for (let pass = 0; pass < 12 && harness.pendingLiveSnapshots().length > 0; pass += 1) {
+      now += 5_000;
+      await relay.drainPendingLiveSnapshotWorks();
+    }
+    assert.equal(
+      harness.pendingLiveSnapshots().length,
+      0,
+      "the completed list removes both its active cursor and any coalesced latest pointer",
+    );
+    assert.equal(
+      harness.committedLiveSnapshotFingerprints().length,
+      1,
+      "only a fully durable list may publish its deduplication fingerprint",
+    );
+    assert.equal(
+      perEventJournalWrites(),
+      0,
+      "a complete EQLIST frame must not fan out into fifty pending-ingest records",
+    );
+    assert.ok(harness.d1BatchAttempts >= 7, "fifty entries must use bounded D1 slices");
+
+    const d1BeforeReplay = harness.d1BatchAttempts;
+    const snapshotWritesBeforeReplay = pendingSnapshotWrites();
+    const journalWritesBeforeReplay = perEventJournalWrites();
+    socket.emit("message", { data: JSON.stringify(frame) });
+    await harness.drainBackground();
+
+    assert.equal(
+      harness.d1BatchAttempts,
+      d1BeforeReplay,
+      "an unchanged fully committed EQLIST frame must not repeat D1 persistence",
+    );
+    assert.equal(
+      pendingSnapshotWrites(),
+      snapshotWritesBeforeReplay,
+      "an unchanged fully committed EQLIST frame must not recreate live snapshot storage",
+    );
+    assert.equal(
+      perEventJournalWrites(),
+      journalWritesBeforeReplay,
+      "replay must create zero new per-event pending ingest records",
+    );
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test("a failed live JMA EQLIST slice keeps its durable cursor and withholds deduplication until retry succeeds", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalConsoleError = console.error;
+  const originalNow = Date.now;
+  let now = Date.parse("2026-08-14T00:00:00.000Z");
+  let failD1 = true;
+  const harness = createLiveSnapshotHarness({ failD1Batches: () => failD1 });
+  const relay = new QuakeRelay(harness.state, { DB: harness.database });
+  const socket = new harness.Socket();
+  const route = "jma_eqlist";
+  const frame = jmaEqlistSnapshot();
+  const snapshotWrites = () => harness.writes.filter(([, key]) =>
+    isLiveSnapshotStorageKey(key)
+  ).length;
+  try {
+    Date.now = () => now;
+    console.error = () => {};
+    relay.upstreams.set(route, socket);
+    relay.attachUpstreamSocketListeners(route, socket);
+    socket.emit("message", { data: JSON.stringify(frame) });
+    await harness.drainBackground();
+
+    assert.equal(harness.d1BatchAttempts, 1, "the first bounded D1 slice was attempted once");
+    assert.ok(
+      harness.pendingLiveSnapshots().length > 0,
+      "a D1 failure must retain a durable active snapshot or latest coalescing record",
+    );
+    assert.equal(
+      harness.committedLiveSnapshotFingerprints().length,
+      0,
+      "a failed D1 slice must never publish a completed snapshot fingerprint",
+    );
+    const snapshotWritesBeforeDuplicate = snapshotWrites();
+    socket.emit("message", { data: JSON.stringify(frame) });
+    await harness.drainBackground();
+    assert.equal(
+      harness.d1BatchAttempts,
+      1,
+      "the retry deadline prevents a duplicate frame from immediately hammering failed D1",
+    );
+    assert.equal(
+      snapshotWrites(),
+      snapshotWritesBeforeDuplicate,
+      "a duplicate frame during retry must share the existing durable snapshot work",
+    );
+
+    failD1 = false;
+    for (let pass = 0; pass < 12 && harness.pendingLiveSnapshots().length > 0; pass += 1) {
+      now += 60_000;
+      await relay.drainPendingLiveSnapshotWorks();
+    }
+    assert.equal(
+      harness.pendingLiveSnapshots().length,
+      0,
+      "the successful retry clears all durable snapshot work",
+    );
+    assert.equal(
+      harness.committedLiveSnapshotFingerprints().length,
+      1,
+      "deduplication is committed only after all slices eventually succeed",
+    );
+    assert.ok(
+      harness.d1BatchAttempts > 1,
+      "the cursor retries D1 only after its durable retry deadline",
+    );
+  } finally {
+    console.error = originalConsoleError;
+    Date.now = originalNow;
+  }
+});
+
+test("empty or malformed live EQLIST frames cannot publish source freshness", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalConsoleWarn = console.warn;
+  const originalNow = Date.now;
+  const now = Date.parse("2026-08-14T00:00:00.000Z");
+  const route = "jma_eqlist";
+  const freshnessKey = `upstream-last-success-ms:${route}`;
+  const overloadKey = `live-snapshot-overload:${route}`;
+  const staleCheckpoint = now - 181_000;
+  const harness = createLiveSnapshotHarness();
+  const relay = new QuakeRelay(harness.state, { DB: harness.database });
+  const socket = new harness.Socket();
+  try {
+    Date.now = () => now;
+    console.warn = () => {};
+    harness.values.set(freshnessKey, staleCheckpoint);
+    relay.statuses.set(route, "error");
+    relay.lastSuccessfulUpstreamMs.set(route, staleCheckpoint);
+    relay.upstreams.set(route, socket);
+    relay.attachUpstreamSocketListeners(route, socket);
+
+    for (const invalidFrame of [
+      { type: route, md5: "empty-ranked-list" },
+      { type: route, md5: "malformed-ranked-list", No1: {} },
+    ]) {
+      socket.emit("message", { data: JSON.stringify(invalidFrame) });
+      await harness.drainBackground();
+    }
+
+    assert.equal(
+      relay.lastSuccessfulUpstreamMs.get(route),
+      staleCheckpoint,
+      "an invalid ranked list must not refresh the in-memory success timestamp",
+    );
+    assert.equal(
+      harness.values.get(freshnessKey),
+      staleCheckpoint,
+      "an invalid ranked list must not write a fresh durable checkpoint",
+    );
+    assert.equal(
+      relay.statuses.get(route),
+      "error",
+      "an invalid ranked list must not turn the route open",
+    );
+    assert.ok(
+      harness.values.has(overloadKey),
+      "the first invalid list must create a durable fail-closed marker",
+    );
+    assert.equal(
+      harness.writes.filter(([operation, key]) =>
+        operation === "put" && key === overloadKey
+      ).length,
+      1,
+      "repeated invalid frames must share the one fail-closed marker",
+    );
+
+    const response = await relay.statusResponse();
+    const body = await response.json();
+    assert.equal(body.upstream.sources[route].pendingLiveSnapshot, true);
+    assert.equal(
+      body.upstream.sources[route].stale,
+      true,
+      "the durable invalid-list marker must keep health failed closed",
+    );
+  } finally {
+    console.warn = originalConsoleWarn;
+    Date.now = originalNow;
+  }
+});
+
+test("live snapshot active/latest source-key mismatches remain fail-closed", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalConsoleError = console.error;
+  const originalNow = Date.now;
+  const now = Date.parse("2026-08-14T00:00:00.000Z");
+  const route = "jma_eqlist";
+  const mismatchedSource = "cenc_eqlist";
+  try {
+    Date.now = () => now;
+    console.error = () => {};
+    for (const key of [
+      `pending-live-snapshot:${route}`,
+      `pending-live-snapshot-latest:${route}`,
+    ]) {
+      const harness = createLiveSnapshotHarness();
+      const relay = new QuakeRelay(harness.state, { DB: harness.database });
+      const socket = new harness.Socket();
+      const mismatchedWork = storedLiveSnapshotWork(mismatchedSource, now);
+      harness.values.set(key, mismatchedWork);
+      harness.values.set(`upstream-last-success-ms:${route}`, now);
+      relay.statuses.set(route, "open");
+      relay.lastSuccessfulUpstreamMs.set(route, now);
+
+      const before = await relay.statusResponse();
+      const beforeBody = await before.json();
+      assert.equal(
+        beforeBody.upstream.sources[route].pendingLiveSnapshot,
+        true,
+        `${key} must remain a pending durability fence even when its value names another source`,
+      );
+      assert.equal(
+        beforeBody.upstream.sources[route].stale,
+        true,
+        `${key} must keep health failed closed instead of trusting the old fresh checkpoint`,
+      );
+
+      relay.upstreams.set(route, socket);
+      relay.attachUpstreamSocketListeners(route, socket);
+      socket.emit("message", { data: JSON.stringify(jmaEqlistSnapshot(1)) });
+      await harness.drainBackground();
+
+      assert.equal(
+        harness.values.get(key),
+        mismatchedWork,
+        "a valid incoming list must not overwrite source-mismatched durable intent",
+      );
+      assert.equal(
+        harness.writes.filter(([operation, writeKey]) =>
+          operation === "put" &&
+          typeof writeKey === "string" &&
+          (writeKey.startsWith("pending-live-snapshot:") ||
+            writeKey.startsWith("pending-live-snapshot-latest:"))
+        ).length,
+        0,
+        "a source-key mismatch must not create replacement snapshot work",
+      );
+    }
+  } finally {
+    console.error = originalConsoleError;
+    Date.now = originalNow;
+  }
+});
+
+test("a third distinct live list records one overload marker without later snapshot-write churn", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalConsoleError = console.error;
+  const originalConsoleWarn = console.warn;
+  const originalNow = Date.now;
+  let now = Date.parse("2026-08-14T00:00:00.000Z");
+  const route = "jma_eqlist";
+  const overloadKey = `live-snapshot-overload:${route}`;
+  const harness = createLiveSnapshotHarness();
+  const relay = new QuakeRelay(harness.state, { DB: harness.database });
+  const socket = new harness.Socket();
+  const liveSnapshotPutCount = () => harness.writes.filter(([operation, key]) =>
+    operation === "put" &&
+    typeof key === "string" &&
+    (key.startsWith("pending-live-snapshot:") ||
+      key.startsWith("pending-live-snapshot-latest:") ||
+      key.startsWith("live-snapshot-overload:"))
+  ).length;
+  try {
+    Date.now = () => now;
+    console.error = () => {};
+    console.warn = () => {};
+    relay.upstreams.set(route, socket);
+    relay.attachUpstreamSocketListeners(route, socket);
+
+    for (const variant of [1, 2, 3]) {
+      socket.emit("message", {
+        data: JSON.stringify(distinctJmaEqlistSnapshot(variant)),
+      });
+      await harness.drainBackground();
+    }
+
+    assert.ok(
+      harness.values.has(overloadKey),
+      "the third distinct list must leave one durable overload marker",
+    );
+    assert.equal(
+      harness.writes.filter(([operation, key]) =>
+        operation === "put" && key === overloadKey
+      ).length,
+      1,
+      "the capacity signal is persisted exactly once",
+    );
+    const snapshotPutsAfterOverload = liveSnapshotPutCount();
+    const d1BatchesAfterOverload = harness.d1BatchAttempts;
+
+    for (const variant of [4, 5, 6]) {
+      socket.emit("message", {
+        data: JSON.stringify(distinctJmaEqlistSnapshot(variant)),
+      });
+      await harness.drainBackground();
+    }
+
+    assert.equal(
+      liveSnapshotPutCount(),
+      snapshotPutsAfterOverload,
+      "later changed frames must not create any active/latest/overload snapshot writes",
+    );
+    assert.equal(
+      harness.d1BatchAttempts,
+      d1BatchesAfterOverload,
+      "an overloaded source must wait for its paced cursor instead of starting more D1 slices",
+    );
+  } finally {
+    console.error = originalConsoleError;
+    console.warn = originalConsoleWarn;
+    Date.now = originalNow;
+  }
+});
+
+test("the early live-snapshot alarm is replaced by its five-second cursor retry", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalNow = Date.now;
+  const startedAt = Date.parse("2026-08-14T00:00:00.000Z");
+  let now = startedAt;
+  const route = "jma_eqlist";
+  const workKey = `pending-live-snapshot:${route}`;
+  const harness = createLiveSnapshotHarness();
+  const relay = new QuakeRelay(harness.state, { DB: harness.database });
+  const socket = new harness.Socket();
+  try {
+    Date.now = () => now;
+    // This test exercises only the live cursor scheduler, not the unrelated
+    // first-run HTTP baseline. A real deployed relay will already have this
+    // marker after that baseline completes.
+    harness.values.set("initial-http-seed-complete", true);
+    relay.ensureUpstreams = async () => {};
+    relay.upstreams.set(route, socket);
+    relay.attachUpstreamSocketListeners(route, socket);
+    socket.emit("message", { data: JSON.stringify(jmaEqlistSnapshot()) });
+    await harness.drainBackground();
+
+    const work = harness.values.get(workKey);
+    assert.equal(work.retryAtMs, startedAt + 5_000);
+    assert.equal(
+      harness.alarmAt,
+      startedAt + 1,
+      "creating the cursor requests the prompt first wakeup",
+    );
+
+    // Cloudflare returns null from getAlarm while the alarm handler itself is
+    // running unless that handler has set a newer alarm. Model consumption of
+    // the one-millisecond wakeup before invoking the relay alarm directly.
+    now = startedAt + 1;
+    harness.clearScheduledAlarm();
+    await relay.alarm();
+
+    assert.equal(
+      harness.alarmAt,
+      startedAt + 5_000,
+      "the final scheduler must retain the durable cursor's exact retry time",
+    );
+    assert.notEqual(
+      harness.alarmAt,
+      now + 60_000,
+      "the routine one-minute wakeup must not replace the pending cursor retry",
+    );
+  } finally {
+    Date.now = originalNow;
   }
 });
 

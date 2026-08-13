@@ -8,12 +8,28 @@ on:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
+      - ".github/workflows/cloudflare.yml"
       - ".github/scripts/verify-ios-build-split.sh"
+      - ".github/scripts/verify-ios-release-contract.mjs"
+      - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - "backend/cloudflare/wrangler.jsonc"
+      - "backend/cloudflare/scripts/smoke-test.mjs"
+      - "backend/cloudflare/scripts/smoke-test-policy.mjs"
+      - "backend/cloudflare/scripts/wait-for-worker-readiness.mjs"
+      - "backend/cloudflare/scripts/wait-for-worker-readiness.test.mjs"
   pull_request:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
+      - ".github/workflows/cloudflare.yml"
       - ".github/scripts/verify-ios-build-split.sh"
+      - ".github/scripts/verify-ios-release-contract.mjs"
+      - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - "backend/cloudflare/wrangler.jsonc"
+      - "backend/cloudflare/scripts/smoke-test.mjs"
+      - "backend/cloudflare/scripts/smoke-test-policy.mjs"
+      - "backend/cloudflare/scripts/wait-for-worker-readiness.mjs"
+      - "backend/cloudflare/scripts/wait-for-worker-readiness.test.mjs"
   workflow_dispatch:
     inputs:
       archive_only:
@@ -56,6 +72,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Verify iOS and Worker release contract
+        run: node .github/scripts/verify-ios-release-contract.mjs
 
       - name: Install checksum-pinned XcodeGen
         run: |
@@ -221,10 +240,43 @@ jobs:
     runs-on: macos-latest
     environment:
       name: ios-app-store-release
+    # Serialize against any policy-changing production Worker deployment. This
+    # prevents a healthy early smoke from being invalidated before IPA upload.
+    concurrency:
+      group: quakesignal-production-app-attest-policy
+      cancel-in-progress: false
 
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Run before any certificate/profile/API-key materialization. A manual
+      # archive must fail rather than override a mismatched source policy.
+      - name: Verify iOS and Worker release contract
+        id: release-contract
+        env:
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        run: node .github/scripts/verify-ios-release-contract.mjs --build-number "$BUILD_NUMBER"
+
+      # These two dependency-free Node scripts run directly from the checked
+      # out tree, immediately after the static contract. Nothing capable of
+      # mutating them runs before the production-origin proof.
+      - name: Verify production notification origin readiness and contract
+        working-directory: backend/cloudflare
+        env:
+          IOS_RELEASE_API_BASE_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          APP_ATTEST_POLICY_FINGERPRINT: ${{ steps.release-contract.outputs.app_attest_policy_fingerprint }}
+        run: |
+          set -euo pipefail
+          if [ "$IOS_RELEASE_API_BASE_URL" != "https://quakesignal-api.hopeso.workers.dev" ]; then
+            echo "::error::IOS_RELEASE_API_BASE_URL must be https://quakesignal-api.hopeso.workers.dev"
+            exit 1
+          fi
+          node scripts/wait-for-worker-readiness.mjs "$IOS_RELEASE_API_BASE_URL"
+          node scripts/smoke-test.mjs "$IOS_RELEASE_API_BASE_URL" \
+            --expected-app-attest-policy-fingerprint "$APP_ATTEST_POLICY_FINGERPRINT" \
+            --required-app-attest-bundle-version "$BUILD_NUMBER"
 
       - name: Install checksum-pinned XcodeGen
         run: |
@@ -239,20 +291,6 @@ jobs:
           ditto -x -k "$archive" "$install_root"
           echo "$install_root/xcodegen/bin" >> "$GITHUB_PATH"
           "$install_root/xcodegen/bin/xcodegen" --version
-
-      # Keep the production-origin check below independent from the signing
-      # material: install the immutable Worker test dependencies before any
-      # certificate, profile, or App Store Connect secret is exposed.
-      - name: Set up Node.js for production Worker smoke
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: backend/cloudflare/package-lock.json
-
-      - name: Install Worker smoke-test dependencies
-        working-directory: backend/cloudflare
-        run: npm ci
 
       - name: Regenerate Xcode project and verify it is committed
         working-directory: ios
@@ -323,22 +361,6 @@ jobs:
             exit 1
           fi
 
-      - name: Verify production notification origin readiness and contract
-        working-directory: backend/cloudflare
-        env:
-          IOS_RELEASE_API_BASE_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
-        run: |
-          set -euo pipefail
-          # A newly deployed Worker may need the bounded 90-second Wolfx HTTP
-          # fallback grace before it becomes fully ready. Require the complete
-          # APNs/upstream contract rather than accepting a superficial 200.
-          npm run wait:worker-readiness -- "$IOS_RELEASE_API_BASE_URL"
-          # A legacy Worker can return a superficial 200 from /healthz while
-          # lacking App Attest, delivery readiness, and the App Store legal
-          # routes. Require the full production smoke contract before signing
-          # an archive for TestFlight or App Review.
-          npm run test:remote -- "$IOS_RELEASE_API_BASE_URL"
-
       - name: Import Apple Distribution certificate and App Store profile
         env:
           IOS_CERTIFICATE: ${{ secrets.IOS_APP_STORE_CERTIFICATE }}
@@ -371,28 +393,24 @@ jobs:
           BUILD_NUMBER: ${{ inputs.build_number }}
           IOS_PROFILE_NAME: ${{ vars.IOS_APP_STORE_PROFILE_NAME }}
           IOS_RELEASE_API_BASE_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "::error::build_number must contain only digits"
-            exit 1
-          fi
-          if [ "$BUILD_NUMBER" != "2" ]; then
-            echo "::error::Update ios/project.yml and APP_ATTEST_ALLOWED_BUNDLE_VERSIONS in the reviewed Worker release before using a new CFBundleVersion"
-            exit 1
-          fi
-          xcodebuild archive \
-            -project "$XCODE_PROJECT" \
-            -scheme "$XCODE_SCHEME" \
-            -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/QuakeSignal.xcarchive" \
-            DEVELOPMENT_TEAM=5TT564H883 \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY='Apple Distribution' \
-            PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
-            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-            QUAKESIGNAL_API_BASE_URL="$IOS_RELEASE_API_BASE_URL"
+        # The preceding release-contract step validates the dispatch input
+        # against the checked-in Xcode/Worker policy before any signing secret
+        # is materialized. Keep this as one folded, direct command: the static
+        # verifier can then bind every archive argument to the executable
+        # command rather than infer safety from unrelated shell text.
+        run: >-
+          xcodebuild archive
+          -project "$XCODE_PROJECT"
+          -scheme "$XCODE_SCHEME"
+          -configuration Release
+          -destination 'generic/platform=iOS'
+          -archivePath "$RUNNER_TEMP/QuakeSignal.xcarchive"
+          DEVELOPMENT_TEAM=5TT564H883
+          CODE_SIGN_STYLE=Manual
+          CODE_SIGN_IDENTITY='Apple Distribution'
+          PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME"
+          CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+          QUAKESIGNAL_API_BASE_URL="$IOS_RELEASE_API_BASE_URL"
 
       - name: Export App Store Connect IPA
         env:

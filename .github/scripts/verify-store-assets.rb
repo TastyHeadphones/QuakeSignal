@@ -183,6 +183,27 @@ begin
   manifest = JSON.parse(ios_store.join("screenshot-manifest.json").read)
   raise "platform must be iOS" unless manifest.fetch("platform") == "iOS"
 
+  provenance = JSON.parse(ios_store.join("screenshot-provenance.json").read)
+  allowed_provenance_statuses = %w[pending-public-release-candidate approved]
+  unless allowed_provenance_statuses.include?(provenance.fetch("status"))
+    raise "iOS screenshot provenance must have an allowed status"
+  end
+  unless provenance.fetch("requiredBeforeUpload").fetch("configuration") == "Release"
+    raise "iOS screenshot provenance must require Release configuration"
+  end
+  unless Integer(provenance.fetch("requiredBeforeUpload").fetch("minimumCFBundleVersion")) >= 3
+    raise "iOS screenshot provenance must require a public build number of at least 3"
+  end
+
+  mac_provenance = JSON.parse(mac_store.join("screenshot-provenance.json").read)
+  allowed_mac_provenance_statuses = %w[pending-signed-mac-app-store-build approved]
+  unless allowed_mac_provenance_statuses.include?(mac_provenance.fetch("status"))
+    raise "macOS screenshot provenance must have an allowed status"
+  end
+  unless mac_provenance.fetch("requiredBeforeUpload").fetch("configuration") == "macos-app-store"
+    raise "macOS screenshot provenance must require the Mac App Store configuration"
+  end
+
   locales = manifest.fetch("locales").map { |locale| locale.fetch("directory") }
   frames = manifest.fetch("frames").map { |frame| frame.fetch("file") }
   display_classes = manifest.fetch("displayClasses")
@@ -256,7 +277,10 @@ begin
   end
 
   validator.validate_macos_listing_copy(mac_store.join("en-US"))
+  validator.require_nonempty_file(ios_store.join("review-notes.txt"))
+  validator.require_nonempty_file(ios_store.join("submission-answers.md"))
   validator.require_nonempty_file(mac_store.join("review-notes.txt"))
+  validator.require_nonempty_file(mac_store.join("submission-answers.md"))
 
   mac_screenshot_directory = mac_store.join("screenshots", "en-US")
   actual_mac_screenshots = mac_screenshot_directory.directory? ? mac_screenshot_directory.children.select(&:file?) : []

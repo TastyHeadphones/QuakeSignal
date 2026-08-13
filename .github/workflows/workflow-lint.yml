@@ -9,11 +9,29 @@ on:
       - ".github/workflows/**"
       - ".github/scripts/**"
       - "packaging/homebrew-tap/**"
+      - "ios/project.yml"
+      - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal/Supporting/Info.plist"
+      - "backend/cloudflare/wrangler.jsonc"
+      - "backend/cloudflare/scripts/smoke-test.mjs"
+      - "backend/cloudflare/scripts/smoke-test-policy.mjs"
+      - "backend/cloudflare/scripts/smoke-test.test.mjs"
+      - "backend/cloudflare/scripts/wait-for-worker-readiness.mjs"
+      - "backend/cloudflare/scripts/wait-for-worker-readiness.test.mjs"
   pull_request:
     paths:
       - ".github/workflows/**"
       - ".github/scripts/**"
       - "packaging/homebrew-tap/**"
+      - "ios/project.yml"
+      - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal/Supporting/Info.plist"
+      - "backend/cloudflare/wrangler.jsonc"
+      - "backend/cloudflare/scripts/smoke-test.mjs"
+      - "backend/cloudflare/scripts/smoke-test-policy.mjs"
+      - "backend/cloudflare/scripts/smoke-test.test.mjs"
+      - "backend/cloudflare/scripts/wait-for-worker-readiness.mjs"
+      - "backend/cloudflare/scripts/wait-for-worker-readiness.test.mjs"
   workflow_dispatch:
 
 permissions:
@@ -26,6 +44,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
 
       # Ubuntu hosted runners include Go. Pin the actionlint module version so
       # workflow syntax and expression validation is reproducible and does not
@@ -50,3 +73,16 @@ jobs:
         run: |
           set -euo pipefail
           ruby .github/scripts/test-render-homebrew-cask.rb
+
+      - name: Test iOS release contract
+        run: |
+          set -euo pipefail
+          node --test .github/scripts/verify-ios-release-contract.test.mjs
+          node .github/scripts/verify-ios-release-contract.mjs
+          node --test backend/cloudflare/scripts/smoke-test.test.mjs
+
+      - name: Test desktop and Homebrew release contract
+        run: |
+          set -euo pipefail
+          node --test .github/scripts/verify-desktop-release-contract.test.mjs
+          node .github/scripts/verify-desktop-release-contract.mjs
