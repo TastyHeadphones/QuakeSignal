@@ -344,21 +344,12 @@ test("rejects an over-limit health probe before it can activate the global relay
 
 test("status probes preserve first boot but do not repeatedly run relay recovery", async () => {
   const { QuakeRelay } = await workerModule();
-  const originalWebSocket = globalThis.WebSocket;
   const originalFetch = globalThis.fetch;
-  let socketCreations = 0;
+  let upgradeRequests = 0;
   let httpSeedRequests = 0;
   let d1Batches = 0;
   let alarmAt = Date.now() + 60_000;
   const values = new Map();
-  class TestWebSocket {
-    constructor() {
-      socketCreations += 1;
-      this.readyState = 1;
-    }
-    addEventListener() {}
-    send() {}
-  }
   const storage = {
     async get(key) {
       return values.get(key);
@@ -375,6 +366,10 @@ test("status probes preserve first boot but do not repeatedly run relay recovery
     async setAlarm(value) {
       alarmAt = value;
     },
+  };
+  const state = {
+    storage,
+    waitUntil() {},
   };
   const database = {
     prepare() {
@@ -399,14 +394,17 @@ test("status probes preserve first boot but do not repeatedly run relay recovery
       throw new Error("a scheduled relay must not batch-recover for a status probe");
     },
   };
-  globalThis.WebSocket = TestWebSocket;
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (_url, init) => {
+    if (new Headers(init?.headers).get("upgrade") === "websocket") {
+      upgradeRequests += 1;
+      throw new Error("a scheduled relay must not wait on an Upgrade in this test");
+    }
     httpSeedRequests += 1;
     throw new Error("a scheduled relay must not HTTP-seed for a status probe");
   };
   try {
     const relay = new QuakeRelay(
-      { storage },
+      state,
       {
         DB: database,
         ALERT_DELIVERY_QUEUE: {
@@ -420,28 +418,20 @@ test("status probes preserve first boot but do not repeatedly run relay recovery
     await relay.fetch(new Request("https://relay.internal/status"));
     assert.equal(d1Batches, 0);
     assert.equal(httpSeedRequests, 0);
-    assert.equal(socketCreations, 3, "one lightweight watcher bootstrap is enough");
+    assert.equal(upgradeRequests, 3, "one Upgrade attempt per watcher is enough");
   } finally {
-    globalThis.WebSocket = originalWebSocket;
     globalThis.fetch = originalFetch;
   }
 });
 
 test("a first status probe still performs operational bootstrap when no alarm exists", async () => {
   const { QuakeRelay } = await workerModule();
-  const originalWebSocket = globalThis.WebSocket;
   const originalFetch = globalThis.fetch;
   let alarmAt = null;
   let d1Batches = 0;
+  let upgradeRequests = 0;
   let httpSeedRequests = 0;
   const values = new Map();
-  class TestWebSocket {
-    constructor() {
-      this.readyState = 1;
-    }
-    addEventListener() {}
-    send() {}
-  }
   const storage = {
     async get(key) {
       return values.get(key);
@@ -458,6 +448,10 @@ test("a first status probe still performs operational bootstrap when no alarm ex
     async setAlarm(value) {
       alarmAt = value;
     },
+  };
+  const state = {
+    storage,
+    waitUntil() {},
   };
   const database = {
     prepare() {
@@ -482,14 +476,17 @@ test("a first status probe still performs operational bootstrap when no alarm ex
       return statements.map(() => ({ meta: { changes: 0 } }));
     },
   };
-  globalThis.WebSocket = TestWebSocket;
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (_url, init) => {
+    if (new Headers(init?.headers).get("upgrade") === "websocket") {
+      upgradeRequests += 1;
+      return { status: 503, webSocket: null, body: null };
+    }
     httpSeedRequests += 1;
     return new Response(null, { status: 503 });
   };
   try {
     const relay = new QuakeRelay(
-      { storage },
+      state,
       {
         DB: database,
         ALERT_DELIVERY_QUEUE: { async send() {} },
@@ -498,9 +495,218 @@ test("a first status probe still performs operational bootstrap when no alarm ex
     await relay.fetch(new Request("https://relay.internal/status"));
     assert.ok(d1Batches > 0, "first status retains durable startup work");
     assert.ok(httpSeedRequests > 0, "first status retains upstream seed bootstrap");
+    assert.equal(upgradeRequests, 3, "first status opens one Upgrade per route");
     assert.notEqual(alarmAt, null, "first status schedules routine recovery");
   } finally {
-    globalThis.WebSocket = originalWebSocket;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("activates one fetch-Upgraded Wolfx route only after accept", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalFetch = globalThis.fetch;
+  const pending = new Set();
+  const failures = [];
+  const values = new Map();
+  const alarms = [];
+  const storage = {
+    async get(key) {
+      return values.get(key);
+    },
+    async put(key, value) {
+      values.set(key, value);
+    },
+    async list() {
+      return new Map();
+    },
+    async setAlarm(value) {
+      alarms.push(value);
+    },
+  };
+  const state = {
+    storage,
+    waitUntil(promise) {
+      let tracked;
+      tracked = Promise.resolve(promise)
+        .catch((error) => failures.push(error))
+        .finally(() => pending.delete(tracked));
+      pending.add(tracked);
+    },
+  };
+  const drain = async () => {
+    for (let pass = 0; pass < 20 && pending.size > 0; pass += 1) {
+      await Promise.all([...pending]);
+    }
+    assert.equal(pending.size, 0, "all relay background work should settle");
+    assert.deepEqual(failures, [], "the Upgrade path must not hide background errors");
+  };
+  class UpgradeSocket {
+    readyState = 1;
+    accepted = false;
+    sent = [];
+    listeners = new Map();
+
+    accept() {
+      this.accepted = true;
+    }
+
+    addEventListener(type, listener) {
+      this.listeners.set(type, listener);
+    }
+
+    send(message) {
+      assert.equal(this.accepted, true, "Wolfx queries must follow accept()");
+      this.sent.push(message);
+    }
+
+    close() {
+      this.readyState = 3;
+    }
+  }
+  const socket = new UpgradeSocket();
+  const fetchCalls = [];
+  let resolveUpgrade;
+  globalThis.fetch = (url, init) => {
+    fetchCalls.push({ url: String(url), init });
+    return new Promise((resolve) => {
+      resolveUpgrade = resolve;
+    });
+  };
+  try {
+    const relay = new QuakeRelay(state, {});
+    // These private TypeScript methods remain callable in the bundled black-box
+    // test. Calling twice exercises the real connectingRoutes guard.
+    relay.connect("all_eew");
+    relay.connect("all_eew");
+    assert.equal(fetchCalls.length, 1, "an in-flight route must not be duplicated");
+    assert.equal(fetchCalls[0].url, "https://ws-api.wolfx.jp/all_eew");
+    assert.equal(
+      new Headers(fetchCalls[0].init.headers).get("upgrade"),
+      "websocket",
+    );
+
+    resolveUpgrade({ status: 101, webSocket: socket, body: null });
+    await drain();
+
+    assert.equal(socket.accepted, true);
+    assert.deepEqual(socket.sent, [
+      "query_jmaeew",
+      "query_sceew",
+      "query_cenceew",
+      "query_fjeew",
+      "query_cqeew",
+    ]);
+    assert.equal(relay.statuses.get("jma_eew"), "open");
+    assert.equal(relay.upstreams.get("all_eew"), socket);
+    assert.equal(relay.connectingRoutes.has("all_eew"), false);
+    assert.deepEqual(alarms, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("rejected and failed Upgrade handshakes cancel, log safely, and retry", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalFetch = globalThis.fetch;
+  const originalConsoleWarn = console.warn;
+  const pending = new Set();
+  const failures = [];
+  const alarms = [];
+  const warnings = [];
+  const storage = {
+    async get() {
+      return undefined;
+    },
+    async put() {},
+    async list() {
+      return new Map();
+    },
+    async setAlarm(value) {
+      alarms.push(value);
+    },
+  };
+  const state = {
+    storage,
+    waitUntil(promise) {
+      let tracked;
+      tracked = Promise.resolve(promise)
+        .catch((error) => failures.push(error))
+        .finally(() => pending.delete(tracked));
+      pending.add(tracked);
+    },
+  };
+  const drain = async () => {
+    for (let pass = 0; pass < 20 && pending.size > 0; pass += 1) {
+      await Promise.all([...pending]);
+    }
+    assert.equal(pending.size, 0, "all retry scheduling should settle");
+    assert.deepEqual(failures, [], "failure telemetry must not become an exception");
+  };
+  const body = {
+    cancelled: 0,
+    async cancel() {
+      this.cancelled += 1;
+    },
+  };
+  let mode = "rejected";
+  globalThis.fetch = async () => {
+    if (mode === "rejected") {
+      return { status: 429, webSocket: null, body };
+    }
+    throw new TypeError("never copy this upstream transport text into logs");
+  };
+  console.warn = (entry) => warnings.push(entry);
+  try {
+    const relay = new QuakeRelay(state, {});
+    const beforeRejected = Date.now();
+    relay.connect("jma_eqlist");
+    await drain();
+    assert.equal(body.cancelled, 1, "a rejected Upgrade body must be released");
+    assert.equal(relay.statuses.get("jma_eqlist"), "error");
+    assert.equal(relay.connectingRoutes.has("jma_eqlist"), false);
+    const rejected = JSON.parse(warnings.at(-1));
+    assert.deepEqual(
+      {
+        outcome: rejected.outcome,
+        route: rejected.route,
+        httpStatus: rejected.httpStatus,
+      },
+      {
+        outcome: "wolfx_upstream_upgrade_rejected",
+        route: "jma_eqlist",
+        httpStatus: 429,
+      },
+    );
+    assert.ok(
+      alarms.at(-1) >= beforeRejected + 900,
+      "a rejected handshake gets a short reconnect alarm",
+    );
+
+    mode = "throw";
+    relay.connect("cenc_eqlist");
+    await drain();
+    assert.equal(relay.statuses.get("cenc_eqlist"), "error");
+    assert.equal(relay.connectingRoutes.has("cenc_eqlist"), false);
+    const failed = JSON.parse(warnings.at(-1));
+    assert.deepEqual(
+      {
+        outcome: failed.outcome,
+        route: failed.route,
+        errorName: failed.errorName,
+      },
+      {
+        outcome: "wolfx_upstream_upgrade_error",
+        route: "cenc_eqlist",
+        errorName: "TypeError",
+      },
+    );
+    assert.equal(
+      warnings.at(-1).includes("never copy this upstream transport text"),
+      false,
+      "upstream exception text must not enter Worker logs",
+    );
+  } finally {
+    console.warn = originalConsoleWarn;
     globalThis.fetch = originalFetch;
   }
 });
