@@ -1,15 +1,37 @@
 import assert from "node:assert/strict";
+import {
+  assertAppAttestPolicyHealth,
+  fetchWithoutRedirect,
+  parseSmokeTestArguments,
+} from "./smoke-test-policy.mjs";
 
-const baseURL = process.argv[2] ?? process.env.QUAKESIGNAL_API_URL;
-if (!baseURL) {
-  console.error("Usage: node scripts/smoke-test.mjs https://quakesignal-api.hopeso.workers.dev");
+let smokeArguments;
+try {
+  smokeArguments = parseSmokeTestArguments();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : "Cloudflare smoke-test arguments are invalid");
   process.exit(2);
 }
 
-const health = await fetch(`${baseURL}/healthz`);
+const {
+  baseURL,
+  expectedAppAttestPolicyFingerprint,
+  requiredAppAttestBundleVersion,
+} = smokeArguments;
+
+const health = await fetchWithoutRedirect(fetch, `${baseURL}/healthz`);
 assert.equal(health.status, 200, "health endpoint must return 200");
+assert.equal(
+  health.headers.get("cache-control"),
+  "no-store",
+  "health endpoint must not be cached",
+);
 const healthBody = await health.json();
 assert.equal(healthBody.ok, true, "health response must report ok");
+const appAttestPolicy = assertAppAttestPolicyHealth(healthBody, {
+  expectedAppAttestPolicyFingerprint,
+  requiredAppAttestBundleVersion,
+});
 assert.equal(
   healthBody.mode,
   "notification-only",
@@ -41,7 +63,7 @@ assert.deepEqual(
   "production health must not have stale required sources",
 );
 
-const root = await fetch(baseURL);
+const root = await fetchWithoutRedirect(fetch, baseURL);
 assert.equal(root.status, 200, "service metadata must return 200");
 const rootBody = await root.json();
 assert.equal(rootBody.purpose, "APNs alert delivery only");
@@ -54,7 +76,7 @@ for (const [path, title] of [
   ["/support", "Support"],
   ["/terms", "Terms of Use"],
 ]) {
-  const response = await fetch(`${baseURL}${path}`);
+  const response = await fetchWithoutRedirect(fetch, `${baseURL}${path}`);
   assert.equal(response.status, 200, `${path} must be an App Store-ready HTTPS page`);
   assert.match(
     response.headers.get("content-type") ?? "",
@@ -66,13 +88,13 @@ for (const [path, title] of [
   assert.match(body, /QuakeSignal/);
 }
 
-const recent = await fetch(`${baseURL}/v1/quakes/recent?limit=5`);
+const recent = await fetchWithoutRedirect(fetch, `${baseURL}/v1/quakes/recent?limit=5`);
 assert.equal(recent.status, 410, "recent data endpoint must stay disabled");
 
-const detail = await fetch(`${baseURL}/v1/quakes/jma_eew%3Atest`);
+const detail = await fetchWithoutRedirect(fetch, `${baseURL}/v1/quakes/jma_eew%3Atest`);
 assert.equal(detail.status, 410, "detail data endpoint must stay disabled");
 
-const live = await fetch(`${baseURL}/v1/live`);
+const live = await fetchWithoutRedirect(fetch, `${baseURL}/v1/live`);
 assert.equal(live.status, 410, "live relay endpoint must stay disabled");
 
 // Use a syntactically valid token for integrity-boundary probes. Otherwise a
@@ -80,7 +102,7 @@ assert.equal(live.status, 410, "live relay endpoint must stay disabled");
 // the App Attest authorization guard that this smoke test is meant to prove.
 const unattestedDeviceToken = "a".repeat(64);
 
-const invalidRegistration = await fetch(`${baseURL}/v1/devices`, {
+const invalidRegistration = await fetchWithoutRedirect(fetch, `${baseURL}/v1/devices`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ token: unattestedDeviceToken }),
@@ -96,7 +118,7 @@ assert.equal(
   "device registration responses must not be cached",
 );
 
-const oversizedRegistration = await fetch(`${baseURL}/v1/devices`, {
+const oversizedRegistration = await fetchWithoutRedirect(fetch, `${baseURL}/v1/devices`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ token: "a".repeat(9 * 1024) }),
@@ -113,7 +135,7 @@ assert.equal(
 );
 
 const encoder = new TextEncoder();
-const chunkedOversizedRegistration = await fetch(`${baseURL}/v1/devices`, {
+const chunkedOversizedRegistration = await fetchWithoutRedirect(fetch, `${baseURL}/v1/devices`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   // Deliberately omit Content-Length so the Worker must enforce its streaming
@@ -134,7 +156,7 @@ assert.equal(
   "device registration must enforce its body limit for chunked requests",
 );
 
-const invalidDeletion = await fetch(`${baseURL}/v1/devices`, {
+const invalidDeletion = await fetchWithoutRedirect(fetch, `${baseURL}/v1/devices`, {
   method: "DELETE",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ token: unattestedDeviceToken }),
@@ -150,7 +172,7 @@ assert.equal(
   "device deletion responses must not be cached",
 );
 
-const invalidTestPush = await fetch(`${baseURL}/v1/devices/test`, {
+const invalidTestPush = await fetchWithoutRedirect(fetch, `${baseURL}/v1/devices/test`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ token: unattestedDeviceToken }),
@@ -163,7 +185,7 @@ assert.equal(
 assert.equal(
   invalidTestPush.headers.get("cache-control"), "no-store");
 
-const malformedChallenge = await fetch(`${baseURL}/v1/app-attest/challenge`, {
+const malformedChallenge = await fetchWithoutRedirect(fetch, `${baseURL}/v1/app-attest/challenge`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ version: "1" }),
@@ -175,7 +197,7 @@ assert.equal(
 );
 assert.equal(malformedChallenge.headers.get("cache-control"), "no-store");
 
-const rejectedDevelopmentBypass = await fetch(`${baseURL}/v1/devices`, {
+const rejectedDevelopmentBypass = await fetchWithoutRedirect(fetch, `${baseURL}/v1/devices`, {
   method: "POST",
   headers: {
     "content-type": "application/json",
@@ -196,6 +218,7 @@ console.log(
       baseURL,
       upstreams: healthBody.upstreams,
       appAttest: "enforced",
+      appAttestPolicy,
       earthquakeDataEndpoints: "disabled",
     },
     null,

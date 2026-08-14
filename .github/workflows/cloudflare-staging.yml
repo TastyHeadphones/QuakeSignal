@@ -8,10 +8,24 @@ on:
     paths:
       - "backend/cloudflare/**"
       - ".github/workflows/cloudflare-staging.yml"
+      - ".github/workflows/cloudflare.yml"
+      - ".github/workflows/ios.yml"
+      - ".github/scripts/verify-ios-release-contract.mjs"
+      - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - "ios/project.yml"
+      - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal/Supporting/Info.plist"
   pull_request:
     paths:
       - "backend/cloudflare/**"
       - ".github/workflows/cloudflare-staging.yml"
+      - ".github/workflows/cloudflare.yml"
+      - ".github/workflows/ios.yml"
+      - ".github/scripts/verify-ios-release-contract.mjs"
+      - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - "ios/project.yml"
+      - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal/Supporting/Info.plist"
   workflow_dispatch:
     inputs:
       deploy_staging:
@@ -48,6 +62,9 @@ jobs:
           cache: npm
           cache-dependency-path: backend/cloudflare/package-lock.json
 
+      - name: Verify iOS and Worker release contract
+        run: node .github/scripts/verify-ios-release-contract.mjs
+
       - name: Install Worker dependencies
         working-directory: backend/cloudflare
         run: npm ci
@@ -65,6 +82,7 @@ jobs:
           npm run test:render-staging-config
           npm run test:verify-apns-secret-config
           npm run test:worker-readiness
+          npm run test:smoke-test
           npm audit --audit-level=high
 
   deploy-staging:

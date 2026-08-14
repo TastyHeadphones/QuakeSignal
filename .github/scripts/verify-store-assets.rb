@@ -26,6 +26,35 @@ class StoreAssetValidator
     error("missing or empty file: #{path}")
   end
 
+  # Store review material is deliberately version controlled alongside the
+  # listing copy. A merely present placeholder is not enough: keep a small,
+  # stable set of anchors so an accidental replacement cannot silently drop
+  # the reviewer route or the Wolfx content-rights gate.
+  def validate_submission_document(path, document_name, required_phrases)
+    require_nonempty_file(path)
+    return unless path.file? && path.size.positive?
+
+    text = path.read(encoding: "UTF-8")
+    required_phrases.each do |phrase|
+      next if text.include?(phrase)
+
+      error("#{path}: #{document_name} must include #{phrase.inspect}")
+    end
+  end
+
+  # A release-ready checklist may legitimately have every item checked. Check
+  # that Content Rights/Wolfx remains a real checkbox item without requiring
+  # either an unfinished marker or a particular completion state.
+  def validate_submission_checklist(path, document_name)
+    validate_submission_document(path, document_name, ["Content Rights", "Wolfx"])
+    return unless path.file? && path.size.positive?
+
+    text = path.read(encoding: "UTF-8")
+    return if text.match?(/^- \[[ xX]\] \*\*Content Rights\b.*?\bWolfx\b/m)
+
+    error("#{path}: #{document_name} must contain a Content Rights/Wolfx checkbox item")
+  end
+
   def listing_text(path)
     require_nonempty_file(path)
     return "" unless path.file?
@@ -183,6 +212,27 @@ begin
   manifest = JSON.parse(ios_store.join("screenshot-manifest.json").read)
   raise "platform must be iOS" unless manifest.fetch("platform") == "iOS"
 
+  provenance = JSON.parse(ios_store.join("screenshot-provenance.json").read)
+  allowed_provenance_statuses = %w[pending-public-release-candidate approved]
+  unless allowed_provenance_statuses.include?(provenance.fetch("status"))
+    raise "iOS screenshot provenance must have an allowed status"
+  end
+  unless provenance.fetch("requiredBeforeUpload").fetch("configuration") == "Release"
+    raise "iOS screenshot provenance must require Release configuration"
+  end
+  unless Integer(provenance.fetch("requiredBeforeUpload").fetch("minimumCFBundleVersion")) >= 3
+    raise "iOS screenshot provenance must require a public build number of at least 3"
+  end
+
+  mac_provenance = JSON.parse(mac_store.join("screenshot-provenance.json").read)
+  allowed_mac_provenance_statuses = %w[pending-signed-mac-app-store-build approved]
+  unless allowed_mac_provenance_statuses.include?(mac_provenance.fetch("status"))
+    raise "macOS screenshot provenance must have an allowed status"
+  end
+  unless mac_provenance.fetch("requiredBeforeUpload").fetch("configuration") == "macos-app-store"
+    raise "macOS screenshot provenance must require the Mac App Store configuration"
+  end
+
   locales = manifest.fetch("locales").map { |locale| locale.fetch("directory") }
   frames = manifest.fetch("frames").map { |frame| frame.fetch("file") }
   display_classes = manifest.fetch("displayClasses")
@@ -256,7 +306,34 @@ begin
   end
 
   validator.validate_macos_listing_copy(mac_store.join("en-US"))
-  validator.require_nonempty_file(mac_store.join("review-notes.txt"))
+  validator.validate_submission_document(
+    ios_store.join("review-notes.txt"),
+    "iOS App Review notes",
+    ["QuakeSignal", "Wolfx", "No account"],
+  )
+  validator.validate_submission_document(
+    ios_store.join("submission-answers.md"),
+    "iOS App Store Connect submission answers",
+    ["Content Rights", "Wolfx"],
+  )
+  validator.validate_submission_checklist(
+    ios_store.join("submission-checklist.md"),
+    "iOS App Store Connect pre-submission checklist",
+  )
+  validator.validate_submission_document(
+    mac_store.join("review-notes.txt"),
+    "macOS App Review notes",
+    ["QuakeSignal", "Wolfx", "does not require an account"],
+  )
+  validator.validate_submission_document(
+    mac_store.join("submission-answers.md"),
+    "macOS App Store Connect submission answers",
+    ["Content Rights", "Wolfx"],
+  )
+  validator.validate_submission_checklist(
+    mac_store.join("submission-checklist.md"),
+    "macOS App Store Connect pre-submission checklist",
+  )
 
   mac_screenshot_directory = mac_store.join("screenshots", "en-US")
   actual_mac_screenshots = mac_screenshot_directory.directory? ? mac_screenshot_directory.children.select(&:file?) : []

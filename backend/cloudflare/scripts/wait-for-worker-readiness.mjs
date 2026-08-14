@@ -66,6 +66,7 @@ async function probeHealthWithinDeadline(fetchImpl, url, timeoutMs) {
   const probe = (async () => {
     const response = await fetchImpl(url, {
       cache: "no-store",
+      redirect: "error",
       signal: controller.signal,
     });
     let body = null;

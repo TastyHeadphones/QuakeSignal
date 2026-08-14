@@ -19,6 +19,7 @@
     "test:delayed-training-test-push": "node --test scripts/delayed-training-test-push.test.mjs",
     "wait:worker-readiness": "node scripts/wait-for-worker-readiness.mjs",
     "test:worker-readiness": "node --test scripts/wait-for-worker-readiness.test.mjs",
+    "test:smoke-test": "node --test scripts/smoke-test.test.mjs",
     "test:attested-key-bound-deletion": "node scripts/local-attested-key-bound-deletion-test.mjs",
     "test:local-request-validation": "node scripts/local-request-validation-test.mjs",
     "test:remote": "node scripts/smoke-test.mjs"

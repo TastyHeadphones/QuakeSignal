@@ -327,8 +327,22 @@ npx wrangler secret put APNS_BUNDLE_ID
   turns a historical backfill into an alert. On the Workers Free plan,
   Cloudflare currently allows 100,000 Durable Object rows written per day. To
   stay within a routine budget, healthy WebSocket and emergency HTTP freshness
-  checkpoints are each written at most once per source per minute. This is not
-  an unlimited-capacity claim: unusual sustained event, reconnect, or recovery
+  checkpoints are each written at most once per source per minute. Repeated
+  unchanged ranked earthquake-list WebSocket frames are committed through one
+  bounded snapshot cursor and then deduplicated by a post-D1 fingerprint, so
+  they do not create one journal row per list entry. Each list source holds at
+  most an active cursor plus two newer accepted snapshots. The third distinct
+  frame is made durable before it marks the source overloaded and `/healthz`
+  fails closed; only then does the relay close that list socket. Later frames
+  after explicit backpressure are not admitted, so the path remains bounded
+  rather than spending one write per frame. The relay drains active → latest →
+  overflow before a fresh complete resync can clear the overload marker. This
+  guarantees durability for frames admitted before the close; it cannot turn a
+  finite relay window into an upstream replay log, so health remains failed
+  closed until that resync. A bare WebSocket Upgrade does not reset reconnect backoff or
+  publish freshness; only valid Wolfx traffic does, and a route must stay live
+  for one minute before its exponential reconnect history is cleared. This is
+  not an unlimited-capacity claim: unusual sustained changed-event, reconnect, or recovery
   activity can still exhaust the quota. Monitor Durable Object usage; a failed
   durable checkpoint is not treated as fresh and the three-minute stale policy
   makes `/healthz` fail closed.

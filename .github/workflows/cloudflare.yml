@@ -8,10 +8,22 @@ on:
     paths:
       - "backend/cloudflare/**"
       - ".github/workflows/cloudflare.yml"
+      - ".github/workflows/ios.yml"
+      - ".github/scripts/verify-ios-release-contract.mjs"
+      - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - "ios/project.yml"
+      - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal/Supporting/Info.plist"
   pull_request:
     paths:
       - "backend/cloudflare/**"
       - ".github/workflows/cloudflare.yml"
+      - ".github/workflows/ios.yml"
+      - ".github/scripts/verify-ios-release-contract.mjs"
+      - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - "ios/project.yml"
+      - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal/Supporting/Info.plist"
   workflow_dispatch:
     inputs:
       deploy_production:
@@ -48,6 +60,9 @@ jobs:
           cache: npm
           cache-dependency-path: backend/cloudflare/package-lock.json
 
+      - name: Verify iOS and Worker release contract
+        run: node .github/scripts/verify-ios-release-contract.mjs
+
       - name: Install Worker dependencies
         working-directory: backend/cloudflare
         run: npm ci
@@ -63,6 +78,10 @@ jobs:
       - name: Test delayed Worker readiness gate
         working-directory: backend/cloudflare
         run: npm run test:worker-readiness
+
+      - name: Test deployed App Attest policy smoke contract
+        working-directory: backend/cloudflare
+        run: npm run test:smoke-test
 
       - name: Test App Attest key-rotation registration recovery
         working-directory: backend/cloudflare
@@ -133,6 +152,11 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: cloudflare-production
+    # Serialize against TestFlight's remote policy proof through IPA upload.
+    # A deploy therefore completes before that proof or waits until it ends.
+    concurrency:
+      group: quakesignal-production-app-attest-policy
+      cancel-in-progress: false
 
     steps:
       - name: Check out repository

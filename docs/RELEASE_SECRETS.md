@@ -309,14 +309,24 @@ clearly labelled training push to its owned production subscription per UTC
 day. The Worker returns `429` with `Retry-After` until the next UTC day after
 that slot is claimed, including when APNs later rejects the attempted training
 push. The delayed background/locked/terminated training check uses the same
-claim and requires the InternalQA TestFlight build `1.0 (2)`, or an explicitly
-later InternalQA build, containing **Schedule Background Test Alert**. Build
-`1.0 (2)` is assigned to the internal QA group and is not a public submission
-candidate because a public `Release` deliberately excludes that control. Its
+claim and requires the legacy QA-only TestFlight build `1.0 (2)`, or an
+explicitly later `InternalQA` build, containing **Schedule Background Test
+Alert**. Build `1.0 (2)` predates the current InternalQA configuration, is
+assigned to the internal QA group, and is not a public submission candidate
+because a public `Release` deliberately excludes that control. Its
 physical-device evidence is still required before launch promotion. After the
 promotion, create a newly numbered public `Release` build only after its source
 build number, Worker App Attest allowlist, and checked-in iOS workflow guard
-have been updated together in a reviewed release.
+have been updated together in a reviewed release. The iOS release-contract
+verifier then rejects any mismatched dispatch build, generated Xcode setting,
+Worker policy, or archive invocation before signing secrets are imported. Its
+non-secret App Attest policy fingerprint must match the deployed production
+Worker's `/healthz` response and allow that selected build before a signed
+archive can start. This is a deployment-consistency gate; it does not claim
+that optional release metadata is present in every valid iOS 17–26 proof.
+The signed TestFlight lane and protected production Worker deploy also share a
+non-cancelling concurrency lock, so a policy-changing deployment cannot land
+between that live proof and the IPA upload.
 
 For the first production Worker deployment, run the protected workflow from
 `main` with `deploy_production=true` and `bootstrap_testflight=true` while

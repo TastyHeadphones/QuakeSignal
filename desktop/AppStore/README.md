@@ -12,6 +12,9 @@ Nothing here is uploaded automatically.
 | Description | `en-US/description.txt` |
 | Keywords | `en-US/keywords.txt` |
 | App Review notes | `review-notes.txt` |
+| Submission-answer worksheet | `submission-answers.md` |
+| Pre-submission checklist | `submission-checklist.md` |
+| Screenshot provenance / signed-build approval | `screenshot-provenance.json` |
 
 The approved primary product-page name is **QuakeSignal for macOS** and the
 intended primary category is **Weather**. App Store Connect requires unique
@@ -38,9 +41,10 @@ be one multi-platform/Universal Purchase record.
 | Primary category | Weather |
 | Copyright | `2026 UniSphereco LLC` |
 
-Before uploading a build or submitting the macOS version, create the `1.0.0`
-platform version to match `desktop/src-tauri/tauri.conf.json`, then complete
-the age rating, content rights, export-compliance and App Privacy answers.
+Before uploading a build or submitting the macOS version, use the existing
+`1.0.0` platform version in App Store Connect (currently Prepare for
+Submission); do not create a duplicate version. Then complete the age rating,
+content rights, export-compliance and App Privacy answers.
 Before certifying content rights for Wolfx-supplied data, obtain and preserve
 written upstream permission using
 [`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md).
@@ -93,10 +97,13 @@ is shown.
 | 4 | `screenshots/en-US/04-notification-preferences.png` | Alarm and notification preferences plus independent-app disclosure |
 
 Before upload, visually compare every frame with the signed, sandboxed Mac App
-Store build on a supported Mac and record the approval. Recapture and replace
-any frame that differs; the controlled-harness render alone is not confirmation
-of the final signed build. Then upload the approved set in the listed order and
-confirm App Store Connect's current screenshot validation rules at upload time.
+Store build on a supported Mac and record the approval in
+[`screenshot-provenance.json`](./screenshot-provenance.json), including the
+signed app/package SHA-256, source commit, Mac/OS, capture time, and reviewer.
+Recapture and replace any frame that differs; the controlled-harness render
+alone is not confirmation of the final signed build. Then upload the approved
+set in the listed order and confirm App Store Connect's current screenshot
+validation rules at upload time.
 
 ## Content guardrails
 

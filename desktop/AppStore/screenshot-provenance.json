@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "status": "pending-signed-mac-app-store-build",
+  "purpose": "Evidence record for the macOS App Store screenshot upload set. This file does not approve the committed controlled-render frames for portal upload.",
+  "requiredBeforeUpload": {
+    "configuration": "macos-app-store",
+    "bundleIdentifier": "com.quakesignal.desktop",
+    "version": "1.0.0",
+    "screenshots": [
+      "01-home-all-clear.png",
+      "02-event-history.png",
+      "03-monitoring-preferences.png",
+      "04-notification-preferences.png"
+    ],
+    "evidence": [
+      "signed sandboxed app or package SHA-256",
+      "source commit",
+      "Apple Distribution signing identity and team",
+      "supported Mac model and macOS version",
+      "capture timestamp",
+      "reviewer approval"
+    ]
+  },
+  "currentSet": {
+    "status": "controlled-render-draft-only",
+    "reason": "The committed frames are generated from the real Mac App Store frontend configuration, but need comparison or recapture from the final signed sandboxed build before upload."
+  }
+}

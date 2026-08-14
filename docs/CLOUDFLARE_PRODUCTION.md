@@ -97,11 +97,24 @@ release evidence; repeat the production proof against
    freshness at most once per minute. A source with no current durable
    WebSocket or HTTP freshness proof is stale after three minutes, so
    `/healthz` fails closed rather than claiming an unverified alert path.
-   This bounded cadence does not make the Free tier unlimited: unusual
-   sustained event ingestion, reconnect/recovery activity, or other durable
-   work can still exhaust the daily write quota. Monitor Durable Object usage
+   A bare WebSocket Upgrade is not treated as source freshness or a reconnect
+   success. The relay requires a valid Wolfx frame and waits one stable minute
+   before clearing exponential reconnect state, so an upgrade-then-close flap
+   cannot repeatedly return to the five-second retry floor. Repeated unchanged
+   ranked earthquake-list frames are deduplicated only after their bounded D1
+   cursor commits. A source may retain one active list plus two newer accepted
+   snapshots; the third distinct list is persisted before it enters an
+   explicit fail-closed overload state and the relay closes that list socket.
+   Later frames after backpressure are not admitted, rather than writing one
+   cursor per frame. The relay drains active → latest → overflow before a new
+   full resync can clear the overload marker. It preserves all frames admitted
+   before backpressure, but cannot replace an upstream replay log; readiness
+   stays failed closed until that resync. This bounded cadence does not make the Free tier unlimited: unusual sustained event
+   ingestion, reconnect/recovery activity, or other durable work can still
+   exhaust the daily write quota. Monitor Durable Object usage
    and treat quota errors or health degradation as an operational incident;
-   choose a paid plan when the observed or expected volume requires it.
+   reduce/cap the offending path and keep alert readiness fail-closed rather
+   than relying on a paid-plan upgrade as recovery.
    Deploy the separate, cron-only
    [`terminal-DLQ monitor`](../backend/cloudflare/terminal-dlq-monitor/) with a
    five-minute Cloudflare Cron Trigger. It uses only a **Queues Read** token to

@@ -37,6 +37,7 @@ test("waits through degraded websocket startup and accepts fresh HTTP fallback",
     fetchImpl: async (_url, init) => {
       requests += 1;
       assert.equal(init.cache, "no-store");
+      assert.equal(init.redirect, "error");
       return requests === 1
         ? health()
         : health({
