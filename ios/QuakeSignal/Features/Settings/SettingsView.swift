@@ -98,7 +98,14 @@ struct SettingsView: View {
                             Text("settings.testAlert")
                         }
                     }
-                    .disabled(isSendingTest || !settings.pushSubscriptionEnabled || notifications.deviceToken == nil)
+                    .disabled(
+                        isSendingTest ||
+                        !PushTestAlertPolicy.isAvailable(
+                            subscriptionEnabled: settings.pushSubscriptionEnabled,
+                            registrationState: settings.pushRegistrationState,
+                            hasDeviceToken: notifications.deviceToken != nil
+                        )
+                    )
 
                     if let testResultMessage {
                         Text(testResultMessage)
@@ -414,7 +421,14 @@ struct SettingsView: View {
     }
 
     private func sendTestAlert() async {
-        guard let token = notifications.deviceToken else { return }
+        guard PushTestAlertPolicy.isAvailable(
+                  subscriptionEnabled: settings.pushSubscriptionEnabled,
+                  registrationState: settings.pushRegistrationState,
+                  hasDeviceToken: notifications.deviceToken != nil
+              ),
+              let token = notifications.deviceToken else {
+            return
+        }
         isSendingTest = true
         testResultMessage = nil
         do {

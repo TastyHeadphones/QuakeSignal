@@ -47,4 +47,47 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertTrue(restored.pushRegistrationState.isRetryable)
         XCTAssertEqual(defaults.string(forKey: "settings.pushRegistrationState"), PushRegistrationState.failed.rawValue)
     }
+
+    func testSelectingCurrentLocationPreservesTheLastCityAsFallback() throws {
+        let suiteName = "PushRegistrationLifecycleTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let settings = AppSettings(defaults: defaults)
+        settings.selectedCityId = "tokyo"
+
+        settings.selectCurrentLocation()
+
+        XCTAssertTrue(settings.useCurrentLocation)
+        XCTAssertEqual(settings.selectedCityId, "tokyo")
+        XCTAssertEqual(defaults.string(forKey: "settings.cityId"), "tokyo")
+    }
+
+    func testTestAlertRequiresAnActiveServerRegistrationAndDeviceToken() {
+        XCTAssertTrue(PushTestAlertPolicy.isAvailable(
+            subscriptionEnabled: true,
+            registrationState: .active,
+            hasDeviceToken: true
+        ))
+        XCTAssertFalse(PushTestAlertPolicy.isAvailable(
+            subscriptionEnabled: true,
+            registrationState: .registering,
+            hasDeviceToken: true
+        ))
+        XCTAssertFalse(PushTestAlertPolicy.isAvailable(
+            subscriptionEnabled: true,
+            registrationState: .failed,
+            hasDeviceToken: true
+        ))
+        XCTAssertFalse(PushTestAlertPolicy.isAvailable(
+            subscriptionEnabled: false,
+            registrationState: .active,
+            hasDeviceToken: true
+        ))
+        XCTAssertFalse(PushTestAlertPolicy.isAvailable(
+            subscriptionEnabled: true,
+            registrationState: .active,
+            hasDeviceToken: false
+        ))
+    }
 }

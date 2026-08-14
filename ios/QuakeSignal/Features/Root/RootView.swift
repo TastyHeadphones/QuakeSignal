@@ -45,7 +45,7 @@ struct RootView: View {
             // launch; this schedules registration immediately if one arrives.
             schedulePushRegistration()
             if AppSettings.shared.useCurrentLocation {
-                locationManager.requestLocationUpdate()
+                locationManager.requestCurrentLocation()
             }
             store.setForegroundActive(scenePhase == .active)
             await store.start()

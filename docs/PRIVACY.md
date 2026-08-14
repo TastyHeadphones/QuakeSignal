@@ -112,7 +112,7 @@ stored for your device:
 | Test-alert preference | Respecting your alert choices |
 | Created and updated timestamps | Housekeeping |
 | App Attest integrity record: opaque key identifier, public verification key, Apple attestation receipt, assertion counter, integrity timestamps, and any Apple-supplied build/version distribution category | Proving that a registration, removal, or test-push request came from the signed app instance and preventing forged or replayed requests |
-| Production training-test claim: opaque App Attest key identifier and UTC claim/expiry timestamps, only while a reviewed production training test is enabled | Enforcing one clearly labelled production training attempt per App Attest key per UTC day; this contains no APNs token, proof, or request body |
+| Production training-test claim: opaque App Attest key identifier and UTC claim/expiry timestamps after an immediate or reviewed delayed production test | Enforcing one clearly labelled production training attempt per App Attest key per UTC day; this contains no APNs token, proof, or request body |
 | Optional delayed-training scheduler record: opaque App Attest key identifier, fixed due time, and at-most-once attempted state | Scheduling one reviewed background training notification. It contains no APNs token, request body, App Attest proof, preferences, location, or earthquake payload, and is deleted after its one attempt or cancellation; an alarm more than 30 seconds late is deleted without delivery. |
 
 The subscription data is stored in the `devices` table and the integrity data
@@ -149,8 +149,8 @@ it must supply the exact current APNs token for a token-bound recovery request
 or use the support deletion path. Each App Attest challenge expires in no more
 than five minutes and expired records are removed by routine cleanup.
 When the last associated registration is removed, that App Attest verifier,
-receipt, and assertion-counter record is deleted too. A reviewed production
-training test creates a separate token-free claim containing only the opaque
+receipt, and assertion-counter record is deleted too. A production training
+test creates a separate token-free claim containing only the opaque
 App Attest key ID and UTC timestamps; it is retained for at most 14 days to
 enforce one production training attempt per key per UTC day. Its optional
 fixed-delay check creates a private scheduler record containing only that key

@@ -319,11 +319,12 @@ npx wrangler secret put APNS_BUNDLE_ID
 `APNS_PRIVATE_KEY` is the complete one-time-download Apple APNs `.p8` key.
 Store a recovery copy in the organization's approved password manager before
 entering it. Do not create a key in the Apple portal until its secure storage
-is ready. `ENABLE_PRODUCTION_TEST_PUSH` stays `false`; production training
-pushes must be a deliberate, separately reviewed deployment setting. If it is
-temporarily set to `true`, each existing App Attest key can make only one
-clearly labelled training push to its owned production subscription per UTC
-day. The Worker returns `429` with `Retry-After` until the next UTC day after
+is ready. `ENABLE_PRODUCTION_TEST_PUSH` stays `false`; it controls only the
+InternalQA delayed-background scheduler. The ordinary foreground **Send Test
+Alert** remains available to an active, attested production registration.
+Each existing App Attest key can make only one clearly labelled training push
+to its owned production subscription per UTC day across both modes. The Worker
+returns `429` with `Retry-After` until the next UTC day after
 that slot is claimed, including when APNs later rejects the attempted training
 push. The delayed background/locked/terminated training check uses the same
 claim and requires the legacy QA-only TestFlight build `1.0 (2)`, or an
