@@ -41,9 +41,9 @@ The Environment needs these environment-scoped secrets:
 | `CLOUDFLARE_DEPLOY_ACCOUNT_ID` | Separate account ID where `quakesignal-terminal-dlq-monitor` is deployed. It must differ from the production Queue account. |
 | `CLOUDFLARE_TARGET_ACCOUNT_ID` | Production account ID owning `quakesignal-alert-delivery-dlq-fallback`. It is stored as a runtime Worker secret so the target cannot be changed from source. |
 | `CLOUDFLARE_MONITOR_API_TOKEN` | Separate runtime token: account-scoped **Queues: Read** only. It can list Queues and read aggregate metrics, but cannot read, acknowledge, retry, purge, or redrive messages. |
-| `GITHUB_APP_ID` | Numeric GitHub App ID. |
-| `GITHUB_APP_INSTALLATION_ID` | Numeric installation ID for an installation limited to this one repository. |
-| `GITHUB_APP_PRIVATE_KEY_PKCS8` | Unencrypted PKCS#8 RSA private-key PEM for that GitHub App. |
+| `TERMINAL_DLQ_GITHUB_APP_ID` | Numeric GitHub App ID; the protected workflow maps it to runtime `GITHUB_APP_ID`. GitHub reserves the `GITHUB_` Environment-secret namespace. |
+| `TERMINAL_DLQ_GITHUB_APP_INSTALLATION_ID` | Numeric installation ID for an installation limited to this one repository; mapped to runtime `GITHUB_APP_INSTALLATION_ID`. |
+| `TERMINAL_DLQ_GITHUB_APP_PRIVATE_KEY_PKCS8` | Unencrypted PKCS#8 RSA private-key PEM for that GitHub App; mapped to runtime `GITHUB_APP_PRIVATE_KEY_PKCS8`. |
 
 Create a dedicated GitHub App with repository selection **Only select
 repositories → `TastyHeadphones/QuakeSignal`** and only the repository
@@ -63,9 +63,11 @@ openssl pkcs8 -topk8 -nocrypt \
 ```
 
 Store the complete output (including `BEGIN PRIVATE KEY` / `END PRIVATE KEY`)
-as the `GITHUB_APP_PRIVATE_KEY_PKCS8` Environment secret, then securely remove
-the local converted copy. Do not use a personal access token or an Actions-write
-GitHub App for this monitor.
+as the `TERMINAL_DLQ_GITHUB_APP_PRIVATE_KEY_PKCS8` Environment secret, then
+securely remove the local converted copy. GitHub does not allow custom secret
+names beginning with `GITHUB_`; the protected workflow maps this value to the
+Worker-only runtime name. Do not use a personal access token or an
+Actions-write GitHub App for this monitor.
 
 ## Deploy and verify
 
