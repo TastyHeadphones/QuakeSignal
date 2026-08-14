@@ -15,7 +15,7 @@ only after the listed evidence is complete. Use it together with
 | Bundle ID | `com.quakesignal.app` | `ios/project.yml` |
 | SKU | `quakesignal-ios` | `README.md` |
 | Version | `1.0` | `ios/project.yml` |
-| Release candidate | Replacement `1.0 (4)` is signed, uploaded, processed, and assigned to `QuakeSignal Internal QA`; **PENDING** physical QA, public attachment, and App Review. Uploaded build `1.0 (3)` is superseded and must not be selected. | [build-4 upload run 31793143181](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31793143181), `README.md` build-number rule |
+| Release candidate | Coordinated repair `1.0 (5)` is **PENDING** protected upload, processing, physical QA, public attachment, and App Review. Uploaded builds `1.0 (3)` and `1.0 (4)` are superseded and must not be selected. | [build-4 upload run 31793143181](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31793143181), `README.md` build-number rule |
 | TestFlight build 2 | Legacy QA-only; never attach it to App Review | `README.md`, `docs/IOS_TESTFLIGHT_PHYSICAL_QA.md` |
 | Primary / secondary category | Weather / Utilities | `README.md` |
 | Price / availability | Free; **PENDING** release-owner territory decision | release owner |

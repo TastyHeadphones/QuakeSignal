@@ -27,12 +27,15 @@ Public `Release` build `1.0 (3)` was signed and uploaded by
 [run 31784685472](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31784685472),
 but physical use exposed location-selection and foreground test-alert defects.
 It is superseded and must not be attached to the App Store version or submitted
-for review. The coordinated replacement is `1.0 (4)`; begin the normal
-production registration, refresh, unsubscribe, and foreground test-alert checks
-below with that build. The protected workflow signed and uploaded it in
+for review. The next coordinated replacement was `1.0 (4)`. The protected workflow signed and uploaded it in
 [run 31793143181](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31793143181),
 App Store Connect finished processing it, and it is assigned to the existing
-`QuakeSignal Internal QA` group. Physical-device results are still pending.
+`QuakeSignal Internal QA` group. Device use then exposed an App Attest
+proof-recovery failure and remaining current-location state defects, so build
+`4` is superseded too. Do not attach builds `3` or `4` to App Review. The
+coordinated repair candidate is `1.0 (5)`; begin the normal production
+registration, refresh, unsubscribe, and foreground test-alert checks below
+only after its protected upload is processed and available.
 
 ## Before starting
 

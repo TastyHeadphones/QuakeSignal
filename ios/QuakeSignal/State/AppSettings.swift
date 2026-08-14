@@ -24,7 +24,24 @@ enum PushTestAlertPolicy {
         registrationState: PushRegistrationState,
         hasDeviceToken: Bool
     ) -> Bool {
-        subscriptionEnabled && registrationState == .active && hasDeviceToken
+        subscriptionEnabled && registrationState != .registering && hasDeviceToken
+    }
+
+    /// A proof can fail after a registration was previously accepted, for
+    /// example when iOS can no longer use the Secure Enclave key associated
+    /// with that registration. These failures are known to happen before an
+    /// APNs test send. Repair the server registration once, then issue the
+    /// user-requested test; never retry an ambiguous network/provider error
+    /// which might otherwise produce two notifications.
+    static func shouldRepairRegistration(after error: Error) -> Bool {
+        if let apiError = error as? APIError {
+            return apiError.statusCode == 404
+        }
+        guard let appAttestError = error as? AppAttestError else { return false }
+        if case .proofGenerationFailed = appAttestError {
+            return true
+        }
+        return false
     }
 }
 

@@ -17,8 +17,8 @@ struct HomeView: View {
                         }
                     }
 
-                    if settings.useCurrentLocation && locationManager.authorizationStatus == .denied {
-                        InlineBanner(symbol: "location.slash", titleKey: "home.banner.locationOff", detail: String(localized: "home.banner.locationOff.detail"), actionKey: "settings.openSystemSettings") {
+                    if settings.useCurrentLocation && locationManager.selectionStatus == .denied {
+                        InlineBanner(symbol: "location.slash", titleKey: "home.banner.locationOff", detail: locationManager.selectionStatus.localizedDetail(fallbackCityName: settings.selectedCity?.localizedName), actionKey: "settings.openSystemSettings") {
                             showingCityPicker = true
                         }
                     }
@@ -76,8 +76,15 @@ struct HomeView: View {
     }
 
     private var cityTitle: String {
+        if settings.useCurrentLocation,
+           locationManager.selectionStatus == .current {
+            return String(localized: "city.currentLocation")
+        }
         if let city = settings.selectedCity {
             return city.localizedName
+        }
+        if settings.useCurrentLocation {
+            return String(localized: "city.currentLocation")
         }
         return String(localized: "app.name")
     }

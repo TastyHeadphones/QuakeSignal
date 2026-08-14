@@ -228,6 +228,15 @@
 /* City / location picker */
 "city.pickerTitle" = "Location";
 "city.useCurrentLocation" = "Use Current Location";
+"city.currentLocation" = "Current Location";
+"city.currentLocation.active" = "GPS location active";
+"city.currentLocation.locating" = "Locating…";
+"city.currentLocation.permissionRequired" = "Location permission is required";
+"city.currentLocation.unavailable" = "Current location is unavailable";
+"city.currentLocation.permissionFallback" = "Permission required · using %1$@ for now";
+"city.currentLocation.deniedFallback" = "Location off · using %1$@";
+"city.currentLocation.locatingFallback" = "Locating · using %1$@ for now";
+"city.currentLocation.unavailableFallback" = "Location unavailable · using %1$@";
 "city.section.radius" = "Nearby Radius";
 "city.section.pick" = "Subscribe to a City";
 "city.none" = "Not set";

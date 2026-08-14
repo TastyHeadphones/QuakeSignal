@@ -1,12 +1,17 @@
 import Foundation
 
 enum APIError: LocalizedError {
-    case server(String)
+    case server(statusCode: Int, message: String)
     case invalidResponse
+
+    var statusCode: Int? {
+        guard case .server(let statusCode, _) = self else { return nil }
+        return statusCode
+    }
 
     var errorDescription: String? {
         switch self {
-        case .server(let message): return message
+        case .server(_, let message): return message
         case .invalidResponse: return "Invalid response from server"
         }
     }
@@ -90,9 +95,9 @@ final class APIClient: Sendable {
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
             if let object = try? JSONDecoder().decode([String: String].self, from: data), let message = object["error"] {
-                throw APIError.server(message)
+                throw APIError.server(statusCode: http.statusCode, message: message)
             }
-            throw APIError.server("HTTP \(http.statusCode)")
+            throw APIError.server(statusCode: http.statusCode, message: "HTTP \(http.statusCode)")
         }
     }
 }

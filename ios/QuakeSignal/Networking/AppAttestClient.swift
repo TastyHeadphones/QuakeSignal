@@ -28,20 +28,27 @@ import Security
 actor AppAttestClient {
     static let shared = AppAttestClient()
 
-    private let service = DCAppAttestService.shared
+    private let service: any AppAttestServicing
     private let session: URLSession
     private var keyStore: AppAttestKeyStoring
     private let policy: AppAttestClientPolicy
+    private let proofRetrySleep: AppAttestRetrySleep
     private let protectedRequestSerialiser = AppAttestRequestSerialiser()
 
     init(
         session: URLSession = .shared,
+        service: any AppAttestServicing = SystemAppAttestService.shared,
         keyStore: AppAttestKeyStoring = KeychainAppAttestKeyStore(),
-        policy: AppAttestClientPolicy = .current
+        policy: AppAttestClientPolicy = .current,
+        proofRetrySleep: @escaping AppAttestRetrySleep = { duration in
+            try await Task.sleep(for: duration)
+        }
     ) {
         self.session = session
+        self.service = service
         self.keyStore = keyStore
         self.policy = policy
+        self.proofRetrySleep = proofRetrySleep
     }
 
     /// Serializes every challenge → proof → HTTP request flow. App Attest
@@ -109,13 +116,14 @@ actor AppAttestClient {
         let clientDataHash = Data(SHA256.hash(data: clientData))
 
         do {
-            let proof: Data
-            switch challenge.proofType {
-            case .attestation:
-                proof = try await service.attestKey(keyID, clientDataHash: clientDataHash)
-            case .assertion:
-                proof = try await service.generateAssertion(keyID, clientDataHash: clientDataHash)
-            }
+            let proof = try await AppAttestProofGenerator(
+                service: service,
+                sleep: proofRetrySleep
+            ).proof(
+                type: challenge.proofType,
+                keyID: keyID,
+                clientDataHash: clientDataHash
+            )
             return [
                 AppAttestHeader.version: AppAttestWireFormat.version,
                 AppAttestHeader.keyID: keyID,
@@ -124,12 +132,17 @@ actor AppAttestClient {
                 AppAttestHeader.proof: proof.base64URLEncodedString(),
             ]
         } catch {
-            // A local key can outlive the Worker record (for example after a
-            // deliberate server-side key reset), or a restored preferences
-            // backup can point to a no-longer-usable Secure Enclave key. One
-            // fresh key gives the server a new enrollment opportunity. Any
-            // second failure is surfaced to the caller — no production bypass.
-            guard mayRotateKey, shouldRotateKey(after: error) else {
+            // Apple requires a server-unavailable attestation to retry with the
+            // same key and client-data hash. `AppAttestProofGenerator` performs
+            // those bounded retries above. Any other proof failure means the
+            // key must be discarded before one fresh enrollment attempt. This
+            // also repairs an assertion key that the Secure Enclave can no
+            // longer use even though the Worker still has its public record.
+            guard mayRotateKey,
+                  AppAttestProofRecoveryPolicy.action(
+                      for: error,
+                      proofType: challenge.proofType
+                  ) == .replaceKey else {
                 throw AppAttestError.proofGenerationFailed(underlying: error)
             }
             try removeStoredKeyID()
@@ -208,11 +221,6 @@ actor AppAttestClient {
         }
     }
 
-    private func shouldRotateKey(after error: Error) -> Bool {
-        let nsError = error as NSError
-        return nsError.domain == DCErrorDomain && nsError.code == DCError.invalidKey.rawValue
-    }
-
     private func removeStoredKeyID() throws {
         do {
             try keyStore.removeKeyID()
@@ -230,6 +238,106 @@ actor AppAttestClient {
             throw AppAttestError.unsupportedInProduction
         }
         return [AppAttestHeader.developmentBypass: "development-unsupported"]
+    }
+}
+
+protocol AppAttestServicing: AnyObject, Sendable {
+    var isSupported: Bool { get }
+    func generateKey() async throws -> String
+    func attestKey(_ keyID: String, clientDataHash: Data) async throws -> Data
+    func generateAssertion(_ keyID: String, clientDataHash: Data) async throws -> Data
+}
+
+private final class SystemAppAttestService: AppAttestServicing, @unchecked Sendable {
+    static let shared = SystemAppAttestService()
+
+    private let service = DCAppAttestService.shared
+
+    var isSupported: Bool { service.isSupported }
+
+    func generateKey() async throws -> String {
+        try await service.generateKey()
+    }
+
+    func attestKey(_ keyID: String, clientDataHash: Data) async throws -> Data {
+        try await service.attestKey(keyID, clientDataHash: clientDataHash)
+    }
+
+    func generateAssertion(_ keyID: String, clientDataHash: Data) async throws -> Data {
+        try await service.generateAssertion(keyID, clientDataHash: clientDataHash)
+    }
+}
+
+typealias AppAttestRetrySleep = @Sendable (Duration) async throws -> Void
+
+enum AppAttestProofRecoveryAction: Equatable {
+    case retrySameKey
+    case replaceKey
+    case fail
+}
+
+enum AppAttestProofRecoveryPolicy {
+    static func action(
+        for error: Error,
+        proofType: AppAttestChallenge.ProofType
+    ) -> AppAttestProofRecoveryAction {
+        if error is CancellationError {
+            return .fail
+        }
+
+        let nsError = error as NSError
+        if proofType == .attestation,
+           nsError.domain == DCErrorDomain,
+           nsError.code == DCError.serverUnavailable.rawValue {
+            return .retrySameKey
+        }
+        return .replaceKey
+    }
+}
+
+struct AppAttestProofGenerator: Sendable {
+    private static let attestationRetryDelays: [Duration] = [
+        .milliseconds(250),
+        .milliseconds(750),
+        .seconds(2),
+    ]
+
+    let service: any AppAttestServicing
+    let sleep: AppAttestRetrySleep
+
+    func proof(
+        type: AppAttestChallenge.ProofType,
+        keyID: String,
+        clientDataHash: Data
+    ) async throws -> Data {
+        switch type {
+        case .assertion:
+            return try await service.generateAssertion(
+                keyID,
+                clientDataHash: clientDataHash
+            )
+        case .attestation:
+            for retryDelay in Self.attestationRetryDelays {
+                do {
+                    return try await service.attestKey(
+                        keyID,
+                        clientDataHash: clientDataHash
+                    )
+                } catch {
+                    guard AppAttestProofRecoveryPolicy.action(
+                        for: error,
+                        proofType: .attestation
+                    ) == .retrySameKey else {
+                        throw error
+                    }
+                    try await sleep(retryDelay)
+                }
+            }
+            return try await service.attestKey(
+                keyID,
+                clientDataHash: clientDataHash
+            )
+        }
     }
 }
 

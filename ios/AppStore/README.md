@@ -50,8 +50,8 @@ App Review, or release it publicly.
 
 App Store Connect will reject a repeat upload with the same build number. The
 checked-in replacement-candidate source is coordinated for `CFBundleVersion`
-`4`: `CURRENT_PROJECT_VERSION` is `4`, the Worker App Attest allow-list is
-`1,2,3,4`, and the protected archive workflow defaults to `4`. Older
+`5`: `CURRENT_PROJECT_VERSION` is `5`, the Worker App Attest allow-list is
+`1,2,3,4,5`, and the protected archive workflow defaults to `5`. Older
 allowlisted versions are preserved deliberately for existing clients. The
 protected workflow signed and uploaded `1.0 (3)` to TestFlight in
 [run 31784685472](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31784685472).
@@ -60,8 +60,10 @@ build `3` is superseded and must not be attached or submitted. The protected
 workflow signed and uploaded build `4` in
 [run 31793143181](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31793143181);
 App Store Connect has processed it and assigned it to `QuakeSignal Internal
-QA`. It must still be installed and physically verified before it can replace
-build `3` as the reviewed public candidate. Upload, processing, and internal
+QA`. Device use then exposed an App Attest proof-recovery failure and remaining
+current-location state defects, so build `4` is also superseded and must not be
+attached or submitted. Build `5` contains the coordinated repairs; it is not a
+review candidate until its protected upload has completed. Upload, processing, and internal
 group assignment do not by themselves establish physical-device evidence,
 Content Rights, protected launch promotion, App Review, or public release. The
 checked-in verifier rejects a mismatched manual `build_number`, Xcode project,
@@ -259,7 +261,7 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    and preserve written upstream permission using
    [`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md).
 8. After protected upload and processing, test the TestFlight-only replacement
-   Release candidate `1.0 (4)` on physical hardware
+   Release candidate `1.0 (5)` on physical hardware
    for the normal production registration, refresh, unsubscribe, re-enrollment,
    and controlled training-push evidence. Use the legacy QA-only build `1.0 (2)`
    (or a later explicitly `InternalQA` build) for delayed background/locked/
@@ -285,7 +287,7 @@ allow one to ten screenshots and list the accepted display-size resolutions.
     `APP_ATTEST_PRODUCTION_ENFORCED=true` and run the protected Cloudflare
     launch deployment with `bootstrap_testflight` disabled. This does not make
     build `2` public; it remains a legacy QA-only evidence build.
-10. Only after build `1.0 (4)` is uploaded, processed, physically verified,
+10. Only after build `1.0 (5)` is uploaded, processed, physically verified,
     launch promotion and every other public-release gate are complete, attach
     it to the App Store version if it remains the accurate reviewed candidate.
     If the iOS

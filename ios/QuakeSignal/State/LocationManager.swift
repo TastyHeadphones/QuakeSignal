@@ -1,5 +1,61 @@
 import CoreLocation
 
+enum LocationSelectionStatus: Equatable {
+    case permissionRequired
+    case denied
+    case locating
+    case current
+    case unavailable
+
+    static func resolve(
+        authorizationStatus: CLAuthorizationStatus,
+        hasCurrentLocation: Bool,
+        isRequestingLocation: Bool,
+        lastRequestFailed: Bool
+    ) -> Self {
+        if authorizationStatus == .denied || authorizationStatus == .restricted {
+            return .denied
+        }
+        if hasCurrentLocation {
+            return .current
+        }
+        if authorizationStatus == .notDetermined {
+            return .permissionRequired
+        }
+        if lastRequestFailed {
+            return .unavailable
+        }
+        return isRequestingLocation ? .locating : .unavailable
+    }
+
+    func localizedDetail(fallbackCityName: String?) -> String {
+        switch self {
+        case .current:
+            return String(localized: "city.currentLocation.active")
+        case .permissionRequired:
+            if let fallbackCityName {
+                return L("city.currentLocation.permissionFallback", fallbackCityName)
+            }
+            return String(localized: "city.currentLocation.permissionRequired")
+        case .denied:
+            if let fallbackCityName {
+                return L("city.currentLocation.deniedFallback", fallbackCityName)
+            }
+            return String(localized: "home.banner.locationOff")
+        case .locating:
+            if let fallbackCityName {
+                return L("city.currentLocation.locatingFallback", fallbackCityName)
+            }
+            return String(localized: "city.currentLocation.locating")
+        case .unavailable:
+            if let fallbackCityName {
+                return L("city.currentLocation.unavailableFallback", fallbackCityName)
+            }
+            return String(localized: "city.currentLocation.unavailable")
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class LocationManager: NSObject, CLLocationManagerDelegate {
@@ -7,6 +63,8 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 
     private(set) var authorizationStatus: CLAuthorizationStatus
     private(set) var currentLocation: CLLocationCoordinate2D?
+    private(set) var isRequestingLocation = false
+    private(set) var lastRequestFailed = false
 
     private let manager = CLLocationManager()
 
@@ -21,16 +79,33 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     /// Calling `requestLocation()` before the authorization prompt completes
     /// can fail without ever producing the fix needed by push registration.
     func requestCurrentLocation() {
-        switch authorizationStatus {
+        let currentAuthorization = manager.authorizationStatus
+        authorizationStatus = currentAuthorization
+        lastRequestFailed = false
+
+        switch currentAuthorization {
         case .authorizedAlways, .authorizedWhenInUse:
+            isRequestingLocation = true
             manager.requestLocation()
         case .notDetermined:
+            isRequestingLocation = true
             manager.requestWhenInUseAuthorization()
         case .denied, .restricted:
-            break
+            currentLocation = nil
+            isRequestingLocation = false
         @unknown default:
-            break
+            currentLocation = nil
+            isRequestingLocation = false
         }
+    }
+
+    var selectionStatus: LocationSelectionStatus {
+        LocationSelectionStatus.resolve(
+            authorizationStatus: authorizationStatus,
+            hasCurrentLocation: currentLocation != nil,
+            isRequestingLocation: isRequestingLocation,
+            lastRequestFailed: lastRequestFailed
+        )
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -42,7 +117,12 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
                 // delegate-callback parameter -- CLLocationManager isn't
                 // provably Sendable, so passing the parameter itself across
                 // into this @MainActor closure trips strict concurrency.
+                self.lastRequestFailed = false
+                self.isRequestingLocation = true
                 self.manager.requestLocation()
+            } else {
+                self.currentLocation = nil
+                self.isRequestingLocation = false
             }
         }
     }
@@ -51,10 +131,15 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         guard let coordinate = locations.last?.coordinate else { return }
         Task { @MainActor in
             self.currentLocation = coordinate
+            self.isRequestingLocation = false
+            self.lastRequestFailed = false
         }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        // No-op: the user can always fall back to picking a city manually in Settings.
+        Task { @MainActor in
+            self.isRequestingLocation = false
+            self.lastRequestFailed = true
+        }
     }
 }

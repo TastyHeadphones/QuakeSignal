@@ -1,4 +1,5 @@
 import CryptoKit
+import DeviceCheck
 import Foundation
 import XCTest
 @testable import QuakeSignal
@@ -142,10 +143,102 @@ final class AppAttestWireFormatTests: XCTestCase {
         }
     }
 
+    func testAttestationRetriesServerUnavailableWithTheSameKeyAndHash() async throws {
+        let service = AppAttestServiceDouble(attestationServerUnavailableFailures: 2)
+        let delayRecorder = AppAttestDelayRecorder()
+        let hash = Data(repeating: 0xA5, count: 32)
+        let proof = try await AppAttestProofGenerator(
+            service: service,
+            sleep: { delay in await delayRecorder.record(delay) }
+        ).proof(
+            type: .attestation,
+            keyID: "stable-key",
+            clientDataHash: hash
+        )
+
+        XCTAssertEqual(proof, Data([0x01, 0x02, 0x03]))
+        let calls = await service.attestationCalls
+        XCTAssertEqual(calls.count, 3)
+        XCTAssertTrue(calls.allSatisfy { $0.keyID == "stable-key" && $0.hash == hash })
+        let recordedDelayCount = await delayRecorder.count
+        XCTAssertEqual(recordedDelayCount, 2)
+    }
+
+    func testNonTransientAttestationFailureReplacesTheKey() {
+        let error = NSError(
+            domain: DCErrorDomain,
+            code: DCError.unknownSystemFailure.rawValue
+        )
+
+        XCTAssertEqual(
+            AppAttestProofRecoveryPolicy.action(for: error, proofType: .attestation),
+            .replaceKey
+        )
+    }
+
+    func testAnyAssertionFailureReplacesTheKeyInsteadOfReusingABrokenCredential() {
+        let serverUnavailable = NSError(
+            domain: DCErrorDomain,
+            code: DCError.serverUnavailable.rawValue
+        )
+
+        XCTAssertEqual(
+            AppAttestProofRecoveryPolicy.action(
+                for: serverUnavailable,
+                proofType: .assertion
+            ),
+            .replaceKey
+        )
+    }
+
     private func base64URL(_ data: Data) -> String {
         data.base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+    }
+}
+
+private actor AppAttestServiceDouble: AppAttestServicing {
+    nonisolated let isSupported = true
+
+    struct AttestationCall: Sendable {
+        let keyID: String
+        let hash: Data
+    }
+
+    private var remainingAttestationFailures: Int
+    private(set) var attestationCalls: [AttestationCall] = []
+
+    init(attestationServerUnavailableFailures: Int) {
+        remainingAttestationFailures = attestationServerUnavailableFailures
+    }
+
+    func generateKey() async throws -> String {
+        "generated-key"
+    }
+
+    func attestKey(_ keyID: String, clientDataHash: Data) async throws -> Data {
+        attestationCalls.append(AttestationCall(keyID: keyID, hash: clientDataHash))
+        if remainingAttestationFailures > 0 {
+            remainingAttestationFailures -= 1
+            throw NSError(
+                domain: DCErrorDomain,
+                code: DCError.serverUnavailable.rawValue
+            )
+        }
+        return Data([0x01, 0x02, 0x03])
+    }
+
+    func generateAssertion(_ keyID: String, clientDataHash: Data) async throws -> Data {
+        Data([0x04, 0x05, 0x06])
+    }
+}
+
+private actor AppAttestDelayRecorder {
+    private(set) var count = 0
+
+    func record(_ duration: Duration) {
+        count += 1
     }
 }

@@ -1,10 +1,12 @@
 import SwiftUI
+import UIKit
 
 struct CityPickerView: View {
     @State private var settings = AppSettings.shared
     @State private var locationManager = LocationManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
+    @State private var showingLocationPermissionAlert = false
 
     var body: some View {
         @Bindable var settings = settings
@@ -16,11 +18,22 @@ struct CityPickerView: View {
                         // Preserve the selected city as a usable subscription
                         // fallback while authorization/GPS is still pending.
                         settings.selectCurrentLocation()
+                        if locationManager.selectionStatus == .denied {
+                            showingLocationPermissionAlert = true
+                            return
+                        }
                         locationManager.requestCurrentLocation()
                         dismiss()
                     } label: {
                         HStack {
-                            Label("city.useCurrentLocation", systemImage: "location.fill")
+                            VStack(alignment: .leading, spacing: 3) {
+                                Label("city.useCurrentLocation", systemImage: "location.fill")
+                                Text(locationManager.selectionStatus.localizedDetail(
+                                    fallbackCityName: settings.selectedCity?.localizedName
+                                ))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
                             Spacer()
                             if settings.useCurrentLocation {
                                 Image(systemName: "checkmark").foregroundStyle(Color("BrandColor"))
@@ -67,6 +80,17 @@ struct CityPickerView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(String(localized: "alert.dismiss")) { dismiss() }
                 }
+            }
+            .alert("home.banner.locationOff", isPresented: $showingLocationPermissionAlert) {
+                Button("settings.openSystemSettings") {
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                    UIApplication.shared.open(url)
+                }
+                Button("alert.dismiss", role: .cancel) {}
+            } message: {
+                Text(locationManager.selectionStatus.localizedDetail(
+                    fallbackCityName: settings.selectedCity?.localizedName
+                ))
             }
         }
     }

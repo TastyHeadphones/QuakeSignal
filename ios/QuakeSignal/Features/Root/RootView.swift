@@ -64,6 +64,12 @@ struct RootView: View {
             // a current APNs token and the normal status observer schedules
             // its protected server registration without requiring a relaunch.
             notifications.refreshAuthorizationStatus()
+            if AppSettings.shared.useCurrentLocation {
+                // Refresh the real CLLocationManager state after returning from
+                // iPhone Settings, then request a fresh fix. The cached status
+                // can otherwise leave the app stuck on the old city fallback.
+                locationManager.requestCurrentLocation()
+            }
         }
         .onChange(of: coarseCurrentLocation) { _, _ in
             // Observing the quantized cell, rather than every GPS fix, keeps
