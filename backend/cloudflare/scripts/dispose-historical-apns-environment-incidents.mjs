@@ -6,6 +6,7 @@ const INCIDENT_DISPOSITION_ACCOUNT_ID = "69c72916910ed7231abce32069d5257b";
 const INCIDENT_DISPOSITION_DATABASE_ID = "834fba5c-0d99-4398-9565-18c6858eb2a8";
 const INCIDENT_DISPOSITION_TOKEN_NAME =
   "CLOUDFLARE_D1_INCIDENT_DISPOSITION_API_TOKEN";
+const D1_QUERY_MAX_BIND_PARAMETERS = 100;
 
 /**
  * This is deliberately a one-shot, fixed manifest rather than a general D1
@@ -316,7 +317,16 @@ export function allTargetsResolveStatement(
     ...readyTargets.map((target) => targetActivePredicate("candidate", target)),
     ...disposedTargets.map((target) => targetDisposedPredicate("candidate", target)),
   ];
-  const rows = readyTargets.map((target) => targetActivePredicate("p", target));
+  const readyOutboxIds = readyTargets.map((target) => target.outboxId);
+  const params = [
+    resolvedAtUtc,
+    ...candidates.flatMap(({ params: candidateParams }) => candidateParams),
+    allTargets.length,
+    ...readyOutboxIds,
+  ];
+  if (params.length > D1_QUERY_MAX_BIND_PARAMETERS) {
+    fail("APNs incident disposition exceeds the Cloudflare D1 bind parameter limit.");
+  }
   return {
     sql: `UPDATE alert_delivery_page_failures AS p
           SET status = 'resolved', resolved_at_utc = ?
@@ -325,13 +335,10 @@ export function allTargetsResolveStatement(
             FROM alert_delivery_page_failures AS candidate
             WHERE ${candidates.map(({ sql }) => sql).join(" OR ")}
           ) = ?
-            AND (${rows.map(({ sql }) => sql).join(" OR ")})`,
-    params: [
-      resolvedAtUtc,
-      ...candidates.flatMap(({ params }) => params),
-      allTargets.length,
-      ...rows.flatMap(({ params }) => params),
-    ],
+            AND p.outbox_id IN (${readyOutboxIds.map(() => "?").join(", ")})
+            AND p.status = 'active'
+            AND p.resolved_at_utc IS NULL`,
+    params,
   };
 }
 

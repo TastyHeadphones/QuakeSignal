@@ -166,7 +166,10 @@ test("apply resolves only exact active provider failures after an expired-outbox
   assert.match(statement.sql, /queue_lease_until_utc IS NULL/);
   assert.match(statement.sql, /apns_status = 403/);
   assert.match(statement.sql, /resolved_at_utc IS NULL/);
-  assert.match(statement.sql, /delivery_id = p\.delivery_id/);
+  assert.match(statement.sql, /delivery_id = candidate\.delivery_id/);
+  assert.match(statement.sql, /p\.outbox_id IN \(\?, \?, \?, \?, \?\)/);
+  assert.equal(statement.params.length, 62);
+  assert.ok(statement.params.length <= 100);
   assert.equal(dispositionSummary(result), "APNs incident disposition completed: resolved=5, already_resolved=0, targets=5.");
 });
 
@@ -256,7 +259,8 @@ test("an already disposed target remains part of the all-target race fence", asy
   assert.equal(write.batch.length, 1);
   assert.match(write.batch[0].sql, /candidate\.status = 'resolved'/);
   assert.match(write.batch[0].sql, /\) = \?/);
-  assert.equal(write.batch[0].params.at(-1), HISTORICAL_APNS_ENVIRONMENT_INCIDENTS.targets.at(-1).acknowledgedAtUtc);
+  assert.equal(write.batch[0].params.at(-1), HISTORICAL_APNS_ENVIRONMENT_INCIDENTS.targets.at(-1).outboxId);
+  assert.equal(write.batch[0].params.length, 61);
 });
 
 test("an already disposed target remains a read-only no-op", async () => {
@@ -284,7 +288,20 @@ test("target comparison binds the page-failure row to the exact expired outbox",
     "mismatch",
   );
   const statement = allTargetsResolveStatement([target], [], fixedNow.toISOString());
-  assert.equal(statement.params.at(-2), target.expiresAtUtc);
-  assert.equal(statement.params.at(-1), target.acknowledgedAtUtc);
+  assert.equal(statement.params.at(-4), target.expiresAtUtc);
+  assert.equal(statement.params.at(-3), target.acknowledgedAtUtc);
+  assert.equal(statement.params.at(-1), target.outboxId);
   assert.match(statement.sql, /acknowledged_at_utc = \?/);
+});
+
+test("all-target statement fails closed before exceeding Cloudflare D1's bind limit", () => {
+  const target = HISTORICAL_APNS_ENVIRONMENT_INCIDENTS.targets[0];
+  const oversizedManifest = Array.from({ length: 9 }, (_, index) => ({
+    ...target,
+    outboxId: `synthetic-target-${index}`,
+  }));
+  assert.throws(
+    () => allTargetsResolveStatement(oversizedManifest, [], fixedNow.toISOString()),
+    /bind parameter limit/i,
+  );
 });
