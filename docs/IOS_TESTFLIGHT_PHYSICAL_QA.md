@@ -29,8 +29,10 @@ but physical use exposed location-selection and foreground test-alert defects.
 It is superseded and must not be attached to the App Store version or submitted
 for review. The coordinated replacement is `1.0 (4)`; begin the normal
 production registration, refresh, unsubscribe, and foreground test-alert checks
-below only after the protected workflow has signed it, App Store Connect has
-finished processing it, and the intended internal group can install it.
+below with that build. The protected workflow signed and uploaded it in
+[run 31793143181](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31793143181),
+App Store Connect finished processing it, and it is assigned to the existing
+`QuakeSignal Internal QA` group. Physical-device results are still pending.
 
 ## Before starting
 

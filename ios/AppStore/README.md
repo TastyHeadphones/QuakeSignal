@@ -56,11 +56,14 @@ allowlisted versions are preserved deliberately for existing clients. The
 protected workflow signed and uploaded `1.0 (3)` to TestFlight in
 [run 31784685472](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31784685472).
 Physical use exposed location-selection and foreground test-alert defects, so
-build `3` is superseded and must not be attached or submitted. Build `4` must
-be signed, uploaded, processed, installed, and physically verified before it
-can replace it. That future upload will not by itself establish physical-device
-evidence, Content Rights, protected launch promotion, App Review, or public
-release. The
+build `3` is superseded and must not be attached or submitted. The protected
+workflow signed and uploaded build `4` in
+[run 31793143181](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31793143181);
+App Store Connect has processed it and assigned it to `QuakeSignal Internal
+QA`. It must still be installed and physically verified before it can replace
+build `3` as the reviewed public candidate. Upload, processing, and internal
+group assignment do not by themselves establish physical-device evidence,
+Content Rights, protected launch promotion, App Review, or public release. The
 checked-in verifier rejects a mismatched manual `build_number`, Xcode project,
 Worker policy, or archive command before signing material is used. It also
 derives a non-secret policy fingerprint; the protected archive flow requires
