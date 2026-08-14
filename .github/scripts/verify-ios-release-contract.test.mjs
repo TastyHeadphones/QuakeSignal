@@ -11,10 +11,10 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 const approvedOrigin = "https://quakesignal-api.hopeso.workers.dev";
 
 function fixtureFiles({
-  buildNumber = "4",
+  buildNumber = "5",
   projectFileVersions = [buildNumber, buildNumber, buildNumber],
   infoBundleVersion = "$(CURRENT_PROJECT_VERSION)",
-  allowedVersions = "1,2,3,4",
+  allowedVersions = "1,2,3,4,5",
   workflowDefault = buildNumber,
   archiveConfiguration = "Release",
   remoteOrigin = "${{ vars.CLOUDFLARE_WORKER_URL }}",
@@ -89,7 +89,7 @@ env:
 }
 
 async function fixtureWorkflow({
-  workflowDefault = "4",
+  workflowDefault = "5",
   remoteOrigin = "${{ vars.CLOUDFLARE_WORKER_URL }}",
   remoteRunPrefix = "",
   archiveConfiguration = "Release",
@@ -100,9 +100,9 @@ async function fixtureWorkflow({
     workflow = workflow.replace(from, to);
   };
 
-  if (workflowDefault !== "4") {
+  if (workflowDefault !== "5") {
     replaceOnce(
-      '        default: "4"\n        type: string\n',
+      '        default: "5"\n        type: string\n',
       `        default: "${workflowDefault}"\n        type: string\n`,
       "build_number default",
     );
@@ -168,23 +168,23 @@ async function expectFailure(t, options, expression) {
 
 test("the checked-in public Release contract is coherent", async () => {
   const verified = await verifyIOSReleaseContract({ root: repositoryRoot });
-  assert.equal(verified.buildNumber, "4");
-  assert.deepEqual(verified.allowedBundleVersions, ["1", "2", "3", "4"]);
+  assert.equal(verified.buildNumber, "5");
+  assert.deepEqual(verified.allowedBundleVersions, ["1", "2", "3", "4", "5"]);
   assert.match(verified.appAttestPolicyFingerprint, /^sha256:[A-Za-z0-9_-]{43}$/);
 });
 
-test("a coordinated future build 5 contract passes without hardcoding its version", async (t) => {
+test("a coordinated future build 6 contract passes without hardcoding its version", async (t) => {
   await withFixture(t, {
-    buildNumber: "5",
-    allowedVersions: "1,2,3,4,5",
-    workflowDefault: "5",
+    buildNumber: "6",
+    allowedVersions: "1,2,3,4,5,6",
+    workflowDefault: "6",
   }, async (root) => {
     const verified = await verifyIOSReleaseContract({ root });
     assert.deepEqual(verified, {
-      buildNumber: "5",
-      allowedBundleVersions: ["1", "2", "3", "4", "5"],
+      buildNumber: "6",
+      allowedBundleVersions: ["1", "2", "3", "4", "5", "6"],
       generatedProjectEntries: 3,
-      appAttestPolicyFingerprint: "sha256:4B7GI_0Loa-3_nNrTJp_UDpgQPKT7dHDkOBvKd4Iq94",
+      appAttestPolicyFingerprint: "sha256:vrcQ7oEE6fjeR8AEkdLhugJSFvmfZy2CRYgAB1Licug",
     });
   });
 });
@@ -441,10 +441,10 @@ test("fails closed when Worker validation omits the historical APNs incident gua
 });
 
 test("fails closed when a JSONC comment impersonates the Worker allow-list", async (t) => {
-  await withFixture(t, { workerConfigSuffix: "\n// \"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS\": \"1,2,3,4\"" }, async (root) => {
+  await withFixture(t, { workerConfigSuffix: "\n// \"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS\": \"1,2,3,4,5\"" }, async (root) => {
     const path = join(root, "backend/cloudflare/wrangler.jsonc");
     const contents = await readFile(path, "utf8");
-    await writeFile(path, contents.replace('    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4",\n', ""), "utf8");
+    await writeFile(path, contents.replace('    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5",\n', ""), "utf8");
     await assert.rejects(verifyIOSReleaseContract({ root }), /must be defined exactly once outside comments/i);
   });
 });

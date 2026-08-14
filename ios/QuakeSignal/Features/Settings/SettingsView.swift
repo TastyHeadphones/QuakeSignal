@@ -4,6 +4,7 @@ import UIKit
 struct SettingsView: View {
     @State private var settings = AppSettings.shared
     @State private var notifications = NotificationManager.shared
+    @State private var locationManager = LocationManager.shared
     @State private var isSendingTest = false
     @State private var testResultMessage: String?
 #if QUAKESIGNAL_INTERNAL_QA
@@ -30,7 +31,7 @@ struct SettingsView: View {
                         HStack {
                             Text(settings.useCurrentLocation ? "city.useCurrentLocation" : "settings.subscribedCity")
                             Spacer()
-                            Text(settings.selectedCity?.localizedName ?? String(localized: "city.none"))
+                            Text(locationSelectionDetail)
                                 .foregroundStyle(.secondary)
                             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
                         }
@@ -214,6 +215,15 @@ struct SettingsView: View {
                 }
                 resyncPushPreferences()
             }
+        )
+    }
+
+    private var locationSelectionDetail: String {
+        guard settings.useCurrentLocation else {
+            return settings.selectedCity?.localizedName ?? String(localized: "city.none")
+        }
+        return locationManager.selectionStatus.localizedDetail(
+            fallbackCityName: settings.selectedCity?.localizedName
         )
     }
 
@@ -432,7 +442,21 @@ struct SettingsView: View {
         isSendingTest = true
         testResultMessage = nil
         do {
-            try await APIClient.shared.sendTestAlert(token: token)
+            if settings.pushRegistrationState != .active {
+                try await QuakeStore.shared.registerForPush(token: token)
+            }
+            do {
+                try await APIClient.shared.sendTestAlert(token: token)
+            } catch {
+                guard PushTestAlertPolicy.shouldRepairRegistration(after: error) else {
+                    throw error
+                }
+                // A fresh registration is the ownership hand-off for a
+                // replacement App Attest key. Only after that succeeds may the
+                // test endpoint use the new key to address this APNs token.
+                try await QuakeStore.shared.registerForPush(token: token)
+                try await APIClient.shared.sendTestAlert(token: token)
+            }
             testResultMessage = String(localized: "settings.testAlert.success")
         } catch {
             testResultMessage = L("settings.testAlert.failure", error.localizedDescription)

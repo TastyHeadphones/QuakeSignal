@@ -227,6 +227,15 @@
 /* 都市・位置情報の選択 */
 "city.pickerTitle" = "位置情報";
 "city.useCurrentLocation" = "現在地を使用";
+"city.currentLocation" = "現在地";
+"city.currentLocation.active" = "GPSの現在地を使用中";
+"city.currentLocation.locating" = "現在地を取得中…";
+"city.currentLocation.permissionRequired" = "位置情報の許可が必要です";
+"city.currentLocation.unavailable" = "現在地を利用できません";
+"city.currentLocation.permissionFallback" = "許可が必要です · 当面は%1$@を使用";
+"city.currentLocation.deniedFallback" = "位置情報オフ · %1$@を使用";
+"city.currentLocation.locatingFallback" = "取得中 · 当面は%1$@を使用";
+"city.currentLocation.unavailableFallback" = "現在地を利用不可 · %1$@を使用";
 "city.section.radius" = "近隣半径";
 "city.section.pick" = "都市を登録";
 "city.none" = "未設定";

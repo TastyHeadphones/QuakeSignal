@@ -1,4 +1,6 @@
 import Foundation
+import CoreLocation
+import DeviceCheck
 import XCTest
 @testable import QuakeSignal
 
@@ -63,7 +65,55 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "settings.cityId"), "tokyo")
     }
 
-    func testTestAlertRequiresAnActiveServerRegistrationAndDeviceToken() {
+    func testLocationSelectionStatusDistinguishesGPSFallbackAndPermissionStates() {
+        XCTAssertEqual(
+            LocationSelectionStatus.resolve(
+                authorizationStatus: .authorizedWhenInUse,
+                hasCurrentLocation: true,
+                isRequestingLocation: false,
+                lastRequestFailed: false
+            ),
+            .current
+        )
+        XCTAssertEqual(
+            LocationSelectionStatus.resolve(
+                authorizationStatus: .authorizedWhenInUse,
+                hasCurrentLocation: false,
+                isRequestingLocation: true,
+                lastRequestFailed: false
+            ),
+            .locating
+        )
+        XCTAssertEqual(
+            LocationSelectionStatus.resolve(
+                authorizationStatus: .notDetermined,
+                hasCurrentLocation: false,
+                isRequestingLocation: true,
+                lastRequestFailed: false
+            ),
+            .permissionRequired
+        )
+        XCTAssertEqual(
+            LocationSelectionStatus.resolve(
+                authorizationStatus: .denied,
+                hasCurrentLocation: true,
+                isRequestingLocation: false,
+                lastRequestFailed: false
+            ),
+            .denied
+        )
+        XCTAssertEqual(
+            LocationSelectionStatus.resolve(
+                authorizationStatus: .authorizedWhenInUse,
+                hasCurrentLocation: false,
+                isRequestingLocation: false,
+                lastRequestFailed: true
+            ),
+            .unavailable
+        )
+    }
+
+    func testTestAlertCanRepairAStoppedRegistrationWhenADeviceTokenExists() {
         XCTAssertTrue(PushTestAlertPolicy.isAvailable(
             subscriptionEnabled: true,
             registrationState: .active,
@@ -74,9 +124,14 @@ final class PushRegistrationLifecycleTests: XCTestCase {
             registrationState: .registering,
             hasDeviceToken: true
         ))
-        XCTAssertFalse(PushTestAlertPolicy.isAvailable(
+        XCTAssertTrue(PushTestAlertPolicy.isAvailable(
             subscriptionEnabled: true,
             registrationState: .failed,
+            hasDeviceToken: true
+        ))
+        XCTAssertTrue(PushTestAlertPolicy.isAvailable(
+            subscriptionEnabled: true,
+            registrationState: .unregistered,
             hasDeviceToken: true
         ))
         XCTAssertFalse(PushTestAlertPolicy.isAvailable(
@@ -89,5 +144,41 @@ final class PushRegistrationLifecycleTests: XCTestCase {
             registrationState: .active,
             hasDeviceToken: false
         ))
+    }
+
+    func testTestAlertRepairsOnlyKnownPreDeliveryIntegrityFailures() {
+        XCTAssertTrue(PushTestAlertPolicy.shouldRepairRegistration(
+            after: APIError.server(statusCode: 404, message: "device not found")
+        ))
+        XCTAssertTrue(PushTestAlertPolicy.shouldRepairRegistration(
+            after: AppAttestError.proofGenerationFailed(
+                underlying: NSError(domain: DCErrorDomain, code: DCError.invalidKey.rawValue)
+            )
+        ))
+        XCTAssertFalse(PushTestAlertPolicy.shouldRepairRegistration(
+            after: APIError.server(statusCode: 503, message: "APNs unavailable")
+        ))
+        XCTAssertFalse(PushTestAlertPolicy.shouldRepairRegistration(
+            after: URLError(.timedOut)
+        ))
+    }
+
+    func testAPIValidationPreservesTheHTTPStatusUsedForRegistrationRepair() throws {
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: URL(string: "https://example.invalid/v1/devices/test")!,
+            statusCode: 404,
+            httpVersion: nil,
+            headerFields: nil
+        ))
+        let body = Data(#"{"error":"device not found"}"#.utf8)
+
+        XCTAssertThrowsError(try APIClient.validate(response, data: body)) { error in
+            guard let apiError = error as? APIError else {
+                return XCTFail("Expected APIError, received \(error)")
+            }
+            XCTAssertEqual(apiError.statusCode, 404)
+            XCTAssertEqual(apiError.errorDescription, "device not found")
+            XCTAssertTrue(PushTestAlertPolicy.shouldRepairRegistration(after: apiError))
+        }
     }
 }

@@ -227,6 +227,15 @@
 /* 城市/位置选择 */
 "city.pickerTitle" = "位置";
 "city.useCurrentLocation" = "使用当前位置";
+"city.currentLocation" = "当前位置";
+"city.currentLocation.active" = "正在使用 GPS 位置";
+"city.currentLocation.locating" = "正在定位…";
+"city.currentLocation.permissionRequired" = "需要定位权限";
+"city.currentLocation.unavailable" = "当前位置不可用";
+"city.currentLocation.permissionFallback" = "需要授权 · 暂时使用%1$@";
+"city.currentLocation.deniedFallback" = "定位已关闭 · 使用%1$@";
+"city.currentLocation.locatingFallback" = "正在定位 · 暂时使用%1$@";
+"city.currentLocation.unavailableFallback" = "定位不可用 · 使用%1$@";
 "city.section.radius" = "附近半径";
 "city.section.pick" = "订阅城市";
 "city.none" = "未设置";
