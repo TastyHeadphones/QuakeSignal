@@ -15,13 +15,17 @@ struct CityPickerView: View {
             List {
                 Section {
                     Button {
-                        // Preserve the selected city as a usable subscription
-                        // fallback while authorization/GPS is still pending.
-                        settings.selectCurrentLocation()
-                        if locationManager.selectionStatus == .denied {
+                        if !locationManager.selectionStatus.canRequestCurrentLocation {
+                            // A denied tap is only a request to repair the
+                            // permission. Do not silently replace the person's
+                            // working city subscription with GPS fallback mode
+                            // if they dismiss the Settings prompt.
                             showingLocationPermissionAlert = true
                             return
                         }
+                        // Preserve the selected city as a usable subscription
+                        // fallback while authorization/GPS is still pending.
+                        settings.selectCurrentLocation()
                         locationManager.requestCurrentLocation()
                         dismiss()
                     } label: {

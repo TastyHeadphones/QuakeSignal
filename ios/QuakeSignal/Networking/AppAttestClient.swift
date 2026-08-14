@@ -61,21 +61,62 @@ actor AppAttestClient {
     ) async throws {
         await protectedRequestSerialiser.acquire()
         do {
-            let headers = try await attestationHeaders(for: binding, body: body)
-            var request = URLRequest(url: BackendConfig.httpBaseURL.appending(path: binding.path))
-            request.httpMethod = binding.method
-            request.httpBody = body
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
-            for (name, value) in headers {
-                request.setValue(value, forHTTPHeaderField: name)
-            }
-            let (data, response) = try await session.data(for: request)
-            try APIClient.validate(response, data: data)
+            try await performProtectedRequestWhileSerialised(
+                binding: binding,
+                body: body,
+                mayRecoverRejectedKey: true
+            )
             await protectedRequestSerialiser.release()
         } catch {
             await protectedRequestSerialiser.release()
             throw error
+        }
+    }
+
+    /// A 401 from a protected endpoint means the Worker rejected the App
+    /// Attest identity before applying the requested mutation. This can
+    /// happen after an app restore or when Apple can no longer usefully
+    /// attest the locally cached key. Registration can safely replace the key
+    /// and repeat its complete challenge -> proof -> request flow exactly
+    /// once. A rejected test resets the key but returns control to Settings,
+    /// which must register that new identity before retrying the test. Other
+    /// HTTP/network failures remain ambiguous and are never replayed.
+    private func performProtectedRequestWhileSerialised(
+        binding: AppAttestRequestBinding,
+        body: Data,
+        mayRecoverRejectedKey: Bool
+    ) async throws {
+        let headers = try await attestationHeaders(for: binding, body: body)
+        var request = URLRequest(url: BackendConfig.httpBaseURL.appending(path: binding.path))
+        request.httpMethod = binding.method
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        for (name, value) in headers {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
+        let (data, response) = try await session.data(for: request)
+        do {
+            try APIClient.validate(response, data: data)
+        } catch {
+            switch AppAttestServerRejectionRecoveryPolicy.action(
+                after: error,
+                operation: binding.operation,
+                mayRecoverRejectedKey: mayRecoverRejectedKey
+            ) {
+            case .fail:
+                throw error
+            case .replaceKeyAndFail:
+                try removeStoredKeyID()
+                throw AppAttestError.serverRejectedCredential
+            case .replaceKeyAndRetry:
+                try removeStoredKeyID()
+                try await performProtectedRequestWhileSerialised(
+                    binding: binding,
+                    body: body,
+                    mayRecoverRejectedKey: false
+                )
+            }
         }
     }
 
@@ -292,6 +333,40 @@ enum AppAttestProofRecoveryPolicy {
             return .retrySameKey
         }
         return .replaceKey
+    }
+}
+
+enum AppAttestServerRejectionRecoveryAction: Equatable {
+    case replaceKeyAndRetry
+    case replaceKeyAndFail
+    case fail
+}
+
+enum AppAttestServerRejectionRecoveryPolicy {
+    static func action(
+        after error: Error,
+        operation: AppAttestOperation,
+        mayRecoverRejectedKey: Bool
+    ) -> AppAttestServerRejectionRecoveryAction {
+        guard mayRecoverRejectedKey,
+              let apiError = error as? APIError,
+              apiError.statusCode == 401 else {
+            return .fail
+        }
+        switch operation {
+        case .deviceRegistration:
+            // Registration is the ownership hand-off for a fresh key, and a
+            // 401 guarantees the rejected attempt did not mutate the device.
+            return .replaceKeyAndRetry
+        case .testPush:
+            // A fresh key cannot own a test-push request. Let Settings first
+            // re-register the token, then issue the test exactly once.
+            return .replaceKeyAndFail
+        case .deviceDeletion:
+            // Rotating here would discard the only key that may still own the
+            // registration and would not make a deletion retry safer.
+            return .fail
+        }
     }
 }
 
@@ -616,6 +691,7 @@ enum AppAttestWireFormat {
 
 enum AppAttestError: LocalizedError {
     case unsupportedInProduction
+    case serverRejectedCredential
     case invalidKeyIdentifier
     case invalidChallenge
     case keyGenerationFailed(underlying: Error)
@@ -627,6 +703,8 @@ enum AppAttestError: LocalizedError {
         switch self {
         case .unsupportedInProduction:
             "This device cannot verify this alert subscription. Try a supported physical device."
+        case .serverRejectedCredential:
+            "The saved app integrity credential was rejected and has been reset. Please try again."
         case .invalidKeyIdentifier, .invalidChallenge:
             "The app integrity check returned invalid data. Please try again."
         case .keyGenerationFailed:
