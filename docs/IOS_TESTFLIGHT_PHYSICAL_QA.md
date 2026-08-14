@@ -1,9 +1,9 @@
 # iOS TestFlight physical-device verification
 
-Use this runbook after a release build has been uploaded to the internal
-TestFlight group and the protected production Worker has completed its
-TestFlight-bootstrap deployment. It records the physical-device evidence
-needed before a reviewer may set
+Use this runbook after App Store Connect has processed a release candidate and
+the candidate is available to the intended internal TestFlight group, and after
+the protected production Worker has completed its TestFlight-bootstrap
+deployment. It records the physical-device evidence needed before a reviewer may set
 `APP_ATTEST_PRODUCTION_ENFORCED=true` and run the production launch
 deployment.
 
@@ -16,15 +16,21 @@ below is incomplete.
 
 ## Build boundary
 
-The uploaded TestFlight build `1.0 (2)` is a **legacy QA-only** archive. It
-predates the current `InternalQA` configuration but includes **Schedule
-Background Test Alert** for the delayed background/locked/terminated evidence,
-while a public `Release` intentionally excludes that feature. Use build `2`
-only for this runbook: do not attach it to the App Store version or submit it
-for App Review. The checked-in public-candidate source is coordinated for
-build `3`, including its Worker App Attest allow-list and protected iOS
-workflow build guard. It still must not be signed, uploaded, or attached to
-App Review until the physical evidence and protected production launch
+TestFlight build `1.0 (2)` is a **legacy QA-only** archive. It predates the
+current `InternalQA` configuration but includes **Schedule Background Test
+Alert** for the delayed background/locked/terminated evidence, while a public
+`Release` intentionally excludes that feature. Use build `2` only for that
+delayed-training evidence; do not attach it to the App Store version or submit
+it for App Review.
+
+The coordinated public `Release` candidate `1.0 (3)` was signed and uploaded
+to TestFlight by the protected workflow in
+[run 31784685472](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31784685472).
+It may be used for the normal production registration, refresh, and
+unsubscribe checks below once it is available to the intended internal group.
+It remains a TestFlight-only candidate: do not attach it to the App Store
+version, submit it for App Review, or release it publicly until all required
+physical evidence, content-rights evidence, and protected production launch
 promotion are complete.
 
 ## Before starting

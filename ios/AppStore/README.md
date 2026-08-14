@@ -52,11 +52,14 @@ App Store Connect will reject a repeat upload with the same build number. The
 checked-in public-candidate source is coordinated for `CFBundleVersion` `3`:
 `CURRENT_PROJECT_VERSION` is `3`, the Worker App Attest allow-list is
 `1,2,3`, and the protected archive workflow defaults to `3`. Older allowlisted
-versions are preserved deliberately for existing clients. This source
-preparation does **not** authorize signing, uploading, App Review, or public
-release: first complete the physical evidence and protected production launch
-promotion. For a later candidate, update the project version, Worker allow-list,
-and checked-in workflow build guard together in one reviewed release. The
+versions are preserved deliberately for existing clients. The protected
+workflow signed and uploaded `1.0 (3)` to TestFlight in
+[run 31784685472](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31784685472).
+That TestFlight upload does **not** establish internal-group availability,
+physical-device evidence, Content Rights, protected launch promotion, App
+Review, or public release. For a later candidate, update the project version,
+Worker allow-list, and checked-in workflow build guard together in one reviewed
+release. The
 checked-in verifier rejects a mismatched manual `build_number`, Xcode project,
 Worker policy, or archive command before signing material is used. It also
 derives a non-secret policy fingerprint; the protected archive flow requires
@@ -241,7 +244,8 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    live, set its Privacy Policy and Support URLs to the values above and
    complete the draft `1.0` metadata.
 6. Use the existing `1.0 (2)` **legacy QA-only** TestFlight upload for the
-   production physical-device evidence in step 9. It predates the current
+   delayed background/locked/terminated production physical-device evidence in
+   step 8. It predates the current
    InternalQA configuration but contains **Schedule Background Test Alert**;
    it must not be used as the archive attached to the App Store version or
    submitted as the public candidate.
@@ -250,8 +254,11 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    Before certifying content rights for Wolfx-supplied earthquake data, obtain
    and preserve written upstream permission using
    [`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md).
-8. Test the legacy QA-only build `1.0 (2)` in TestFlight on physical hardware
-   before the production launch promotion. Follow the exact, privacy-safe
+8. Test the TestFlight-only Release candidate `1.0 (3)` on physical hardware
+   for the normal production registration, refresh, unsubscribe, re-enrollment,
+   and controlled training-push evidence. Use the legacy QA-only build `1.0 (2)`
+   (or a later explicitly `InternalQA` build) for delayed background/locked/
+   terminated evidence. Follow the exact, privacy-safe
    [`iOS TestFlight physical-device runbook`](../../docs/IOS_TESTFLIGHT_PHYSICAL_QA.md)
    for production App Attest registration, refresh, token-bound unsubscribe,
    key-owned empty-body unsubscribe, re-enrollment, and the controlled
@@ -273,9 +280,10 @@ allow one to ten screenshots and list the accepted display-size resolutions.
     `APP_ATTEST_PRODUCTION_ENFORCED=true` and run the protected Cloudflare
     launch deployment with `bootstrap_testflight` disabled. This does not make
     build `2` public; it remains a legacy QA-only evidence build.
-10. Only after that launch promotion, prepare and validate the coordinated
-    newly numbered public `Release` candidate described in the build-number
-    rule, then archive it with Xcode 26.6 (or another currently supported
-    stable release) and upload it to TestFlight/App Store Connect. Attach only
-    that new public `Release` build to the App Store version before App Review
-    or public release.
+10. Only after launch promotion and every other public-release gate is
+    complete, attach the already-uploaded `1.0 (3)` Release candidate to the
+    App Store version if it remains the accurate reviewed candidate. If the iOS
+    source, Worker policy, or signing inputs change after this upload, increment
+    the build number, coordinate the policy, sign, upload, and validate a new
+    Release candidate instead. Do not attach build `2` to the App Store version
+    before App Review or public release.
