@@ -17,7 +17,8 @@ value.
   protected archive workflow.
 - [ ] Complete the required physical-device/TestFlight evidence, including the
   production App Attest and APNs checks, then obtain the required protected
-  production-monitor proof before public launch promotion.
+  production health/readiness proof before public launch promotion. Terminal-DLQ
+  monitoring is an optional operational control, not a deployment attestation.
 - [ ] Confirm the approved production endpoint, `/privacy`, `/support`, and
   any intended `/terms` URL respond over public Cloudflare Web-PKI TLS. Do not
   use a private CA, origin certificate, or client certificate.

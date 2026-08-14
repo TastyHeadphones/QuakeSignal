@@ -100,9 +100,9 @@ async function fixtureWorkflow({
     workflow = workflow.replace(from, to);
   };
 
-  if (workflowDefault !== "2") {
+  if (workflowDefault !== "3") {
     replaceOnce(
-      '        default: "2"\n        type: string\n',
+      '        default: "3"\n        type: string\n',
       `        default: "${workflowDefault}"\n        type: string\n`,
       "build_number default",
     );
@@ -168,34 +168,60 @@ async function expectFailure(t, options, expression) {
 
 test("the checked-in public Release contract is coherent", async () => {
   const verified = await verifyIOSReleaseContract({ root: repositoryRoot });
-  assert.equal(verified.buildNumber, "2");
-  assert.deepEqual(verified.allowedBundleVersions, ["1", "2"]);
+  assert.equal(verified.buildNumber, "3");
+  assert.deepEqual(verified.allowedBundleVersions, ["1", "2", "3"]);
   assert.match(verified.appAttestPolicyFingerprint, /^sha256:[A-Za-z0-9_-]{43}$/);
 });
 
-test("a coordinated future build 3 contract passes without hardcoding its version", async (t) => {
-  await withFixture(t, { buildNumber: "3" }, async (root) => {
+test("a coordinated future build 4 contract passes without hardcoding its version", async (t) => {
+  await withFixture(t, {
+    buildNumber: "4",
+    allowedVersions: "1,2,3,4",
+    workflowDefault: "4",
+  }, async (root) => {
     const verified = await verifyIOSReleaseContract({ root });
     assert.deepEqual(verified, {
-      buildNumber: "3",
-      allowedBundleVersions: ["1", "2", "3"],
+      buildNumber: "4",
+      allowedBundleVersions: ["1", "2", "3", "4"],
       generatedProjectEntries: 3,
-      appAttestPolicyFingerprint: "sha256:3vuP0dLgyorNEbQhOYncY7BnDCbwLG5giJl7le8P2EU",
+      appAttestPolicyFingerprint: "sha256:F3ffYtQY-r7Rtcc7Mcqw72doNsMRXHdvcLbhQYfy1wQ",
     });
   });
 });
 
 test("fails closed on source/version drift", async (t) => {
-  await withFixture(t, { buildNumber: "3" }, async (root) => {
+  await withFixture(t, {
+    buildNumber: "4",
+    allowedVersions: "1,2,3,4",
+    workflowDefault: "4",
+  }, async (root) => {
     await assert.rejects(
-      verifyIOSReleaseContract({ root, expectedBuildNumber: "2" }),
-      /requested build_number 2 does not match ios\/project\.yml 3/i,
+      verifyIOSReleaseContract({ root, expectedBuildNumber: "3" }),
+      /requested build_number 3 does not match ios\/project\.yml 4/i,
     );
   });
-  await expectFailure(t, { projectFileVersions: ["3", "2", "3"] }, /does not match ios\/project\.yml 3/i);
-  await expectFailure(t, { allowedVersions: "1,2" }, /must include ios\/project\.yml build 3/i);
-  await expectFailure(t, { infoBundleVersion: "3" }, /Info\.plist CFBundleVersion interpolation/i);
-  await expectFailure(t, { workflowDefault: "2" }, /build_number default 2 does not match ios\/project\.yml 3/i);
+  await expectFailure(t, {
+    buildNumber: "4",
+    projectFileVersions: ["4", "3", "4"],
+    allowedVersions: "1,2,3,4",
+    workflowDefault: "4",
+  }, /does not match ios\/project\.yml 4/i);
+  await expectFailure(t, {
+    buildNumber: "4",
+    allowedVersions: "1,2,3",
+    workflowDefault: "4",
+  }, /must include ios\/project\.yml build 4/i);
+  await expectFailure(t, {
+    buildNumber: "4",
+    allowedVersions: "1,2,3,4",
+    workflowDefault: "4",
+    infoBundleVersion: "4",
+  }, /Info\.plist CFBundleVersion interpolation/i);
+  await expectFailure(t, {
+    buildNumber: "4",
+    allowedVersions: "1,2,3,4",
+    workflowDefault: "3",
+  }, /build_number default 3 does not match ios\/project\.yml 4/i);
 });
 
 test("fails closed when the remote smoke changes origin or executable command", async (t) => {
