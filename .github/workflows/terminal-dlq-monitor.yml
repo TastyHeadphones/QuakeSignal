@@ -114,9 +114,12 @@ jobs:
           CLOUDFLARE_DEPLOY_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
           CLOUDFLARE_TARGET_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_TARGET_ACCOUNT_ID }}
           CLOUDFLARE_MONITOR_API_TOKEN: ${{ secrets.CLOUDFLARE_MONITOR_API_TOKEN }}
-          GITHUB_APP_ID: ${{ secrets.GITHUB_APP_ID }}
-          GITHUB_APP_INSTALLATION_ID: ${{ secrets.GITHUB_APP_INSTALLATION_ID }}
-          GITHUB_APP_PRIVATE_KEY_PKCS8: ${{ secrets.GITHUB_APP_PRIVATE_KEY_PKCS8 }}
+          # GitHub reserves the GITHUB_* secret namespace. Keep the
+          # Environment-secret names legal, then map them only within this
+          # protected job to the Worker runtime names.
+          GITHUB_APP_ID: ${{ secrets.TERMINAL_DLQ_GITHUB_APP_ID }}
+          GITHUB_APP_INSTALLATION_ID: ${{ secrets.TERMINAL_DLQ_GITHUB_APP_INSTALLATION_ID }}
+          GITHUB_APP_PRIVATE_KEY_PKCS8: ${{ secrets.TERMINAL_DLQ_GITHUB_APP_PRIVATE_KEY_PKCS8 }}
         run: |
           set -euo pipefail
           for name in \
@@ -154,9 +157,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
           CLOUDFLARE_TARGET_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_TARGET_ACCOUNT_ID }}
           CLOUDFLARE_MONITOR_API_TOKEN: ${{ secrets.CLOUDFLARE_MONITOR_API_TOKEN }}
-          GITHUB_APP_ID: ${{ secrets.GITHUB_APP_ID }}
-          GITHUB_APP_INSTALLATION_ID: ${{ secrets.GITHUB_APP_INSTALLATION_ID }}
-          GITHUB_APP_PRIVATE_KEY_PKCS8: ${{ secrets.GITHUB_APP_PRIVATE_KEY_PKCS8 }}
+          GITHUB_APP_ID: ${{ secrets.TERMINAL_DLQ_GITHUB_APP_ID }}
+          GITHUB_APP_INSTALLATION_ID: ${{ secrets.TERMINAL_DLQ_GITHUB_APP_INSTALLATION_ID }}
+          GITHUB_APP_PRIVATE_KEY_PKCS8: ${{ secrets.TERMINAL_DLQ_GITHUB_APP_PRIVATE_KEY_PKCS8 }}
         run: |
           set -euo pipefail
           monitor_config="wrangler.jsonc"

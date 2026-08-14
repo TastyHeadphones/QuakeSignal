@@ -59,6 +59,14 @@ jobs:
           go version
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 .github/workflows/*.yml
 
+      - name: Reject forbidden monitor GitHub secret names
+        run: |
+          set -euo pipefail
+          if rg -n '\$\{\{\s*secrets\.GITHUB_' .github/workflows/terminal-dlq-monitor.yml; then
+            echo "::error::GitHub does not permit custom secret names beginning with GITHUB_"
+            exit 1
+          fi
+
       - name: Test terminal DLQ fallback monitor
         run: |
           set -euo pipefail

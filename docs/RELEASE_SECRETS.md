@@ -205,9 +205,9 @@ production-deployment capability.
 | `CLOUDFLARE_DEPLOY_ACCOUNT_ID` | Secret | Account ID for that separate monitor account; it must differ from the production Queue account. |
 | `CLOUDFLARE_TARGET_ACCOUNT_ID` | Secret | Production Queue account ID. It is stored as a runtime Worker secret so the target cannot be changed by source. |
 | `CLOUDFLARE_MONITOR_API_TOKEN` | Secret | Separate account-scoped **Queues Read** token only. It may list Queues and read aggregate metrics but cannot read, acknowledge, retry, purge, or redrive messages. |
-| `GITHUB_APP_ID` | Secret | Numeric ID of a GitHub App installed only on `TastyHeadphones/QuakeSignal`. |
-| `GITHUB_APP_INSTALLATION_ID` | Secret | Numeric ID of that one-repository GitHub App installation. |
-| `GITHUB_APP_PRIVATE_KEY_PKCS8` | Secret | Full unencrypted PKCS#8 RSA private-key PEM for the GitHub App. Convert a downloaded PKCS#1 key with `openssl pkcs8 -topk8 -nocrypt`; never commit the result. |
+| `TERMINAL_DLQ_GITHUB_APP_ID` | Secret | Numeric ID of a GitHub App installed only on `TastyHeadphones/QuakeSignal`. GitHub reserves the `GITHUB_` secret namespace, so the protected workflow maps this legal Environment-secret name to the Worker's runtime `GITHUB_APP_ID`. |
+| `TERMINAL_DLQ_GITHUB_APP_INSTALLATION_ID` | Secret | Numeric ID of that one-repository GitHub App installation. It is mapped only in the protected job to runtime `GITHUB_APP_INSTALLATION_ID`. |
+| `TERMINAL_DLQ_GITHUB_APP_PRIVATE_KEY_PKCS8` | Secret | Full unencrypted PKCS#8 RSA private-key PEM for the GitHub App. It is mapped only in the protected job to runtime `GITHUB_APP_PRIVATE_KEY_PKCS8`. Convert a downloaded PKCS#1 key with `openssl pkcs8 -topk8 -nocrypt`; never commit the result. |
 
 Create the GitHub App with only repository permission **Issues: Read and
 write** (Metadata read is implicit), no webhooks, and repository selection
