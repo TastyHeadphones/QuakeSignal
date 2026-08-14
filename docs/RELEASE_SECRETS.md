@@ -234,6 +234,28 @@ but a staging Queue account/token. Run the same workflow with
 putting evidence in the production terminal Queue. The deploy and target
 accounts must still differ.
 
+## `cloudflare-production-incident-disposition`
+
+This is a separate, reviewer-protected Environment for the one-time
+**Disposition historical APNs incident** workflow. It is not the normal
+`cloudflare-production` deployment Environment and must never receive the
+Worker deployment, Queue, APNs, Durable Object, or monitor credentials.
+
+| Name | Kind | Value |
+| --- | --- | --- |
+| `CLOUDFLARE_ACCOUNT_ID` | Secret | Production account ID, used only to pin the reviewed D1 REST request to the expected account. |
+| `CLOUDFLARE_D1_INCIDENT_DISPOSITION_API_TOKEN` | Secret | A short-lived, incident-only Cloudflare API token with **D1 Read** and **D1 Write** only on the production account, with no other permission groups. The reviewed script hard-pins `quakesignal-production`'s D1 UUID. It must not have Workers Scripts, Queues, Durable Objects, APNs, account-wide edit, or message-recovery permissions. Revoke it immediately after the reviewed disposition completes. |
+
+The fixed-manifest script accepts no target IDs, SQL, database ID, or arbitrary
+time from workflow input. Its default invocation is read-only and emits only
+aggregate target counts. The optional apply checkbox may resolve only the
+three reviewed historical provider-page failures after exact compare-and-set
+checks prove that their matching outboxes are already terminal `expired`.
+It does not delete registrations, read payloads/tokens, redrive a Queue, or
+claim a delivery. Do not create this token or run apply until the APNs
+environment-isolation Worker revision has been deployed and its smoke test is
+green; then run the protected dry-run first and preserve its aggregate result.
+
 ## `cloudflare-production`
 
 | Name | Kind | Value |

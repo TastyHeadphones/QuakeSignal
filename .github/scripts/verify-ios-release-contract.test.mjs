@@ -396,6 +396,24 @@ test("fails closed when another Cloudflare job can change policy outside the loc
   });
 });
 
+test("fails closed when Worker validation omits the historical APNs incident guard", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, ".github/workflows/cloudflare.yml");
+    const contents = await readFile(path, "utf8");
+    const guard = `
+      - name: Test historical APNs incident disposition guard
+        working-directory: backend/cloudflare
+        run: npm run test:historical-apns-incident-disposition
+`;
+    assert.match(contents, new RegExp(guard.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    await writeFile(path, contents.replace(guard, "\n"), "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /Cloudflare workflow jobs must match the reviewed production-release graph fingerprint/i,
+    );
+  });
+});
+
 test("fails closed when a JSONC comment impersonates the Worker allow-list", async (t) => {
   await withFixture(t, { workerConfigSuffix: "\n// \"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS\": \"1,2,3\"" }, async (root) => {
     const path = join(root, "backend/cloudflare/wrangler.jsonc");

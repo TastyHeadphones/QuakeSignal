@@ -1,0 +1,61 @@
+name: Disposition historical APNs incident
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply_incident_disposition:
+        description: Resolve only the reviewed, expired APNs-environment incident records
+        required: false
+        default: false
+        type: boolean
+
+# Keep this one-shot D1 action serialized with protected Worker deployments and
+# TestFlight policy proof. It does not deploy a Worker or apply migrations.
+concurrency:
+  group: quakesignal-production-app-attest-policy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  disposition:
+    name: Preview or dispose reviewed historical APNs incident
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.ref_protected
+    runs-on: ubuntu-latest
+    environment:
+      name: cloudflare-production-incident-disposition
+
+    steps:
+      - name: Check out reviewed main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Verify protected incident disposition configuration
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_INCIDENT_DISPOSITION_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_INCIDENT_DISPOSITION_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_D1_INCIDENT_DISPOSITION_API_TOKEN; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::cloudflare-production-incident-disposition is missing: $name"
+              exit 1
+            fi
+          done
+
+      - name: Dry-run exact historical incident disposition
+        working-directory: backend/cloudflare
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_INCIDENT_DISPOSITION_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_INCIDENT_DISPOSITION_API_TOKEN }}
+        run: node scripts/dispose-historical-apns-environment-incidents.mjs
+
+      - name: Apply exact historical incident disposition
+        if: inputs.apply_incident_disposition
+        working-directory: backend/cloudflare
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_INCIDENT_DISPOSITION_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_INCIDENT_DISPOSITION_API_TOKEN }}
+        run: node scripts/dispose-historical-apns-environment-incidents.mjs --apply

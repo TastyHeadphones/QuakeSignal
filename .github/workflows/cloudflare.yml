@@ -99,6 +99,10 @@ jobs:
         working-directory: backend/cloudflare
         run: npm run test:production-gates
 
+      - name: Test historical APNs incident disposition guard
+        working-directory: backend/cloudflare
+        run: npm run test:historical-apns-incident-disposition
+
       - name: Smoke the local device-request validation boundary
         working-directory: backend/cloudflare
         run: |
