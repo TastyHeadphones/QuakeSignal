@@ -41,6 +41,9 @@ enum PushTestAlertPolicy {
         if case .proofGenerationFailed = appAttestError {
             return true
         }
+        if case .serverRejectedCredential = appAttestError {
+            return true
+        }
         return false
     }
 }

@@ -7,6 +7,13 @@ enum LocationSelectionStatus: Equatable {
     case current
     case unavailable
 
+    /// A denied/restricted authorization cannot be repaired by another Core
+    /// Location request. Keep the existing city subscription unchanged and
+    /// direct the person to iOS Settings instead.
+    var canRequestCurrentLocation: Bool {
+        self != .denied
+    }
+
     static func resolve(
         authorizationStatus: CLAuthorizationStatus,
         hasCurrentLocation: Bool,

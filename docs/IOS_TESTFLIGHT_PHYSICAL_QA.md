@@ -33,7 +33,12 @@ App Store Connect finished processing it, and it is assigned to the existing
 `QuakeSignal Internal QA` group. Device use then exposed an App Attest
 proof-recovery failure and remaining current-location state defects, so build
 `4` is superseded too. Do not attach builds `3` or `4` to App Review. The
-coordinated repair candidate is `1.0 (5)`; begin the normal production
+protected workflow then signed and uploaded `1.0 (5)` in
+[run 31811106548](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31811106548),
+but device use exposed a server-rejected App Attest credential recovery gap,
+an incorrect denied-location selection transition, and notification-settings
+routing that still needed repair. Build `5` is superseded too. The coordinated
+repair candidate is `1.0 (6)`; begin the normal production
 registration, refresh, unsubscribe, and foreground test-alert checks below
 only after its protected upload is processed and available.
 

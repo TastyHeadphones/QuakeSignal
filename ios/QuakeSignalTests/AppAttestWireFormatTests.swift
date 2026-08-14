@@ -191,6 +191,44 @@ final class AppAttestWireFormatTests: XCTestCase {
         )
     }
 
+    func testServerIntegrityRejectionUsesOperationSpecificSafeRecovery() {
+        let rejected = APIError.server(
+            statusCode: 401,
+            message: "app integrity verification failed"
+        )
+
+        XCTAssertEqual(AppAttestServerRejectionRecoveryPolicy.action(
+            after: rejected,
+            operation: .deviceRegistration,
+            mayRecoverRejectedKey: true
+        ), .replaceKeyAndRetry)
+        XCTAssertEqual(AppAttestServerRejectionRecoveryPolicy.action(
+            after: rejected,
+            operation: .testPush,
+            mayRecoverRejectedKey: true
+        ), .replaceKeyAndFail)
+        XCTAssertEqual(AppAttestServerRejectionRecoveryPolicy.action(
+            after: rejected,
+            operation: .deviceDeletion,
+            mayRecoverRejectedKey: true
+        ), .fail)
+        XCTAssertEqual(AppAttestServerRejectionRecoveryPolicy.action(
+            after: rejected,
+            operation: .deviceRegistration,
+            mayRecoverRejectedKey: false
+        ), .fail)
+        XCTAssertEqual(AppAttestServerRejectionRecoveryPolicy.action(
+            after: APIError.server(statusCode: 503, message: "temporarily unavailable"),
+            operation: .deviceRegistration,
+            mayRecoverRejectedKey: true
+        ), .fail)
+        XCTAssertEqual(AppAttestServerRejectionRecoveryPolicy.action(
+            after: URLError(.timedOut),
+            operation: .deviceRegistration,
+            mayRecoverRejectedKey: true
+        ), .fail)
+    }
+
     private func base64URL(_ data: Data) -> String {
         data.base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")

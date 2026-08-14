@@ -72,7 +72,7 @@ struct SettingsView: View {
                             Task { await enableNotifications() }
                         }
                     } else if notifications.authorizationStatus == .denied {
-                        Button("settings.openSystemSettings") { openSystemSettings() }
+                        Button("settings.openSystemSettings") { openNotificationSettings() }
                         Text("settings.pushSubscription.permissionDenied")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -427,6 +427,14 @@ struct SettingsView: View {
 
     private func openSystemSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private func openNotificationSettings() {
+        guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else {
+            openSystemSettings()
+            return
+        }
         UIApplication.shared.open(url)
     }
 

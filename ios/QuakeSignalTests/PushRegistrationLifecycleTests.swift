@@ -111,6 +111,9 @@ final class PushRegistrationLifecycleTests: XCTestCase {
             ),
             .unavailable
         )
+        XCTAssertFalse(LocationSelectionStatus.denied.canRequestCurrentLocation)
+        XCTAssertTrue(LocationSelectionStatus.permissionRequired.canRequestCurrentLocation)
+        XCTAssertTrue(LocationSelectionStatus.current.canRequestCurrentLocation)
     }
 
     func testTestAlertCanRepairAStoppedRegistrationWhenADeviceTokenExists() {
@@ -154,6 +157,9 @@ final class PushRegistrationLifecycleTests: XCTestCase {
             after: AppAttestError.proofGenerationFailed(
                 underlying: NSError(domain: DCErrorDomain, code: DCError.invalidKey.rawValue)
             )
+        ))
+        XCTAssertTrue(PushTestAlertPolicy.shouldRepairRegistration(
+            after: AppAttestError.serverRejectedCredential
         ))
         XCTAssertFalse(PushTestAlertPolicy.shouldRepairRegistration(
             after: APIError.server(statusCode: 503, message: "APNs unavailable")

@@ -45,7 +45,7 @@ on:
       build_number:
         description: Exact pre-approved CFBundleVersion from ios/project.yml and the Worker App Attest allow-list
         required: false
-        default: "5"
+        default: "6"
         type: string
 
 concurrency:
