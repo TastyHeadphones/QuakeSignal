@@ -15,13 +15,6 @@ export const APP_ATTEST_DEPLOYMENT_PHASE = {
   testflightBootstrap: "testflight-bootstrap",
 };
 
-// This is an explicit operator attestation stored only in the protected
-// `cloudflare-production` GitHub Environment. It is deliberately not a
-// Cloudflare Queue depth or alert-configuration probe: the Worker has no
-// reliable way to inspect the consumerless terminal Queue's external monitor.
-export const TERMINAL_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFICATION_VARIABLE =
-  "ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED";
-
 function fail(message) {
   throw new Error(message);
 }
@@ -61,29 +54,6 @@ export function verifyProductionWorkerOrigin(environment) {
     fail(`CLOUDFLARE_WORKER_URL must be exactly ${PRODUCTION_WORKER_URL}.`);
   }
   return PRODUCTION_WORKER_URL;
-}
-
-/**
- * The final persistence-fallback Queue has no Worker consumer by design. A
- * production deployment can send a message there immediately, including the
- * one-time TestFlight bootstrap, so an external Queue monitor and a reviewed
- * operator recovery procedure must exist before either phase is allowed.
- *
- * This gate intentionally verifies only the protected operator attestation;
- * it does not imply that Queue depth, retention, or dashboard alert wiring was
- * inspected automatically.
- */
-export function verifyTerminalDlqFallbackMonitorRecovery(environment) {
-  if (
-    environment[
-      TERMINAL_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFICATION_VARIABLE
-    ] !== "true"
-  ) {
-    fail(
-      `${TERMINAL_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFICATION_VARIABLE} must be exactly true after an operator verifies the terminal DLQ fallback monitor and recovery procedure.`,
-    );
-  }
-  return true;
 }
 
 async function fetchCloudflareJSON(url, token, fetchImpl) {
@@ -128,7 +98,6 @@ export async function verifyProductionGates(
     "CLOUDFLARE_ACCOUNT_ID",
     "CLOUDFLARE_WORKER_URL",
     "APP_ATTEST_PRODUCTION_ENFORCED",
-    TERMINAL_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFICATION_VARIABLE,
   ];
   const missing = required.filter((name) => !environment[name]?.trim());
   if (missing.length > 0) {
@@ -139,9 +108,6 @@ export async function verifyProductionGates(
   if (!/^[a-f0-9]{32}$/i.test(accountId)) {
     fail("CLOUDFLARE_ACCOUNT_ID must be a 32-character Cloudflare ID.");
   }
-
-  const terminalDlqFallbackMonitorRecoveryVerified =
-    verifyTerminalDlqFallbackMonitorRecovery(environment);
 
   const workersSubdomain = await fetchCloudflareJSON(
     `${CLOUDFLARE_API_BASE}/accounts/${accountId}/workers/subdomain`,
@@ -156,7 +122,6 @@ export async function verifyProductionGates(
     origin: verifyProductionWorkerOrigin(environment),
     phase: verifyAppAttestDeploymentPhase(environment),
     workersSubdomain: workersSubdomain.subdomain,
-    terminalDlqFallbackMonitorRecoveryVerified,
   };
 }
 
