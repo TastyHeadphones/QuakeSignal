@@ -315,6 +315,142 @@ test("bounds hung APNs operations and clears the success timer", async () => {
   );
 });
 
+test("automatic production delivery skips historical sandbox registrations", async () => {
+  const { dispatchPushPage } = await workerModule();
+  const originalFetch = globalThis.fetch;
+  const deviceRows = [
+    {
+      cursor: 1,
+      token: "historical-sandbox-token",
+      environment: "sandbox",
+      locale: null,
+      sources: '["jma_eew"]',
+      min_magnitude: 0,
+      critical_alerts_enabled: 0,
+      city_name: null,
+      latitude: null,
+      longitude: null,
+      radius_km: null,
+      include_test_alerts: 1,
+      utc_offset_minutes: null,
+      notify_at_night: 1,
+      created_at: "2026-08-14T00:00:00.000Z",
+      updated_at: "2026-08-14T00:00:00.000Z",
+    },
+    {
+      cursor: 2,
+      token: "current-production-token",
+      environment: "production",
+      locale: null,
+      sources: '["jma_eew"]',
+      min_magnitude: 0,
+      critical_alerts_enabled: 0,
+      city_name: null,
+      latitude: null,
+      longitude: null,
+      radius_km: null,
+      include_test_alerts: 1,
+      utc_offset_minutes: null,
+      notify_at_night: 1,
+      created_at: "2026-08-14T00:00:00.000Z",
+      updated_at: "2026-08-14T00:00:00.000Z",
+    },
+  ];
+  const pageQueries = [];
+  const deliveredBatches = [];
+  const apnsUrls = [];
+  const database = {
+    prepare(sql) {
+      return {
+        bind(...bindings) {
+          return {
+            async all() {
+              if (sql.includes("SELECT rowid AS cursor, * FROM devices")) {
+                pageQueries.push({ sql, bindings });
+                const [afterCursor, environment] = bindings;
+                return {
+                  results: deviceRows.filter(
+                    (row) => row.cursor > afterCursor && row.environment === environment,
+                  ),
+                };
+              }
+              if (
+                sql.includes("FROM notification_deliveries") ||
+                sql.includes("FROM alert_delivery_failures")
+              ) {
+                return { results: [] };
+              }
+              throw new Error(`unexpected automatic delivery query: ${sql}`);
+            },
+          };
+        },
+      };
+    },
+    async batch(statements) {
+      deliveredBatches.push(statements);
+      return statements.map(() => ({ meta: { changes: 1 } }));
+    },
+  };
+  globalThis.fetch = async (url) => {
+    apnsUrls.push(String(url));
+    return new Response(null, { status: 200, headers: { "apns-id": "test-id" } });
+  };
+
+  try {
+    const page = await dispatchPushPage(
+      {
+        APP_ATTEST_ENFORCEMENT: "required",
+        DB: database,
+        APNS_PRIVATE_KEY: "configured-for-page-filter-test",
+        APNS_KEY_ID: "ABCDEFGHIJ",
+        APNS_TEAM_ID: "ABCDEFGHIJ",
+        APNS_BUNDLE_ID: "com.quakesignal.app",
+      },
+      {
+        id: "jma_eew:automatic-filter-test",
+        eventId: "automatic-filter-test",
+        sourceId: "jma_eew",
+        serial: 1,
+        kind: "eew",
+        originTimeUtc: "2026-08-14T00:00:00.000Z",
+        reportTimeUtc: "2026-08-14T00:00:00.000Z",
+        hypocenter: "Test Region",
+        latitude: 35,
+        longitude: 135,
+        magnitude: 5.5,
+        depth: 10,
+        maxIntensity: "5-",
+        isWarn: true,
+        isFinal: false,
+        isCancel: false,
+        isTraining: false,
+        tsunami: null,
+        raw: null,
+      },
+      "new",
+      "cached.provider.jwt",
+      "automatic-filter-delivery",
+    );
+
+    assert.equal(page.nextAfterDeviceCursor, null);
+    assert.equal(page.pageFailure, null);
+    assert.equal(page.retryRequired, false);
+    assert.equal(pageQueries.length, 1);
+    assert.match(pageQueries[0].sql, /WHERE rowid > \? AND environment = \?/);
+    assert.deepEqual(
+      pageQueries[0].bindings,
+      [0, "production", 20],
+      "the production delivery page must filter before page-size pagination",
+    );
+    assert.deepEqual(apnsUrls, [
+      "https://api.push.apple.com/3/device/current-production-token",
+    ]);
+    assert.equal(deliveredBatches.length, 1, "only the production delivery is recorded");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("rejects an over-limit health probe before it can activate the global relay", async () => {
   const { default: worker } = await workerModule();
   let relayTouched = false;
@@ -3753,6 +3889,11 @@ test("training pushes obtain APNs authorization from the relay cache and fail cl
     updated_at: "2026-08-12T00:00:00.000Z",
   };
   const baseEnvironment = {
+    // This regression exercises the explicitly isolated staging/sandbox
+    // test-push path. Production must instead reject this stored token before
+    // it obtains a relay authorization or sends APNs traffic.
+    APP_ATTEST_ENFORCEMENT: "development",
+    APP_ATTEST_DEVELOPMENT_ENVIRONMENT: "true",
     DB: {
       prepare() {
         return {
@@ -3811,6 +3952,26 @@ test("training pushes obtain APNs authorization from the relay cache and fail cl
     assert.equal(response.status, 200);
     assert.deepEqual(relayPaths, ["/apns/authorization"]);
     assert.deepEqual(apnsAuthorizations, ["bearer cached.provider.jwt"]);
+
+    const relayCallsBeforeMismatch = relayPaths.length;
+    const apnsCallsBeforeMismatch = apnsAuthorizations.length;
+    const mismatchedProductionResponse = await handleDeviceTestPush(
+      request,
+      {
+        ...baseEnvironment,
+        APP_ATTEST_ENFORCEMENT: "required",
+        APP_ATTEST_DEVELOPMENT_ENVIRONMENT: undefined,
+      },
+      payload,
+      { mode: "attested", keyId: "production-app-attest-key", environment: "production" },
+    );
+    assert.equal(
+      mismatchedProductionResponse.status,
+      403,
+      "a production Worker must reject a historical sandbox registration before APNs",
+    );
+    assert.equal(relayPaths.length, relayCallsBeforeMismatch);
+    assert.equal(apnsAuthorizations.length, apnsCallsBeforeMismatch);
 
     const failingResponse = await handleDeviceTestPush(
       request,
