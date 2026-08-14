@@ -208,6 +208,7 @@ production-deployment capability.
 | `TERMINAL_DLQ_GITHUB_APP_ID` | Secret | Numeric ID of a GitHub App installed only on `TastyHeadphones/QuakeSignal`. GitHub reserves the `GITHUB_` secret namespace, so the protected workflow maps this legal Environment-secret name to the Worker's runtime `GITHUB_APP_ID`. |
 | `TERMINAL_DLQ_GITHUB_APP_INSTALLATION_ID` | Secret | Numeric ID of that one-repository GitHub App installation. It is mapped only in the protected job to runtime `GITHUB_APP_INSTALLATION_ID`. |
 | `TERMINAL_DLQ_GITHUB_APP_PRIVATE_KEY_PKCS8` | Secret | Full unencrypted PKCS#8 RSA private-key PEM for the GitHub App. It is mapped only in the protected job to runtime `GITHUB_APP_PRIVATE_KEY_PKCS8`. Convert a downloaded PKCS#1 key with `openssl pkcs8 -topk8 -nocrypt`; never commit the result. |
+| `HEARTBEAT_PING_URL` | Secret | Full opaque HTTPS URL for an independent missed-heartbeat monitor. The Worker follows no redirects, logs neither URL nor response, and pings only after the Queue/GitHub monitor completes successfully. Use a distinct URL per staging/production Environment; configure a staffed alert after roughly 20 minutes (three missed five-minute runs plus jitter), and prove it in staging before using production evidence. |
 
 Create the GitHub App with only repository permission **Issues: Read and
 write** (Metadata read is implicit), no webhooks, and repository selection

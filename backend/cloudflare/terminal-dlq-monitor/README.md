@@ -16,6 +16,8 @@ Every five minutes it:
    **Issues: write** on `TastyHeadphones/QuakeSignal` only.
 4. When its Queue probe fails, creates or updates a separate monitor-failure
    issue when GitHub remains reachable, then records the Cron failure.
+5. Only after the complete Queue/GitHub monitor path succeeds, sends one
+   no-redirect HTTPS heartbeat to an external missed-heartbeat monitor.
 
 It never requests Queue messages and never logs provider responses, access
 tokens, app JWTs, private keys, device data, or message contents. The existing
@@ -44,6 +46,7 @@ The Environment needs these environment-scoped secrets:
 | `TERMINAL_DLQ_GITHUB_APP_ID` | Numeric GitHub App ID; the protected workflow maps it to runtime `GITHUB_APP_ID`. GitHub reserves the `GITHUB_` Environment-secret namespace. |
 | `TERMINAL_DLQ_GITHUB_APP_INSTALLATION_ID` | Numeric installation ID for an installation limited to this one repository; mapped to runtime `GITHUB_APP_INSTALLATION_ID`. |
 | `TERMINAL_DLQ_GITHUB_APP_PRIVATE_KEY_PKCS8` | Unencrypted PKCS#8 RSA private-key PEM for that GitHub App; mapped to runtime `GITHUB_APP_PRIVATE_KEY_PKCS8`. |
+| `HEARTBEAT_PING_URL` | Complete opaque **HTTPS** ping URL for an independently operated missed-heartbeat monitor. It is a secret because its path/query commonly contains the check token. The Worker follows no redirects, logs neither URL nor response, and pings only after a full monitor success. Use a distinct check URL for staging and production. |
 
 Create a dedicated GitHub App with repository selection **Only select
 repositories → `TastyHeadphones/QuakeSignal`** and only the repository
@@ -72,7 +75,7 @@ Actions-write GitHub App for this monitor.
 ## Deploy and verify
 
 Use **Deploy terminal DLQ monitor → Run workflow → `deploy_monitor=true`** from
-protected `main`. The protected job submits all five runtime values using one
+protected `main`. The protected job submits all six runtime values using one
 `wrangler deploy --secrets-file` invocation, so the first version has both
 `workers_dev:false` and all required secrets before its `*/5 * * * *` Cron
 Trigger becomes active. Cloudflare documents that Cron changes can take up to
@@ -86,11 +89,12 @@ Before treating it as release evidence:
    Events and corresponding token-free `terminal_dlq_monitor_completed` logs.
    Each normal run also mints a fresh GitHub App installation token and verifies
    its repository/`issues:write` scope, even while the Queue is empty.
-3. Configure an independent missed-heartbeat/Cron-failure alert outside this
-   Worker (for example, a Cloudflare observability integration or external
-   heartbeat monitor). A Worker cannot alert when its own scheduled invocation
-   never starts. Exercise that escalation in an isolated nonproduction monitor;
-   never add test evidence to the production terminal Queue.
+3. Configure a distinct `HEARTBEAT_PING_URL` for each environment with a
+   staffed recipient and a timeout of roughly 20 minutes for this five-minute
+   Cron (three missed intervals plus jitter). A Worker cannot alert when its
+   own scheduled invocation never starts. Exercise that escalation in the
+   isolated staging monitor; never add test evidence to the production terminal
+   Queue.
 4. Confirm the labelled GitHub recovery issue reaches a staffed responder and
    rehearse the retention-aware procedure in
    [`docs/CLOUDFLARE_PRODUCTION.md`](../../../docs/CLOUDFLARE_PRODUCTION.md#terminal-dlq-fallback-recovery).

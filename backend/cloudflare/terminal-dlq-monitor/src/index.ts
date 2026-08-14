@@ -16,6 +16,10 @@ interface Env {
   GITHUB_APP_INSTALLATION_ID: string;
   // PKCS#8 RSA private-key PEM. Keep it as a Cloudflare Worker secret.
   GITHUB_APP_PRIVATE_KEY_PKCS8: string;
+  // Opaque HTTPS endpoint of an external missed-heartbeat monitor. Keep the
+  // complete URL secret because providers commonly encode its check token in
+  // the path or query string.
+  HEARTBEAT_PING_URL: string;
   MONITOR_TARGET: string;
 }
 
@@ -140,6 +144,30 @@ function requireTargetAccountIdentifier(value: unknown): string {
     throw permanent("CLOUDFLARE_TARGET_ACCOUNT_ID has an invalid format");
   }
   return accountId;
+}
+
+function heartbeatPingUrl(value: unknown): URL {
+  const raw = requireNonEmpty(value, "HEARTBEAT_PING_URL");
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw permanent("HEARTBEAT_PING_URL must be a valid HTTPS URL");
+  }
+
+  // The URL itself is an opaque secret. Restrict it to a direct HTTPS endpoint
+  // without embedded credentials or fragments, and never include it in an
+  // error or structured log.
+  if (
+    url.protocol !== "https:" ||
+    url.hostname === "" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.hash !== ""
+  ) {
+    throw permanent("HEARTBEAT_PING_URL must be a direct HTTPS URL");
+  }
+  return url;
 }
 
 function monitorTarget(value: unknown): MonitorTarget {
@@ -509,9 +537,10 @@ function monitorFailureBody(observedAtMs: number, target: MonitorTarget): string
   return `${target.monitorFailureMarker}
 ## Terminal DLQ monitor failed
 
-The independent Cloudflare Cron monitor could not complete its aggregate Queue
-metrics probe. This is a monitoring incident: the terminal fallback Queue may
-contain retained evidence that has not been observed.
+The independent Cloudflare Cron monitor could not complete a required
+Queue/GitHub monitor cycle or its external heartbeat check-in. This is a
+monitoring incident: the terminal fallback Queue may contain retained evidence
+that has not been observed.
 
 - Observed (UTC): \`${new Date(observedAtMs).toISOString()}\`
 
@@ -601,6 +630,35 @@ async function reportMonitorFailure(
   }));
 }
 
+async function pingHeartbeat(
+  url: URL,
+  fetchImplementation: FetchImplementation,
+): Promise<void> {
+  const response = await fetchWithDeadline(
+    fetchImplementation,
+    url,
+    {
+      method: "GET",
+      // A heartbeat URL often contains an opaque check token. Do not send it
+      // to a redirect destination if its operator changes routing.
+      redirect: "error",
+    },
+    "heartbeat ping",
+  );
+  try {
+    if (!response.ok) {
+      throw new MonitorError(
+        "heartbeat ping returned an unexpected status",
+        statusRetryable(response.status),
+      );
+    }
+  } finally {
+    // The response has no useful data and may be unbounded. Never read or log
+    // it; cancel it before this Cron invocation completes.
+    await response.body?.cancel();
+  }
+}
+
 async function runTerminalDlqMonitor(
   env: Env,
   observedAtMs: number,
@@ -652,6 +710,9 @@ async function scheduledMonitor(
   try {
     target = monitorTarget(env.MONITOR_TARGET);
     await runTerminalDlqMonitor(env, observedAtMs, fetchImplementation);
+    // A successful heartbeat means the full Queue/GitHub monitor path ran,
+    // not merely that the scheduled handler started.
+    await pingHeartbeat(heartbeatPingUrl(env.HEARTBEAT_PING_URL), fetchImplementation);
   } catch (error) {
     const monitorError = error instanceof MonitorError ? error : retryable("Terminal DLQ monitor failed unexpectedly");
     if (!monitorError.retryable) controller.noRetry();
