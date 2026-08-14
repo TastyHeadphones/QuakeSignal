@@ -331,10 +331,13 @@ explicitly later `InternalQA` build, containing **Schedule Background Test
 Alert**. Build `1.0 (2)` predates the current InternalQA configuration, is
 assigned to the internal QA group, and is not a public submission candidate
 because a public `Release` deliberately excludes that control. Its
-physical-device evidence is still required before launch promotion. After the
-promotion, create a newly numbered public `Release` build only after its source
-build number, Worker App Attest allowlist, and checked-in iOS workflow guard
-have been updated together in a reviewed release. The iOS release-contract
+physical-device evidence is still required before launch promotion. A
+coordinated public `Release` candidate may be signed and uploaded to TestFlight
+before promotion, but it must remain TestFlight-only until physical evidence,
+Content Rights, launch promotion, and the other App Review gates are complete.
+If the source, Worker App Attest allowlist, or checked-in iOS workflow guard
+changes after candidate upload, increment the build number and coordinate a
+new reviewed Release candidate. The iOS release-contract
 verifier then rejects any mismatched dispatch build, generated Xcode setting,
 Worker policy, or archive invocation before signing secrets are imported. Its
 non-secret App Attest policy fingerprint must match the deployed production
