@@ -23,15 +23,14 @@ Alert** for the delayed background/locked/terminated evidence, while a public
 delayed-training evidence; do not attach it to the App Store version or submit
 it for App Review.
 
-The coordinated public `Release` candidate `1.0 (3)` was signed and uploaded
-to TestFlight by the protected workflow in
-[run 31784685472](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31784685472).
-It may be used for the normal production registration, refresh, and
-unsubscribe checks below once it is available to the intended internal group.
-It remains a TestFlight-only candidate: do not attach it to the App Store
-version, submit it for App Review, or release it publicly until all required
-physical evidence, content-rights evidence, and protected production launch
-promotion are complete.
+Public `Release` build `1.0 (3)` was signed and uploaded by
+[run 31784685472](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31784685472),
+but physical use exposed location-selection and foreground test-alert defects.
+It is superseded and must not be attached to the App Store version or submitted
+for review. The coordinated replacement is `1.0 (4)`; begin the normal
+production registration, refresh, unsubscribe, and foreground test-alert checks
+below only after the protected workflow has signed it, App Store Connect has
+finished processing it, and the intended internal group can install it.
 
 ## Before starting
 
@@ -126,13 +125,10 @@ support link if a real user needs help removing an orphaned registration.
 
 ### 5. Controlled production training notification
 
-The checked-in production configuration deliberately has
-`ENABLE_PRODUCTION_TEST_PUSH=false`. Do **not** press **Send Test Alert**
-while that setting is disabled: a resulting “production test alerts are
-disabled” error is expected and is not a delivery test.
-
-When a release operator has explicitly opened a reviewed, time-bounded test
-window, do the following on the already active device:
+The checked-in production configuration keeps the InternalQA delayed scheduler
+disabled with `ENABLE_PRODUCTION_TEST_PUSH=false`. The ordinary foreground
+**Send Test Alert** remains available with that setting on an already active,
+attested production registration. Do the following:
 
 1. Leave the app's **Include Test Alerts** preference enabled for a clear test
    record. Do not use real earthquake data or a real-looking emergency
@@ -147,9 +143,8 @@ window, do the following on the already active device:
    attempt per App Attest key per UTC day; a later attempt receives a
    rate-limit response until the next UTC day, even if APNs rejected the first
    attempt.
-5. The release operator must return `ENABLE_PRODUCTION_TEST_PUSH` to `false`
-   in a separately reviewed configuration deployment immediately after the
-   planned attempt. It is never a client secret or a standing launch setting.
+5. Leave `ENABLE_PRODUCTION_TEST_PUSH=false`; the immediate control does not
+   require a production configuration change. It is never a client secret.
 
 The training endpoint requires an existing, attested production registration
 owned by the caller's key. It cannot bootstrap a key or send to another

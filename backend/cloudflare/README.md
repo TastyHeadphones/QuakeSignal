@@ -339,18 +339,20 @@ npx wrangler secret put APNS_BUNDLE_ID
   activity can still exhaust the quota. Monitor Durable Object usage; a failed
   durable checkpoint is not treated as fresh and the three-minute stale policy
   makes `/healthz` fail closed.
-- Keep `ENABLE_PRODUCTION_TEST_PUSH=false` unless a reviewed training-alert
-  exercise explicitly requires production-device test delivery. When it is
-  deliberately set to `true`, an existing App Attest key may make exactly one
-  **clearly labelled training/drill** push to its owned production subscription
-  per UTC calendar day. The Worker atomically consumes the one-time App Attest
+- Keep `ENABLE_PRODUCTION_TEST_PUSH=false` unless a reviewed delayed
+  background-training exercise explicitly requires the InternalQA scheduler.
+  The ordinary foreground **Send Test Alert** remains available to an active,
+  attested production registration while the flag is false. An existing App
+  Attest key may make exactly one **clearly labelled training/drill** push to
+  its owned production subscription per UTC calendar day. The Worker atomically
+  consumes the one-time App Attest
   assertion/counter and D1 claim before it contacts APNs. A second valid request
   receives `429`, `Cache-Control: no-store`, an exact `Retry-After` to the next
   UTC midnight, and `retryAtUtc`; an APNs failure after a claim still consumes
   that day's single outbound training attempt. The claim retains only the
   opaque App Attest key ID and UTC timestamps—never an APNs token, proof, or
-  request body—and is purged after 14 days. The immediate and delayed modes
-  share this same claim. The delayed mode stores only the opaque key ID, due
+  request body—and is purged after 14 days. The always-available immediate and
+  flag-gated delayed modes share this same claim. The delayed mode stores only the opaque key ID, due
   time, and at-most-once state in a private per-key Durable Object; it rechecks
   the current D1 ownership and the production flag before APNs, drops jobs more
   than 30 seconds late, and never retries an APNs result.

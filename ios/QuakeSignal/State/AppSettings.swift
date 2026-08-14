@@ -18,6 +18,16 @@ enum PushRegistrationState: String, Codable, Sendable, Equatable {
     }
 }
 
+enum PushTestAlertPolicy {
+    static func isAvailable(
+        subscriptionEnabled: Bool,
+        registrationState: PushRegistrationState,
+        hasDeviceToken: Bool
+    ) -> Bool {
+        subscriptionEnabled && registrationState == .active && hasDeviceToken
+    }
+}
+
 @Observable
 @MainActor
 final class AppSettings {
@@ -62,6 +72,13 @@ final class AppSettings {
 
     var selectedCity: City? {
         selectedCityId.flatMap { CityDirectory.find(id: $0) }
+    }
+
+    /// Selects GPS-backed filtering without discarding the last explicit city.
+    /// Core Location can take time to authorize or produce a fix, and the
+    /// selected city remains the safe subscription fallback until then.
+    func selectCurrentLocation() {
+        useCurrentLocation = true
     }
 
     private enum Keys {

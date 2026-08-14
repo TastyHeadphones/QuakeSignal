@@ -3313,10 +3313,15 @@ export async function dispatchPushPage(
   };
 }
 
-function productionTestPushAllowed(env: Env, device: DeviceRecord): boolean {
+export function productionTestPushAllowed(
+  enableProductionTestPush: string | undefined,
+  deviceEnvironment: "sandbox" | "production",
+  kind: DeviceTestPushRequest["kind"],
+): boolean {
   return (
-    device.environment !== "production" ||
-    env.ENABLE_PRODUCTION_TEST_PUSH === "true"
+    deviceEnvironment !== "production" ||
+    kind === "immediate" ||
+    enableProductionTestPush === "true"
   );
 }
 
@@ -6746,7 +6751,14 @@ export class TrainingPushScheduler {
       const device = rowToDevice(row);
       // Disabling the reviewed deploy-time flag cancels any appointment that
       // has not run yet. No background retry follows an APNs failure.
-      if (!productionTestPushAllowed(this.env, device) || !hasApnsConfiguration(this.env)) return;
+      if (
+        !productionTestPushAllowed(
+          this.env.ENABLE_PRODUCTION_TEST_PUSH,
+          device.environment,
+          "delayed",
+        ) ||
+        !hasApnsConfiguration(this.env)
+      ) return;
       const event = trainingTestEvent(device);
       const result = await sendPush(
         this.env,
@@ -8748,9 +8760,13 @@ export async function handleDeviceTestPush(
       noStoreHeaders(),
     );
   }
-  if (!productionTestPushAllowed(env, device)) {
+  if (!productionTestPushAllowed(
+    env.ENABLE_PRODUCTION_TEST_PUSH,
+    device.environment,
+    body.kind,
+  )) {
     return json(
-      { error: "production test alerts are disabled" },
+      { error: "delayed production test alerts are disabled" },
       403,
       noStoreHeaders(),
     );

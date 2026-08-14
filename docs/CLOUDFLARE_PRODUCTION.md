@@ -326,16 +326,17 @@ When the monitor alerts:
   reinstall/restore recovery: a fresh production attestation plus the exact
   APNs token may atomically rebind that token, while an assertion or empty body
   from a different key remains refused.
-- Keep `ENABLE_PRODUCTION_TEST_PUSH=false`. If a controlled production test is
-  ever enabled, it remains limited to an existing, attested test device and to
-  **one clearly labelled training notification per App Attest key per UTC
+- Keep `ENABLE_PRODUCTION_TEST_PUSH=false` except during a reviewed InternalQA
+  delayed-background exercise. The ordinary foreground **Send Test Alert** is
+  available with the flag false, but both modes remain limited to an existing,
+  attested test device and to **one clearly labelled training notification per App Attest key per UTC
   calendar day**. The Worker claims that slot in D1 in the same transaction as
   its assertion-counter/challenge update before contacting APNs; concurrent
   valid requests cannot both dispatch. A second request returns `429` with
   `Cache-Control: no-store`, `Retry-After` calculated to the next UTC midnight,
   and a `retryAtUtc` value. The slot counts an accepted outbound attempt even
   when APNs later fails, so do not enable it for an ad-hoc retry loop. The
-  optional delayed TestFlight mode is a fixed 90-second appointment rather
+  flag-gated delayed TestFlight mode is a fixed 90-second appointment rather
   than a general scheduler: it is reachable only after that same attested
   request and D1 claim, rechecks that the original key still owns a production
   registration immediately before APNs, cancels after 30 seconds of lateness,

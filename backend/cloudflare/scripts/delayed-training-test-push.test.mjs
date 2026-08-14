@@ -188,11 +188,40 @@ test("the public route and handler cannot reach delayed scheduling without the o
   assert.equal(disabled.status, 403, "the checked-in false production flag blocks scheduling");
   assert.equal(schedulerAccesses, 0);
 
+  const immediateEnvironment = guardedEnvironment(false);
+  delete immediateEnvironment.APNS_PRIVATE_KEY;
+  const immediate = await handleDeviceTestPush(
+    request,
+    immediateEnvironment,
+    {
+      body: { token: device.token },
+      bytes: new TextEncoder().encode(JSON.stringify({ token: device.token })),
+    },
+    { mode: "attested", keyId, environment: "production" },
+  );
+  assert.equal(
+    immediate.status,
+    503,
+    "the ordinary production test passes the delayed flag guard and reaches APNs readiness",
+  );
+  assert.deepEqual(await immediate.json(), { error: "APNs credentials are not configured" });
+
   const internalRoute = await worker.fetch(
     new Request("https://quakesignal-api.example/schedule", { method: "POST" }),
     {},
   );
   assert.equal(internalRoute.status, 404, "the Worker has no public scheduler route");
+});
+
+test("ordinary production test alerts remain available while only delayed training requires the deploy flag", async () => {
+  const { productionTestPushAllowed } = await workerModule();
+
+  assert.equal(productionTestPushAllowed("false", "production", "immediate"), true);
+  assert.equal(productionTestPushAllowed(undefined, "production", "immediate"), true);
+  assert.equal(productionTestPushAllowed("false", "production", "delayed"), false);
+  assert.equal(productionTestPushAllowed("true", "production", "delayed"), true);
+  assert.equal(productionTestPushAllowed("false", "sandbox", "immediate"), true);
+  assert.equal(productionTestPushAllowed("false", "sandbox", "delayed"), true);
 });
 
 test("the privacy page discloses the delayed scheduler's minimal data and deletion behavior", async () => {

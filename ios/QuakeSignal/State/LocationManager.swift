@@ -17,12 +17,20 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         authorizationStatus = manager.authorizationStatus
     }
 
-    func requestAuthorization() {
-        manager.requestWhenInUseAuthorization()
-    }
-
-    func requestLocationUpdate() {
-        manager.requestLocation()
+    /// Requests the next location using the appropriate Core Location state.
+    /// Calling `requestLocation()` before the authorization prompt completes
+    /// can fail without ever producing the fix needed by push registration.
+    func requestCurrentLocation() {
+        switch authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse:
+            manager.requestLocation()
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .denied, .restricted:
+            break
+        @unknown default:
+            break
+        }
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {

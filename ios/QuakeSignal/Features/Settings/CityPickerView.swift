@@ -13,10 +13,10 @@ struct CityPickerView: View {
             List {
                 Section {
                     Button {
-                        settings.useCurrentLocation = true
-                        settings.selectedCityId = nil
-                        locationManager.requestAuthorization()
-                        locationManager.requestLocationUpdate()
+                        // Preserve the selected city as a usable subscription
+                        // fallback while authorization/GPS is still pending.
+                        settings.selectCurrentLocation()
+                        locationManager.requestCurrentLocation()
                         dismiss()
                     } label: {
                         HStack {

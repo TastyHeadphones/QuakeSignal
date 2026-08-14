@@ -20,8 +20,9 @@
     // consumerless final Queue is only the bounded, operator-visible last
     // resort when both D1 and that independent storage path are unavailable.
     "ALERT_DELIVERY_DLQ_FALLBACK_NAME": "quakesignal-alert-delivery-dlq-fallback",
-    // Production test pushes are deliberately disabled. Enabling this is a
-    // conscious, deploy-time choice; it is not a credential.
+    // Delayed production training pushes are deliberately disabled. The
+    // ordinary foreground Send Test Alert remains available to an active,
+    // attested registration; this flag opens only the InternalQA scheduler.
     "ENABLE_PRODUCTION_TEST_PUSH": "false",
     // Every public device mutation is bound to a one-time Apple App Attest
     // proof. `disabled` and the development bypass are intentionally absent
@@ -31,7 +32,7 @@
     "APP_ATTEST_APP_ID": "5TT564H883.com.quakesignal.app",
     // CFBundleVersion, not the marketing version. Update this allow-list in
     // the same reviewed release that changes CURRENT_PROJECT_VERSION.
-    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3",
+    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4",
     // iOS 17–26 valid App Attest proofs do not have the iOS 27 release
     // metadata extension. Whenever an extension is present it is still
     // strictly checked for App Store/TestFlight category and this build ID.
