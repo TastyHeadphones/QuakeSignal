@@ -247,7 +247,7 @@ Worker deployment, Queue, APNs, Durable Object, or monitor credentials.
 The fixed-manifest script accepts no target IDs, SQL, database ID, or arbitrary
 time from workflow input. Its default invocation is read-only and emits only
 aggregate target counts. The optional apply checkbox may resolve only the
-three reviewed historical provider-page failures after exact compare-and-set
+five reviewed historical provider-page failures after exact compare-and-set
 checks prove that their matching outboxes are already terminal `expired`.
 It does not delete registrations, read payloads/tokens, redrive a Queue, or
 claim a delivery. Do not create this token or run apply until the APNs

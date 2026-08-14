@@ -209,7 +209,7 @@ release evidence; repeat the production proof against
 ## One-time historical APNs environment-incident disposition
 
 The repository contains a deliberately narrow, default-read-only workflow,
-**Disposition historical APNs incident**, for the three reviewed historical
+**Disposition historical APNs incident**, for the five reviewed historical
 `BadEnvironmentKeyInToken` page-failure records caused by the former
 development-device registration path. It is not a general D1 administration
 tool: the checked-in script has a fixed manifest and will only resolve a page
