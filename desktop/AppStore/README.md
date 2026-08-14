@@ -13,6 +13,7 @@ Nothing here is uploaded automatically.
 | Keywords | `en-US/keywords.txt` |
 | App Review notes | `review-notes.txt` |
 | Submission-answer worksheet | `submission-answers.md` |
+| Pre-submission checklist | `submission-checklist.md` |
 | Screenshot provenance / signed-build approval | `screenshot-provenance.json` |
 
 The approved primary product-page name is **QuakeSignal for macOS** and the
@@ -40,9 +41,10 @@ be one multi-platform/Universal Purchase record.
 | Primary category | Weather |
 | Copyright | `2026 UniSphereco LLC` |
 
-Before uploading a build or submitting the macOS version, create the `1.0.0`
-platform version to match `desktop/src-tauri/tauri.conf.json`, then complete
-the age rating, content rights, export-compliance and App Privacy answers.
+Before uploading a build or submitting the macOS version, use the existing
+`1.0.0` platform version in App Store Connect (currently Prepare for
+Submission); do not create a duplicate version. Then complete the age rating,
+content rights, export-compliance and App Privacy answers.
 Before certifying content rights for Wolfx-supplied data, obtain and preserve
 written upstream permission using
 [`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md).

@@ -11,6 +11,7 @@ exact current location, or a test-push result in product-page imagery.
 | Japanese and Simplified Chinese draft copy | `ja/`, `zh-Hans/` (do not upload without name approval) |
 | App Review notes | `review-notes.txt` |
 | Submission-answer worksheet | `submission-answers.md` |
+| Pre-submission checklist | `submission-checklist.md` |
 | Screenshot provenance / signed-candidate approval | `screenshot-provenance.json` |
 
 ## App record
@@ -97,11 +98,13 @@ not substitute another personal, preview, or staging Worker hostname:
 The Privacy Policy and Support URLs are the App Store Connect values. Use the
 Terms URL only where a release-owner-approved customer-facing terms link or
 custom license agreement requires it; do not imply that a custom EULA has been
-approved merely because this endpoint exists. This exact `workers.dev` hostname
-is approved for the production release; verify its public TLS and the HTTPS
-responses for all three URLs immediately before submission. The app uses
-Cloudflare's public certificate; do not ship a private CA, a private root, or
-an iOS client-mTLS certificate.
+approved merely because this endpoint exists. The current Settings screen links
+only to Privacy Policy and Support, so do not describe the Terms endpoint as an
+in-app Settings link unless a separately reviewed UI change adds one. This exact
+`workers.dev` hostname is approved for the production release; verify its public
+TLS and the HTTPS responses for all three URLs immediately before submission.
+The app uses Cloudflare's public certificate; do not ship a private CA, a private
+root, or an iOS client-mTLS certificate.
 
 ## App privacy answers
 
@@ -142,7 +145,10 @@ Use the versioned [`review-notes.txt`](./review-notes.txt) file when filling
 the App Review notes field. The auditable
 [`submission-answers.md`](./submission-answers.md) worksheet keeps the
 privacy inventory, URLs, and deliberately pending legal/release-owner answers
-in one place; it does not authorize completion of any pending field.
+in one place. Complete the companion
+[`submission-checklist.md`](./submission-checklist.md) before copying any
+value into App Store Connect; neither artifact authorizes completion of a
+pending field.
 
 ## Required release assets
 

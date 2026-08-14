@@ -1,7 +1,24 @@
-QuakeSignal is an independent, non-official earthquake-information app. It reads public Wolfx Open API feeds and tells people to follow official local emergency guidance. Data can be delayed, incomplete, revised, or inaccurate; notifications are best-effort and are not a government emergency-alert service.
+QuakeSignal is an independent, non-official earthquake-information app. It reads
+public Wolfx Open API feeds and tells people to follow official local emergency
+guidance. Data can be delayed, incomplete, revised, or inaccurate; notifications
+are best-effort and are not a government emergency-alert service.
 
-No account, sign-in, payment, demo account, review credentials, location permission, or notification permission is required for review. The Home, List, Map, Guide, and Settings tabs are usable with a generic selected city and without granting either permission.
+No account, sign-in, payment, demo account, or review credential is required.
+For a permission-free review path, start the app, choose **Skip** at the
+notification and location onboarding steps, then use the Home, List, Map, Guide,
+and Settings tabs. Alternatively, a reviewer can choose a listed city instead of
+granting location access.
 
-Notifications are optional. If enabled, the app uses a coarse selected-city or rounded location and chosen thresholds to decide whether a nearby earthquake report may warrant a local alert. The public Release includes an ordinary, foreground-only **Send Test Alert** control when an opted-in device has an APNs token; it does not include the InternalQA-only delayed background-training control.
+Notifications are optional. If enabled, the app uses a selected city or rounded
+location and chosen thresholds to decide whether a nearby earthquake report may
+warrant a local alert. The public Release includes the ordinary, foreground
+**Send Test Alert** control only after notification authorization, an opt-in alert
+registration, and an APNs token are present. The InternalQA-only delayed
+background-training control is not compiled into a public Release archive, and is
+not needed for App Review.
 
-The app links to its Privacy Policy, Support, and Terms from Settings. Its production service uses the public HTTPS endpoint https://quakesignal-api.hopeso.workers.dev; no private CA or client certificate is required.
+Settings links to the Privacy Policy and Support pages. The optional Terms URL in
+the release worksheet is not currently an in-app Settings link and must not be
+described as one. The production service uses the public HTTPS endpoint
+https://quakesignal-api.hopeso.workers.dev; no private CA or client certificate is
+required.

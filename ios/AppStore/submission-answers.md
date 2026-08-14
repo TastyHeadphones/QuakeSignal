@@ -3,7 +3,9 @@
 This is the reviewed-source worksheet for the existing **QuakeSignal** iOS
 record (Apple ID `6800642443`). It is not a substitute for App Store Connect
 fields, legal review, or the release owner's final confirmation. Copy values
-only after the listed evidence is complete.
+only after the listed evidence is complete. Use it together with
+[`submission-checklist.md`](./submission-checklist.md): every row marked
+**PENDING** is a non-submission condition, not a value to infer or certify.
 
 ## Record and version
 
@@ -25,7 +27,7 @@ only after the listed evidence is complete.
 | --- | --- | --- |
 | Privacy Policy URL | `https://quakesignal-api.hopeso.workers.dev/privacy` | GET 200 over public HTTPS immediately before submission |
 | Support URL | `https://quakesignal-api.hopeso.workers.dev/support` | GET 200 over public HTTPS immediately before submission |
-| Terms URL, if requested | `https://quakesignal-api.hopeso.workers.dev/terms` | Use only with release-owner approval for a customer-facing terms link/EULA |
+| Terms URL, if requested | `https://quakesignal-api.hopeso.workers.dev/terms` | Use only with release-owner approval for a customer-facing terms link/EULA; it is not currently linked from the app's Settings page |
 
 The approved endpoint uses Cloudflare-managed public Web-PKI TLS. Do not add a
 private CA, an origin certificate, or an iOS client certificate.
@@ -34,9 +36,9 @@ private CA, an origin certificate, or an iOS client certificate.
 
 | Apple data type | Collected | Linked | Tracking | Purpose | Source evidence |
 | --- | --- | --- | --- | --- | --- |
-| Coarse Location | Yes, only for opted-in nearby-alert matching | Yes, when stored with alert preferences | No | App Functionality | `PrivacyInfo.xcprivacy`, `docs/PRIVACY.md` |
-| Device ID (APNs token) | Yes, only for opted-in push delivery | Yes | No | App Functionality | `PrivacyInfo.xcprivacy`, `docs/PRIVACY.md` |
-| Other Data (alert preferences and App Attest integrity record) | Yes | Yes | No | App Functionality | `PrivacyInfo.xcprivacy`, `docs/PRIVACY.md` |
+| Coarse Location | Yes, only for opted-in nearby-alert matching | Yes, when stored with alert preferences | No | App Functionality | `ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy`, `docs/PRIVACY.md` |
+| Device ID (APNs token) | Yes, only for opted-in push delivery | Yes | No | App Functionality | `ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy`, `docs/PRIVACY.md` |
+| Other Data (alert preferences and App Attest integrity record) | Yes | Yes | No | App Functionality | `ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy`, `docs/PRIVACY.md` |
 | Names, account data, contacts, advertising ID, analytics | No | N/A | No | N/A | `docs/PRIVACY.md` |
 
 Before submission, the release owner must compare these entries with the
@@ -51,7 +53,8 @@ Collected” merely because the app has no account.
 | Sign-in required | No |
 | Review notes | `review-notes.txt` |
 | Contact name, email, phone | **PENDING**: release owner must enter an accountable UniSphereco LLC contact |
-| Notes for background/notification behavior | Optional notifications are best-effort; public Release has an ordinary foreground Send Test Alert control for an opted-in APNs device, but no delayed background-training control |
+| Review route | Start the app, choose **Skip** for notification and location onboarding, then inspect Home, List, Map, Guide, and Settings; no account or review credential is required |
+| Notes for background/notification behavior | Optional notifications are best-effort. A public Release exposes an ordinary foreground Send Test Alert control only after authorization, opt-in registration, and an APNs token; it has no delayed background-training control |
 
 ## Required human/legal decisions — do not infer these answers
 
