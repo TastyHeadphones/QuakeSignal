@@ -41,6 +41,7 @@ function baseEnvironment() {
     GITHUB_APP_ID: "1234567",
     GITHUB_APP_INSTALLATION_ID: "7654321",
     GITHUB_APP_PRIVATE_KEY_PKCS8: privateKeyPem,
+    HEARTBEAT_PING_URL: "https://heartbeat.example.invalid/quakesignal-monitor-token-not-logged",
     MONITOR_TARGET: "production",
   };
 }
@@ -168,6 +169,7 @@ test("a failed Queue probe calls noRetry and creates a separate token-free monit
   assert.equal(payload.title, "[Emergency] Terminal DLQ monitor probe failed");
   assert.match(payload.body, /terminal-dlq-monitor-failure/);
   assert.doesNotMatch(payload.body, /queue-read-token-not-logged|github-installation-token-not-logged/);
+  assert.equal(calls.some((call) => call.url === baseEnvironment().HEARTBEAT_PING_URL), false);
 });
 
 test("the defensive Fetch handler exposes no monitor data", async () => {
@@ -197,6 +199,7 @@ test("a delayed Cron uses invocation time, not its stale scheduled timestamp, fo
     if (url.endsWith("/queues/terminalqueueid/metrics")) {
       return json({ success: true, result: { backlog_count: 0, oldest_message_timestamp_ms: 0 } });
     }
+    if (url === baseEnvironment().HEARTBEAT_PING_URL) return new Response(null, { status: 204 });
     throw new Error(`unexpected request ${url}`);
   };
 
@@ -204,6 +207,174 @@ test("a delayed Cron uses invocation time, not its stale scheduled timestamp, fo
 
   const [, encodedPayload] = jwt.split(".");
   assert.equal(JSON.parse(decodePart(encodedPayload)).iat, Math.floor(invocationTime / 1000) - 60);
+});
+
+test("a successful monitor pings its opaque HTTPS heartbeat only after Queue and GitHub checks succeed", async () => {
+  const { scheduledMonitor } = await workerModule();
+  const calls = [];
+  const heartbeat = baseEnvironment().HEARTBEAT_PING_URL;
+  const controller = {
+    scheduledTime: observedAt,
+    cron: "*/5 * * * *",
+    noRetry() { throw new Error("successful heartbeat must not call noRetry"); },
+  };
+  const fetch = async (input, init = {}) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.endsWith("/app/installations/7654321/access_tokens")) return json(installationToken(), 201);
+    if (url.includes("/queues?page=1")) return json(queueList());
+    if (url.endsWith("/queues/terminalqueueid/metrics")) {
+      return json({ success: true, result: { backlog_count: 0, oldest_message_timestamp_ms: 0 } });
+    }
+    if (url === heartbeat) return new Response(null, { status: 204 });
+    throw new Error(`unexpected request ${url}`);
+  };
+
+  await scheduledMonitor(controller, baseEnvironment(), fetch, () => observedAt);
+
+  assert.equal(calls.at(-1).url, heartbeat);
+  assert.deepEqual(calls.at(-1).init, {
+    method: "GET",
+    redirect: "error",
+    cache: "no-store",
+    signal: calls.at(-1).init.signal,
+  });
+  assert.equal(calls.at(-1).init.signal instanceof AbortSignal, true);
+});
+
+test("an evidence escalation is acknowledged only after its GitHub issue update succeeds", async () => {
+  const { scheduledMonitor } = await workerModule();
+  const calls = [];
+  const heartbeat = baseEnvironment().HEARTBEAT_PING_URL;
+  const controller = {
+    scheduledTime: observedAt,
+    cron: "*/5 * * * *",
+    noRetry() { throw new Error("successful evidence escalation must not call noRetry"); },
+  };
+  const fetch = async (input, init = {}) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.endsWith("/app/installations/7654321/access_tokens")) return json(installationToken(), 201);
+    if (url.includes("/queues?page=1")) return json(queueList());
+    if (url.endsWith("/queues/terminalqueueid/metrics")) {
+      return json({ success: true, result: { backlog_count: 1, oldest_message_timestamp_ms: observedAt - 1_000 } });
+    }
+    if (url.endsWith("/labels/quakesignal-terminal-dlq-fallback")) return json({ name: "quakesignal-terminal-dlq-fallback" });
+    if (url.includes("/issues?state=open")) return json([]);
+    if (url.endsWith("/issues") && init.method === "POST") return json({ number: 127 }, 201);
+    if (url === heartbeat) return new Response(null, { status: 204 });
+    throw new Error(`unexpected request ${url}`);
+  };
+
+  await scheduledMonitor(controller, baseEnvironment(), fetch, () => observedAt);
+
+  assert.equal(calls.at(-1).url, heartbeat);
+  assert.ok(calls.some((call) => call.url.endsWith("/issues") && call.init.method === "POST"));
+});
+
+test("a failed heartbeat is retried through Cron without exposing its opaque URL", async () => {
+  const { scheduledMonitor } = await workerModule();
+  const heartbeat = baseEnvironment().HEARTBEAT_PING_URL;
+  let noRetryCalls = 0;
+  const controller = {
+    scheduledTime: observedAt,
+    cron: "*/5 * * * *",
+    noRetry() { noRetryCalls += 1; },
+  };
+  const fetch = async (input, init = {}) => {
+    const url = String(input);
+    if (url.endsWith("/app/installations/7654321/access_tokens")) return json(installationToken(), 201);
+    if (url.includes("/queues?page=1")) return json(queueList());
+    if (url.endsWith("/queues/terminalqueueid/metrics")) {
+      return json({ success: true, result: { backlog_count: 0, oldest_message_timestamp_ms: 0 } });
+    }
+    if (url === heartbeat) return new Response(null, { status: 503 });
+    if (url.endsWith("/labels/quakesignal-terminal-dlq-fallback")) return json({ name: "quakesignal-terminal-dlq-fallback" });
+    if (url.includes("/issues?state=open")) return json([]);
+    if (url.endsWith("/issues") && init.method === "POST") return json({ number: 126 }, 201);
+    throw new Error(`unexpected request ${url}`);
+  };
+
+  await assert.rejects(
+    () => scheduledMonitor(controller, baseEnvironment(), fetch, () => observedAt),
+    (error) => {
+      assert.match(String(error), /heartbeat ping returned an unexpected status/);
+      assert.doesNotMatch(String(error), new RegExp(heartbeat));
+      return true;
+    },
+  );
+  assert.equal(noRetryCalls, 0);
+});
+
+test("a permanent heartbeat status fails closed without exposing the opaque URL", async () => {
+  const { scheduledMonitor } = await workerModule();
+  const heartbeat = baseEnvironment().HEARTBEAT_PING_URL;
+  let noRetryCalls = 0;
+  const controller = {
+    scheduledTime: observedAt,
+    cron: "*/5 * * * *",
+    noRetry() { noRetryCalls += 1; },
+  };
+  const fetch = async (input, init = {}) => {
+    const url = String(input);
+    if (url.endsWith("/app/installations/7654321/access_tokens")) return json(installationToken(), 201);
+    if (url.includes("/queues?page=1")) return json(queueList());
+    if (url.endsWith("/queues/terminalqueueid/metrics")) {
+      return json({ success: true, result: { backlog_count: 0, oldest_message_timestamp_ms: 0 } });
+    }
+    if (url === heartbeat) return new Response(null, { status: 410 });
+    if (url.endsWith("/labels/quakesignal-terminal-dlq-fallback")) return json({ name: "quakesignal-terminal-dlq-fallback" });
+    if (url.includes("/issues?state=open")) return json([]);
+    if (url.endsWith("/issues") && init.method === "POST") return json({ number: 128 }, 201);
+    throw new Error(`unexpected request ${url}`);
+  };
+
+  await assert.rejects(
+    () => scheduledMonitor(controller, baseEnvironment(), fetch, () => observedAt),
+    (error) => {
+      assert.match(String(error), /heartbeat ping returned an unexpected status/);
+      assert.doesNotMatch(String(error), new RegExp(heartbeat));
+      return true;
+    },
+  );
+  assert.equal(noRetryCalls, 1);
+});
+
+test("an invalid heartbeat URL does not prevent the Queue and GitHub monitor cycle", async () => {
+  const { scheduledMonitor } = await workerModule();
+  const calls = [];
+  let noRetryCalls = 0;
+  const controller = {
+    scheduledTime: observedAt,
+    cron: "*/5 * * * *",
+    noRetry() { noRetryCalls += 1; },
+  };
+  const fetch = async (input, init = {}) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.endsWith("/app/installations/7654321/access_tokens")) return json(installationToken(), 201);
+    if (url.includes("/queues?page=1")) return json(queueList());
+    if (url.endsWith("/queues/terminalqueueid/metrics")) {
+      return json({ success: true, result: { backlog_count: 0, oldest_message_timestamp_ms: 0 } });
+    }
+    if (url.endsWith("/labels/quakesignal-terminal-dlq-fallback")) return json({ name: "quakesignal-terminal-dlq-fallback" });
+    if (url.includes("/issues?state=open")) return json([]);
+    if (url.endsWith("/issues") && init.method === "POST") return json({ number: 129 }, 201);
+    throw new Error(`unexpected request ${url}`);
+  };
+
+  await assert.rejects(
+    () => scheduledMonitor(
+      controller,
+      { ...baseEnvironment(), HEARTBEAT_PING_URL: "http://heartbeat.example.invalid/not-logged" },
+      fetch,
+      () => observedAt,
+    ),
+    /HEARTBEAT_PING_URL must be a direct HTTPS URL/,
+  );
+  assert.equal(noRetryCalls, 1);
+  assert.ok(calls.some((call) => call.url.includes("/queues?page=1")));
+  assert.ok(calls.some((call) => call.url.endsWith("/queues/terminalqueueid/metrics")));
 });
 
 test("the staging target uses a fixed isolated Queue and a distinct test issue label", async () => {

@@ -120,6 +120,7 @@ jobs:
           GITHUB_APP_ID: ${{ secrets.TERMINAL_DLQ_GITHUB_APP_ID }}
           GITHUB_APP_INSTALLATION_ID: ${{ secrets.TERMINAL_DLQ_GITHUB_APP_INSTALLATION_ID }}
           GITHUB_APP_PRIVATE_KEY_PKCS8: ${{ secrets.TERMINAL_DLQ_GITHUB_APP_PRIVATE_KEY_PKCS8 }}
+          HEARTBEAT_PING_URL: ${{ secrets.HEARTBEAT_PING_URL }}
         run: |
           set -euo pipefail
           for name in \
@@ -129,7 +130,8 @@ jobs:
             CLOUDFLARE_MONITOR_API_TOKEN \
             GITHUB_APP_ID \
             GITHUB_APP_INSTALLATION_ID \
-            GITHUB_APP_PRIVATE_KEY_PKCS8; do
+            GITHUB_APP_PRIVATE_KEY_PKCS8 \
+            HEARTBEAT_PING_URL; do
             if [ -z "${!name:-}" ]; then
               echo "::error::cloudflare-terminal-dlq-monitor-worker is missing: $name"
               exit 1
@@ -141,6 +143,25 @@ jobs:
             echo "::error::GITHUB_APP_PRIVATE_KEY_PKCS8 must be an unencrypted PKCS#8 PEM"
             exit 1
           }
+          node <<'NODE'
+          const value = process.env.HEARTBEAT_PING_URL;
+          try {
+            if (typeof value !== "string" || value.trim() === "") throw new Error("missing");
+            const url = new URL(value);
+            if (
+              url.protocol !== "https:" ||
+              url.hostname === "" ||
+              url.username !== "" ||
+              url.password !== "" ||
+              url.hash !== ""
+            ) {
+              throw new Error("invalid");
+            }
+          } catch {
+            console.error("::error::HEARTBEAT_PING_URL must be a direct HTTPS URL");
+            process.exit(1);
+          }
+          NODE
           if [ "$CLOUDFLARE_DEPLOY_ACCOUNT_ID" = "$CLOUDFLARE_TARGET_ACCOUNT_ID" ]; then
             echo "::error::The monitor must deploy from a separate Cloudflare account; Workers Scripts: Edit is account-wide."
             exit 1
@@ -160,6 +181,7 @@ jobs:
           GITHUB_APP_ID: ${{ secrets.TERMINAL_DLQ_GITHUB_APP_ID }}
           GITHUB_APP_INSTALLATION_ID: ${{ secrets.TERMINAL_DLQ_GITHUB_APP_INSTALLATION_ID }}
           GITHUB_APP_PRIVATE_KEY_PKCS8: ${{ secrets.TERMINAL_DLQ_GITHUB_APP_PRIVATE_KEY_PKCS8 }}
+          HEARTBEAT_PING_URL: ${{ secrets.HEARTBEAT_PING_URL }}
         run: |
           set -euo pipefail
           monitor_config="wrangler.jsonc"
@@ -177,6 +199,7 @@ jobs:
             "GITHUB_APP_ID",
             "GITHUB_APP_INSTALLATION_ID",
             "GITHUB_APP_PRIVATE_KEY_PKCS8",
+            "HEARTBEAT_PING_URL",
           ];
           const secrets = Object.fromEntries(names.map((name) => [name, process.env[name]]));
           fs.writeFileSync(output, JSON.stringify(secrets), { encoding: "utf8", mode: 0o600 });

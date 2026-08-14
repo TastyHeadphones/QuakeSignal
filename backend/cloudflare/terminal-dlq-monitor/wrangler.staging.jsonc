@@ -17,7 +17,8 @@
       "CLOUDFLARE_MONITOR_API_TOKEN",
       "GITHUB_APP_ID",
       "GITHUB_APP_INSTALLATION_ID",
-      "GITHUB_APP_PRIVATE_KEY_PKCS8"
+      "GITHUB_APP_PRIVATE_KEY_PKCS8",
+      "HEARTBEAT_PING_URL"
     ]
   },
   "observability": {
