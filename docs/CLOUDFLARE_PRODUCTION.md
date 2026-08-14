@@ -215,6 +215,32 @@ release evidence; repeat the production proof against
    Complete the launch promotion before public App Review/submission or any
    public release.
 
+## One-time historical APNs environment-incident disposition
+
+The repository contains a deliberately narrow, default-read-only workflow,
+**Disposition historical APNs incident**, for the three reviewed historical
+`BadEnvironmentKeyInToken` page-failure records caused by the former
+development-device registration path. It is not a general D1 administration
+tool: the checked-in script has a fixed manifest and will only resolve a page
+failure when its matching outbox is already terminal with
+`terminal_reason='expired'`, no final delivery status, no Queue lease, and the
+exact reviewed failure metadata. It never reads event payloads or device
+tokens, deletes registrations, acknowledges Queue messages, redrives alerts,
+or marks a notification delivered.
+
+Do not run the apply mode until the APNs environment-isolation Worker revision
+is deployed and its smoke test is green. Create the dedicated reviewer-protected
+`cloudflare-production-incident-disposition` Environment with only a
+time-bound `CLOUDFLARE_D1_INCIDENT_DISPOSITION_API_TOKEN` (D1 Read + D1 Write
+on the production account, with no other API permissions) plus
+`CLOUDFLARE_ACCOUNT_ID`. The reviewed script hard-pins the production D1
+database UUID. First dispatch the
+workflow from protected `main` with its apply checkbox off and confirm its
+aggregate-only dry-run result. A reviewer may then rerun it with the checkbox
+on. It rechecks every compare-and-set predicate and fails closed on any drift.
+Afterward, recheck `/healthz`; a cleared historical record does not excuse any
+new delivery failure or replace staging/physical TestFlight APNs proof.
+
 ## Terminal DLQ fallback recovery
 
 The final `quakesignal-alert-delivery-dlq-fallback` Queue is deliberately

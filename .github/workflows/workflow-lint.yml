@@ -18,6 +18,8 @@ on:
       - "backend/cloudflare/scripts/smoke-test.test.mjs"
       - "backend/cloudflare/scripts/wait-for-worker-readiness.mjs"
       - "backend/cloudflare/scripts/wait-for-worker-readiness.test.mjs"
+      - "backend/cloudflare/scripts/dispose-historical-apns-environment-incidents.mjs"
+      - "backend/cloudflare/scripts/dispose-historical-apns-environment-incidents.test.mjs"
   pull_request:
     paths:
       - ".github/workflows/**"
@@ -32,6 +34,8 @@ on:
       - "backend/cloudflare/scripts/smoke-test.test.mjs"
       - "backend/cloudflare/scripts/wait-for-worker-readiness.mjs"
       - "backend/cloudflare/scripts/wait-for-worker-readiness.test.mjs"
+      - "backend/cloudflare/scripts/dispose-historical-apns-environment-incidents.mjs"
+      - "backend/cloudflare/scripts/dispose-historical-apns-environment-incidents.test.mjs"
   workflow_dispatch:
 
 permissions:
@@ -88,6 +92,7 @@ jobs:
           node --test .github/scripts/verify-ios-release-contract.test.mjs
           node .github/scripts/verify-ios-release-contract.mjs
           node --test backend/cloudflare/scripts/smoke-test.test.mjs
+          node --test backend/cloudflare/scripts/dispose-historical-apns-environment-incidents.test.mjs
 
       - name: Test desktop and Homebrew release contract
         run: |

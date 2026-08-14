@@ -11,6 +11,7 @@
     "test:render-staging-config": "node --test scripts/render-staging-config.test.mjs",
     "verify:apns-secrets": "node scripts/verify-apns-worker-secrets.mjs",
     "test:verify-apns-secret-config": "node --test scripts/verify-apns-worker-secrets.test.mjs",
+    "test:historical-apns-incident-disposition": "node --test scripts/dispose-historical-apns-environment-incidents.test.mjs",
     "verify:production-gates": "node scripts/verify-production-gates.mjs",
     "test:production-gates": "node --test scripts/verify-production-gates.test.mjs",
     "test:alert-delivery-reliability": "node --test scripts/alert-delivery-reliability.test.mjs",
