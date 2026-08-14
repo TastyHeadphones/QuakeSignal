@@ -48,23 +48,23 @@ archive. Use build `2` only to collect the physical-device evidence in the
 TestFlight runbook. Do not attach it to the App Store version, select it for
 App Review, or release it publicly.
 
-App Store Connect will reject a repeat upload with the same build number. Once
-the physical evidence is complete and the protected production launch gate has
-been promoted, the next public candidate must be a newly signed public
-`Release` archive with a later `CFBundleVersion` (at least `3`). Coordinate its
-source and App Attest version boundary in one reviewed release: update
-`CURRENT_PROJECT_VERSION` in `project.yml`, make
-`APP_ATTEST_ALLOWED_BUNDLE_VERSIONS` in `backend/cloudflare/wrangler.jsonc`
-admit that exact build number, and update the intentional checked-in build
-contract in `.github/workflows/ios.yml`. Preserve or retire older allowlisted
-versions only deliberately. The checked-in verifier rejects a mismatched
-manual `build_number`, Xcode project, Worker policy, or archive command before
-signing material is used. It also derives a non-secret policy fingerprint; the
-protected archive flow requires the live production `/healthz` response to
-match that fingerprint and admit the selected build before certificate import.
-This is deployment-consistency evidence, not a claim that every iOS 17–26
-App Attest proof carries optional Apple release metadata. Do not override only
-the workflow input or reuse build `2`.
+App Store Connect will reject a repeat upload with the same build number. The
+checked-in public-candidate source is coordinated for `CFBundleVersion` `3`:
+`CURRENT_PROJECT_VERSION` is `3`, the Worker App Attest allow-list is
+`1,2,3`, and the protected archive workflow defaults to `3`. Older allowlisted
+versions are preserved deliberately for existing clients. This source
+preparation does **not** authorize signing, uploading, App Review, or public
+release: first complete the physical evidence and protected production launch
+promotion. For a later candidate, update the project version, Worker allow-list,
+and checked-in workflow build guard together in one reviewed release. The
+checked-in verifier rejects a mismatched manual `build_number`, Xcode project,
+Worker policy, or archive command before signing material is used. It also
+derives a non-secret policy fingerprint; the protected archive flow requires
+the live production `/healthz` response to match that fingerprint and admit the
+selected build before certificate import. This is deployment-consistency
+evidence, not a claim that every iOS 17–26 App Attest proof carries optional
+Apple release metadata. Do not override only the workflow input or reuse build
+`2`.
 The protected TestFlight archive and production Worker deployment share a
 non-cancelling concurrency lock, so the checked live policy cannot change
 between that smoke proof and IPA upload.

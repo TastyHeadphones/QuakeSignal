@@ -218,11 +218,11 @@ for each escalation and restricts it to this repository and `issues: write`.
 Run **Deploy terminal DLQ monitor → Run workflow → `deploy_monitor=true`**
 from protected `main`. It atomically deploys all runtime secrets with the first
 `workers_dev:false` Cron Worker version. Cloudflare Cron changes can take up to
-15 minutes to propagate. Before re-affirming the production monitor
-attestation, confirm three on-cadence Cron Events, the App credential/scope
-readiness logged on every empty-Queue run, a staging-target issue escalation,
-and an independent missed-heartbeat/Cron-failure alert. A cron Worker cannot
-self-report an invocation that never starts; see its [monitor
+15 minutes to propagate. When operating this optional production monitor,
+confirm three on-cadence Cron Events, the App credential/scope readiness logged
+on every empty-Queue run, a staging-target issue escalation, and an independent
+missed-heartbeat/Cron-failure alert. A cron Worker cannot self-report an
+invocation that never starts; see its [monitor
 runbook](../backend/cloudflare/terminal-dlq-monitor/README.md).
 
 Create a second reviewer-protected Environment named

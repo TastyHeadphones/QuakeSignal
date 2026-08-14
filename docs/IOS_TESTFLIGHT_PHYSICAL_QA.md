@@ -21,10 +21,11 @@ predates the current `InternalQA` configuration but includes **Schedule
 Background Test Alert** for the delayed background/locked/terminated evidence,
 while a public `Release` intentionally excludes that feature. Use build `2`
 only for this runbook: do not attach it to the App Store version or submit it
-for App Review. After the physical evidence and protected production launch
-promotion are complete, create a new public `Release` build with a later build
-number (at least `3`), coordinated with the source release configuration,
-the Worker App Attest allowlist, and the checked-in iOS workflow build guard.
+for App Review. The checked-in public-candidate source is coordinated for
+build `3`, including its Worker App Attest allow-list and protected iOS
+workflow build guard. It still must not be signed, uploaded, or attached to
+App Review until the physical evidence and protected production launch
+promotion are complete.
 
 ## Before starting
 

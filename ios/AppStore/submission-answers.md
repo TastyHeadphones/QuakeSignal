@@ -66,4 +66,4 @@ Collected” merely because the app has no account.
 | Availability / pricing schedule | Select approved territories and distribution timing | **PENDING** release-owner decision |
 | Japanese / Simplified Chinese listing | Exact product-page names, availability, and trademark review | **PENDING**; keep English-only until approved |
 | Screenshots | Recapture and approve all primary 6.5-inch frames from the signed public Release candidate | **PENDING** build >=3 provenance evidence |
-| Physical QA / launch | Complete TestFlight proof, production monitor proof, and App Attest launch promotion | **PENDING** — see `docs/IOS_TESTFLIGHT_PHYSICAL_QA.md` and `docs/CLOUDFLARE_PRODUCTION.md` |
+| Physical QA / launch | Complete TestFlight proof, production health/readiness proof, and App Attest launch promotion; terminal-DLQ monitoring remains an optional operational control | **PENDING** — see `docs/IOS_TESTFLIGHT_PHYSICAL_QA.md` and `docs/CLOUDFLARE_PRODUCTION.md` |
