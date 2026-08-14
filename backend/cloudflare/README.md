@@ -124,18 +124,13 @@ npx wrangler queues create quakesignal-alert-delivery-dlq
 npx wrangler queues create quakesignal-alert-delivery-dlq-fallback
 ```
 
-Before either protected production deployment phase, configure and manually
-verify the independent cron-only terminal-DLQ monitor for the exact
+The independent cron-only terminal-DLQ monitor is recommended for the exact
 consumerless `quakesignal-alert-delivery-dlq-fallback` Queue. The GitHub
 Actions monitor remains a secondary check because GitHub can delay or drop
-scheduled workflow runs. A release operator may set the
-protected `cloudflare-production` Environment variable
-`ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true` only after
-verifying the monitor reaches a staffed responder and reviewing the
-retention-aware recovery procedure. The production gate deliberately does not
-inspect Queue depth or Cloudflare dashboard alert wiring; it verifies only this
-explicit operator attestation and blocks both TestFlight bootstrap and launch
-when it is absent or not exactly `true`. See
+scheduled workflow runs. The production deployment gate does not inspect Queue
+depth or Cloudflare dashboard alert wiring. Deploying without the independent
+monitor is an explicit acceptance that terminal-Queue backlog or a missed Cron
+run may go unnoticed until manual inspection. See
 [`docs/CLOUDFLARE_PRODUCTION.md`](../../docs/CLOUDFLARE_PRODUCTION.md#terminal-dlq-fallback-recovery)
 for the recovery runbook.
 
@@ -161,8 +156,8 @@ approved public `workers.dev` origin. Do not make a routine production release
 by running remote migration or deployment commands from a workstation. Its
 Cloudflare token needs permission to deploy this Worker, manage its Durable
 Object/D1/Queues, and list Worker secret names (not values). A missing secret
-name, App Attest gate, or terminal-DLQ monitor/recovery attestation blocks
-deployment.
+name or App Attest gate blocks deployment. The terminal-DLQ monitor remains an
+optional operational control rather than a deployment attestation.
 
 The same protected GitHub Environment provides the exact
 `CLOUDFLARE_WORKER_URL` and the App Attest review gate; it no longer needs a
@@ -295,11 +290,9 @@ npx wrangler secret put APNS_BUNDLE_ID
   DLQ message remains retriable and ultimately enters the consumerless
   `quakesignal-alert-delivery-dlq-fallback` Queue. `/healthz` cannot inspect
   Queue backlog, so monitor that Queue externally and recover its evidence
-  before Cloudflare's consumerless-DLQ retention expires. The protected
-  deployment gate requires
-  `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true` only after a
-  release operator verifies that monitor and recovery procedure; it does not
-  claim to query Queue depth or dashboard alert wiring automatically.
+  before Cloudflare's consumerless-DLQ retention expires. A production
+  deployment does not attest that the monitor is deployed or healthy; it does
+  not claim to query Queue depth or dashboard alert wiring automatically.
 - Active per-device quarantines or transient retry failures also make
   `/healthz` return `503`. They store only a token hash, delivery/event
   metadata, APNs status, and reason; resolve the underlying

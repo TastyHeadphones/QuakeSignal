@@ -109,6 +109,6 @@ it cannot be pointed at an arbitrary Queue or repository. Exercise that test
 issue, notify the responder, then manually close it before production
 attestation.
 
-Only after those records exist may a release operator re-affirm
-`ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true` for a launch
-promotion. The current GitHub-only schedule history alone is not sufficient.
+The monitor is recommended operational evidence for a launch promotion, but it
+is not a deployment gate. The current GitHub-only schedule history alone is
+not sufficient evidence that an independent Cron monitor is operating.

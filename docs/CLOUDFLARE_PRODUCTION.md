@@ -126,14 +126,12 @@ release evidence; repeat the production proof against
    secondary check: GitHub documents that scheduled workflow runs can be
    delayed or dropped, so it is not sufficient as the sole cadence control.
    A nonzero backlog, oldest-message timestamp, or direct-monitor probe failure
-   is an urgent incident. Before either the TestFlight bootstrap or launch
-   deployment, a release operator must verify the direct monitor, its
-   independent missed-heartbeat/Cron-failure escalation, and the staffed
-   recovery procedure below, then set protected
-   Environment variable `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true`.
-   The protected deployment workflow fails closed without that explicit operator
-   attestation. The Worker cannot query Queue depth; a nonzero backlog is an
-   urgent operator-recovery event before the consumerless Queue retention ends.
+   is an urgent incident. The terminal-DLQ monitor is an optional operational
+   control, not a production deployment attestation. A release operator may
+   deploy without it only while explicitly accepting that a terminal Queue
+   backlog or missed Cron run can remain undiscovered until manual inspection.
+   The Worker cannot query Queue depth; a nonzero backlog is an urgent
+   operator-recovery event before the consumerless Queue retention ends.
 4. Configure APNs Worker secrets interactively, as documented in
    [`RELEASE_SECRETS.md`](RELEASE_SECRETS.md#cloudflare-production). Store the
    one-time-download `.p8` key in the organization's password manager first.
@@ -169,8 +167,7 @@ release evidence; repeat the production proof against
    workflow** with both `deploy_production` and `bootstrap_testflight` enabled.
    This is a one-purpose, reviewer-approved **TestFlight bootstrap**: it still
    requires the APNs secret names, exact approved public `workers.dev` origin,
-   protected `main`, real App Attest enforcement, and the terminal-DLQ monitor
-   and recovery attestation. It does not weaken the
+   protected `main`, and real App Attest enforcement. It does not weaken the
    Worker, enable a simulator bypass, or authorize a public App Store
    submission. Keep the app unlisted while the proof is performed.
 
@@ -185,15 +182,10 @@ release evidence; repeat the production proof against
    `APP_ATTEST_PRODUCTION_ENFORCED=true` and re-run the protected workflow with
    `bootstrap_testflight` disabled for the **launch promotion**. That variable
    records an approved test; it is not an App Attest credential.
-7. After the independent terminal-DLQ monitor has passed its protected deploy,
-   three on-cadence Cloudflare Cron executions, independent missed-heartbeat
-   escalation, and staffed-responder review,
-   put `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
+7. Put `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
    `CLOUDFLARE_WORKER_URL=https://quakesignal-api.hopeso.workers.dev`, the App
-   Attest review gate, and
-   `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true` (only after
-   explicit operator verification) in the protected `cloudflare-production`
-   GitHub Environment. Grant the token only the Worker, Durable Object, D1, Queue,
+   Attest review gate in the protected `cloudflare-production` GitHub
+   Environment. Grant the token only the Worker, Durable Object, D1, Queue,
    and Worker-secret-list permissions needed by this service, including the
    read access necessary to verify that the selected account owns
    `hopeso.workers.dev`. Require trusted reviewers for that environment and
@@ -201,8 +193,7 @@ release evidence; repeat the production proof against
    secrets.
 8. Run **Cloudflare Worker → Run workflow → deploy_production** in the phase
    selected above. It validates TypeScript, the native rate-limit configuration,
-   APNs secret names, and the exact Workers.dev/App Attest/terminal-DLQ
-   monitor-and-recovery gate for that phase;
+   APNs secret names, and the exact Workers.dev/App Attest gate for that phase;
    it also confirms the deployment account owns `hopeso.workers.dev`, then
    applies migrations, deploys, and verifies `/healthz`, `/privacy`, `/support`,
    and `/terms` through the exact approved public origin. This protected
@@ -250,10 +241,12 @@ also unavailable. Treat a labelled GitHub recovery issue from **Monitor
 terminal DLQ fallback** as a production incident, even when the Cloudflare
 metric reports only an oldest-message timestamp.
 
-Before setting or re-affirming
-`ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true`, verify all of the
-following. Earlier GitHub-only scheduled probes are useful secondary evidence,
-but are not enough by themselves because GitHub can delay or drop schedules.
+When operating the optional terminal-DLQ monitor, verify all of the following.
+Earlier GitHub-only scheduled probes are useful secondary evidence, but are not
+enough by themselves because GitHub can delay or drop schedules. Deploying
+without this monitor is an explicit acceptance of the resulting missed-backlog
+and missed-Cron risk; it does not make the consumerless Queue observable from
+`/healthz`.
 
 1. The separate `quakesignal-terminal-dlq-monitor` Worker has no public route,
    delivery binding, D1, Queue, APNs, or deployment binding. It is deployed in
@@ -307,11 +300,10 @@ When the monitor alerts:
   Cloudflare Cron terminal-DLQ monitor alerts on the terminal consumerless
   Queue's aggregate Cloudflare backlog metric—this is not exposed through
   `/healthz`; the GitHub schedule is a secondary audit only.
-  `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED` is a protected
-  operator attestation that this monitor and a retention-aware recovery
-  procedure were reviewed; it is not a Queue-depth check. If the
-  monitor/recovery path is changed or unverified, set it to
-  `false` so both bootstrap and launch deployment fail closed.
+  The monitor is an optional operational control, not a Queue-depth check or a
+  deployment attestation. If it is absent or unverified, accept the resulting
+  missed-backlog and missed-Cron risk explicitly and retain the recovery
+  procedure for manual incident handling.
   A generic HEAD probe is not sufficient. `/healthz` intentionally returns
   `503` for any required source that is stale across both transports. It can
   return `200` with `upstream.transport: "http-polling"` and

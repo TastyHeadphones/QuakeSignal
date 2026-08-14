@@ -5,11 +5,9 @@ import {
   APP_ATTEST_DEPLOYMENT_PHASE,
   PRODUCTION_WORKER_URL,
   PRODUCTION_WORKERS_SUBDOMAIN,
-  TERMINAL_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFICATION_VARIABLE,
   verifyAppAttestDeploymentPhase,
   verifyProductionGates,
   verifyProductionWorkerOrigin,
-  verifyTerminalDlqFallbackMonitorRecovery,
 } from "./verify-production-gates.mjs";
 
 const environment = {
@@ -17,7 +15,6 @@ const environment = {
   CLOUDFLARE_ACCOUNT_ID: "a".repeat(32),
   CLOUDFLARE_WORKER_URL: PRODUCTION_WORKER_URL,
   APP_ATTEST_PRODUCTION_ENFORCED: "true",
-  [TERMINAL_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFICATION_VARIABLE]: "true",
 };
 
 function fetchWithWorkersSubdomain(subdomain = PRODUCTION_WORKERS_SUBDOMAIN) {
@@ -42,7 +39,6 @@ test("accepts the approved public Workers.dev production origin", async () => {
     origin: PRODUCTION_WORKER_URL,
     phase: APP_ATTEST_DEPLOYMENT_PHASE.launch,
     workersSubdomain: PRODUCTION_WORKERS_SUBDOMAIN,
-    terminalDlqFallbackMonitorRecoveryVerified: true,
   });
 });
 
@@ -61,40 +57,14 @@ test("fails closed when protected production values are absent", async () => {
     ),
     /missing protected Cloudflare production configuration/i,
   );
-  await assert.rejects(
+  await assert.doesNotReject(
     verifyProductionGates(
       {
         ...environment,
-        [TERMINAL_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFICATION_VARIABLE]: "",
+        ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED: "false",
       },
       fetchWithWorkersSubdomain(),
     ),
-    /missing protected Cloudflare production configuration/i,
-  );
-});
-
-test("requires an explicit protected monitor and recovery attestation without querying Queue depth", async () => {
-  assert.equal(verifyTerminalDlqFallbackMonitorRecovery(environment), true);
-  assert.throws(
-    () =>
-      verifyTerminalDlqFallbackMonitorRecovery({
-        ...environment,
-        [TERMINAL_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFICATION_VARIABLE]: "false",
-      }),
-    /must be exactly true after an operator verifies the terminal DLQ fallback monitor and recovery procedure/i,
-  );
-
-  await assert.rejects(
-    verifyProductionGates(
-      {
-        ...environment,
-        [TERMINAL_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFICATION_VARIABLE]: "false",
-      },
-      async () => {
-        throw new Error("the Cloudflare API must not be called before this gate fails");
-      },
-    ),
-    /must be exactly true after an operator verifies the terminal DLQ fallback monitor and recovery procedure/i,
   );
 });
 
@@ -159,7 +129,7 @@ test("requires a reviewer-approved phase for launch versus TestFlight bootstrap"
   );
 });
 
-test("requires the terminal fallback monitor attestation during TestFlight bootstrap too", async () => {
+test("accepts a protected TestFlight bootstrap without an external monitor attestation", async () => {
   const bootstrapEnvironment = {
     ...environment,
     APP_ATTEST_PRODUCTION_ENFORCED: "false",
@@ -170,18 +140,4 @@ test("requires the terminal fallback monitor attestation during TestFlight boots
     fetchWithWorkersSubdomain(),
   );
   assert.equal(result.phase, APP_ATTEST_DEPLOYMENT_PHASE.testflightBootstrap);
-  assert.equal(result.terminalDlqFallbackMonitorRecoveryVerified, true);
-
-  await assert.rejects(
-    verifyProductionGates(
-      {
-        ...bootstrapEnvironment,
-        [TERMINAL_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFICATION_VARIABLE]: "false",
-      },
-      async () => {
-        throw new Error("the Cloudflare API must not be called before this gate fails");
-      },
-    ),
-    /must be exactly true after an operator verifies the terminal DLQ fallback monitor and recovery procedure/i,
-  );
 });

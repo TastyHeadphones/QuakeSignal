@@ -184,11 +184,9 @@ release secret.
 | `CLOUDFLARE_ACCOUNT_ID` | Secret | Cloudflare account ID that owns the exact terminal fallback Queue. |
 
 This GitHub workflow is a best-effort secondary check only: GitHub can delay or
-drop scheduled runs. It does **not** justify setting the separate
-`cloudflare-production`
-`ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED=true` deployment
-attestation by itself. It never contains that attestation or any deployment
-credential; the independent Cron Worker below is the required primary control.
+drop scheduled runs. It never contains a production deployment credential. The
+independent Cron Worker below remains recommended operational monitoring, but
+is not a production deployment gate.
 
 ## `cloudflare-terminal-dlq-monitor-worker`
 
@@ -264,7 +262,6 @@ green; then run the protected dry-run first and preserve its aggregate result.
 | `CLOUDFLARE_ACCOUNT_ID` | Secret | Cloudflare account ID that owns those resources |
 | `CLOUDFLARE_WORKER_URL` | Environment variable | Exactly `https://quakesignal-api.hopeso.workers.dev`; this is the user-approved public Workers.dev production origin |
 | `APP_ATTEST_PRODUCTION_ENFORCED` | Environment variable | Exactly `false` for the one-time protected TestFlight bootstrap, then exactly `true` only after a reviewer has completed the physical-device/TestFlight App Attest test plan |
-| `ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED` | Environment variable | Exactly `true` only after a release operator has verified the independent Cloudflare Cron terminal-DLQ monitor, its missed-heartbeat/Cron-failure escalation, and the staffed recovery procedure for `quakesignal-alert-delivery-dlq-fallback`. GitHub-only scheduled runs are secondary evidence. Required for both TestFlight bootstrap and launch; it is an explicit attestation, not telemetry. |
 
 The manual **Cloudflare Worker → Run workflow** deployment is the sole normal
 production route for remote D1 migrations and Worker deployment. Include
@@ -299,20 +296,17 @@ exhaust DLQ retries, so preserve and recover the retained message through the
 approved incident procedure before the consumerless Queue's retention period
 expires.
 
-Before changing
-`ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED` to `true`, the release
-operator must verify that the separate-account primary monitor targets the exact
-terminal Queue, its Queues-Read token and repository-limited **Issues: write**
-GitHub App credential are valid, and both monitor deployment Environments are
-protected. Exercise the staging-target escalation, confirm three on-cadence
-production Cron events, configure and test an independent missed-heartbeat/Cron
-failure alert, and ensure a staffed responder has the documented
-retention-aware recovery path. The protected deployment gate deliberately does
-**not** inspect Queue depth, retention, Cron delivery, or Environment wiring; it
-only fails closed unless this protected Environment attestation is exactly
-`true`. Set it back to `false` while any part of the monitor or recovery
-procedure is unverified. This is required even for the TestFlight bootstrap
-because that deployment can create terminal fallback evidence.
+When operating the optional terminal-DLQ monitor, verify that the
+separate-account primary monitor targets the exact terminal Queue, its
+Queues-Read token and repository-limited **Issues: write** GitHub App
+credential are valid, and both monitor deployment Environments are protected.
+Exercise the staging-target escalation, confirm on-cadence production Cron
+events, configure and test an independent missed-heartbeat/Cron-failure alert,
+and ensure a staffed responder has the documented retention-aware recovery
+path. The production deployment gate does not inspect Queue depth, retention,
+Cron delivery, or Environment wiring. Deploying without the monitor is an
+explicit acceptance of the risk that terminal-Queue backlog or a missed Cron
+run can go unnoticed until manual inspection.
 
 ```bash
 cd backend/cloudflare

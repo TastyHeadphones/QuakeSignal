@@ -182,10 +182,9 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WORKER_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
-          ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED: ${{ vars.ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED }}
         run: |
           set -euo pipefail
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID WORKER_URL ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED; do
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID WORKER_URL; do
             if [ -z "${!name:-}" ]; then
               echo "::error::cloudflare-production is missing: $name"
               exit 1
@@ -193,10 +192,6 @@ jobs:
           done
           if [ "$WORKER_URL" != "https://quakesignal-api.hopeso.workers.dev" ]; then
             echo "::error::CLOUDFLARE_WORKER_URL must be https://quakesignal-api.hopeso.workers.dev"
-            exit 1
-          fi
-          if [ "$ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED" != "true" ]; then
-            echo "::error::ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED must be exactly true after an operator verifies the external terminal DLQ fallback monitor and recovery procedure"
             exit 1
           fi
 
@@ -214,7 +209,7 @@ jobs:
           set -euo pipefail
           if [ "$BOOTSTRAP_TESTFLIGHT" = "true" ]; then
             echo "APP_ATTEST_DEPLOYMENT_PHASE=testflight-bootstrap" >> "$GITHUB_ENV"
-            echo "::warning::Deploying a protected TestFlight bootstrap. The terminal DLQ fallback monitor/recovery verification is required now; do not submit the app publicly until physical-device verification is complete and the launch gate is promoted."
+            echo "::warning::Deploying a protected TestFlight bootstrap. Do not submit the app publicly until physical-device verification is complete and the launch gate is promoted."
           else
             echo "APP_ATTEST_DEPLOYMENT_PHASE=launch" >> "$GITHUB_ENV"
           fi
@@ -227,7 +222,6 @@ jobs:
           CLOUDFLARE_WORKER_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
           APP_ATTEST_PRODUCTION_ENFORCED: ${{ vars.APP_ATTEST_PRODUCTION_ENFORCED }}
           APP_ATTEST_DEPLOYMENT_PHASE: ${{ env.APP_ATTEST_DEPLOYMENT_PHASE }}
-          ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED: ${{ vars.ALERT_DELIVERY_DLQ_FALLBACK_MONITOR_RECOVERY_VERIFIED }}
         run: npm run verify:production-gates
 
       - name: Apply D1 migrations
