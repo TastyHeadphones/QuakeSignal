@@ -3121,7 +3121,7 @@ type OutboxDeliveryGateState =
   | "superseded"
   | "missing";
 
-async function dispatchPushPage(
+export async function dispatchPushPage(
   env: Env,
   event: NormalizedEvent,
   reason: NotifyReason,
@@ -3130,14 +3130,19 @@ async function dispatchPushPage(
   afterDeviceCursor?: number,
   beforeApnsBatch?: () => Promise<OutboxDeliveryGateState>,
 ): Promise<DeliveryPageResult> {
+  // APNs JWT credentials are environment-specific. A production Worker must
+  // never page a legacy sandbox subscription (and an isolated development
+  // Worker must never reach production subscriptions), even if an older
+  // client registered it before the App Attest registration fence existed.
+  const deviceEnvironment = apnsDeviceEnvironmentForWorker(env);
   const rows = await env.DB
     .prepare(
       `SELECT rowid AS cursor, * FROM devices
-       WHERE rowid > ?
+       WHERE rowid > ? AND environment = ?
        ORDER BY rowid ASC
        LIMIT ?`,
     )
-    .bind(afterDeviceCursor ?? 0, DEVICE_DELIVERY_PAGE_SIZE)
+    .bind(afterDeviceCursor ?? 0, deviceEnvironment, DEVICE_DELIVERY_PAGE_SIZE)
     .all<DeviceRow>();
   const page = rows.results;
   const nextAfterDeviceCursor =
@@ -7168,6 +7173,44 @@ interface DeviceRegistrationValues {
   now: string;
 }
 
+type ApnsDeviceEnvironment = DeviceRegistrationValues["environment"];
+
+/**
+ * App Attest's verifier environment is server-authenticated, whereas an APNs
+ * environment in a JSON body is only client input. Keep the conversion in one
+ * place so a production verifier cannot be used to register a sandbox token,
+ * or vice versa.
+ */
+export function apnsEnvironmentForAppAttestEnvironment(
+  environment: AppAttestEnvironment,
+): ApnsDeviceEnvironment {
+  return environment === "development" ? "sandbox" : "production";
+}
+
+/**
+ * Development bypasses are local/staging-only and may never create a
+ * production APNs subscription. Production bypasses are already impossible
+ * by configuration, but this default keeps direct callers fail-closed too.
+ */
+export function apnsEnvironmentForAuthorizedDeviceMutation(
+  authorization: Pick<AuthorizedDeviceMutation, "mode"> & {
+    environment?: AppAttestEnvironment;
+  },
+): ApnsDeviceEnvironment {
+  return authorization.mode === "attested"
+    ? apnsEnvironmentForAppAttestEnvironment(authorization.environment ?? "production")
+    : "sandbox";
+}
+
+/** The APNs population that this Worker instance is allowed to deliver to. */
+export function apnsDeviceEnvironmentForWorker(
+  env: AppAttestPolicyEnvironment,
+): ApnsDeviceEnvironment {
+  return apnsEnvironmentForAppAttestEnvironment(
+    appAttestVerificationEnvironment(env),
+  );
+}
+
 function appAttestFailureResponse(): Response {
   // Do not distinguish an expired challenge, wrong key, invalid certificate,
   // replay, or counter race to a network caller. The client simply requests a
@@ -7696,6 +7739,14 @@ export async function completeAttestedRegistration(
   authorization: AttestedDeviceMutation,
   values: DeviceRegistrationValues,
 ): Promise<"completed" | "conflict"> {
+  // Keep this transaction-level fence in addition to the HTTP-handler
+  // validation below. It prevents a future direct caller from consuming a
+  // verified challenge while writing a token for the opposite APNs endpoint.
+  if (
+    values.environment !== apnsEnvironmentForAuthorizedDeviceMutation(authorization)
+  ) {
+    return "conflict";
+  }
   const now = values.now;
   const matching = challengeMatchesNow(authorization.challenge, now);
   const consumed = challengeConsumedNowCondition(authorization.challenge.id, now);
@@ -8182,6 +8233,15 @@ async function handleDeviceRegistration(
   if (rateLimitResponse) return rateLimitResponse;
   const values = validatedRegistrationValues(body);
   if (values instanceof Response) return values;
+  if (
+    values.environment !== apnsEnvironmentForAuthorizedDeviceMutation(authorization)
+  ) {
+    return json(
+      { error: "device environment is not permitted for this app integrity environment" },
+      400,
+      noStoreHeaders(),
+    );
+  }
   try {
     if (authorization.mode === "attested") {
       if (
@@ -8674,6 +8734,20 @@ export async function handleDeviceTestPush(
     .first<DeviceRow>();
   if (!row) return json({ error: "device not found" }, 404, noStoreHeaders());
   const device = rowToDevice(row);
+  // A test-push request is also an APNs send path. Require both the verified
+  // request identity and this Worker's configured verifier to agree with the
+  // stored APNs endpoint, so a historical cross-environment registration
+  // cannot turn a production provider JWT into a sandbox request.
+  if (
+    device.environment !== apnsEnvironmentForAuthorizedDeviceMutation(authorization) ||
+    device.environment !== apnsDeviceEnvironmentForWorker(env)
+  ) {
+    return json(
+      { error: "device environment is not permitted for this app integrity environment" },
+      403,
+      noStoreHeaders(),
+    );
+  }
   if (!productionTestPushAllowed(env, device)) {
     return json(
       { error: "production test alerts are disabled" },

@@ -467,3 +467,108 @@ test("a development verifier persists development App Attest key material", asyn
     await rm(stateDirectory, { recursive: true, force: true });
   }
 });
+
+test("APNs registration environments are bound to verified App Attest environments", async () => {
+  const {
+    apnsDeviceEnvironmentForWorker,
+    apnsEnvironmentForAppAttestEnvironment,
+    apnsEnvironmentForAuthorizedDeviceMutation,
+    completeAttestedRegistration,
+  } = await workerModule();
+
+  assert.equal(apnsEnvironmentForAppAttestEnvironment("development"), "sandbox");
+  assert.equal(apnsEnvironmentForAppAttestEnvironment("production"), "production");
+  assert.equal(
+    apnsEnvironmentForAuthorizedDeviceMutation({ mode: "development_bypass" }),
+    "sandbox",
+    "a local-only bypass can never create a production APNs registration",
+  );
+  assert.equal(
+    apnsDeviceEnvironmentForWorker({
+      APP_ATTEST_ENFORCEMENT: "development",
+      APP_ATTEST_DEVELOPMENT_ENVIRONMENT: "true",
+    }),
+    "sandbox",
+  );
+  assert.equal(
+    apnsDeviceEnvironmentForWorker({ APP_ATTEST_ENFORCEMENT: "required" }),
+    "production",
+  );
+
+  const now = "2026-08-14T00:00:00.000Z";
+  const stateDirectory = await mkdtemp(join(tmpdir(), "quakesignal-app-attest-apns-environment-"));
+  let adapter;
+
+  try {
+    runWrangler([
+      "d1",
+      "migrations",
+      "apply",
+      "quakesignal-production",
+      "--local",
+      "--persist-to",
+      stateDirectory,
+    ]);
+    const databaseFile = localD1File(stateDirectory);
+    const developmentAuthorization = authorization(
+      "development-environment-key",
+      "attestation",
+      "development",
+    );
+    const productionAuthorization = authorization(
+      "production-environment-key",
+      "attestation",
+      "production",
+    );
+    const seed = new DatabaseSync(databaseFile);
+    try {
+      seedChallenge(seed, developmentAuthorization.challenge, now, "development");
+      seedChallenge(seed, productionAuthorization.challenge, now, "production");
+    } finally {
+      seed.close();
+    }
+
+    adapter = localD1Adapter(databaseFile);
+    assert.equal(
+      await completeAttestedRegistration(
+        adapter.database,
+        developmentAuthorization,
+        registrationValues("development-proof-production-token", now, "production"),
+      ),
+      "conflict",
+      "a development proof must not create a production APNs registration",
+    );
+    assert.equal(
+      await completeAttestedRegistration(
+        adapter.database,
+        productionAuthorization,
+        registrationValues("production-proof-sandbox-token", now, "sandbox"),
+      ),
+      "conflict",
+      "a production proof must not create a sandbox APNs registration",
+    );
+    assert.deepEqual(
+      adapter.all(
+        "SELECT key_id, consumed_at_utc FROM app_attest_challenges ORDER BY key_id",
+      ),
+      [
+        { key_id: "development-environment-key", consumed_at_utc: null },
+        { key_id: "production-environment-key", consumed_at_utc: null },
+      ],
+      "a rejected cross-environment registration must not consume its challenge",
+    );
+    assert.deepEqual(
+      adapter.all("SELECT key_id FROM app_attest_keys ORDER BY key_id"),
+      [],
+      "a rejected cross-environment registration must not persist integrity material",
+    );
+    assert.deepEqual(
+      adapter.all("SELECT token FROM devices ORDER BY token"),
+      [],
+      "a rejected cross-environment registration must not persist an APNs token",
+    );
+  } finally {
+    adapter?.close();
+    await rm(stateDirectory, { recursive: true, force: true });
+  }
+});
