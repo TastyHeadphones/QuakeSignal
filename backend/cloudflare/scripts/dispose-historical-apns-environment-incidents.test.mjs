@@ -12,7 +12,7 @@ import {
   verifyDispositionManifest,
 } from "./dispose-historical-apns-environment-incidents.mjs";
 
-const fixedNow = new Date("2026-08-14T04:00:00.000Z");
+const fixedNow = new Date("2026-08-14T06:00:00.000Z");
 const environment = {
   CLOUDFLARE_ACCOUNT_ID: HISTORICAL_APNS_ENVIRONMENT_INCIDENTS.accountId,
   CLOUDFLARE_D1_INCIDENT_DISPOSITION_API_TOKEN: "test-secret-token",
@@ -104,7 +104,7 @@ test("argument and environment guards fail closed outside the protected workflow
 });
 
 test("manifest is fixed, expired, and rejects broad or future target edits", () => {
-  assert.equal(verifyDispositionManifest(HISTORICAL_APNS_ENVIRONMENT_INCIDENTS, fixedNow).targets.length, 3);
+  assert.equal(verifyDispositionManifest(HISTORICAL_APNS_ENVIRONMENT_INCIDENTS, fixedNow).targets.length, 5);
   assert.throws(
     () => verifyDispositionManifest({ ...HISTORICAL_APNS_ENVIRONMENT_INCIDENTS, targets: [] }, fixedNow),
     /fixed targets/i,
@@ -127,8 +127,8 @@ test("dry run reads only metadata and never issues a D1 write", async () => {
   });
   assert.deepEqual(result, {
     apply: false,
-    states: ["ready", "ready", "ready"],
-    initialStates: ["ready", "ready", "ready"],
+    states: ["ready", "ready", "ready", "ready", "ready"],
+    initialStates: ["ready", "ready", "ready", "ready", "ready"],
     resolved: 0,
   });
   assert.equal(calls.length, 1);
@@ -137,7 +137,7 @@ test("dry run reads only metadata and never issues a D1 write", async () => {
   assert.equal(calls[0].init.cache, "no-store");
   assert.ok(calls[0].init.signal);
   assert.match(calls[0].url, /\/d1\/database\//);
-  assert.equal(dispositionSummary(result), "APNs incident disposition dry run: would_resolve=3, already_resolved=0, targets=3.");
+  assert.equal(dispositionSummary(result), "APNs incident disposition dry run: would_resolve=5, already_resolved=0, targets=5.");
 });
 
 test("apply resolves only exact active provider failures after an expired-outbox fence", async () => {
@@ -146,15 +146,15 @@ test("apply resolves only exact active provider failures after an expired-outbox
   const { fetchImpl, calls } = createFetch({
     initialRows,
     finalRows,
-    writeChanges: [3],
+    writeChanges: [5],
   });
   const result = await disposeHistoricalApnsEnvironmentIncidents(environment, {
     apply: true,
     fetchImpl,
     now: fixedNow,
   });
-  assert.equal(result.resolved, 3);
-  assert.deepEqual(result.states, ["disposed", "disposed", "disposed"]);
+  assert.equal(result.resolved, 5);
+  assert.deepEqual(result.states, ["disposed", "disposed", "disposed", "disposed", "disposed"]);
   assert.equal(calls.length, 3);
   const write = JSON.parse(calls[1].init.body);
   assert.equal(write.batch.length, 1);
@@ -167,7 +167,7 @@ test("apply resolves only exact active provider failures after an expired-outbox
   assert.match(statement.sql, /apns_status = 403/);
   assert.match(statement.sql, /resolved_at_utc IS NULL/);
   assert.match(statement.sql, /delivery_id = p\.delivery_id/);
-  assert.equal(dispositionSummary(result), "APNs incident disposition completed: resolved=3, already_resolved=0, targets=3.");
+  assert.equal(dispositionSummary(result), "APNs incident disposition completed: resolved=5, already_resolved=0, targets=5.");
 });
 
 test("state drift fails before any write and exposes no target or token in its error", async () => {
@@ -243,20 +243,20 @@ test("an already disposed target remains part of the all-target race fence", asy
   const { fetchImpl, calls } = createFetch({
     initialRows,
     finalRows,
-    writeChanges: [2],
+    writeChanges: [4],
   });
   const result = await disposeHistoricalApnsEnvironmentIncidents(environment, {
     apply: true,
     fetchImpl,
     now: fixedNow,
   });
-  assert.equal(result.resolved, 2);
-  assert.deepEqual(result.initialStates, ["ready", "disposed", "ready"]);
+  assert.equal(result.resolved, 4);
+  assert.deepEqual(result.initialStates, ["ready", "disposed", "ready", "ready", "ready"]);
   const write = JSON.parse(calls[1].init.body);
   assert.equal(write.batch.length, 1);
   assert.match(write.batch[0].sql, /candidate\.status = 'resolved'/);
   assert.match(write.batch[0].sql, /\) = \?/);
-  assert.equal(write.batch[0].params.at(-1), HISTORICAL_APNS_ENVIRONMENT_INCIDENTS.targets[2].acknowledgedAtUtc);
+  assert.equal(write.batch[0].params.at(-1), HISTORICAL_APNS_ENVIRONMENT_INCIDENTS.targets.at(-1).acknowledgedAtUtc);
 });
 
 test("an already disposed target remains a read-only no-op", async () => {
@@ -269,8 +269,8 @@ test("an already disposed target remains a read-only no-op", async () => {
   });
   assert.deepEqual(result, {
     apply: true,
-    states: ["disposed", "disposed", "disposed"],
-    initialStates: ["disposed", "disposed", "disposed"],
+    states: ["disposed", "disposed", "disposed", "disposed", "disposed"],
+    initialStates: ["disposed", "disposed", "disposed", "disposed", "disposed"],
     resolved: 0,
   });
   assert.equal(calls.length, 1);
