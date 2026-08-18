@@ -14,7 +14,7 @@ struct RootView: View {
         @Bindable var store = store
 
         Group {
-            if hasCompletedOnboarding {
+            if hasCompletedOnboarding || ScreenshotAutomation.isEnabled {
                 TabView {
                     HomeView()
                         .tabItem { Label("tab.home", systemImage: "waveform.path.ecg") }
@@ -38,6 +38,10 @@ struct RootView: View {
             }
         }
         .task {
+            guard !ScreenshotAutomation.isEnabled else {
+                store.setForegroundActive(false)
+                return
+            }
             notifications.onNotificationTapped = { payload in
                 Task { await handleTap(payload) }
             }
@@ -61,6 +65,7 @@ struct RootView: View {
             schedulePushRegistration()
         }
         .onChange(of: scenePhase) { _, phase in
+            guard !ScreenshotAutomation.isEnabled else { return }
             store.setForegroundActive(phase == .active)
             guard phase == .active else { return }
             // A person can grant notifications from the iOS Settings screen
@@ -101,7 +106,9 @@ struct RootView: View {
     /// follow-up registration with the newest preferences and location.
     @MainActor
     private func schedulePushRegistration() {
-        guard AppSettings.shared.pushSubscriptionEnabled,
+        guard !ScreenshotAutomation.isEnabled,
+              PlatformCapabilities.supportsAttestedAlertRegistration,
+              AppSettings.shared.pushSubscriptionEnabled,
               notifications.canRegisterForRemoteNotifications,
               notifications.deviceToken != nil else {
             return

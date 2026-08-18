@@ -14,8 +14,8 @@ non-submission condition, not a value to infer or certify.
 | Name | `QuakeSignal for macOS` — approved English (U.S.) name | `README.md` |
 | Bundle ID | `com.quakesignal.desktop` | `desktop/src-tauri/tauri.conf.json` |
 | SKU | `quakesignal-macos` | `README.md` |
-| Version | `1.0.0` | `desktop/src-tauri/tauri.conf.json` |
-| Build | **PENDING**: current signed sandboxed App Store archive accepted by App Store Connect | protected Mac App Store workflow |
+| Version | `1.1.0` | `desktop/src-tauri/tauri.conf.json` |
+| Build | **PENDING**: current signed sandboxed 1.1.0 App Store archive accepted by App Store Connect. The portal's existing 1.0.0 build is Ready to Submit but is superseded and must not be selected. | protected Mac App Store workflow; read-only portal audit |
 | Category | Weather | `README.md` |
 | Price / availability | Free; **PENDING** release-owner territory decision | release owner |
 | Copyright | `2026 UniSphereco LLC` | `README.md` |
@@ -30,6 +30,12 @@ non-submission condition, not a value to infer or certify.
 | Demo account / sign-in | Not required |
 | Review notes | `review-notes.txt` |
 | Review contact | **PENDING**: release owner must enter an accountable UniSphereco LLC contact |
+
+The 2026-08-19 read-only portal audit found this canonical record still in an
+editable 1.0.0 draft with four older screenshot assets, a 1.0.0 build Ready to
+Submit, and zero installs. Preserve the draft and evidence. Update that draft
+to 1.1.0 only if App Store Connect permits; otherwise stop and contact support.
+Do not submit the old build, delete a record, or create another Mac record.
 
 The approved Worker URL uses public Cloudflare Web-PKI TLS. Do not add a
 private CA, origin certificate, or client-mTLS configuration.
@@ -54,6 +60,7 @@ is selected.
 | Permission-free route | If macOS asks for notification permission at launch, decline it; Home, Events, and Settings remain reviewable without an account or credentials |
 | Manual location | Settings accepts a manually selected city or optional coordinates; the Mac App Store build does not request macOS Location Services access |
 | Store-only feature scope | The sandboxed build omits the direct-distribution Test Alarm and Launch at Login controls |
+| Alarm delivery | Local foreground evaluation while the Mac app is running; no App Attest or APNs registration and no background emergency-alert service |
 
 ## Required human/legal decisions — do not infer these answers
 

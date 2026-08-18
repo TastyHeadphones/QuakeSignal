@@ -8,16 +8,20 @@
     <script type="module" src="/src/alert.ts" defer></script>
   </head>
   <body>
-    <div id="alert">
+    <div
+      id="alert"
+      role="alertdialog"
+      aria-modal="true"
+      aria-atomic="true"
+      aria-labelledby="badge hypocenter"
+      aria-describedby="meta guidance tip"
+    >
       <div>
         <span class="badge" id="badge"></span>
         <div class="hypocenter" id="hypocenter"></div>
         <div class="meta" id="meta"></div>
       </div>
-      <div class="countdown">
-        <div class="num" id="countdown-num"></div>
-        <div class="label" id="countdown-label"></div>
-      </div>
+      <div class="alert-guidance" id="guidance"></div>
       <div>
         <div class="tip" id="tip"></div>
         <div class="footer alert-footer">

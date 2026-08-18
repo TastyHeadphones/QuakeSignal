@@ -1,0 +1,1 @@
+earthquake,seismic,alerts,map,magnitude,intensity,preparedness,safety,weather

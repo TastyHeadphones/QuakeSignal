@@ -62,7 +62,7 @@
 /* Settings */
 "settings.title" = "设置";
 "settings.section.language" = "语言";
-"settings.language.systemNote" = "QuakeSignal 会跟随 iPhone 的「语言与地区」设置。支持 English、日本語、简体中文。";
+"settings.language.systemNote" = "QuakeSignal 会跟随此设备的“语言与地区”设置。支持 English、日本語、简体中文。";
 "settings.openSystemSettings" = "打开系统设置";
 "settings.section.sources" = "预警数据源";
 "settings.source.jma_eew" = "日本气象厅 — 地震预警";
@@ -76,7 +76,7 @@
 "settings.section.notifications" = "通知";
 "settings.openNotificationSettings" = "检查通知设置";
 "settings.notificationDelivery.degraded" = "部分提醒功能已关闭";
-"settings.notificationDelivery.degraded.detail" = "请在 iPhone 设置中开启提醒、声音和时效性通知，以获得系统允许的最佳送达效果。QuakeSignal 不会绕过静音模式或专注模式。";
+"settings.notificationDelivery.degraded.detail" = "请在系统设置中开启提醒、声音和时效性通知，以获得系统允许的最佳送达效果。QuakeSignal 不会绕过静音模式或专注模式。";
 "settings.alertSound.title" = "提醒声音";
 "settings.alertSound.system" = "系统默认";
 "settings.alertSound.system.detail" = "使用 Apple 标准通知声音。";
@@ -90,21 +90,21 @@
 "settings.testAlert.success" = "测试预警已发送。";
 "settings.testAlert.failure" = "测试预警发送失败：%1$@";
 "settings.delayedTestAlert" = "安排后台测试预警";
-"settings.delayedTestAlert.detail" = "将在 90 秒后安排一条明确标注为测试的预警。请离开 QuakeSignal，然后锁定或结束 iPhone 上的 App。";
+"settings.delayedTestAlert.detail" = "将在 90 秒后安排一条明确标注为测试的预警。请离开 QuakeSignal，然后锁定设备或结束 App。";
 "settings.delayedTestAlert.confirmation.title" = "安排后台测试预警？";
 "settings.delayedTestAlert.confirmation.message" = "QuakeSignal 将在约 90 秒后安排一条测试通知。仅限在已审核的测试时段使用。";
 "settings.delayedTestAlert.confirm" = "安排测试预警";
-"settings.delayedTestAlert.success" = "后台测试预警已安排。请离开 QuakeSignal，然后锁定或结束 iPhone 上的 App。";
+"settings.delayedTestAlert.success" = "后台测试预警已安排。请离开 QuakeSignal，然后锁定设备或结束 App。";
 "settings.delayedTestAlert.failure" = "无法安排后台测试预警：%1$@";
-"settings.pushSubscription.permissionDenied" = "iPhone 系统设置中已关闭通知。您仍可在下方删除现有的 QuakeSignal 提醒注册。";
+"settings.pushSubscription.permissionDenied" = "系统设置中已关闭通知。您仍可在下方删除现有的 QuakeSignal 提醒注册。";
 "settings.pushSubscription.waiting" = "正在等待 APNs 提供此设备的注册令牌。收到后即可重试。";
 "settings.pushSubscription.remove" = "删除提醒注册";
-"settings.pushSubscription.remove.detail" = "此操作会从 QuakeSignal 提醒服务中删除此设备。若本次启动没有 APNs 令牌，则只能删除已由此 App 实例保护的注册；不会更改 iPhone 的通知权限。";
+"settings.pushSubscription.remove.detail" = "此操作会从 QuakeSignal 提醒服务中删除此设备。若本次启动没有 APNs 令牌，则只能删除已由此 App 实例保护的注册；不会更改系统通知权限。";
 "settings.pushSubscription.remove.confirmation.title" = "删除提醒注册？";
-"settings.pushSubscription.remove.confirmation.message" = "QuakeSignal 将删除此设备的提醒注册，不会更改 iPhone 的通知权限。";
+"settings.pushSubscription.remove.confirmation.message" = "QuakeSignal 将删除此设备的提醒注册，不会更改系统通知权限。";
 "settings.pushSubscription.remove.confirm" = "删除注册";
 "settings.pushSubscription.remove.cancel" = "取消";
-"settings.pushSubscription.remove.success" = "提醒注册已删除。iPhone 的通知权限未更改。";
+"settings.pushSubscription.remove.success" = "提醒注册已删除。系统通知权限未更改。";
 "settings.pushSubscription.remove.failure" = "无法删除提醒注册：%1$@";
 "settings.pushSubscription.resume" = "恢复地震提醒";
 "settings.pushSubscription.resume.detail" = "使用已保存的提醒偏好重新在 QuakeSignal 注册此设备。";
@@ -275,7 +275,7 @@
 "disclaimer.source.jma" = "日本气象厅 公开速报（聚合）";
 "disclaimer.notOfficial" = "本应用不是官方政府地震预警平台，不替代官方权威信息。";
 "disclaimer.mayBeDelayed" = "信息可能延迟、不完整或不准确，请以官方发布与当地应急指示为准。";
-"disclaimer.deliveryNotGuaranteed" = "通知送达取决于 iOS、网络状况与设备设置，无法保证秒级到达。";
+"disclaimer.deliveryNotGuaranteed" = "通知送达取决于操作系统、网络状况与设备设置，无法保证秒级到达。";
 
 /* 防灾指南 tab */
 "guide.offlineBadge" = "可离线使用";
@@ -325,3 +325,15 @@
 "guide.familyCheckIn.contact" = "联系人";
 "guide.familyCheckIn.name" = "姓名";
 "guide.familyCheckIn.phone" = "电话号码";
+
+/* Apple 平台体验 */
+"platform.alertRegistration.foregroundOnly" = "Mac 仅支持前台监测";
+"platform.alertRegistration.foregroundOnly.detail" = "安全的后台提醒注册依赖 Apple App Attest，而 Mac 不支持该功能。打开 QuakeSignal 时仍可查看实时地震信息并使用所选提醒声音。";
+"platform.alertRegistration.unavailable.error" = "此平台不支持安全的后台提醒注册。";
+"platform.foreground.badge" = "仅限前台";
+"platform.foreground.refreshUnavailable" = "暂时无法获取实时地震信息。";
+"platform.tv.title" = "地震信息看板";
+"platform.tv.foregroundOnly.detail" = "Apple TV 仅在此看板打开时更新地震信息，不会注册后台提醒。";
+"platform.watch.foregroundOnly.detail" = "打开手表 App 即可刷新。在安全的伴侣设备推送可用前，后台提醒仍由已配对的 iPhone 接收。";
+"platform.refresh" = "刷新";
+"platform.loading" = "正在加载地震信息…";

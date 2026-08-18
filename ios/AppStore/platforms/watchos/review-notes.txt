@@ -1,0 +1,18 @@
+The Apple Watch app is a foreground-only companion embedded in the QuakeSignal
+iOS 1.1 (8) upload. It has no account, sign-in, payment, location permission,
+notification permission, demo account, or reviewer credential.
+
+Open the Watch app to refresh a compact headline and recent-report list, then
+open a report for available magnitude, status, source, time, intensity, and
+depth details. It fetches only while opened and does not independently register
+for APNs, App Attest, Time Sensitive or Critical notifications, alert audio, or
+background delivery. Optional nearby alerts remain an iPhone feature; do not
+review the Watch companion as an independent emergency-alert service.
+
+The Watch app must be tested from the signed iOS host build on a paired Apple
+Watch before submission. Simulator/generic compilation is not evidence for
+pairing, installation, Digital Crown/scroll behavior, or foreground refresh.
+
+QuakeSignal is independent and non-official. Wolfx-aggregated information can
+be delayed, incomplete, revised, or inaccurate. Always follow official local
+emergency guidance.

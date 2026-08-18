@@ -3,6 +3,7 @@
 // Early Warning", "Notify at Night") so the two apps read as one product.
 export const en = {
   "app.name": "QuakeSignal",
+  "app.tagline": "Independent earthquake monitor",
   "tab.home": "Home",
   "tab.events": "Events",
   "tab.settings": "Settings",
@@ -66,6 +67,11 @@ export const en = {
   "settings.alarmVolume": "Alarm Volume",
   "settings.alarmVolume.detail": "{volume}% — use Test Alarm to verify your speakers.",
   "settings.alarmVolume.storeDetail": "{volume}% volume for automatic earthquake alarms.",
+  "settings.alertSound": "Alert Sound",
+  "settings.alertSound.system": "Standard tone",
+  "settings.alertSound.urgent": "Urgent tone",
+  "settings.alertSound.japaneseVoice": "Japanese safety voice",
+  "settings.alertSound.detail": "The Japanese voice is original synthesized safety guidance, not an official J-Alert or JMA recording. It uses HTS Voice Mei by Nagoya Institute of Technology under CC BY 3.0.",
   "settings.includeTestAlerts": "Receive Test/Drill Alerts",
   "settings.includeTestAlerts.detail": "Occasionally JMA and other agencies broadcast training alerts to test the system.",
   "settings.notifyAtNight": "Notify at Night",
@@ -80,9 +86,9 @@ export const en = {
   "settings.save": "Save",
   "settings.saved": "Saved",
 
-  "alert.countdown.label": "Estimated time until shaking",
-  "alert.countdown.unknown": "Distance unknown",
-  "alert.countdown.arrived": "Shaking may have started",
+  "alert.guidance.active": "Timing and intensity can change. Protect yourself now and follow official guidance.",
+  "alert.guidance.training": "This is a training broadcast, not a real earthquake.",
+  "alert.guidance.cancelled": "This warning was cancelled. Continue to follow official local guidance.",
   "alert.dropCoverHoldOn": "Drop, Cover, and Hold On",
   "alert.training.note": "This is a training broadcast, not a real earthquake.",
   "alert.dismiss": "Dismiss",

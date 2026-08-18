@@ -7,13 +7,16 @@ deployment. It records the physical-device evidence needed before a reviewer may
 `APP_ATTEST_PRODUCTION_ENFORCED=true` and run the production launch
 deployment.
 
-The current public `Release` candidate is `1.1 (7)`. The protected workflow
+Public `Release` build `1.1 (7)` was uploaded and processed as historical
+Internal QA evidence. The protected workflow
 [run 32167921337](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/32167921337)
-signed, uploaded, and validated that build, and App Store Connect now reports
-the TestFlight build as **Ready to Submit**. It is assigned to the existing
-`QuakeSignal Internal QA` group. Those facts establish artifact, processing,
-and group-assignment status only; they do not replace any physical-device
-result required below.
+signed, uploaded, and validated that build; App Store Connect reports it as
+**Ready to Submit** and assigned to `QuakeSignal Internal QA`. The read-only
+2026-08-19 audit showed zero installs and zero sessions for build 7, so it has
+no physical-device evidence. The coordinated source candidate is now `1.1
+(8)`, but build 8 has not been uploaded, processed, or assigned to a TestFlight
+group. Do not begin or claim this runbook for build 8 until those prerequisites
+are visibly complete.
 
 This is a **production** check. It must use the TestFlight release build and
 the approved notification origin
@@ -52,23 +55,29 @@ Public `Release` build `1.0 (6)` completed the 1.0 release line and is already
 not the candidate or substitute physical-device proof for version 1.1. Do not
 attach builds `2` through `6` to the 1.1 App Store version.
 
-Public `Release` build `1.1 (7)` is the current candidate. Its protected
+Public `Release` build `1.1 (7)` is processed historical Internal QA evidence.
+Its protected
 workflow upload and validation are recorded in
 [run 32167921337](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/32167921337),
 and the processed TestFlight build is **Ready to Submit** and assigned to
-`QuakeSignal Internal QA`. Perform the normal production registration,
-refresh, unsubscribe, foreground training-alert, and reinstall-smoke checks
-below with `1.1 (7)` after the tester confirms it is installable from that
-group. Section 6 remains a separate `InternalQA`-only gate; the public
-`Release` candidate deliberately does not contain its delayed scheduler.
+`QuakeSignal Internal QA`, but the read-only audit showed zero installs and zero
+sessions. It is not the coordinated build-8 release candidate and does not
+satisfy any physical-device row below.
+
+The coordinated source candidate is public `Release` build `1.1 (8)`. It is
+not yet uploaded, processed, or assigned. After those facts are established,
+perform the normal production registration, refresh, unsubscribe, foreground
+training-alert, and reinstall-smoke checks below with exactly `1.1 (8)`.
+Section 6 remains a separate `InternalQA`-only gate; the public `Release`
+candidate deliberately does not contain its delayed scheduler.
 
 ## Before starting
 
 - Use an iPhone that supports App Attest, has normal network access, and is
-  enrolled in the QuakeSignal internal TestFlight group. Confirm that `1.1 (7)`
+  enrolled in the QuakeSignal internal TestFlight group. Confirm that `1.1 (8)`
   is available to that group and record the exact marketing version and build
   number shown by TestFlight.
-- Install the assigned `1.1 (7)` TestFlight build rather than a historical,
+- Install the assigned `1.1 (8)` TestFlight build rather than a historical,
   development, or Xcode build. Complete onboarding, then open the **Settings**
   tab and its **Notifications** section.
 - Turn off Focus or otherwise make banners visible for the notification test.
@@ -234,7 +243,7 @@ Copy this into the release ticket; redact all identifiers and personal data.
 
 | Check | Result | UTC time | Evidence / observed text |
 | --- | --- | --- | --- |
-| TestFlight public `Release` candidate `1.1 (7)` and physical device identified |  |  |  |
+| TestFlight public `Release` candidate `1.1 (8)` uploaded, processed, assigned, installed, and physical device identified |  |  |  |
 | Initial production registration |  |  |  |
 | Launch/token refresh |  |  |  |
 | Token-bound unsubscribe + re-enrollment |  |  |  |
@@ -245,7 +254,7 @@ Copy this into the release ticket; redact all identifiers and personal data.
 
 Do not promote the App Attest environment gate or submit the iOS app while a
 required row is unresolved. The workflow upload, validation, and **Ready to
-Submit** status for `1.1 (7)` do not waive any row. See the broader deployment
-controls in
+Submit** status for historical `1.1 (7)` do not waive any row and are not
+evidence for build 8. See the broader deployment controls in
 [`CLOUDFLARE_PRODUCTION.md`](CLOUDFLARE_PRODUCTION.md) and the App Store
 release sequence in [`ios/AppStore/README.md`](../ios/AppStore/README.md).

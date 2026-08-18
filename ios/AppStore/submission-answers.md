@@ -15,7 +15,7 @@ only after the listed evidence is complete. Use it together with
 | Bundle ID | `com.quakesignal.app` | `ios/project.yml` |
 | SKU | `quakesignal-ios` | `README.md` |
 | Version | `1.1` | `ios/project.yml` |
-| Release candidate | Version `1.0 (6)` is already Ready for Distribution. The new `1.1 (7)` candidate is **PENDING** protected Worker deployment, TestFlight upload and processing, physical-device QA, public attachment, and App Review. Builds `1.0 (2)` through `1.0 (5)` remain historical QA or superseded. | App Store Connect record `6800642443`; prior submission `295fd2ba-11c4-4dc9-945b-2bf6a9fc7bbe`; `README.md` build-number rule |
+| Release candidate | Version `1.0 (6)` is already Ready for Distribution. A processed `1.1 (7)` build is historical TestFlight evidence only. The coordinated native candidate is `1.1 (8)` and remains **PENDING** matching Worker migration/policy deployment, protected uploads and processing, platform/physical-device QA, public attachment, and App Review. Builds `1.0 (2)` through `1.0 (5)` remain historical QA or superseded. | App Store Connect record `6800642443`; prior submission `295fd2ba-11c4-4dc9-945b-2bf6a9fc7bbe`; `README.md` build-number rule |
 | TestFlight build 2 | Legacy QA-only; never attach it to App Review | `README.md`, `docs/IOS_TESTFLIGHT_PHYSICAL_QA.md` |
 | Primary / secondary category | Weather / Utilities | `README.md` |
 | Price / availability | Free; **PENDING** release-owner territory decision | release owner |
@@ -56,6 +56,19 @@ Collected” merely because the app has no account.
 | Review route | Start the app, choose **Skip** for notification and location onboarding, then inspect Home, List, Map, Guide, and Settings; no account or review credential is required |
 | Notes for background/notification behavior | Optional notifications are best-effort. A public Release exposes an ordinary foreground Send Test Alert control only after authorization, opt-in registration, and an APNs token; it has no delayed background-training control |
 
+## Native platform drafts in this record
+
+| Platform | Intended 1.1 (8) behavior | Portal / evidence status |
+| --- | --- | --- |
+| Apple Watch companion | Foreground-only compact dashboard embedded in the iOS upload; no independent APNs, App Attest, alert audio, or background emergency alerts | **PENDING** signed host + Watch profile, paired-device QA, Watch screenshots, and shared iOS description/review approval |
+| tvOS | Foreground-only large-screen dashboard; no APNs, App Attest, alert audio, or background emergency alerts | Portal has an empty `1.0` draft; **PENDING** edit to 1.1 where permitted, build 8, profile, platform QA, metadata, and 1920 × 1080 screenshots |
+| visionOS | Full native windowed app with protected App Attest/APNs registration; qualifying fresh warnings may be Time Sensitive, never Critical | Portal has an empty `1.0` draft; **PENDING** edit to 1.1 where permitted, build 8, profile, platform QA, App Motion answer, metadata, and 3840 × 2160 screenshots |
+
+Use `platforms/` for exact copy, review notes, and pending screenshot manifests.
+Use `app-store-connect-portal-audit-2026-08-19.md` for the read-only portal
+contradictions and safe action order. Do not delete or repurpose an existing
+draft from this worksheet.
+
 ## Required human/legal decisions — do not infer these answers
 
 | App Store Connect area | Required decision/evidence | Current status |
@@ -65,5 +78,5 @@ Collected” merely because the app has no account.
 | Export Compliance | Answer Apple's current encryption/export questions for the final signed archive | **PENDING** legal/release-owner confirmation |
 | Availability / pricing schedule | Select approved territories and distribution timing | **PENDING** release-owner decision |
 | Japanese / Simplified Chinese listing | Exact product-page names, availability, and trademark review | **PENDING**; keep English-only until approved |
-| Screenshots | Five 6.5-inch iPhone and five 13-inch iPad Release-simulator frames for each approved locale | **VALIDATED LOCALLY; PENDING** final source-commit provenance update and release-owner upload approval — see `screenshot-provenance-v1.1.json` |
+| Screenshots | Five 6.5-inch iPhone and five 13-inch iPad frames for each approved locale, recaptured from frozen build-8 source | **PENDING** build-8 recapture and release-owner approval. The existing 30-file provenance truthfully records build 7 and must not be relabeled or uploaded as build-8 evidence. |
 | Physical QA / launch | Complete TestFlight proof, production health/readiness proof, and App Attest launch promotion; terminal-DLQ monitoring remains an optional operational control | **PENDING** — see `docs/IOS_TESTFLIGHT_PHYSICAL_QA.md` and `docs/CLOUDFLARE_PRODUCTION.md` |

@@ -1,5 +1,22 @@
 import CoreLocation
 
+extension CLAuthorizationStatus {
+    var allowsQuakeSignalLocation: Bool {
+        switch self {
+        case .authorizedWhenInUse:
+            return true
+#if !os(visionOS)
+        case .authorizedAlways:
+            return true
+#endif
+        case .denied, .notDetermined, .restricted:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+}
+
 enum LocationFixPolicy {
     static let maximumAge: TimeInterval = 2 * 60
     static let maximumHorizontalAccuracy: CLLocationAccuracy = 5_000
@@ -116,12 +133,12 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     /// Calling `requestLocation()` before the authorization prompt completes
     /// can fail without ever producing the fix needed by push registration.
     func requestCurrentLocation() {
+        guard !ScreenshotAutomation.isEnabled else { return }
         let currentAuthorization = manager.authorizationStatus
         authorizationStatus = currentAuthorization
         lastRequestFailed = false
 
-        switch currentAuthorization {
-        case .authorizedAlways, .authorizedWhenInUse:
+        if currentAuthorization.allowsQuakeSignalLocation {
             // Never present a previous trip's coordinate as a fresh fix while
             // a new request is in flight.
             currentLocation = nil
@@ -129,20 +146,19 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
             locationExpirationTask = nil
             isRequestingLocation = true
             manager.requestLocation()
-        case .notDetermined:
+            return
+        }
+
+        if currentAuthorization == .notDetermined {
             isRequestingLocation = true
             manager.requestWhenInUseAuthorization()
-        case .denied, .restricted:
-            currentLocation = nil
-            locationExpirationTask?.cancel()
-            locationExpirationTask = nil
-            isRequestingLocation = false
-        @unknown default:
-            currentLocation = nil
-            locationExpirationTask?.cancel()
-            locationExpirationTask = nil
-            isRequestingLocation = false
+            return
         }
+
+        currentLocation = nil
+        locationExpirationTask?.cancel()
+        locationExpirationTask = nil
+        isRequestingLocation = false
     }
 
     var selectionStatus: LocationSelectionStatus {
@@ -158,7 +174,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         let status = manager.authorizationStatus
         Task { @MainActor in
             self.authorizationStatus = status
-            if status == .authorizedWhenInUse || status == .authorizedAlways {
+            if status.allowsQuakeSignalLocation {
                 // Use self.manager (the same underlying instance), not the
                 // delegate-callback parameter -- CLLocationManager isn't
                 // provably Sendable, so passing the parameter itself across

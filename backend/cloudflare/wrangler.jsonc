@@ -30,9 +30,14 @@
     // Worker when testing Debug/simulator flows.
     "APP_ATTEST_ENFORCEMENT": "required",
     "APP_ATTEST_APP_ID": "5TT564H883.com.quakesignal.app",
+    // Authoritative App Attest identity -> APNs route allow-list. Presence is
+    // enablement: Watch is intentionally absent until its App ID entitlement,
+    // APNs credentials, client proof flow, and physical-device delivery have
+    // been reviewed. Never add a client-provided topic to this setting.
+    "APP_ATTEST_APNS_ROUTES": "[{\"appIdentity\":\"5TT564H883.com.quakesignal.app\",\"apnsTopic\":\"com.quakesignal.app\",\"platform\":\"ios\"}]",
     // CFBundleVersion, not the marketing version. Update this allow-list in
     // the same reviewed release that changes CURRENT_PROJECT_VERSION.
-    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7",
+    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8",
     // iOS 17–26 valid App Attest proofs do not have the iOS 27 release
     // metadata extension. Whenever an extension is present it is still
     // strictly checked for App Store/TestFlight category and this build ID.

@@ -101,14 +101,7 @@ struct EpicenterMapView: View {
     }
 
     private var canShowUserLocation: Bool {
-        switch locationManager.authorizationStatus {
-        case .authorizedAlways, .authorizedWhenInUse:
-            return true
-        case .denied, .notDetermined, .restricted:
-            return false
-        @unknown default:
-            return false
-        }
+        locationManager.authorizationStatus.allowsQuakeSignalLocation
     }
 
     private var locatedEvents: [EEWEvent] {

@@ -9,7 +9,7 @@ value.
 ## Public-build and service gate
 
 - [ ] Identify the exact signed public `Release` 1.1 archive/IPA, source
-  commit, SHA-256, and `CFBundleVersion` `7`.
+  commit, SHA-256, and `CFBundleVersion` `8`, including the embedded Watch app.
 - [ ] Confirm that this is not the legacy TestFlight `1.0 (2)` InternalQA-only
   evidence build and that it contains no delayed background-training control.
 - [ ] Confirm the App Attest version policy admits exactly that public build and
@@ -39,8 +39,15 @@ value.
 - [ ] Keep Japanese and Simplified Chinese localizations unpublished until the
   exact display names, availability, and trademark review are approved.
 - [ ] Freeze `screenshot-provenance-v1.1.json`, verify all 30 hashes, and
-  visually approve the five 6.5-inch iPhone and five 13-inch iPad screenshots
-  for every uploaded locale.
+  preserve it as historical build-7 evidence. Do not relabel those 30 images as
+  build 8. Recapture the five 6.5-inch iPhone and five 13-inch iPad screenshots
+  from frozen build-8 source for every uploaded locale, then create truthful
+  hashes and provenance.
+- [ ] Complete the Apple Watch, tvOS, and visionOS metadata, screenshot, icon,
+  profile, and platform-QA gates in `platforms/` before submitting those
+  experiences. tvOS and Watch must remain foreground-only in every claim.
+- [ ] Complete the required visionOS App Motion answer from final-platform QA;
+  do not infer the portal selection from source inspection alone.
 
 ## Privacy, rights, and Apple questionnaires
 

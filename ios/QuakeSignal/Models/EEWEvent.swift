@@ -1,5 +1,6 @@
-import SwiftUI
 import CoreLocation
+import Foundation
+import SwiftUI
 
 /// Client-side normalized Wolfx event shared by the app's direct HTTP and
 /// WebSocket data paths.
@@ -107,6 +108,41 @@ extension EEWEvent {
         let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(deltaLon)
         let bearingDegrees = (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
         return CompassDirection(bearingDegrees: bearingDegrees)
+    }
+}
+
+/// One freshness boundary for every foreground surface that elevates an EEW
+/// above ordinary reports. The future allowance handles small device/source
+/// clock differences without letting a malformed future timestamp remain
+/// prominent indefinitely.
+enum WarningFreshnessPolicy {
+    static let maximumAge: TimeInterval = 10 * 60
+    static let allowedFutureSkew: TimeInterval = 60
+
+    static func isFresh(_ event: EEWEvent, now: Date = Date()) -> Bool {
+        guard let timestamp = event.reportDate ?? event.originDate else { return false }
+        let age = now.timeIntervalSince(timestamp)
+        return age >= -allowedFutureSkew && age <= maximumAge
+    }
+}
+
+/// Selects the foreground-only TV/Watch headline from an arbitrary snapshot.
+/// A fresh actionable warning takes precedence; retained or future-dated EEW
+/// frames fall back to the newest ordinary earthquake report.
+enum ForegroundHeadlinePolicy {
+    static func headline(from events: [EEWEvent], now: Date = Date()) -> EEWEvent? {
+        let newestFirst = events.sorted {
+            let leftDate = $0.reportDate ?? $0.originDate ?? .distantPast
+            let rightDate = $1.reportDate ?? $1.originDate ?? .distantPast
+            if leftDate != rightDate { return leftDate > rightDate }
+            return $0.id < $1.id
+        }
+
+        return newestFirst.first {
+            $0.isActiveWarning && WarningFreshnessPolicy.isFresh($0, now: now)
+        } ?? newestFirst.first {
+            $0.kind == "report"
+        }
     }
 }
 

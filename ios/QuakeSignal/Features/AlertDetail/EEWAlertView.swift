@@ -62,7 +62,7 @@ struct EEWAlertView: View {
             .toolbarBackground(.hidden, for: .navigationBar)
         }
         .task { hapticTrigger += 1 }
-        .sensoryFeedback(.warning, trigger: hapticTrigger)
+        .quakeWarningFeedback(trigger: hapticTrigger)
     }
 
     private var backgroundColor: Color {
@@ -246,6 +246,21 @@ struct EEWAlertView: View {
         }
         .controlSize(.large)
         .padding(.horizontal, 24)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func quakeWarningFeedback(trigger: Int) -> some View {
+#if os(visionOS)
+        if #available(visionOS 26.0, *) {
+            sensoryFeedback(.warning, trigger: trigger)
+        } else {
+            self
+        }
+#else
+        sensoryFeedback(.warning, trigger: trigger)
+#endif
     }
 }
 

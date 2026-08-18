@@ -46,6 +46,7 @@ export interface Settings {
   notifyAtNight: boolean;
   alarmEnabled: boolean;
   alarmVolume: number;
+  alertSound: string; // "system" | "urgent-tone" | "japanese-voice"
   launchAtLogin: boolean;
 }
 

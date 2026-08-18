@@ -70,6 +70,68 @@ final class AlertPolicyTests: XCTestCase {
         ))
     }
 
+    func testCompanionHeadlineRejectsStaleAndFutureWarningsForLatestReport() {
+        let latestReport = makeEvent(
+            id: "jma_eqlist:latest",
+            kind: "report",
+            reportDate: now.addingTimeInterval(-30),
+            isWarn: false
+        )
+        let olderReport = makeEvent(
+            id: "jma_eqlist:older",
+            kind: "report",
+            reportDate: now.addingTimeInterval(-60),
+            isWarn: false
+        )
+        let staleWarning = makeEvent(
+            id: "jma_eew:stale",
+            reportDate: now.addingTimeInterval(-601),
+            isWarn: true
+        )
+        let futureWarning = makeEvent(
+            id: "jma_eew:future",
+            reportDate: now.addingTimeInterval(61),
+            isWarn: true
+        )
+
+        XCTAssertEqual(
+            ForegroundHeadlinePolicy.headline(
+                from: [olderReport, staleWarning, latestReport],
+                now: now
+            ),
+            latestReport
+        )
+        XCTAssertEqual(
+            ForegroundHeadlinePolicy.headline(
+                from: [futureWarning, olderReport, latestReport],
+                now: now
+            ),
+            latestReport
+        )
+
+        let freshWarning = makeEvent(
+            id: "jma_eew:fresh",
+            reportDate: now.addingTimeInterval(-600),
+            isWarn: true
+        )
+        let allowedFutureWarning = makeEvent(
+            id: "jma_eew:bounded-future",
+            reportDate: now.addingTimeInterval(60),
+            isWarn: true
+        )
+        XCTAssertEqual(
+            ForegroundHeadlinePolicy.headline(from: [latestReport, freshWarning], now: now),
+            freshWarning
+        )
+        XCTAssertEqual(
+            ForegroundHeadlinePolicy.headline(from: [latestReport, allowedFutureWarning], now: now),
+            allowedFutureWarning
+        )
+
+        XCTAssertNil(ForegroundHeadlinePolicy.headline(from: [staleWarning], now: now))
+        XCTAssertNil(ForegroundHeadlinePolicy.headline(from: [futureWarning], now: now))
+    }
+
     func testTrainingRequiresExplicitOptInAndReconnectUpdateIsRecognized() {
         let training = makeEvent(reportDate: now, isWarn: false, isTraining: true)
         XCTAssertNil(reason(for: training, preferences: preferences(includeTraining: false)))
@@ -160,6 +222,145 @@ final class AlertPolicyTests: XCTestCase {
             preferences: preferences,
             now: now
         ), .updated)
+    }
+
+    func testForegroundPushMergesTerminalLifecycleWithoutEmergencyPresentation() {
+        let current = makeEvent(serial: 4, reportDate: now, isWarn: true)
+        let final = makeEvent(
+            serial: 5,
+            reportDate: now.addingTimeInterval(1),
+            isWarn: true,
+            isFinal: true
+        )
+        let cancellation = makeEvent(
+            serial: 6,
+            reportDate: now.addingTimeInterval(2),
+            isWarn: true,
+            isCancel: true
+        )
+
+        let finalDecision = ForegroundPushPolicy.ingestionDecision(
+            for: final,
+            previous: current,
+            requestedReason: .final,
+            preferences: preferences(),
+            now: now
+        )
+        XCTAssertTrue(finalDecision.shouldMerge)
+        XCTAssertNil(finalDecision.presentationReason)
+
+        let cancellationDecision = ForegroundPushPolicy.ingestionDecision(
+            for: cancellation,
+            previous: final,
+            requestedReason: .cancelled,
+            preferences: preferences(),
+            now: now
+        )
+        XCTAssertTrue(cancellationDecision.shouldMerge)
+        XCTAssertNil(cancellationDecision.presentationReason)
+
+        let replayDecision = ForegroundPushPolicy.ingestionDecision(
+            for: current,
+            previous: cancellation,
+            requestedReason: .new,
+            preferences: preferences(),
+            now: now
+        )
+        XCTAssertFalse(replayDecision.shouldMerge)
+        XCTAssertNil(replayDecision.presentationReason)
+    }
+
+    func testPresentedWarningReconcilesOnlyMatchingAcceptedLifecycle() {
+        let active = makeEvent(serial: 4, reportDate: now, isWarn: true)
+        let presented = PresentedAlert(event: active, reason: .new)
+        let unrelatedFinal = makeEvent(
+            id: "jma_eew:unrelated",
+            serial: 5,
+            reportDate: now.addingTimeInterval(1),
+            isWarn: true,
+            isFinal: true
+        )
+
+        XCTAssertEqual(
+            PresentedAlertLifecyclePolicy.afterAcceptedMerge(
+                unrelatedFinal,
+                current: presented,
+                now: now
+            ),
+            presented
+        )
+
+        let update = makeEvent(
+            serial: 5,
+            reportDate: now.addingTimeInterval(1),
+            isWarn: true
+        )
+        let updatedPresentation = PresentedAlertLifecyclePolicy.afterAcceptedMerge(
+            update,
+            current: presented,
+            now: now
+        )
+        XCTAssertEqual(updatedPresentation?.event, update)
+        XCTAssertEqual(updatedPresentation?.reason, .new)
+
+        let final = makeEvent(
+            serial: 6,
+            reportDate: now.addingTimeInterval(2),
+            isWarn: true,
+            isFinal: true
+        )
+        XCTAssertNil(PresentedAlertLifecyclePolicy.afterAcceptedMerge(
+            final,
+            current: updatedPresentation,
+            now: now
+        ))
+
+        let cancelled = makeEvent(
+            serial: 6,
+            reportDate: now.addingTimeInterval(2),
+            isWarn: true,
+            isCancel: true
+        )
+        XCTAssertNil(PresentedAlertLifecyclePolicy.afterAcceptedMerge(
+            cancelled,
+            current: updatedPresentation,
+            now: now
+        ))
+
+        let informationalDemotion = makeEvent(
+            serial: 6,
+            reportDate: now.addingTimeInterval(2),
+            isWarn: false
+        )
+        XCTAssertNil(PresentedAlertLifecyclePolicy.afterAcceptedMerge(
+            informationalDemotion,
+            current: updatedPresentation,
+            now: now
+        ))
+    }
+
+    func testPresentedWarningExpiresWithoutDismissingNonWarningNavigation() {
+        let freshWarning = PresentedAlert(
+            event: makeEvent(reportDate: now, isWarn: true),
+            reason: .new
+        )
+        XCTAssertEqual(
+            PresentedAlertLifecyclePolicy.afterClockTick(freshWarning, now: now),
+            freshWarning
+        )
+        XCTAssertNil(PresentedAlertLifecyclePolicy.afterClockTick(
+            freshWarning,
+            now: now.addingTimeInterval(601)
+        ))
+
+        let report = PresentedAlert(
+            event: makeEvent(kind: "report", reportDate: now.addingTimeInterval(-86_400), isWarn: false),
+            reason: .report
+        )
+        XCTAssertEqual(
+            PresentedAlertLifecyclePolicy.afterClockTick(report, now: now),
+            report
+        )
     }
 
     func testHttpNormalizerRejectsMalformedEmptyAndWrongSourceSnapshots() throws {
@@ -270,7 +471,9 @@ final class AlertPolicyTests: XCTestCase {
     }
 
     private func makeEvent(
+        id: String = "jma_eew:test",
         serial: Int = 1,
+        kind: String = "eew",
         reportDate: Date,
         isWarn: Bool,
         isFinal: Bool = false,
@@ -279,11 +482,11 @@ final class AlertPolicyTests: XCTestCase {
     ) -> EEWEvent {
         let timestamp = ISO8601DateFormatter().string(from: reportDate)
         return EEWEvent(
-            id: "jma_eew:test",
+            id: id,
             sourceId: "jma_eew",
             eventId: "test",
             serial: serial,
-            kind: "eew",
+            kind: kind,
             originTimeUtc: timestamp,
             reportTimeUtc: timestamp,
             hypocenter: "Test",

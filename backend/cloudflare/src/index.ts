@@ -102,7 +102,21 @@ export interface AppAttestPolicyEnvironment {
   APP_ATTEST_REQUIRE_RELEASE_METADATA?: string;
 }
 
-interface Env extends AlertDeliveryQueueNameEnvironment, AppAttestPolicyEnvironment {
+/**
+ * Server-owned routing from one cryptographically verified App Attest app ID
+ * to its APNs topic. The JSON allow-list is deliberately separate from the
+ * registration body: a client may select only an identity that its App Attest
+ * proof subsequently authenticates, and can never provide a topic directly.
+ */
+export interface AppIdentityRoutingEnvironment {
+  APP_ATTEST_APP_ID?: string;
+  APP_ATTEST_APNS_ROUTES?: string;
+  /** Legacy single-topic fallback used only when the route allow-list is unset. */
+  APNS_BUNDLE_ID?: string;
+}
+
+interface Env extends AlertDeliveryQueueNameEnvironment, AppAttestPolicyEnvironment,
+  AppIdentityRoutingEnvironment {
   DB: D1Database;
   RELAY: DurableObjectNamespace;
   /**
@@ -122,7 +136,6 @@ interface Env extends AlertDeliveryQueueNameEnvironment, AppAttestPolicyEnvironm
   APNS_PRIVATE_KEY?: string;
   APNS_KEY_ID?: string;
   APNS_TEAM_ID?: string;
-  APNS_BUNDLE_ID?: string;
   ENABLE_PRODUCTION_TEST_PUSH?: string;
 }
 
@@ -165,6 +178,10 @@ interface DeviceRow {
   utc_offset_minutes: number | null;
   notify_at_night: number;
   app_attest_key_id?: string | null;
+  /** Added by migration 0011; optional here for rolling tests/legacy fixtures. */
+  app_identity?: string | null;
+  apns_topic?: string | null;
+  app_platform?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -368,9 +385,12 @@ const MAX_DEVICE_TOKEN_LENGTH = 512;
 const MAX_DEVICE_TEXT_LENGTH = 120;
 const DEVICE_RATE_LIMIT_WINDOW_SECONDS = 60;
 const APP_ATTEST_APP_ID = "5TT564H883.com.quakesignal.app";
+const LEGACY_APNS_TOPIC = "com.quakesignal.app";
+const MAX_APP_IDENTITY_ROUTES = 16;
+const MAX_APP_IDENTITY_ROUTE_CONFIGURATION_LENGTH = 8 * 1024;
 // Keep this module-local: Workers accepts exported handlers/classes, but a
 // primitive module export would prevent the deployed module from starting.
-const APP_ATTEST_POLICY_FORMAT = "quakesignal-app-attest-policy/v1";
+const APP_ATTEST_POLICY_FORMAT = "quakesignal-app-attest-policy/v2";
 const APP_ATTEST_DEVELOPMENT_BYPASS_VALUE = "development-unsupported";
 // APNs provider tokens are valid for up to one hour and Apple asks providers
 // not to refresh them more often than every 20 minutes. This is an in-memory
@@ -423,8 +443,25 @@ interface ApnsDeliveryResult {
   deactivated?: boolean;
 }
 
+export type AppleAppPlatform =
+  | "ios"
+  | "ipados"
+  | "macos"
+  | "watchos"
+  | "tvos"
+  | "visionos";
+
+/** A server allow-listed App Attest identity and its exact APNs route. */
+export interface AuthenticatedAppRoute {
+  appIdentity: string;
+  apnsTopic: string;
+  platform: AppleAppPlatform;
+}
+
+type RoutedDeviceRecord = DeviceRecord & AuthenticatedAppRoute;
+
 interface PreparedDelivery {
-  device: DeviceRecord;
+  device: RoutedDeviceRecord;
   tokenHash: string;
 }
 
@@ -1749,7 +1786,7 @@ function rowToEvent(row: EventRow): NormalizedEvent {
   };
 }
 
-function rowToDevice(row: DeviceRow): DeviceRecord {
+function rowToDevice(row: DeviceRow): RoutedDeviceRecord {
   return {
     token: row.token,
     environment: row.environment,
@@ -1767,6 +1804,12 @@ function rowToDevice(row: DeviceRow): DeviceRecord {
     includeTestAlerts: !!row.include_test_alerts,
     utcOffsetMinutes: row.utc_offset_minutes,
     notifyAtNight: !!row.notify_at_night,
+    // Migration 0011 makes all three fields non-null. These fallbacks keep a
+    // rolling Worker and focused pre-migration test fixtures on the historical
+    // iOS route; send-time allow-list validation still runs before APNs.
+    appIdentity: row.app_identity ?? APP_ATTEST_APP_ID,
+    apnsTopic: row.apns_topic ?? LEGACY_APNS_TOPIC,
+    platform: (row.app_platform ?? "ios") as AppleAppPlatform,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -2449,13 +2492,195 @@ function utf8Base64URL(value: string): string {
   return base64URL(new TextEncoder().encode(value));
 }
 
-function hasApnsConfiguration(env: Env): boolean {
-  return Boolean(
-    env.APNS_PRIVATE_KEY &&
-      env.APNS_KEY_ID &&
-      env.APNS_TEAM_ID &&
-      env.APNS_BUNDLE_ID,
+export class AppIdentityRouteConfigurationError extends Error {
+  constructor() {
+    super("App identity routing configuration is invalid");
+    this.name = "AppIdentityRouteConfigurationError";
+  }
+}
+
+export class AppIdentityRouteNotAllowedError extends Error {
+  constructor() {
+    super("App identity route is not allow-listed");
+    this.name = "AppIdentityRouteNotAllowedError";
+  }
+}
+
+const APPLE_APP_PLATFORMS = new Set<AppleAppPlatform>([
+  "ios",
+  "ipados",
+  "macos",
+  "watchos",
+  "tvos",
+  "visionos",
+]);
+
+function isAppleBundleIdentifier(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.length <= 255 &&
+    /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*$/.test(value)
   );
+}
+
+function isAuthenticatedAppRoute(value: unknown): value is AuthenticatedAppRoute {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Partial<AuthenticatedAppRoute>;
+  const names = Object.keys(value);
+  if (
+    names.length !== 3 ||
+    !names.every((name) => ["appIdentity", "apnsTopic", "platform"].includes(name)) ||
+    typeof candidate.appIdentity !== "string" ||
+    typeof candidate.apnsTopic !== "string" ||
+    typeof candidate.platform !== "string" ||
+    !APPLE_APP_PLATFORMS.has(candidate.platform as AppleAppPlatform) ||
+    !isAppleBundleIdentifier(candidate.apnsTopic)
+  ) {
+    return false;
+  }
+  const separator = candidate.appIdentity.indexOf(".");
+  if (separator <= 0 || separator === candidate.appIdentity.length - 1) return false;
+  const teamId = candidate.appIdentity.slice(0, separator);
+  const bundleId = candidate.appIdentity.slice(separator + 1);
+  // This service sends only ordinary alert pushes. Requiring the authenticated
+  // bundle ID to equal its topic prevents an allow-list typo from turning one
+  // app's proof into authority over another app or extension's APNs channel.
+  return /^[A-Z0-9]{10}$/.test(teamId) &&
+    isAppleBundleIdentifier(bundleId) && bundleId === candidate.apnsTopic;
+}
+
+/**
+ * Resolve the complete server-owned identity allow-list. When the new setting
+ * is absent, synthesize exactly the historical iOS route so deployed clients
+ * and already-migrated rows keep working without a flag day. Once the setting
+ * is present it is authoritative and malformed/partial values fail closed.
+ */
+export function configuredAppIdentityRoutes(
+  env: AppIdentityRoutingEnvironment,
+): AuthenticatedAppRoute[] {
+  const primaryAppIdentity = env.APP_ATTEST_APP_ID ?? APP_ATTEST_APP_ID;
+  const configured = env.APP_ATTEST_APNS_ROUTES;
+  if (configured === undefined) {
+    const legacy: AuthenticatedAppRoute = {
+      appIdentity: primaryAppIdentity,
+      apnsTopic: env.APNS_BUNDLE_ID ?? LEGACY_APNS_TOPIC,
+      platform: "ios",
+    };
+    if (!isAuthenticatedAppRoute(legacy)) {
+      throw new AppIdentityRouteConfigurationError();
+    }
+    return [legacy];
+  }
+  if (
+    configured.length === 0 ||
+    configured.length > MAX_APP_IDENTITY_ROUTE_CONFIGURATION_LENGTH
+  ) {
+    throw new AppIdentityRouteConfigurationError();
+  }
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(configured);
+  } catch {
+    throw new AppIdentityRouteConfigurationError();
+  }
+  if (
+    !Array.isArray(decoded) ||
+    decoded.length === 0 ||
+    decoded.length > MAX_APP_IDENTITY_ROUTES ||
+    !decoded.every(isAuthenticatedAppRoute)
+  ) {
+    throw new AppIdentityRouteConfigurationError();
+  }
+  const routes = decoded.map((route) => ({ ...route }));
+  if (new Set(routes.map(({ appIdentity }) => appIdentity)).size !== routes.length) {
+    throw new AppIdentityRouteConfigurationError();
+  }
+  // Existing clients do not send `appIdentity`. Keeping the configured
+  // primary identity mandatory preserves that wire contract while still
+  // making every additional platform opt-in.
+  if (!routes.some(({ appIdentity }) => appIdentity === primaryAppIdentity)) {
+    throw new AppIdentityRouteConfigurationError();
+  }
+  return routes.sort((left, right) =>
+    left.appIdentity < right.appIdentity
+      ? -1
+      : left.appIdentity > right.appIdentity
+        ? 1
+        : 0
+  );
+}
+
+function defaultAppIdentityRoute(
+  env: AppIdentityRoutingEnvironment,
+): AuthenticatedAppRoute {
+  const primaryAppIdentity = env.APP_ATTEST_APP_ID ?? APP_ATTEST_APP_ID;
+  const route = configuredAppIdentityRoutes(env).find(
+    ({ appIdentity }) => appIdentity === primaryAppIdentity,
+  );
+  if (!route) throw new AppIdentityRouteConfigurationError();
+  return route;
+}
+
+/**
+ * Select an allow-listed route for a mutation. A fresh key may name an app
+ * identity because the exact body is challenge-bound and the subsequent App
+ * Attest proof verifies that same app ID. An existing key is always anchored
+ * to its stored app ID and cannot switch identities through request JSON.
+ */
+export function authenticatedAppRouteForRequest(
+  env: AppIdentityRoutingEnvironment,
+  body: Record<string, unknown>,
+  storedAppIdentity?: string,
+): AuthenticatedAppRoute {
+  const requested = body.appIdentity;
+  if (requested !== undefined && typeof requested !== "string") {
+    throw new AppIdentityRouteNotAllowedError();
+  }
+  if (
+    storedAppIdentity !== undefined &&
+    requested !== undefined &&
+    requested !== storedAppIdentity
+  ) {
+    throw new AppIdentityRouteNotAllowedError();
+  }
+  const identity = storedAppIdentity ??
+    (requested as string | undefined) ??
+    (env.APP_ATTEST_APP_ID ?? APP_ATTEST_APP_ID);
+  const route = configuredAppIdentityRoutes(env).find(
+    ({ appIdentity }) => appIdentity === identity,
+  );
+  if (!route) throw new AppIdentityRouteNotAllowedError();
+  return route;
+}
+
+function allowedStoredAppIdentityRoute(
+  env: AppIdentityRoutingEnvironment,
+  device: Pick<RoutedDeviceRecord, "appIdentity" | "apnsTopic" | "platform">,
+): AuthenticatedAppRoute {
+  const route = configuredAppIdentityRoutes(env).find(
+    ({ appIdentity }) => appIdentity === device.appIdentity,
+  );
+  if (
+    !route ||
+    route.apnsTopic !== device.apnsTopic ||
+    route.platform !== device.platform
+  ) {
+    throw new AppIdentityRouteNotAllowedError();
+  }
+  return route;
+}
+
+function hasApnsConfiguration(env: Env): boolean {
+  if (!(env.APNS_PRIVATE_KEY && env.APNS_KEY_ID && env.APNS_TEAM_ID)) return false;
+  // Keep APNS_BUNDLE_ID mandatory for the legacy single-route mode. Explicit
+  // per-identity routes carry their own topics and need only provider-key
+  // credentials shared by the Apple developer team.
+  if (env.APP_ATTEST_APNS_ROUTES === undefined && !env.APNS_BUNDLE_ID) return false;
+  try {
+    return configuredAppIdentityRoutes(env).length > 0;
+  } catch {
+    return false;
+  }
 }
 
 function requireApnsConfiguration(env: Env): void {
@@ -2686,15 +2911,17 @@ export async function withApnsRequestTimeout<T>(
 
 async function sendPush(
   env: Env,
-  device: DeviceRecord,
+  device: RoutedDeviceRecord,
   event: NormalizedEvent,
   reason: NotifyReason,
   authorization: string,
   collapseId: string,
 ): Promise<ApnsDeliveryResult> {
   requireApnsConfiguration(env);
-  const bundleId = env.APNS_BUNDLE_ID;
-  if (!bundleId) throw new MissingApnsConfigurationError();
+  // `device.apnsTopic` came from the server-derived registration row. Match
+  // all persisted route fields against the current allow-list again so a
+  // disabled platform, stale mapping, or tampered D1 value cannot reach APNs.
+  allowedStoredAppIdentityRoute(env, device);
   const host =
     device.environment === "sandbox"
       ? "api.sandbox.push.apple.com"
@@ -2704,7 +2931,7 @@ async function sendPush(
       method: "POST",
       headers: {
         authorization: `bearer ${authorization}`,
-        "apns-topic": bundleId,
+        "apns-topic": device.apnsTopic,
         "apns-push-type": "alert",
         "apns-priority": "10",
         "apns-expiration": APNS_EXPIRATION_IMMEDIATE,
@@ -2840,7 +3067,7 @@ function logApnsPageFailure(
   result: ApnsDeliveryResult,
 ): void {
   // Intentionally omit a token hash: this failure applies to the provider
-  // request/page, not to one recipient's subscription.
+  // page or one authenticated topic group, not one recipient subscription.
   console.error(
     JSON.stringify({
       outboxId,
@@ -2860,10 +3087,10 @@ function logApnsPageFailure(
  * scoped. Everything else is treated as provider/topic/payload infrastructure
  * trouble so a bad APNs key or topic cannot quietly quarantine every device.
  *
- * `DeviceTokenNotForTopic` is intentionally page-level here. This service has
- * one configured APNs topic, so it is indistinguishable from an APNS_BUNDLE_ID
- * or entitlement mismatch without an operator investigation. The bounded
- * Queue-to-DLQ path preserves that evidence instead of suppressing recipients.
+ * `DeviceTokenNotForTopic` remains an infrastructure incident, not a reason to
+ * quarantine a recipient. Multi-platform pages isolate topic-scoped failures
+ * to their route group so one disabled Watch topic cannot block iOS delivery;
+ * the bounded Queue-to-DLQ path still preserves the failed route's evidence.
  */
 export function isPageLevelApnsFailure(result: ApnsDeliveryResult): boolean {
   if (result.terminalUnregistration || result.unregistrationTimestampMissing) {
@@ -2878,6 +3105,17 @@ export function isPageLevelApnsFailure(result: ApnsDeliveryResult): boolean {
     return false;
   }
   return result.apnsReason !== "BadDeviceToken";
+}
+
+/** Failures that can be isolated to one APNs topic within a mixed route page. */
+export function isTopicScopedApnsFailure(result: ApnsDeliveryResult): boolean {
+  return [
+    "AppRouteNotAllowed",
+    "BadTopic",
+    "DeviceTokenNotForTopic",
+    "MissingTopic",
+    "TopicDisallowed",
+  ].includes(result.apnsReason ?? "");
 }
 
 function apnsFailureDisposition(
@@ -3114,7 +3352,7 @@ interface DeliveryPageResult {
   retryRequired: boolean;
   retryDelaySeconds: number;
   invalidateApnsJwt: boolean;
-  /** Provider/topic/payload failure for the whole page, never one token. */
+  /** Provider/payload page failure or one topic-group failure, never one token. */
   pageFailure: ApnsDeliveryResult | null;
   /** An expiry or newer serial stopped the page before later APNs batches. */
   terminalState: OutboxDeliveryGateState | null;
@@ -3179,129 +3417,148 @@ export async function dispatchPushPage(
   let pageFailure: ApnsDeliveryResult | null = null;
   let terminalState: OutboxDeliveryGateState | null = null;
 
-  for (
-    let start = 0;
-    start < pendingDevices.length;
-    start += APNS_MAX_CONCURRENT_DELIVERIES
-  ) {
-    // Re-check immediately before every small APNs batch. The initial relay
-    // gate handles the common case; this closes the window where a newer event
-    // revision commits while the current page is reading/filtering devices.
-    const gateState = beforeApnsBatch ? await beforeApnsBatch() : "pending";
-    if (gateState !== "pending") {
-      terminalState = gateState;
-      break;
-    }
-    const batch = pendingDevices.slice(
-      start,
-      start + APNS_MAX_CONCURRENT_DELIVERIES,
-    );
-    const deliveries: PreparedDelivery[] = await Promise.all(
-      batch.map(async (device) => ({
-        device,
-        tokenHash: await tokenHash(device.token),
-      })),
-    );
-    const results = await Promise.allSettled(
-      deliveries.map(({ device }) =>
-        sendPush(env, device, event, reason, authorization, collapseId),
-      ),
-    );
+  // Do not mix APNs topics in one concurrent batch. A topic entitlement or
+  // token/topic mismatch can then stop only that route while other platforms
+  // on the same D1 page still receive the alert. Provider/auth/transport
+  // failures remain page-wide and stop every later route group.
+  const pendingRouteGroups = new Map<string, RoutedDeviceRecord[]>();
+  for (const device of pendingDevices) {
+    const routeKey = `${device.appIdentity}\u0000${device.apnsTopic}\u0000${device.platform}`;
+    const group = pendingRouteGroups.get(routeKey) ?? [];
+    group.push(device);
+    pendingRouteGroups.set(routeKey, group);
+  }
 
-    // A provider transport/auth/topic/payload failure is not evidence that any
-    // recipient is bad. Stop before later batches and retry this exact outbox
-    // page through the bounded Queue/DLQ lifecycle. Parallel successes remain
-    // durable; every other failure in this small batch is intentionally not
-    // quarantined because the page-level incident explains it better.
-    const providerResult = results.find(
-      (result) =>
-        result.status === "rejected" ||
-        (!result.value.ok && isPageLevelApnsFailure(result.value)),
-    );
-    if (providerResult) {
-      for (const [index, result] of results.entries()) {
-        if (result.status === "fulfilled" && result.value.ok) {
-          successfulTokens.push(deliveries[index].device.token);
-        }
+  routeGroups:
+  for (const routeDevices of pendingRouteGroups.values()) {
+    for (
+      let start = 0;
+      start < routeDevices.length;
+      start += APNS_MAX_CONCURRENT_DELIVERIES
+    ) {
+      // Re-check immediately before every small APNs batch. The initial relay
+      // gate handles the common case; this closes the window where a newer event
+      // revision commits while the current page is reading/filtering devices.
+      const gateState = beforeApnsBatch ? await beforeApnsBatch() : "pending";
+      if (gateState !== "pending") {
+        terminalState = gateState;
+        break routeGroups;
       }
-      const failure: ApnsDeliveryResult = providerResult.status === "rejected"
-        ? { ok: false, apnsId: null, apnsReason: "TransportError" }
-        : providerResult.value;
-      pageFailure ??= failure;
-      retryRequired = true;
-      retryDelaySeconds = Math.max(
-        retryDelaySeconds,
-        apnsRetryDelaySeconds(failure),
+      const batch = routeDevices.slice(
+        start,
+        start + APNS_MAX_CONCURRENT_DELIVERIES,
       );
-      invalidateApnsJwt ||= failure.apnsReason === "ExpiredProviderToken";
-      break;
-    }
+      const deliveries: PreparedDelivery[] = await Promise.all(
+        batch.map(async (device) => ({
+          device,
+          tokenHash: await tokenHash(device.token),
+        })),
+      );
+      const results = await Promise.allSettled(
+        deliveries.map(({ device }) =>
+          sendPush(env, device, event, reason, authorization, collapseId),
+        ),
+      );
 
-    for (const [index, result] of results.entries()) {
-      const delivery = deliveries[index];
-      if (result.status === "fulfilled") {
-        if (result.value.ok) {
-          successfulTokens.push(delivery.device.token);
-        } else {
-          const disposition = apnsFailureDisposition(result.value);
-          logApnsFailure(
-            event,
-            reason,
-            delivery.tokenHash,
-            result.value,
-            disposition,
-          );
-          if (disposition === "retry") {
-            retryRequired = true;
-            retryDelaySeconds = Math.max(
-              retryDelaySeconds,
-              apnsRetryDelaySeconds(result.value),
-            );
-            invalidateApnsJwt ||= result.value.apnsReason === "ExpiredProviderToken";
-            await recordDeliveryFailure(
-              env.DB,
-              deliveryId,
-              event,
-              reason,
-              delivery.tokenHash,
-              result.value,
-              "retry",
-            );
-          } else if (disposition === "quarantine") {
-            await recordDeliveryFailure(
-              env.DB,
-              deliveryId,
-              event,
-              reason,
-              delivery.tokenHash,
-              result.value,
-              "quarantine",
-            );
+      // A provider transport/auth/topic/payload failure is not evidence that
+      // one recipient is bad. Preserve successful peers, retry this outbox
+      // page, and continue only when the failure is provably topic-scoped.
+      const providerResult = results.find(
+        (result) =>
+          result.status === "rejected" ||
+          (!result.value.ok && isPageLevelApnsFailure(result.value)),
+      );
+      if (providerResult) {
+        for (const [index, result] of results.entries()) {
+          if (result.status === "fulfilled" && result.value.ok) {
+            successfulTokens.push(deliveries[index].device.token);
           }
         }
-      } else {
-        // Rejections were handled as page-level failures above. This branch is
-        // retained for type exhaustiveness if the classifier is tightened in a
-        // future release.
-        logApnsException(event, reason, delivery.tokenHash, result.reason);
+        const failure: ApnsDeliveryResult = providerResult.status === "rejected"
+          ? {
+              ok: false,
+              apnsId: null,
+              apnsReason: providerResult.reason instanceof AppIdentityRouteNotAllowedError
+                ? "AppRouteNotAllowed"
+                : "TransportError",
+            }
+          : providerResult.value;
+        pageFailure ??= failure;
         retryRequired = true;
         retryDelaySeconds = Math.max(
           retryDelaySeconds,
-          APNS_TRANSIENT_RETRY_DELAY_SECONDS,
+          apnsRetryDelaySeconds(failure),
         );
-        await recordDeliveryFailure(
-          env.DB,
-          deliveryId,
-          event,
-          reason,
-          delivery.tokenHash,
-          {
-            ok: false,
-            apnsId: null,
-            apnsReason: "TransportError",
-          },
-          "retry",
-        );
+        invalidateApnsJwt ||= failure.apnsReason === "ExpiredProviderToken";
+        if (isTopicScopedApnsFailure(failure)) break;
+        break routeGroups;
+      }
+
+      for (const [index, result] of results.entries()) {
+        const delivery = deliveries[index];
+        if (result.status === "fulfilled") {
+          if (result.value.ok) {
+            successfulTokens.push(delivery.device.token);
+          } else {
+            const disposition = apnsFailureDisposition(result.value);
+            logApnsFailure(
+              event,
+              reason,
+              delivery.tokenHash,
+              result.value,
+              disposition,
+            );
+            if (disposition === "retry") {
+              retryRequired = true;
+              retryDelaySeconds = Math.max(
+                retryDelaySeconds,
+                apnsRetryDelaySeconds(result.value),
+              );
+              invalidateApnsJwt ||= result.value.apnsReason === "ExpiredProviderToken";
+              await recordDeliveryFailure(
+                env.DB,
+                deliveryId,
+                event,
+                reason,
+                delivery.tokenHash,
+                result.value,
+                "retry",
+              );
+            } else if (disposition === "quarantine") {
+              await recordDeliveryFailure(
+                env.DB,
+                deliveryId,
+                event,
+                reason,
+                delivery.tokenHash,
+                result.value,
+                "quarantine",
+              );
+            }
+          }
+        } else {
+          // Rejections were handled as page-level failures above. This branch
+          // remains for type exhaustiveness if the classifier is tightened.
+          logApnsException(event, reason, delivery.tokenHash, result.reason);
+          retryRequired = true;
+          retryDelaySeconds = Math.max(
+            retryDelaySeconds,
+            APNS_TRANSIENT_RETRY_DELAY_SECONDS,
+          );
+          await recordDeliveryFailure(
+            env.DB,
+            deliveryId,
+            event,
+            reason,
+            delivery.tokenHash,
+            {
+              ok: false,
+              apnsId: null,
+              apnsReason: "TransportError",
+            },
+            "retry",
+          );
+        }
       }
     }
   }
@@ -7155,6 +7412,7 @@ interface AppAttestKeyRow {
   key_id: string;
   public_key_pem: string;
   sign_count: number;
+  app_id: string;
 }
 
 interface AttestedDeviceMutation {
@@ -7164,16 +7422,29 @@ interface AttestedDeviceMutation {
   environment: AppAttestEnvironment;
   challenge: AppAttestChallengeBinding;
   verification: Awaited<ReturnType<typeof verifyAppAttestProof>>;
+  /** App identity verified by this proof and resolved only from server config. */
+  appRoute: AuthenticatedAppRoute;
 }
 
 interface DevelopmentBypassDeviceMutation {
   mode: "development_bypass";
   keyId: null;
+  /** Always the configured primary route; bypass never trusts client identity. */
+  appRoute: AuthenticatedAppRoute;
 }
 
 type AuthorizedDeviceMutation =
   | AttestedDeviceMutation
   | DevelopmentBypassDeviceMutation;
+
+function appRouteForAuthorizedMutation(
+  authorization: AuthorizedDeviceMutation,
+): AuthenticatedAppRoute {
+  if (!isAuthenticatedAppRoute(authorization.appRoute)) {
+    throw new AppIdentityRouteNotAllowedError();
+  }
+  return authorization.appRoute;
+}
 
 interface DeviceRegistrationValues {
   token: string;
@@ -7305,10 +7576,11 @@ export interface AppAttestPolicy {
   verificationEnvironment: AppAttestEnvironment;
   requireReleaseMetadata: boolean;
   allowedBundleVersions: string[];
+  authenticatedAppRoutes: AuthenticatedAppRoute[];
 }
 
 export function effectiveAppAttestPolicy(
-  env: AppAttestPolicyEnvironment,
+  env: AppAttestPolicyEnvironment & AppIdentityRoutingEnvironment,
 ): AppAttestPolicy {
   return {
     appId: env.APP_ATTEST_APP_ID ?? APP_ATTEST_APP_ID,
@@ -7318,6 +7590,7 @@ export function effectiveAppAttestPolicy(
     verificationEnvironment: appAttestVerificationEnvironment(env),
     requireReleaseMetadata: env.APP_ATTEST_REQUIRE_RELEASE_METADATA === "true",
     allowedBundleVersions: [...appAttestAllowedBundleVersions(env)].sort(),
+    authenticatedAppRoutes: configuredAppIdentityRoutes(env),
   };
 }
 
@@ -7329,6 +7602,19 @@ export function effectiveAppAttestPolicy(
  */
 export function canonicalAppAttestPolicy(policy: AppAttestPolicy): string {
   const allowedBundleVersions = [...new Set(policy.allowedBundleVersions)].sort();
+  const authenticatedAppRoutes = policy.authenticatedAppRoutes
+    .map(({ appIdentity, apnsTopic, platform }) => ({
+      appIdentity,
+      apnsTopic,
+      platform,
+    }))
+    .sort((left, right) =>
+      left.appIdentity < right.appIdentity
+        ? -1
+        : left.appIdentity > right.appIdentity
+          ? 1
+          : 0
+    );
   return [
     `app_id=${policy.appId}`,
     `protocol_version=${policy.protocolVersion}`,
@@ -7337,6 +7623,7 @@ export function canonicalAppAttestPolicy(policy: AppAttestPolicy): string {
     `verification_environment=${policy.verificationEnvironment}`,
     `require_release_metadata=${policy.requireReleaseMetadata}`,
     `allowed_bundle_versions=${allowedBundleVersions.join(",")}`,
+    `app_attest_apns_routes=${JSON.stringify(authenticatedAppRoutes)}`,
     "",
   ].join("\n");
 }
@@ -7364,7 +7651,7 @@ interface AppAttestHealthPolicy {
 }
 
 async function appAttestHealthPolicy(
-  env: AppAttestPolicyEnvironment,
+  env: AppAttestPolicyEnvironment & AppIdentityRoutingEnvironment,
 ): Promise<AppAttestHealthPolicy> {
   const policy = effectiveAppAttestPolicy(env);
   return {
@@ -7592,6 +7879,7 @@ export function registrationStatement(
   db: D1Database,
   values: DeviceRegistrationValues,
   appAttestKeyId: string | null,
+  appRoute: AuthenticatedAppRoute,
   guardSql = "1 = 1",
   guardBindings: unknown[] = [],
   allowAttestedTokenRebind = false,
@@ -7602,8 +7890,9 @@ export function registrationStatement(
         token, environment, locale, sources, min_magnitude,
         critical_alerts_enabled, alert_sound, city_name, latitude, longitude, radius_km,
         include_test_alerts, utc_offset_minutes, notify_at_night,
-        app_attest_key_id, created_at, updated_at
-      ) SELECT ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        app_attest_key_id, app_identity, apns_topic, app_platform,
+        created_at, updated_at
+      ) SELECT ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       WHERE ${guardSql}
       ON CONFLICT(token) DO UPDATE SET
         environment = excluded.environment,
@@ -7620,6 +7909,9 @@ export function registrationStatement(
         utc_offset_minutes = excluded.utc_offset_minutes,
         notify_at_night = excluded.notify_at_night,
         app_attest_key_id = excluded.app_attest_key_id,
+        app_identity = excluded.app_identity,
+        apns_topic = excluded.apns_topic,
+        app_platform = excluded.app_platform,
         updated_at = excluded.updated_at
       WHERE devices.app_attest_key_id IS NULL
         OR devices.app_attest_key_id = excluded.app_attest_key_id
@@ -7640,6 +7932,9 @@ export function registrationStatement(
       values.utcOffsetMinutes,
       values.notifyAtNight,
       appAttestKeyId,
+      appRoute.appIdentity,
+      appRoute.apnsTopic,
+      appRoute.platform,
       values.now,
       values.now,
       ...guardBindings,
@@ -7654,15 +7949,30 @@ async function authorizeAppAttestMutation(
   operation: AppAttestOperation,
 ): Promise<AuthorizedDeviceMutation | Response> {
   if (!appAttestRequired(env)) {
-    return { mode: "development_bypass", keyId: null };
+    try {
+      return {
+        mode: "development_bypass",
+        keyId: null,
+        appRoute: defaultAppIdentityRoute(env),
+      };
+    } catch {
+      return appAttestFailureResponse();
+    }
   }
   if (
     request.headers.get(APP_ATTEST_DEVELOPMENT_BYPASS_HEADER) ===
     APP_ATTEST_DEVELOPMENT_BYPASS_VALUE
   ) {
-    return appAttestDevelopmentBypassAllowed(env)
-      ? { mode: "development_bypass", keyId: null }
-      : appAttestFailureResponse();
+    if (!appAttestDevelopmentBypassAllowed(env)) return appAttestFailureResponse();
+    try {
+      return {
+        mode: "development_bypass",
+        keyId: null,
+        appRoute: defaultAppIdentityRoute(env),
+      };
+    } catch {
+      return appAttestFailureResponse();
+    }
   }
 
   const verificationEnvironment = appAttestVerificationEnvironment(env);
@@ -7712,7 +8022,7 @@ async function authorizeAppAttestMutation(
     };
     const existingRow = await env.DB
       .prepare(
-        `SELECT key_id, public_key_pem, sign_count FROM app_attest_keys
+        `SELECT key_id, public_key_pem, sign_count, app_id FROM app_attest_keys
          WHERE key_id = ? AND environment = ? AND revoked_at_utc IS NULL`,
       )
       .bind(challenge.keyId, verificationEnvironment)
@@ -7724,8 +8034,13 @@ async function authorizeAppAttestMutation(
           signCount: existingRow.sign_count,
         }
       : null;
+    const appRoute = authenticatedAppRouteForRequest(
+      env,
+      payload.body,
+      existingRow?.app_id,
+    );
     const verification = await verifyAppAttestProof({
-      appId: env.APP_ATTEST_APP_ID ?? APP_ATTEST_APP_ID,
+      appId: appRoute.appIdentity,
       environment: verificationEnvironment,
       challenge,
       headerKeyId: wireKeyId,
@@ -7743,6 +8058,7 @@ async function authorizeAppAttestMutation(
       environment: verificationEnvironment,
       challenge,
       verification,
+      appRoute,
     };
   } catch (error) {
     console.warn(
@@ -7775,6 +8091,7 @@ export async function completeAttestedRegistration(
   const verification = authorization.verification;
   const metadata = verification.metadata;
   const appAttestEnvironment = appAttestMutationEnvironment(authorization);
+  const appRoute = appRouteForAuthorizedMutation(authorization);
   const ownership = registrationOwnershipCondition(
     values.token,
     authorization.keyId,
@@ -7801,7 +8118,7 @@ export async function completeAttestedRegistration(
           authorization.keyId,
           verification.publicKeyPem,
           verification.signCount,
-          APP_ATTEST_APP_ID,
+          appRoute.appIdentity,
           appAttestEnvironment,
           metadata?.validationCategory ?? null,
           metadata?.bundleVersion ?? null,
@@ -7955,6 +8272,7 @@ export async function completeAttestedRegistration(
       db,
       values,
       authorization.keyId,
+      appRoute,
       consumed.sql,
       consumed.bindings,
       verification.proofType === "attestation",
@@ -7985,6 +8303,7 @@ async function completeAttestedAuthorization(
   const verification = authorization.verification;
   const metadata = verification.metadata;
   const appAttestEnvironment = appAttestMutationEnvironment(authorization);
+  const appRoute = appRouteForAuthorizedMutation(authorization);
   if (verification.proofType === "attestation") {
     if (!verification.publicKeyPem || !verification.receiptBase64) {
       return "conflict";
@@ -8004,7 +8323,7 @@ async function completeAttestedAuthorization(
           authorization.keyId,
           verification.publicKeyPem,
           verification.signCount,
-          APP_ATTEST_APP_ID,
+          appRoute.appIdentity,
           appAttestEnvironment,
           metadata?.validationCategory ?? null,
           metadata?.bundleVersion ?? null,
@@ -8123,11 +8442,20 @@ async function handleAppAttestChallenge(
   const verificationEnvironment = appAttestVerificationEnvironment(env);
   const existing = await env.DB
     .prepare(
-      `SELECT key_id FROM app_attest_keys
+      `SELECT key_id, app_id FROM app_attest_keys
        WHERE key_id = ? AND environment = ? AND revoked_at_utc IS NULL`,
     )
     .bind(key.keyId, verificationEnvironment)
-    .first<{ key_id: string }>();
+    .first<{ key_id: string; app_id: string }>();
+  if (existing) {
+    try {
+      // Refuse even to issue an assertion challenge for a platform removed
+      // from the server allow-list. A later proof cannot re-enable that route.
+      authenticatedAppRouteForRequest(env, {}, existing.app_id);
+    } catch {
+      return appAttestFailureResponse();
+    }
+  }
   if (body.operation === "test-push" && !existing) {
     // A training push can never bootstrap an integrity key. A deletion may:
     // this lets an upgraded client remove or rebind a legacy/pre-reset record
@@ -8206,6 +8534,37 @@ export function validatedRegistrationValues(
   ) {
     return json({ error: "environment is invalid" }, 400, noStoreHeaders());
   }
+  // `appIdentity` is only a selector for the App Attest verifier and must be
+  // matched by the proof. Topic/platform are exclusively server-derived; do
+  // not silently accept aliases that a future refactor might accidentally use.
+  if (
+    [
+      "apnsTopic",
+      "apns_topic",
+      "topic",
+      "bundleId",
+      "bundleIdentifier",
+      "appPlatform",
+      "app_platform",
+      "platform",
+    ].some((name) => Object.hasOwn(body, name))
+  ) {
+    return json(
+      { error: "APNs routing fields are server controlled" },
+      400,
+      noStoreHeaders(),
+    );
+  }
+  if (
+    body.appIdentity !== undefined &&
+    (typeof body.appIdentity !== "string" ||
+      !/^[A-Z0-9]{10}\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*$/.test(
+        body.appIdentity,
+      ) ||
+      body.appIdentity.length > 266)
+  ) {
+    return json({ error: "app identity is invalid" }, 400, noStoreHeaders());
+  }
   if (
     !isOptionalBoundedString(body.locale, 35) ||
     !isOptionalBoundedString(body.cityName, MAX_DEVICE_TEXT_LENGTH) ||
@@ -8274,7 +8633,15 @@ async function handleDeviceRegistration(
         return appAttestConflictResponse();
       }
     } else {
-      await registrationStatement(env.DB, values, null).run();
+      await registrationStatement(
+        env.DB,
+        values,
+        null,
+        appRouteForAuthorizedMutation(authorization),
+        "1 = 1",
+        [],
+        false,
+      ).run();
     }
   } catch (error) {
     console.error(
@@ -8767,6 +9134,23 @@ export async function handleDeviceTestPush(
   ) {
     return json(
       { error: "device environment is not permitted for this app integrity environment" },
+      403,
+      noStoreHeaders(),
+    );
+  }
+  try {
+    const storedRoute = allowedStoredAppIdentityRoute(env, device);
+    const authorizedRoute = appRouteForAuthorizedMutation(authorization);
+    if (
+      storedRoute.appIdentity !== authorizedRoute.appIdentity ||
+      storedRoute.apnsTopic !== authorizedRoute.apnsTopic ||
+      storedRoute.platform !== authorizedRoute.platform
+    ) {
+      throw new AppIdentityRouteNotAllowedError();
+    }
+  } catch {
+    return json(
+      { error: "device app route is not permitted" },
       403,
       noStoreHeaders(),
     );

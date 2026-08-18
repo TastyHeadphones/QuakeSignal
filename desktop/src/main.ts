@@ -6,6 +6,10 @@ import { CITIES, cityLocalizedName, findCity } from "./cities";
 import { ALL_SOURCE_IDS, EEW_SOURCE_IDS, REPORT_SOURCE_IDS } from "./types";
 import type { LocaleKey } from "./locales/en";
 import type { NormalizedEvent, Settings } from "./types";
+import {
+  isFreshActiveWarningForDisplay,
+  isRecentEventForDisplay,
+} from "./alert-display-policy";
 
 let settings: Settings;
 let recentEvents: NormalizedEvent[] = [];
@@ -87,29 +91,32 @@ function wireTabBar() {
 
 function switchTab(tab: string) {
   document.querySelectorAll<HTMLButtonElement>(".tabbar button").forEach((b) => {
-    b.classList.toggle("active", b.dataset.tab === tab);
+    const isActive = b.dataset.tab === tab;
+    b.classList.toggle("active", isActive);
+    if (isActive) {
+      b.setAttribute("aria-current", "page");
+    } else {
+      b.removeAttribute("aria-current");
+    }
   });
   document.querySelectorAll<HTMLElement>(".panel").forEach((p) => {
-    p.classList.toggle("active", p.id === `panel-${tab}`);
+    const isActive = p.id === `panel-${tab}`;
+    p.classList.toggle("active", isActive);
+    p.hidden = !isActive;
   });
+  $("app").querySelector<HTMLElement>(".panels")?.scrollTo({ top: 0 });
 }
 
 // ------------------------------------------------------------------ home --
 
 function statusLevel(): { level: "normal" | "caution" | "alert"; event?: NormalizedEvent } {
-  const activeWarning = recentEvents.find(
-    (e) => e.kind === "eew" && e.isWarn && !e.isCancel && !e.isTraining,
-  );
+  const activeWarning = recentEvents.find((event) => isFreshActiveWarningForDisplay(event));
   if (activeWarning) {
     return { level: "alert", event: activeWarning };
   }
-  const mostRecent = recentEvents[0];
+  const mostRecent = recentEvents.find((event) => isRecentEventForDisplay(event));
   if (mostRecent) {
-    const stamp = mostRecent.reportTimeUtc ?? mostRecent.originTimeUtc;
-    const ageMs = stamp ? Date.now() - Date.parse(stamp) : Number.POSITIVE_INFINITY;
-    if (ageMs < 30 * 60 * 1000) {
-      return { level: "caution", event: mostRecent };
-    }
+    return { level: "caution", event: mostRecent };
   }
   return { level: "normal" };
 }
@@ -118,6 +125,9 @@ function renderHome() {
   const { level, event } = statusLevel();
   const banner = $("status-banner");
   banner.className = `status-banner ${level === "normal" ? "" : level}`.trim();
+  banner.setAttribute("role", level === "alert" ? "alert" : "status");
+  banner.setAttribute("aria-live", level === "alert" ? "assertive" : "polite");
+  banner.setAttribute("aria-atomic", "true");
 
   const title = $("status-title");
   const detail = $("status-detail");
@@ -225,9 +235,18 @@ function renderEventItem(event: NormalizedEvent, expandable: boolean): HTMLEleme
   item.appendChild(meta);
 
   if (expandable) {
-    item.addEventListener("click", () => {
+    const toggleExpanded = () => {
       expandedEventId = expandedEventId === event.id ? null : event.id;
       renderEvents();
+    };
+    item.role = "button";
+    item.tabIndex = 0;
+    item.setAttribute("aria-expanded", String(expandedEventId === event.id));
+    item.addEventListener("click", toggleExpanded);
+    item.addEventListener("keydown", (keyEvent) => {
+      if (keyEvent.key !== "Enter" && keyEvent.key !== " ") return;
+      keyEvent.preventDefault();
+      toggleExpanded();
     });
     if (expandedEventId === event.id) {
       const detail = document.createElement("div");
@@ -311,9 +330,10 @@ function wireSettingsForm() {
   for (const id of REPORT_SOURCE_IDS) reportsList.appendChild(sourceCheckbox(id));
 
   $<HTMLSelectElement>("f-language").addEventListener("change", (e) => {
-    setLanguage((e.target as HTMLSelectElement).value);
+    const language = (e.target as HTMLSelectElement).value;
+    settings = { ...settings, language };
+    setLanguage(language);
     applyStaticStrings();
-    renderSettingsForm();
     renderHome();
     renderEvents();
   });
@@ -355,6 +375,13 @@ function renderSettingsForm() {
   $<HTMLInputElement>("f-notify-at-night").checked = settings.notifyAtNight;
   $<HTMLInputElement>("f-alarm-enabled").checked = settings.alarmEnabled;
   $<HTMLInputElement>("f-alarm-volume").value = String(settings.alarmVolume);
+  $<HTMLSelectElement>("f-alert-sound").value = [
+    "system",
+    "urgent-tone",
+    "japanese-voice",
+  ].includes(settings.alertSound)
+    ? settings.alertSound
+    : "system";
   renderAlarmVolume();
   const launchAtLogin = $<HTMLInputElement>("f-launch-at-login");
   launchAtLogin.checked = !isMacAppStoreBuild && settings.launchAtLogin;
@@ -402,6 +429,7 @@ function collectSettingsFromForm(): Settings {
     notifyAtNight: $<HTMLInputElement>("f-notify-at-night").checked,
     alarmEnabled: $<HTMLInputElement>("f-alarm-enabled").checked,
     alarmVolume: Number($<HTMLInputElement>("f-alarm-volume").value),
+    alertSound: $<HTMLSelectElement>("f-alert-sound").value,
     launchAtLogin: !isMacAppStoreBuild && $<HTMLInputElement>("f-launch-at-login").checked,
   };
 }
@@ -419,15 +447,20 @@ function showToast(message: string) {
 
 function applyStaticStrings() {
   $("app-title").textContent = t("app.name");
+  $("brand-kicker").textContent = t("app.tagline");
   document.title = t("app.name");
   $("tab-home-label").textContent = t("tab.home");
   $("tab-events-label").textContent = t("tab.events");
   $("tab-settings-label").textContent = t("tab.settings");
+  $("panel-home-title").textContent = t("tab.home");
+  $("panel-events-title").textContent = t("tab.events");
+  $("panel-settings-title").textContent = t("tab.settings");
   $("test-alert-btn").textContent = t("home.testAlert.button");
   $("recent-title").textContent = t("tab.events");
   $("storage-warning").textContent = t("storage.persistenceUnavailable");
 
   $("s-title-language").textContent = t("settings.section.language");
+  $("l-language").textContent = t("settings.section.language");
   const langSelect = $<HTMLSelectElement>("f-language");
   langSelect.options[0].textContent = t("settings.language.system");
   langSelect.options[1].textContent = t("settings.language.en");
@@ -442,6 +475,7 @@ function applyStaticStrings() {
   $("hint-radius").textContent = t("settings.location.radius.hint");
 
   $("s-title-threshold").textContent = t("settings.section.threshold");
+  $("l-min-magnitude").textContent = t("settings.section.threshold");
   $("hint-threshold").textContent = t("settings.threshold.hint");
 
   $("s-title-sources").textContent = t("settings.section.sources");
@@ -461,6 +495,12 @@ function applyStaticStrings() {
   $("d-alarm-enabled").textContent = t("settings.alarmEnabled.detail");
   $("l-alarm-volume").textContent = t("settings.alarmVolume");
   renderAlarmVolume();
+  $("l-alert-sound").textContent = t("settings.alertSound");
+  const soundSelect = $<HTMLSelectElement>("f-alert-sound");
+  soundSelect.options[0].textContent = t("settings.alertSound.system");
+  soundSelect.options[1].textContent = t("settings.alertSound.urgent");
+  soundSelect.options[2].textContent = t("settings.alertSound.japaneseVoice");
+  $("d-alert-sound").textContent = t("settings.alertSound.detail");
   $("l-test-alerts").textContent = t("settings.includeTestAlerts");
   $("d-test-alerts").textContent = t("settings.includeTestAlerts.detail");
   $("l-notify-night").textContent = t("settings.notifyAtNight");

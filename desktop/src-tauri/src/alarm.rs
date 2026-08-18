@@ -6,10 +6,10 @@ static ALARM_PLAYING: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AlarmPattern {
-    Warning,
+    WarningSystem,
+    WarningUrgent,
+    WarningJapaneseVoice,
     Report,
-    #[cfg(not(feature = "macos-app-store"))]
-    Test,
 }
 
 /// Plays a native audio alarm after an event has passed every user filter.
@@ -45,16 +45,24 @@ fn pattern_for(
     }
     if manual_test {
         #[cfg(not(feature = "macos-app-store"))]
-        return Some(AlarmPattern::Test);
+        return Some(warning_pattern(settings));
         #[cfg(feature = "macos-app-store")]
         return None;
     }
     match (event.kind, reason) {
         (EventKind::Eew, _) if crate::filter::is_urgent_warning_presentation(event, reason) => {
-            Some(AlarmPattern::Warning)
+            Some(warning_pattern(settings))
         }
         (EventKind::Report, NotifyReason::Report) => Some(AlarmPattern::Report),
         _ => None,
+    }
+}
+
+fn warning_pattern(settings: &Settings) -> AlarmPattern {
+    match settings.effective_alert_sound() {
+        "urgent-tone" => AlarmPattern::WarningUrgent,
+        "japanese-voice" => AlarmPattern::WarningJapaneseVoice,
+        _ => AlarmPattern::WarningSystem,
     }
 }
 
@@ -94,8 +102,11 @@ fn spawn_pattern(pattern: AlarmPattern, volume: f32) {
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 fn play_native(pattern: AlarmPattern, volume: f32) -> Result<(), String> {
     use rodio::source::{SineWave, Source};
-    use rodio::{DeviceSinkBuilder, Player};
+    use rodio::{Decoder, DeviceSinkBuilder, Player};
+    use std::io::Cursor;
     use std::time::Duration;
+
+    const JAPANESE_VOICE_WAV: &[u8] = include_bytes!("../assets/quakesignal_japanese_voice.wav");
 
     fn append_tone(player: &Player, frequency: f32, millis: u64, volume: f32) {
         player.append(
@@ -117,7 +128,15 @@ fn play_native(pattern: AlarmPattern, volume: f32) -> Result<(), String> {
     let player = Player::connect_new(device.mixer());
 
     match pattern {
-        AlarmPattern::Warning => {
+        AlarmPattern::WarningSystem => {
+            for _ in 0..2 {
+                append_tone(&player, 660.0, 170, volume * 0.85);
+                append_pause(&player, 90);
+                append_tone(&player, 880.0, 210, volume * 0.85);
+                append_pause(&player, 130);
+            }
+        }
+        AlarmPattern::WarningUrgent => {
             for _ in 0..4 {
                 append_tone(&player, 880.0, 180, volume);
                 append_pause(&player, 70);
@@ -125,19 +144,15 @@ fn play_native(pattern: AlarmPattern, volume: f32) -> Result<(), String> {
                 append_pause(&player, 100);
             }
         }
+        AlarmPattern::WarningJapaneseVoice => {
+            let audio = Decoder::try_from(Cursor::new(JAPANESE_VOICE_WAV))
+                .map_err(|error| error.to_string())?;
+            player.append(audio.amplify(volume));
+        }
         AlarmPattern::Report => {
             append_tone(&player, 660.0, 140, volume * 0.75);
             append_pause(&player, 80);
             append_tone(&player, 880.0, 220, volume * 0.75);
-        }
-        #[cfg(not(feature = "macos-app-store"))]
-        AlarmPattern::Test => {
-            for _ in 0..2 {
-                append_tone(&player, 880.0, 160, volume);
-                append_pause(&player, 70);
-                append_tone(&player, 660.0, 160, volume);
-                append_pause(&player, 90);
-            }
         }
     }
 
@@ -157,7 +172,7 @@ mod tests {
             serial: 1,
             kind,
             origin_time_utc: None,
-            report_time_utc: None,
+            report_time_utc: Some(chrono::Utc::now().to_rfc3339()),
             hypocenter: "Test".to_string(),
             latitude: None,
             longitude: None,
@@ -178,7 +193,7 @@ mod tests {
         let settings = Settings::default();
         assert_eq!(
             pattern_for(&settings, &event(EventKind::Eew), NotifyReason::New, false),
-            Some(AlarmPattern::Warning)
+            Some(AlarmPattern::WarningSystem)
         );
         assert_eq!(
             pattern_for(
@@ -189,6 +204,47 @@ mod tests {
             ),
             Some(AlarmPattern::Report)
         );
+    }
+
+    #[test]
+    fn selected_warning_sound_controls_real_and_manual_preview_patterns() {
+        let urgent = Settings {
+            alert_sound: "urgent-tone".to_string(),
+            ..Settings::default()
+        };
+        assert_eq!(
+            pattern_for(&urgent, &event(EventKind::Eew), NotifyReason::New, false),
+            Some(AlarmPattern::WarningUrgent)
+        );
+
+        let voice = Settings {
+            alert_sound: "japanese-voice".to_string(),
+            ..Settings::default()
+        };
+        assert_eq!(
+            pattern_for(&voice, &event(EventKind::Eew), NotifyReason::New, false),
+            Some(AlarmPattern::WarningJapaneseVoice)
+        );
+
+        #[cfg(not(feature = "macos-app-store"))]
+        assert_eq!(
+            pattern_for(&voice, &event(EventKind::Eew), NotifyReason::Training, true),
+            Some(AlarmPattern::WarningJapaneseVoice)
+        );
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn embedded_japanese_voice_is_a_decodable_mono_pcm_asset() {
+        use rodio::{Decoder, Source};
+        use std::io::Cursor;
+
+        let bytes: &[u8] = include_bytes!("../assets/quakesignal_japanese_voice.wav");
+        let decoder = Decoder::try_from(Cursor::new(bytes)).expect("decode embedded voice");
+        assert_eq!(decoder.channels().get(), 1);
+        assert_eq!(decoder.sample_rate().get(), 22_050);
+        let duration = decoder.total_duration().expect("voice duration");
+        assert!(duration.as_secs_f32() > 5.4 && duration.as_secs_f32() < 5.5);
     }
 
     #[test]
@@ -242,7 +298,7 @@ mod tests {
                 NotifyReason::Training,
                 true
             ),
-            Some(AlarmPattern::Test)
+            Some(AlarmPattern::WarningSystem)
         );
     }
 

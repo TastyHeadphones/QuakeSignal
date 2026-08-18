@@ -20,8 +20,10 @@ function systemLang(): string {
 
 /** `settingsLanguage` is "system" | "en" | "ja" | "zh-Hans". */
 export function setLanguage(settingsLanguage: string) {
-  activeLang = settingsLanguage === "system" ? systemLang() : settingsLanguage;
-  activeTable = TABLES[activeLang] ?? en;
+  const requestedLang = settingsLanguage === "system" ? systemLang() : settingsLanguage;
+  activeLang = TABLES[requestedLang] ? requestedLang : "en";
+  activeTable = TABLES[activeLang];
+  document.documentElement.lang = activeLang;
 }
 
 export function currentLang(): string {

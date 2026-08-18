@@ -5,6 +5,7 @@ import type { LocaleKey } from "./en";
 // "接收夜间通知") so the two apps read as one product.
 export const zhHans: Record<LocaleKey, string> = {
   "app.name": "震息",
+  "app.tagline": "独立地震监测",
   "tab.home": "首页",
   "tab.events": "记录",
   "tab.settings": "设置",
@@ -68,6 +69,11 @@ export const zhHans: Record<LocaleKey, string> = {
   "settings.alarmVolume": "警报音量",
   "settings.alarmVolume.detail": "{volume}% — 可使用测试警报检查扬声器。",
   "settings.alarmVolume.storeDetail": "{volume}% — 用于真实地震自动警报的音量。",
+  "settings.alertSound": "警报声音",
+  "settings.alertSound.system": "标准提示音",
+  "settings.alertSound.urgent": "紧急提示音",
+  "settings.alertSound.japaneseVoice": "日语安全语音",
+  "settings.alertSound.detail": "日语语音为原创合成安全提示，并非 J-Alert 或日本气象厅的官方录音。使用名古屋工业大学的 HTS Voice Mei，并遵循 CC BY 3.0 许可。",
   "settings.includeTestAlerts": "接收演习/测试提醒",
   "settings.includeTestAlerts.detail": "气象厅等机构偶尔会发布演习提醒以测试系统。",
   "settings.notifyAtNight": "接收夜间通知",
@@ -82,9 +88,9 @@ export const zhHans: Record<LocaleKey, string> = {
   "settings.save": "保存",
   "settings.saved": "已保存",
 
-  "alert.countdown.label": "预计还有",
-  "alert.countdown.unknown": "距离未知",
-  "alert.countdown.arrived": "可能已开始晃动",
+  "alert.guidance.active": "时间和强度预测可能变化。请立即保护自己，并遵循当地官方指引。",
+  "alert.guidance.training": "这是一次演习/测试提醒，并非真实地震。",
+  "alert.guidance.cancelled": "本次警报已取消。请继续关注并遵循当地官方指引。",
   "alert.dropCoverHoldOn": "趴下、掩护、抓牢",
   "alert.training.note": "这是一次演习/测试提醒，并非真实地震。",
   "alert.dismiss": "关闭",

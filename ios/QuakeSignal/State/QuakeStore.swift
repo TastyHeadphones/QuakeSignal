@@ -7,6 +7,38 @@ struct PresentedAlert: Identifiable, Equatable {
     var id: String { "\(event.id)#\(reason.rawValue)#\(event.serial)" }
 }
 
+/// Keeps an already-presented warning synchronized with accepted lifecycle
+/// frames without allowing an unrelated event to dismiss it. Terminal frames
+/// close the warning, fresh revisions update its details, and the foreground
+/// clock closes an active warning once its safety window has elapsed.
+enum PresentedAlertLifecyclePolicy {
+    static func afterAcceptedMerge(
+        _ incoming: EEWEvent,
+        current: PresentedAlert?,
+        now: Date
+    ) -> PresentedAlert? {
+        guard let current, current.event.id == incoming.id else { return current }
+
+        if current.event.isActiveWarning {
+            guard incoming.isActiveWarning,
+                  WarningFreshnessPolicy.isFresh(incoming, now: now) else {
+                return nil
+            }
+        }
+
+        return PresentedAlert(event: incoming, reason: current.reason)
+    }
+
+    static func afterClockTick(_ current: PresentedAlert?, now: Date) -> PresentedAlert? {
+        guard let current,
+              current.event.isActiveWarning,
+              !WarningFreshnessPolicy.isFresh(current.event, now: now) else {
+            return current
+        }
+        return nil
+    }
+}
+
 @Observable
 @MainActor
 final class QuakeStore {
@@ -28,10 +60,15 @@ final class QuakeStore {
     private var refreshGeneration = 0
     private var clockNow = Date()
     private var alertedRevisionKeys: Set<String> = []
+    private let screenshotAutomationEnabled: Bool
 
     var isConnected: Bool { liveSocket.isConnected }
 
     private init() {
+        screenshotAutomationEnabled = ScreenshotAutomation.isEnabled
+        if screenshotAutomationEnabled {
+            events = ScreenshotAutomation.finalizedHistoricalEvents
+        }
         liveSocket.onEvents = { [weak self] events, isBackfill in
             for event in events {
                 self?.ingestDirect(event: event, isBackfill: isBackfill)
@@ -43,6 +80,7 @@ final class QuakeStore {
     }
 
     func start() async {
+        guard !screenshotAutomationEnabled else { return }
         liveSocket.start()
         updateForegroundHTTPFallback()
         updateExpirationClock()
@@ -55,11 +93,19 @@ final class QuakeStore {
     /// outage. It never generates a local alert for fetched backfill.
     func setForegroundActive(_ isActive: Bool) {
         isForegroundActive = isActive
+        guard !screenshotAutomationEnabled else {
+            foregroundHTTPFallbackTask?.cancel()
+            foregroundHTTPFallbackTask = nil
+            expirationClockTask?.cancel()
+            expirationClockTask = nil
+            return
+        }
         updateForegroundHTTPFallback()
         updateExpirationClock()
     }
 
     func refresh() async {
+        guard !screenshotAutomationEnabled else { return }
         // The upstream feeds are independent. One malformed or temporarily
         // unavailable source must not hide validated reports from every
         // healthy source. The partial path still fails closed when all
@@ -103,6 +149,12 @@ final class QuakeStore {
     }
 
     func registerForPush(token: String) async throws {
+        guard !screenshotAutomationEnabled,
+              PlatformCapabilities.supportsAttestedAlertRegistration else {
+            AppSettings.shared.pushRegistrationState = .unregistered
+            throw PlatformCapabilityError.attestedAlertRegistrationUnavailable
+        }
+
         await pushRegistrationSerialiser.acquire()
         defer { pushRegistrationSerialiser.release() }
 
@@ -153,6 +205,11 @@ final class QuakeStore {
     /// which supports removal before APNs has returned a token this launch
     /// when that key already protects the registration.
     func unregisterForPush(token: String?) async throws {
+        guard !screenshotAutomationEnabled,
+              PlatformCapabilities.supportsAttestedAlertRegistration else {
+            throw PlatformCapabilityError.attestedAlertRegistrationUnavailable
+        }
+
         await pushRegistrationSerialiser.acquire()
         defer { pushRegistrationSerialiser.release() }
 
@@ -178,14 +235,16 @@ final class QuakeStore {
         reason requestedReason: AlertPresentationReason
     ) {
         let previous = events.first(where: { $0.id == event.id })
-        guard let reason = ForegroundPushPolicy.presentationReason(
+        let decision = ForegroundPushPolicy.ingestionDecision(
             for: event,
             previous: previous,
             requestedReason: requestedReason,
             preferences: alertPreferenceSnapshot,
             now: clockNow
-        ) else { return }
+        )
+        guard decision.shouldMerge else { return }
         merge(event)
+        guard let reason = decision.presentationReason else { return }
         let mergedEvent = events.first(where: { $0.id == event.id }) ?? event
         presentEmergencyIfNeeded(event: mergedEvent, reason: reason)
     }
@@ -200,6 +259,11 @@ final class QuakeStore {
             events.insert(event, at: 0)
         }
         sortAndLimitEvents()
+        presentedAlert = PresentedAlertLifecyclePolicy.afterAcceptedMerge(
+            event,
+            current: presentedAlert,
+            now: clockNow
+        )
     }
 
     func revisions(for eventID: String) -> [EventRevision] {
@@ -312,11 +376,16 @@ final class QuakeStore {
     private func applyFetchedEvents(_ fetchedEvents: [EEWEvent]) {
         var newestByID = Dictionary(uniqueKeysWithValues: events.map { ($0.id, $0) })
         for event in fetchedEvents {
-            if let current = newestByID[event.id] {
-                newestByID[event.id] = EventMergePolicy.preferred(current, event)
-            } else {
-                newestByID[event.id] = event
+            if let current = newestByID[event.id],
+               !EventMergePolicy.shouldAccept(event, replacing: current) {
+                continue
             }
+            newestByID[event.id] = event
+            presentedAlert = PresentedAlertLifecyclePolicy.afterAcceptedMerge(
+                event,
+                current: presentedAlert,
+                now: clockNow
+            )
         }
         events = Array(newestByID.values)
         sortAndLimitEvents()
@@ -338,7 +407,14 @@ final class QuakeStore {
     private var alertPreferenceSnapshot: AlertPreferenceSnapshot {
         let settings = AppSettings.shared
         return AlertPreferenceSnapshot(
-            subscriptionEnabled: settings.pushSubscriptionEnabled,
+            // On Catalyst (and an iOS app running on Apple silicon), push
+            // registration is unavailable and its control is intentionally
+            // hidden. Do not let a migrated push opt-out also strand the
+            // foreground-only warning experience in a permanently disabled
+            // state.
+            subscriptionEnabled: PlatformCapabilities.supportsAttestedAlertRegistration
+                ? settings.pushSubscriptionEnabled
+                : true,
             enabledSources: settings.enabledSources,
             minimumMagnitude: settings.minMagnitude,
             coordinate: effectiveCoordinate,
@@ -356,7 +432,12 @@ final class QuakeStore {
         guard expirationClockTask == nil else { return }
         expirationClockTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                self?.clockNow = Date()
+                guard let self else { return }
+                self.clockNow = Date()
+                self.presentedAlert = PresentedAlertLifecyclePolicy.afterClockTick(
+                    self.presentedAlert,
+                    now: self.clockNow
+                )
                 do {
                     try await Task.sleep(for: .seconds(15))
                 } catch {

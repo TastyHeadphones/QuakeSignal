@@ -52,16 +52,22 @@ Sensitive interruption and the registration's allow-listed bundled sound
 (`system`, `urgent-tone`, or `japanese-voice`). The APNs payload includes a
 bounded typed event snapshot and remains below the regular 4 KB payload limit.
 
-All four APNs Worker secrets are mandatory. A missing secret, provider-token,
-topic, payload, transport, or APNs-service failure retries the exact outbox
+The APNs provider-key secrets (`APNS_PRIVATE_KEY`, `APNS_KEY_ID`, and
+`APNS_TEAM_ID`) are mandatory. `APNS_BUNDLE_ID` remains mandatory in legacy
+single-route mode and is retained for backwards-compatible deployments; an
+explicit `APP_ATTEST_APNS_ROUTES` allow-list owns topics in multi-platform
+mode. A missing secret, provider-token, topic, payload, transport, or
+APNs-service failure retries the exact outbox
 page through the bounded Queue policy and then records a DLQ incident if it
 cannot recover. Each APNs request has a 20-second Worker-side timeout; a hung
 connection is aborted and follows this same page-level retry/DLQ path. These
 page failures are held in
 `alert_delivery_page_failures`, never copied into per-device quarantine rows.
-`InvalidProviderToken`, `MissingProviderToken`, `TopicDisallowed`, and—in this
-single-topic service—`DeviceTokenNotForTopic` therefore remain visible
-provider incidents rather than silently suppressing recipients. APNs `429
+`InvalidProviderToken`, `MissingProviderToken`, `TopicDisallowed`, and
+`DeviceTokenNotForTopic` therefore remain visible provider incidents rather
+than silently suppressing recipients. Mixed-platform pages are grouped by
+their stored topic; a topic-scoped failure stops that route while allowing
+other route groups on the page to finish. APNs `429
 TooManyRequests` and `BadDeviceToken` remain recipient-scoped; provider-token
 update throttling remains page-scoped. An `ExpiredProviderToken` clears the
 relay's cached JWT before a later retry. Only an APNs `410` with a valid
@@ -156,7 +162,10 @@ retention. `0009_production_training_test_push_limit.sql` adds the durable,
 token-free UTC-day App Attest claim required before a production training test
 push. `0010_alert_sound_and_urgent_eew_deadline.sql` adds the exact alert-sound
 preference values and the shorter delivery deadline for urgent EEW warnings.
-Migrations `0008` through `0010` are required by this Worker revision.
+`0011_authenticated_app_routes.sql` backfills the current iOS App Attest
+identity, APNs topic, and platform on every registration and adds the route
+audit index. Migrations `0008` through `0011` are required by this Worker
+revision.
 
 The protected **Cloudflare Worker → Run workflow → deploy_production** job is
 the sole normal route for remote D1 migrations and `wrangler deploy`. It runs
@@ -214,6 +223,58 @@ The current App Attest release-metadata extension is optional for valid iOS
 17–26 proofs; when Apple supplies it, the Worker requires exactly the approved
 TestFlight/App Store category and a version in
 `APP_ATTEST_ALLOWED_BUNDLE_VERSIONS`.
+
+## Authenticated app identity and APNs routes
+
+`APP_ATTEST_APNS_ROUTES` is a non-secret JSON array. Each entry has exactly
+`appIdentity`, `apnsTopic`, and `platform`; presence in this array is the only
+way to enable a platform route. The configured primary `APP_ATTEST_APP_ID` must
+always be present because existing iOS clients omit `appIdentity`. When the
+route setting is entirely absent, the Worker synthesizes that one historical
+iOS mapping from `APP_ATTEST_APP_ID` and `APNS_BUNDLE_ID`.
+
+For a new App Attest key, a newer client may add `appIdentity` to the exact
+registration JSON. The challenge already binds the SHA-256 of those exact
+bytes, and the Worker verifies the resulting proof against that allow-listed
+App ID. For an existing key, the persisted App ID is authoritative and a
+request cannot switch it. The client cannot provide `apnsTopic` or `platform`;
+those fields and common aliases are rejected. Registration stores the resolved
+tuple, and delivery matches it against the current allow-list again before
+setting the APNs `apns-topic` header.
+
+Production currently enables only:
+
+```json
+[{"appIdentity":"5TT564H883.com.quakesignal.app","apnsTopic":"com.quakesignal.app","platform":"ios"}]
+```
+
+That single authenticated identity/topic is shared by the native
+iOS/iPadOS and visionOS products in their Universal Purchase record. App
+Attest authenticates the App ID and APNs authorizes the topic; neither proof
+cryptographically distinguishes iOS from visionOS when both values are
+identical. The `platform: "ios"` value is therefore the historical canonical
+server routing/audit label for this shared mobile/vision route, not a claim
+that visionOS uses a second credential or topic. Watch has a distinct identity
+and topic and remains disabled as described below.
+
+The public `quakesignal-app-attest-policy/v2` health fingerprint includes this
+validated route array after rebuilding every entry in fixed key order and
+sorting by `appIdentity`. The build-8 release contract requires the normalized
+array above exactly, so a missing, changed, or additional production route
+cannot pass the pre-signing source check or the live `/healthz` fingerprint
+check. Route JSON whitespace and object-key order do not affect the digest.
+The legacy single-iOS fallback remains deliberate for configurations where
+`APP_ATTEST_APNS_ROUTES` is entirely absent, but it is not accepted by the
+build-8 production release contract.
+
+The Watch route is intentionally disabled. After its signing/App Attest flow,
+APNs entitlement, provider-key access, and physical-device delivery have been
+separately proven, a reviewed configuration may append the following entry;
+do not assume that credentials for the iOS topic authorize it:
+
+```json
+{"appIdentity":"5TT564H883.com.quakesignal.app.watchkitapp","apnsTopic":"com.quakesignal.app.watchkitapp","platform":"watchos"}
+```
 
 ## Isolated Debug staging
 

@@ -14,3 +14,14 @@ access.
 For review, use Settings to select a language, source feeds, magnitude
 threshold, optional location/radius, and local notification preferences. The
 Mac App Store build intentionally does not expose Launch at Login.
+
+Settings also offers a standard tone, urgent tone, and an original synthesized
+Japanese safety voice. The Japanese option is not a J-Alert or JMA recording;
+HTS Voice Mei by Nagoya Institute of Technology is attributed under CC BY 3.0
+in the included release evidence.
+The app does not display an estimated seconds-until-shaking countdown.
+
+The Mac app evaluates feed updates locally while it is running and may present
+a local foreground alarm matching the selected settings. It does not use App
+Attest or APNs and is not a background emergency-alert service. Notification
+delivery and sounds remain subject to macOS and user settings.

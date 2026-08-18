@@ -27,6 +27,9 @@ pub struct AppState {
     /// wolfx_client.rs::handle_message for why this exists.
     pub seeded_sources: Mutex<HashSet<String>>,
     pub connection_status: Mutex<HashMap<String, bool>>,
+    /// Serializes native alert-window show/clear operations without blocking
+    /// the frontend's independent `get_pending_alert` read.
+    pub alert_window_lifecycle: Mutex<()>,
     pub pending_alert: Mutex<Option<serde_json::Value>>,
 }
 
@@ -85,6 +88,7 @@ pub fn run() {
                         .map(|source| (source.as_str().to_string(), false))
                         .collect(),
                 ),
+                alert_window_lifecycle: Mutex::new(()),
                 pending_alert: Mutex::new(None),
             });
 

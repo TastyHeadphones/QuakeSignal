@@ -34,6 +34,9 @@ pub struct Settings {
     pub alarm_enabled: bool,
     /// Linear 0.0–1.0 volume applied to the generated alarm tone.
     pub alarm_volume: f32,
+    /// "system" | "urgent-tone" | "japanese-voice". Unknown values fall
+    /// back to the standard tone so a hand-edited settings file stays safe.
+    pub alert_sound: String,
     pub launch_at_login: bool,
 }
 
@@ -51,6 +54,7 @@ impl Default for Settings {
             notify_at_night: true,
             alarm_enabled: true,
             alarm_volume: 0.8,
+            alert_sound: "system".to_string(),
             launch_at_login: false,
         }
     }
@@ -63,6 +67,14 @@ impl Settings {
 
     pub fn effective_longitude(&self) -> Option<f64> {
         self.longitude
+    }
+
+    pub fn effective_alert_sound(&self) -> &str {
+        match self.alert_sound.as_str() {
+            "urgent-tone" => "urgent-tone",
+            "japanese-voice" => "japanese-voice",
+            _ => "system",
+        }
     }
 
     fn file_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -286,7 +298,19 @@ mod tests {
         let settings: Settings = serde_json::from_str(json).unwrap();
         assert!(settings.alarm_enabled);
         assert_eq!(settings.alarm_volume, 0.8);
+        assert_eq!(settings.alert_sound, "system");
         assert_eq!(settings.min_magnitude, 4.0);
+    }
+
+    #[test]
+    fn unknown_alert_sound_falls_back_without_discarding_other_settings() {
+        let settings = Settings {
+            alert_sound: "unknown-external-value".to_string(),
+            min_magnitude: 4.5,
+            ..Settings::default()
+        };
+        assert_eq!(settings.effective_alert_sound(), "system");
+        assert_eq!(settings.min_magnitude, 4.5);
     }
 
     #[test]

@@ -11,11 +11,21 @@ granting location access.
 
 Notifications are optional. If enabled, the app uses a selected city or rounded
 location and chosen thresholds to decide whether a nearby earthquake report may
-warrant a local alert. The public Release includes the ordinary, foreground
+warrant a local alert. Qualifying fresh warnings may be marked Time Sensitive,
+subject to the user's notification and Focus settings. This release has no
+Critical Alerts entitlement, does not bypass the mute switch as a Critical
+Alert, and does not guarantee delivery. The public Release includes the ordinary, foreground
 **Send Test Alert** control only after notification authorization, an opt-in alert
 registration, and an APNs token are present. The InternalQA-only delayed
 background-training control is not compiled into a public Release archive, and is
 not needed for App Review.
+
+The embedded Apple Watch app is a foreground-only companion. Open it to refresh
+a compact headline and recent reports, then open an event for available details.
+It does not independently register for APNs, App Attest, alert audio, Time
+Sensitive or Critical notifications, or background delivery. Optional nearby
+alerts remain an iPhone feature. Review the companion from the signed iOS host
+on a paired Apple Watch; no separate Watch IPA or reviewer account is required.
 
 Settings links to the Privacy Policy and Support pages. The optional Terms URL in
 the release worksheet is not currently an in-app Settings link and must not be

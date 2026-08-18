@@ -1,6 +1,6 @@
 [package]
 name = "desktop"
-version = "1.0.0"
+version = "1.1.0"
 description = "QuakeSignal Desktop — direct-to-Wolfx earthquake early warning alerts"
 authors = ["UniSphereco LLC"]
 edition = "2021"
@@ -44,4 +44,4 @@ reqwest = { version = "0.13.4", default-features = false, features = ["rustls-no
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
-rodio = { version = "0.22.2", default-features = false, features = ["playback"] }
+rodio = { version = "0.22.2", default-features = false, features = ["playback", "wav"] }

@@ -34,7 +34,8 @@ internet connection is still required to receive live upstream data.
 - Direct live monitoring of seven JMA, CENC, Sichuan, Fujian, and Chongqing
   feeds over three persistent upstream connections
 - Native warning alarm that plays even when the main window is hidden
-- Separate EEW warning pattern and new-report chime
+- Selectable standard tone, urgent tone, or original Japanese safety voice,
+  plus a separate routine-report chime
 - Alarm enable/disable, volume control, and a Test Alarm button
 - Local magnitude, distance, and source filters
 - Local SQLite history with no account or cloud synchronization
@@ -43,6 +44,11 @@ internet connection is still required to receive live upstream data.
 
 Cancelled and training messages never trigger an automatic alarm. The Test
 Alarm button intentionally previews the sound locally.
+
+The Japanese option is original synthesized safety guidance, not a J-Alert or
+JMA recording. Its HTS Voice Mei attribution and exact asset hash are recorded
+in `src-tauri/assets/ATTRIBUTION.md`. QuakeSignal does not invent or display a
+seconds-until-shaking estimate.
 
 ## Develop
 
@@ -66,8 +72,8 @@ npm run tauri build
 ```
 
 Native packages are written below `desktop/src-tauri/target/*/release/bundle`.
-The current desktop release metadata is `1.0.0`; the first supported direct
-macOS/Homebrew release must be built from the protected `v1.0.0` tag. Keep
+The current desktop release metadata is `1.1.0`; the next supported direct
+macOS/Homebrew release must be built from a protected `v1.1.0` tag. Keep
 `package.json`, `Cargo.toml`, and `tauri.conf.json` aligned before creating a
 later release tag.
 

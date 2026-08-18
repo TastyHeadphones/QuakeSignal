@@ -1,10 +1,11 @@
 {
   "name": "desktop",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "node --test src/*.test.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
@@ -21,6 +22,6 @@
   },
   "overrides": {
     "postcss": "8.5.26",
-    "nanoid": "3.3.17"
+    "nanoid": "3.3.18"
   }
 }

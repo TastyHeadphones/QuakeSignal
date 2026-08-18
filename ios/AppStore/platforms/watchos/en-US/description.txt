@@ -1,0 +1,2 @@
+APPLE WATCH COMPANION
+Open QuakeSignal on Apple Watch to refresh a compact headline and recent earthquake reports, then view available magnitude, status, source, time, intensity, and depth details. The Watch app is a foreground-only companion: it does not independently register for push notifications, App Attest, alert audio, or background emergency alerts. Optional nearby alerts remain on the paired iPhone.
