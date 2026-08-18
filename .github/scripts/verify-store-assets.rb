@@ -6,9 +6,11 @@
 # does not render the app, contact App Store Connect, or modify any asset.
 
 require "json"
+require "digest"
 require "open3"
 require "pathname"
 require "set"
+require "time"
 
 class StoreAssetValidator
   MAX_DESCRIPTION_CHARACTERS = 4000
@@ -196,6 +198,57 @@ class StoreAssetValidator
   end
 end
 
+def validate_macos_release_approval!(mac_provenance, expected_source_commit: nil)
+  raise "macOS screenshot provenance is not release-approved" unless mac_provenance.fetch("status") == "approved"
+
+  mac_baseline = mac_provenance.fetch("capture").fetch("sourceBaselineCommit")
+  unless mac_baseline.is_a?(String) && mac_baseline.match?(/\A[0-9a-f]{40}\z/)
+    raise "macOS release-approved provenance needs a full frozen source commit"
+  end
+  if expected_source_commit
+    unless expected_source_commit.match?(/\A[0-9a-f]{40}\z/)
+      raise "expected macOS release source commit must be a full lowercase Git SHA"
+    end
+    raise "macOS frozen screenshot source does not match the release commit" unless mac_baseline == expected_source_commit
+  end
+
+  approval = mac_provenance.fetch("releaseApproval")
+  raise "macOS signed-build comparison must be approved" unless approval.fetch("signedBuildComparison") == "approved"
+  raise "macOS release approval source commit mismatch" unless approval.fetch("sourceBaselineCommit") == mac_baseline
+  artifact_digest = approval.fetch("signedArtifactSha256")
+  unless artifact_digest.is_a?(String) && artifact_digest.match?(/\A[0-9a-f]{64}\z/)
+    raise "macOS release approval needs the signed app or package SHA-256"
+  end
+  reviewer = approval.fetch("reviewer")
+  raise "macOS release approval needs a named reviewer" unless reviewer.is_a?(String) && !reviewer.strip.empty?
+  %w[signedBuildComparedAtUtc reviewedAtUtc].each do |field|
+    value = approval.fetch(field)
+    parsed = Time.iso8601(value)
+    raise "macOS release approval #{field} must be UTC" unless value.end_with?("Z") && parsed.utc?
+  end
+  unless mac_provenance.fetch("currentSet").fetch("status") == "signed-build-approved"
+    raise "macOS current screenshot set must record signed-build-approved status"
+  end
+
+  true
+end
+
+if $PROGRAM_NAME == __FILE__
+require_macos_release_ready = false
+expected_macos_source_commit = nil
+ARGV.each do |argument|
+  case argument
+  when "--require-macos-release-ready"
+    require_macos_release_ready = true
+  when /\A--expected-source-commit=([0-9a-f]{40})\z/
+    expected_macos_source_commit = Regexp.last_match(1)
+  else
+    warn "Usage: #{$PROGRAM_NAME} [--require-macos-release-ready] [--expected-source-commit=<40-character-sha>]"
+    warn "Unknown argument: #{argument}"
+    exit 2
+  end
+end
+
 root = Pathname.new(__dir__).join("..", "..").realpath
 ios_store = root.join("ios", "AppStore")
 mac_store = root.join("desktop", "AppStore")
@@ -209,20 +262,25 @@ expected_mac_screenshots = %w[
 total_ios_screenshots = 0
 
 begin
-  manifest = JSON.parse(ios_store.join("screenshot-manifest.json").read)
-  raise "platform must be iOS" unless manifest.fetch("platform") == "iOS"
+  # The 1.0 kit remains in the repository as historical release evidence. The
+  # current release validator must never silently fall back to that directory.
+  manifest_path = ios_store.join("screenshot-manifest-v1.1.json")
+  provenance_path = ios_store.join("screenshot-provenance-v1.1.json")
+  manifest = JSON.parse(manifest_path.read)
+  raise "platform must be iOS/iPadOS" unless manifest.fetch("platform") == "iOS/iPadOS"
+  raise "configuration must be Release" unless manifest.fetch("configuration") == "Release"
 
-  provenance = JSON.parse(ios_store.join("screenshot-provenance.json").read)
-  allowed_provenance_statuses = %w[pending-public-release-candidate approved]
+  provenance = JSON.parse(provenance_path.read)
+  allowed_provenance_statuses = %w[release-simulator-validated approved]
   unless allowed_provenance_statuses.include?(provenance.fetch("status"))
     raise "iOS screenshot provenance must have an allowed status"
   end
-  unless provenance.fetch("requiredBeforeUpload").fetch("configuration") == "Release"
-    raise "iOS screenshot provenance must require Release configuration"
-  end
-  unless Integer(provenance.fetch("requiredBeforeUpload").fetch("minimumCFBundleVersion")) >= 3
-    raise "iOS screenshot provenance must require a public build number of at least 3"
-  end
+  product = provenance.fetch("product")
+  raise "iOS screenshot provenance configuration mismatch" unless product.fetch("configuration") == "Release"
+  raise "iOS screenshot provenance marketing version mismatch" unless product.fetch("marketingVersion") == manifest.fetch("marketingVersion")
+  raise "iOS screenshot provenance build mismatch" unless Integer(product.fetch("build")) == Integer(manifest.fetch("build"))
+  baseline = provenance.fetch("capture").fetch("sourceBaselineCommit")
+  raise "iOS screenshot provenance needs a full source commit" unless baseline.match?(/\A[0-9a-f]{40}\z/)
 
   mac_provenance = JSON.parse(mac_store.join("screenshot-provenance.json").read)
   allowed_mac_provenance_statuses = %w[pending-signed-mac-app-store-build approved]
@@ -232,13 +290,32 @@ begin
   unless mac_provenance.fetch("requiredBeforeUpload").fetch("configuration") == "macos-app-store"
     raise "macOS screenshot provenance must require the Mac App Store configuration"
   end
+  mac_product = mac_provenance.fetch("product")
+  mac_required = mac_provenance.fetch("requiredBeforeUpload")
+  desktop_version = JSON.parse(root.join("desktop", "src-tauri", "tauri.conf.json").read).fetch("version")
+  raise "macOS screenshot provenance version mismatch" unless mac_product.fetch("version") == desktop_version
+  raise "macOS required-before-upload version mismatch" unless mac_required.fetch("version") == desktop_version
+  raise "macOS screenshot bundle identifier mismatch" unless mac_product.fetch("bundleIdentifier") == "com.quakesignal.desktop"
+
+  # Ordinary listing CI may mechanically validate a deliberately pending image
+  # set. A protected Mac App Store build/upload must additionally prove that
+  # the images were bound to frozen source and compared with a signed build.
+  # An `approved` record is always held to the stronger schema so the status
+  # cannot become a meaningless escape hatch.
+  if require_macos_release_ready || mac_provenance.fetch("status") == "approved"
+    validate_macos_release_approval!(
+      mac_provenance,
+      expected_source_commit: require_macos_release_ready ? expected_macos_source_commit : nil,
+    )
+    if require_macos_release_ready && expected_macos_source_commit.nil?
+      raise "macOS release-ready validation requires --expected-source-commit"
+    end
+  end
 
   locales = manifest.fetch("locales").map { |locale| locale.fetch("directory") }
   frames = manifest.fetch("frames").map { |frame| frame.fetch("file") }
   display_classes = manifest.fetch("displayClasses")
-  primary_display_class = manifest.fetch("primaryDisplayClass")
   raise "at least one upload display class is required" unless display_classes.any? { |_name, detail| detail.fetch("upload") }
-  raise "primary display class must upload" unless display_classes.fetch(primary_display_class).fetch("upload")
 
   duplicate_locales = locales.group_by(&:itself).select { |_name, values| values.length > 1 }.keys
   duplicate_frames = frames.group_by(&:itself).select { |_name, values| values.length > 1 }.keys
@@ -249,7 +326,11 @@ begin
     validator.validate_ios_listing_copy(ios_store.join(locale))
   end
 
-  ios_screenshots = ios_store.join("screenshots")
+  screenshot_root_name = manifest.fetch("rootDirectory")
+  unless Pathname.new(screenshot_root_name).basename.to_s == screenshot_root_name
+    raise "iOS screenshot rootDirectory must be a directory name"
+  end
+  ios_screenshots = ios_store.join(screenshot_root_name)
   unless ios_screenshots.directory?
     validator.error("missing iOS screenshot directory: #{ios_screenshots}")
   end
@@ -265,7 +346,7 @@ begin
   locales.each do |locale|
     locale_directory = ios_screenshots.join(locale)
     actual_class_dirs = locale_directory.directory? ? locale_directory.children.select(&:directory?) : []
-    expected_class_dirs = display_classes.keys.map { |name| "iphone-#{name}" }.to_set
+    expected_class_dirs = display_classes.keys.to_set
     actual_class_dirs.each do |directory|
       unless expected_class_dirs.include?(directory.basename.to_s)
         validator.error("unexpected iOS screenshot class directory: #{directory}")
@@ -273,7 +354,7 @@ begin
     end
 
     display_classes.each do |display_class, specification|
-      class_directory = locale_directory.join("iphone-#{display_class}")
+      class_directory = locale_directory.join(display_class)
       required = specification.fetch("upload")
       expected_files = frames.to_set
       actual_files = class_directory.directory? ? class_directory.children.select(&:file?) : []
@@ -293,9 +374,10 @@ begin
         validator.error("#{class_directory}: missing screenshots: #{missing.to_a.sort.join(', ')}") if required || !actual_names.empty?
       end
 
-      dimensions = specification.fetch("acceptedPortraitPixels").map do |pair|
-        [Integer(pair.fetch(0)), Integer(pair.fetch(1))]
-      end
+      dimensions = [[
+        Integer(specification.fetch("portraitPixels").fetch(0)),
+        Integer(specification.fetch("portraitPixels").fetch(1)),
+      ]]
       actual_files.each do |file|
         next unless expected_files.include?(file.basename.to_s)
 
@@ -303,6 +385,46 @@ begin
         total_ios_screenshots += 1
       end
     end
+  end
+
+  provenance_files = provenance.fetch("files")
+  provenance_by_path = {}
+  provenance_files.each do |entry|
+    relative_path = entry.fetch("file")
+    if provenance_by_path.key?(relative_path)
+      validator.error("#{provenance_path}: duplicate file entry: #{relative_path}")
+    else
+      provenance_by_path[relative_path] = entry
+    end
+  end
+
+  expected_relative_paths = locales.flat_map do |locale|
+    display_classes.select { |_name, specification| specification.fetch("upload") }.keys.flat_map do |display_class|
+      frames.map { |frame| File.join(locale, display_class, frame) }
+    end
+  end.to_set
+  recorded_relative_paths = provenance_by_path.keys.to_set
+  missing_provenance = expected_relative_paths - recorded_relative_paths
+  unexpected_provenance = recorded_relative_paths - expected_relative_paths
+  validator.error("#{provenance_path}: missing file records: #{missing_provenance.to_a.sort.join(', ')}") unless missing_provenance.empty?
+  validator.error("#{provenance_path}: unexpected file records: #{unexpected_provenance.to_a.sort.join(', ')}") unless unexpected_provenance.empty?
+
+  expected_relative_paths.each do |relative_path|
+    entry = provenance_by_path[relative_path]
+    next unless entry
+
+    screenshot = ios_screenshots.join(relative_path)
+    next unless screenshot.file?
+
+    actual_digest = Digest::SHA256.file(screenshot).hexdigest
+    validator.error("#{screenshot}: SHA-256 does not match provenance") unless entry.fetch("sha256") == actual_digest
+    validator.error("#{provenance_path}: #{relative_path} must be recorded as opaque") unless entry.fetch("hasAlpha") == false
+
+    display_class = relative_path.split(File::SEPARATOR).fetch(1)
+    expected_pixels = display_classes.fetch(display_class).fetch("portraitPixels").map { |value| Integer(value) }
+    recorded_pixels = entry.fetch("pixels").map { |value| Integer(value) }
+    validator.error("#{provenance_path}: #{relative_path} pixel record mismatch") unless recorded_pixels == expected_pixels
+    validator.error("#{provenance_path}: #{relative_path} format must be jpeg") unless entry.fetch("format").downcase == "jpeg"
   end
 
   validator.validate_macos_listing_copy(mac_store.join("en-US"))
@@ -352,9 +474,39 @@ begin
 
     validator.validate_image(file, formats: ["png"], dimensions: [[1280, 800]])
   end
-rescue JSON::ParserError, KeyError, TypeError, ArgumentError, SystemCallError => error
-  validator.error("invalid iOS screenshot manifest: #{error.message}")
+
+  mac_provenance_files = mac_provenance.fetch("files")
+  mac_provenance_by_path = {}
+  mac_provenance_files.each do |entry|
+    relative_path = entry.fetch("file")
+    if mac_provenance_by_path.key?(relative_path)
+      validator.error("#{mac_store.join('screenshot-provenance.json')}: duplicate file entry: #{relative_path}")
+    else
+      mac_provenance_by_path[relative_path] = entry
+    end
+  end
+  expected_mac_relative_paths = expected_mac_screenshots.map { |name| File.join("screenshots", "en-US", name) }.to_set
+  missing_mac_provenance = expected_mac_relative_paths - mac_provenance_by_path.keys.to_set
+  unexpected_mac_provenance = mac_provenance_by_path.keys.to_set - expected_mac_relative_paths
+  validator.error("macOS provenance missing file records: #{missing_mac_provenance.to_a.sort.join(', ')}") unless missing_mac_provenance.empty?
+  validator.error("macOS provenance has unexpected file records: #{unexpected_mac_provenance.to_a.sort.join(', ')}") unless unexpected_mac_provenance.empty?
+
+  expected_mac_relative_paths.each do |relative_path|
+    entry = mac_provenance_by_path[relative_path]
+    next unless entry
+
+    screenshot = mac_store.join(relative_path)
+    next unless screenshot.file?
+
+    validator.error("#{screenshot}: SHA-256 does not match provenance") unless entry.fetch("sha256") == Digest::SHA256.file(screenshot).hexdigest
+    validator.error("#{screenshot}: provenance pixels must be 1280x800") unless entry.fetch("pixels").map { |value| Integer(value) } == [1280, 800]
+    validator.error("#{screenshot}: provenance format must be png") unless entry.fetch("format").downcase == "png"
+    validator.error("#{screenshot}: provenance must record an opaque image") unless entry.fetch("hasAlpha") == false
+  end
+rescue JSON::ParserError, KeyError, TypeError, ArgumentError, RuntimeError, SystemCallError => error
+  validator.error("invalid store asset manifest or provenance: #{error.message}")
 end
 
 validator.finish!
 puts "Store listing assets validated: #{total_ios_screenshots} iOS screenshots and #{expected_mac_screenshots.length} macOS screenshots."
+end

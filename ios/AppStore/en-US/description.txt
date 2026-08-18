@@ -1,4 +1,4 @@
-QuakeSignal brings earthquake reports, nearby context, and practical preparedness guidance together in a focused iPhone app.
+QuakeSignal brings earthquake reports, nearby context, and practical preparedness guidance together on iPhone and iPad.
 
 FOLLOW LIVE EARTHQUAKE INFORMATION
 View normalized reports from multiple third-party sources, including JMA, CENC, Sichuan, Fujian, and Chongqing feeds aggregated through the Wolfx Open API.
@@ -11,6 +11,9 @@ Preliminary, updated, final, cancelled, and training messages use distinct label
 
 OPTIONAL LOCAL ALERTS
 When you choose to enable notifications, QuakeSignal can send nearby alerts for reports that match your selected sources, magnitude, city or approximate location, and radius. This optional feature is best-effort, not a government emergency service, and not a replacement for official alerts.
+
+APPLE WATCH COMPANION
+Open QuakeSignal on Apple Watch to refresh a compact headline and recent earthquake reports, then view available magnitude, status, source, time, intensity, and depth details. The Watch app is a foreground-only companion: it does not independently register for push notifications, App Attest, alert audio, or background emergency alerts. Optional nearby alerts remain on the paired iPhone.
 
 PREPARE OFFLINE
 Keep drop-cover-hold-on guidance, situation-specific safety actions, an emergency kit checklist, and family check-in notes available even without a network connection.

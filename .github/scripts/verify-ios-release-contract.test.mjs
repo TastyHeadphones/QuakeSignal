@@ -9,12 +9,20 @@ import { verifyIOSReleaseContract } from "./verify-ios-release-contract.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const approvedOrigin = "https://quakesignal-api.hopeso.workers.dev";
+const reviewedAppIdentityRoutes = [
+  {
+    appIdentity: "5TT564H883.com.quakesignal.app",
+    apnsTopic: "com.quakesignal.app",
+    platform: "ios",
+  },
+];
+const reviewedAppIdentityRoutesJSON = JSON.stringify(reviewedAppIdentityRoutes);
 
 function fixtureFiles({
-  buildNumber = "7",
+  buildNumber = "8",
   projectFileVersions = [buildNumber, buildNumber, buildNumber],
   infoBundleVersion = "$(CURRENT_PROJECT_VERSION)",
-  allowedVersions = "1,2,3,4,5,6,7",
+  allowedVersions = "1,2,3,4,5,6,7,8",
   workflowDefault = buildNumber,
   archiveConfiguration = "Release",
   remoteOrigin = "${{ vars.CLOUDFLARE_WORKER_URL }}",
@@ -34,12 +42,81 @@ function fixtureFiles({
     "  --required-app-attest-bundle-version \"$BUILD_NUMBER\"",
   ].filter(Boolean).map((line) => `          ${line}`).join("\n");
   const files = {
-    "ios/project.yml": `settings:\n  base:\n    CURRENT_PROJECT_VERSION: "${buildNumber}"\n`,
+    "ios/project.yml": `options:
+  deploymentTarget:
+    iOS: "17.0"
+    tvOS: "17.0"
+    watchOS: "10.0"
+    visionOS: "1.0"
+settings:
+  base:
+    MARKETING_VERSION: "1.1"
+    CURRENT_PROJECT_VERSION: "${buildNumber}"
+targets:
+  QuakeSignal:
+    type: application
+    platform: iOS
+    dependencies:
+      - target: QuakeSignalWatch
+        embed: true
+        platformFilter: iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app
+        TARGETED_DEVICE_FAMILY: "1,2"
+      configs:
+        Release:
+          CODE_SIGN_ENTITLEMENTS: QuakeSignal/Supporting/QuakeSignal-Release.entitlements
+          PROVISIONING_PROFILE_SPECIFIER: $(QUAKESIGNAL_IOS_PROFILE_NAME)
+  QuakeSignalTV:
+    type: application
+    platform: tvOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app
+        TARGETED_DEVICE_FAMILY: "3"
+      configs:
+        Release:
+          PROVISIONING_PROFILE_SPECIFIER: $(QUAKESIGNAL_TV_PROFILE_NAME)
+  QuakeSignalVision:
+    type: application
+    platform: visionOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app
+        TARGETED_DEVICE_FAMILY: "7"
+      configs:
+        Release:
+          CODE_SIGN_ENTITLEMENTS: QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements
+          PROVISIONING_PROFILE_SPECIFIER: $(QUAKESIGNAL_VISION_PROFILE_NAME)
+  QuakeSignalWatch:
+    type: application
+    platform: watchOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app.watchkitapp
+        TARGETED_DEVICE_FAMILY: "4"
+      configs:
+        Release:
+          PROVISIONING_PROFILE_SPECIFIER: $(QUAKESIGNAL_WATCH_PROFILE_NAME)
+schemes:
+  QuakeSignal:
+    archive: { config: Release }
+  QuakeSignalTV:
+    archive: { config: Release }
+  QuakeSignalVision:
+    archive: { config: Release }
+  QuakeSignalWatch:
+    archive: { config: Release }
+`,
     "ios/QuakeSignal.xcodeproj/project.pbxproj": projectFileVersions
       .map((version) => `\t\t\t\tCURRENT_PROJECT_VERSION = ${version};`)
       .join("\n"),
     "ios/QuakeSignal/Supporting/Info.plist": `<?xml version="1.0"?>\n<plist><dict>\n<key>CFBundleVersion</key>\n<string>${infoBundleVersion}</string>\n</dict></plist>\n`,
-    "backend/cloudflare/wrangler.jsonc": `{\n  "vars": {\n    "APP_ATTEST_ENFORCEMENT": "required",\n    "APP_ATTEST_APP_ID": "5TT564H883.com.quakesignal.app",\n    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "${allowedVersions}",\n    "APP_ATTEST_REQUIRE_RELEASE_METADATA": "false"\n  }\n}${workerConfigSuffix}\n`,
+    "ios/QuakeSignalTV/Supporting/Info.plist": `<?xml version="1.0"?>\n<plist><dict>\n<key>CFBundleVersion</key>\n<string>${infoBundleVersion}</string>\n</dict></plist>\n`,
+    "ios/QuakeSignalVision/Supporting/Info.plist": `<?xml version="1.0"?>\n<plist><dict>\n<key>CFBundleVersion</key>\n<string>${infoBundleVersion}</string>\n</dict></plist>\n`,
+    "ios/QuakeSignalWatch/Supporting/Info.plist": `<?xml version="1.0"?>\n<plist><dict>\n<key>CFBundleVersion</key>\n<string>${infoBundleVersion}</string>\n</dict></plist>\n`,
+    "backend/cloudflare/wrangler.jsonc": `{\n  "vars": {\n    "APP_ATTEST_ENFORCEMENT": "required",\n    "APP_ATTEST_APP_ID": "5TT564H883.com.quakesignal.app",\n    "APP_ATTEST_APNS_ROUTES": ${JSON.stringify(reviewedAppIdentityRoutesJSON)},\n    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "${allowedVersions}",\n    "APP_ATTEST_REQUIRE_RELEASE_METADATA": "false"\n  }\n}${workerConfigSuffix}\n`,
     ".github/workflows/ios.yml": `name: iOS\non:\n  workflow_dispatch:\n    inputs:\n      build_number:\n        default: "${workflowDefault}"\n        type: string\nenv:\n  XCODE_PROJECT: ios/QuakeSignal.xcodeproj\n  XCODE_SCHEME: QuakeSignal\n  XCODEGEN_VERSION: 2.46.0\n  XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806\njobs:\n  testflight:\n    steps:\n      - name: Check out repository\n        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n      - name: Verify iOS and Worker release contract\n        id: release-contract\n        env:\n          BUILD_NUMBER: \${{ inputs.build_number }}\n        run: node .github/scripts/verify-ios-release-contract.mjs --build-number "$BUILD_NUMBER"\n      - name: Verify production notification origin readiness and contract\n        working-directory: backend/cloudflare\n        env:\n          IOS_RELEASE_API_BASE_URL: ${remoteOrigin}\n          BUILD_NUMBER: \${{ inputs.build_number }}\n          APP_ATTEST_POLICY_FINGERPRINT: \${{ steps.release-contract.outputs.app_attest_policy_fingerprint }}\n        run: |\n${remoteRun}\n      - name: Archive signed App Store build\n        env:\n          BUILD_NUMBER: \${{ inputs.build_number }}\n          IOS_PROFILE_NAME: \${{ vars.IOS_APP_STORE_PROFILE_NAME }}\n          IOS_RELEASE_API_BASE_URL: \${{ vars.CLOUDFLARE_WORKER_URL }}\n        run: >-\n          xcodebuild archive\n          -project "$XCODE_PROJECT"\n          -scheme "$XCODE_SCHEME"\n          -configuration ${archiveConfiguration}\n          -destination 'generic/platform=iOS'\n          -archivePath "$RUNNER_TEMP/QuakeSignal.xcarchive"\n          DEVELOPMENT_TEAM=5TT564H883\n          CODE_SIGN_STYLE=Manual\n          CODE_SIGN_IDENTITY='Apple Distribution'\n          PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME"\n          CURRENT_PROJECT_VERSION="$BUILD_NUMBER"\n          QUAKESIGNAL_API_BASE_URL="$IOS_RELEASE_API_BASE_URL"\n`,
   };
   files[".github/workflows/ios.yml"] = files[".github/workflows/ios.yml"]
@@ -89,7 +166,7 @@ env:
 }
 
 async function fixtureWorkflow({
-  workflowDefault = "7",
+  workflowDefault = "8",
   remoteOrigin = "${{ vars.CLOUDFLARE_WORKER_URL }}",
   remoteRunPrefix = "",
   archiveConfiguration = "Release",
@@ -100,9 +177,9 @@ async function fixtureWorkflow({
     workflow = workflow.replace(from, to);
   };
 
-  if (workflowDefault !== "7") {
+  if (workflowDefault !== "8") {
     replaceOnce(
-      '        default: "7"\n        type: string\n',
+      '        default: "8"\n        type: string\n',
       `        default: "${workflowDefault}"\n        type: string\n`,
       "build_number default",
     );
@@ -138,10 +215,21 @@ async function fixtureWorkflow({
   return workflow;
 }
 
+async function fixturePlatformWorkflow({ workflowDefault = "8" } = {}) {
+  let workflow = await readFile(join(repositoryRoot, ".github/workflows/apple-platforms.yml"), "utf8");
+  if (workflowDefault !== "8") {
+    const from = '        default: "8"\n        type: string\n';
+    if (!workflow.includes(from)) throw new Error("fixture could not locate native platform build_number default");
+    workflow = workflow.replace(from, `        default: "${workflowDefault}"\n        type: string\n`);
+  }
+  return workflow;
+}
+
 async function writeFixture(options = {}) {
   const root = await mkdtemp(join(tmpdir(), "quakesignal-ios-release-contract-"));
   const files = fixtureFiles(options);
   files[".github/workflows/ios.yml"] = await fixtureWorkflow(options);
+  files[".github/workflows/apple-platforms.yml"] = await fixturePlatformWorkflow(options);
   files[".github/workflows/cloudflare.yml"] = await readFile(
     join(repositoryRoot, ".github/workflows/cloudflare.yml"),
     "utf8",
@@ -168,24 +256,26 @@ async function expectFailure(t, options, expression) {
 
 test("the checked-in public Release contract is coherent", async () => {
   const verified = await verifyIOSReleaseContract({ root: repositoryRoot });
-  assert.equal(verified.buildNumber, "7");
-  assert.deepEqual(verified.allowedBundleVersions, ["1", "2", "3", "4", "5", "6", "7"]);
-  assert.match(verified.appAttestPolicyFingerprint, /^sha256:[A-Za-z0-9_-]{43}$/);
+  assert.equal(verified.buildNumber, "8");
+  assert.deepEqual(verified.allowedBundleVersions, ["1", "2", "3", "4", "5", "6", "7", "8"]);
+  assert.deepEqual(verified.appIdentityRoutes, reviewedAppIdentityRoutes);
+  assert.equal(
+    verified.appAttestPolicyFingerprint,
+    "sha256:wQ7bfMyEJST5ySIwLM1Q6HwT4DtbRPR3vanIG-kXCkQ",
+  );
 });
 
-test("a coordinated future build 8 contract passes without hardcoding its version", async (t) => {
+test("a coordinated future build 9 contract passes without hardcoding its version", async (t) => {
   await withFixture(t, {
-    buildNumber: "8",
-    allowedVersions: "1,2,3,4,5,6,7,8",
-    workflowDefault: "8",
+    buildNumber: "9",
+    allowedVersions: "1,2,3,4,5,6,7,8,9",
+    workflowDefault: "9",
   }, async (root) => {
     const verified = await verifyIOSReleaseContract({ root });
-    assert.deepEqual(verified, {
-      buildNumber: "8",
-      allowedBundleVersions: ["1", "2", "3", "4", "5", "6", "7", "8"],
-      generatedProjectEntries: 3,
-      appAttestPolicyFingerprint: "sha256:wYkv21ntkXkIZXXIhotKd12iv0UF3luL7eZ8fCUrhU0",
-    });
+    assert.equal(verified.buildNumber, "9");
+    assert.deepEqual(verified.allowedBundleVersions, ["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+    assert.equal(verified.generatedProjectEntries, 3);
+    assert.match(verified.appAttestPolicyFingerprint, /^sha256:[A-Za-z0-9_-]{43}$/);
   });
 });
 
@@ -441,10 +531,174 @@ test("fails closed when Worker validation omits the historical APNs incident gua
 });
 
 test("fails closed when a JSONC comment impersonates the Worker allow-list", async (t) => {
-  await withFixture(t, { workerConfigSuffix: "\n// \"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS\": \"1,2,3,4,5,6,7\"" }, async (root) => {
+  await withFixture(t, { workerConfigSuffix: "\n// \"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS\": \"1,2,3,4,5,6,7,8\"" }, async (root) => {
     const path = join(root, "backend/cloudflare/wrangler.jsonc");
     const contents = await readFile(path, "utf8");
-    await writeFile(path, contents.replace('    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7",\n', ""), "utf8");
+    await writeFile(path, contents.replace('    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8",\n', ""), "utf8");
     await assert.rejects(verifyIOSReleaseContract({ root }), /must be defined exactly once outside comments/i);
   });
+});
+
+test("fails closed when the reviewed App Attest APNs route is missing, changed, expanded, or wrong", async (t) => {
+  const watchRoute = {
+    appIdentity: "5TT564H883.com.quakesignal.app.watchkitapp",
+    apnsTopic: "com.quakesignal.app.watchkitapp",
+    platform: "watchos",
+  };
+  const mutations = [
+    (vars) => delete vars.APP_ATTEST_APNS_ROUTES,
+    (vars) => {
+      vars.APP_ATTEST_APNS_ROUTES = JSON.stringify([
+        { ...reviewedAppIdentityRoutes[0], platform: "ipados" },
+      ]);
+    },
+    (vars) => {
+      vars.APP_ATTEST_APNS_ROUTES = JSON.stringify([
+        ...reviewedAppIdentityRoutes,
+        watchRoute,
+      ]);
+    },
+    (vars) => {
+      vars.APP_ATTEST_APNS_ROUTES = JSON.stringify([
+        { ...reviewedAppIdentityRoutes[0], apnsTopic: "com.quakesignal.wrong" },
+      ]);
+    },
+  ];
+  for (const mutate of mutations) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, "backend/cloudflare/wrangler.jsonc");
+      const config = JSON.parse(await readFile(path, "utf8"));
+      mutate(config.vars);
+      await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /APP_ATTEST_APNS_ROUTES/i,
+      );
+    });
+  }
+});
+
+test("fails closed when a native platform release gate or selected profile mapping widens", async (t) => {
+  const mutations = [
+    (contents) => contents.replace(
+      "      github.ref_protected\n",
+      "      true\n",
+    ),
+    (contents) => contents.replace(
+      "      name: ios-app-store-release\n",
+      "      name: unprotected-native-platform-release\n",
+    ),
+    (contents) => contents.replace(
+      "TVOS_APP_STORE_PROVISIONING_PROFILE' || 'VISIONOS_APP_STORE_PROVISIONING_PROFILE",
+      "UNREVIEWED_PROFILE' || 'VISIONOS_APP_STORE_PROVISIONING_PROFILE",
+    ),
+    (contents) => contents.replace(
+      "jobs:\n  release:\n",
+      "jobs:\n  bypass-upload:\n    runs-on: macos-latest\n    steps:\n      - run: xcrun altool --upload-package /tmp/bypass.ipa\n  release:\n",
+    ),
+  ];
+  for (const mutate of mutations) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/apple-platforms.yml");
+      await writeFile(path, mutate(await readFile(path, "utf8")), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /native platform release job header|reviewed protected release job|protected-release graph fingerprint/i,
+      );
+    });
+  }
+});
+
+test("fails closed when iOS loses its embedded Watch profile contract", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, ".github/workflows/ios.yml");
+    const contents = await readFile(path, "utf8");
+    await writeFile(
+      path,
+      contents.replace(
+        "          WATCH_PROFILE: ${{ secrets.WATCHOS_APP_STORE_PROVISIONING_PROFILE }}\n",
+        "          WATCH_PROFILE: ${{ secrets.UNRELATED_PROFILE }}\n",
+      ),
+      "utf8",
+    );
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /post-remote signing sequence must match the reviewed fingerprint/i,
+    );
+  });
+});
+
+test("fails closed when the native target, bundle, or embedding matrix drifts", async (t) => {
+  const mutations = [
+    (contents) => contents.replace(
+      "    CURRENT_PROJECT_VERSION: \"8\"\n",
+      "    CURRENT_PROJECT_VERSION: \"8\"\n    TARGETED_DEVICE_FAMILY: \"1,2\"\n",
+    ),
+    (contents) => contents.replace(
+      "        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app.watchkitapp\n",
+      "        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app.unreviewed\n",
+    ),
+    (contents) => contents.replace(
+      "        embed: true\n",
+      "        embed: false\n",
+    ),
+  ];
+  for (const mutate of mutations) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, "ios/project.yml");
+      await writeFile(path, mutate(await readFile(path, "utf8")), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /target-scoped|PRODUCT_BUNDLE_IDENTIFIER|embedded Watch dependency/i,
+      );
+    });
+  }
+});
+
+test("fails closed when generic Apple platform coverage or credential-free signing changes", async (t) => {
+  for (const [from, to] of [
+    ["            scheme: QuakeSignalTV\n", "            scheme: QuakeSignal\n"],
+    ["            destination: generic/platform=visionOS\n", "            destination: generic/platform=iOS\n"],
+    [
+      "            CODE_SIGNING_ALLOWED=NO | tee \"xcodebuild-$PLATFORM_KEY-generic-release.log\"",
+      "            CODE_SIGNING_ALLOWED=YES | tee \"xcodebuild-$PLATFORM_KEY-generic-release.log\"",
+    ],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/ios.yml");
+      const contents = await readFile(path, "utf8");
+      assert.ok(contents.includes(from), `fixture must contain ${from.trim()}`);
+      await writeFile(path, contents.replace(from, to), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /generic Apple platform build job header|generic credential-free build step|release-job graph fingerprint/i,
+      );
+    });
+  }
+});
+
+test("fails closed when build or release jobs reintroduce Simulator downloads", async (t) => {
+  for (const relativePath of [
+    ".github/workflows/ios.yml",
+    ".github/workflows/apple-platforms.yml",
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, relativePath);
+      const contents = await readFile(path, "utf8");
+      const marker = "    steps:\n";
+      assert.ok(contents.includes(marker), `${relativePath} fixture must contain job steps`);
+      await writeFile(
+        path,
+        contents.replace(
+          marker,
+          `${marker}      - run: xcodebuild -downloadPlatform watchOS -architectureVariant arm64\n`,
+        ),
+        "utf8",
+      );
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /must not download Simulator runtimes/i,
+      );
+    });
+  }
 });

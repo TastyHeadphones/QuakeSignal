@@ -54,6 +54,15 @@ struct OnboardingView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 32)
 
+                        if step == .notifications,
+                           !PlatformCapabilities.supportsAttestedAlertRegistration {
+                            Label("platform.alertRegistration.foregroundOnly", systemImage: "macbook")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                        }
+
                         if step == .sources {
                             Text("onboarding.disclaimer")
                                 .font(.footnote)
@@ -90,35 +99,18 @@ struct OnboardingView: View {
             .padding(.horizontal, 32)
 
         case .notifications:
-            VStack(spacing: 12) {
+            if PlatformCapabilities.supportsAttestedAlertRegistration {
+                notificationPermissionActions
+            } else {
                 Button {
-                    Task {
-                        isRequesting = true
-                        _ = await NotificationManager.shared.requestAuthorization()
-                        isRequesting = false
-                        withAnimation { page = .location }
-                    }
+                    withAnimation { page = .location }
                 } label: {
-                    Group {
-                        if isRequesting {
-                            ProgressView()
-                        } else {
-                            Text("onboarding.enableNotifications")
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
+                    Text("onboarding.continue").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(isRequesting)
-
-                Button("onboarding.skip") {
-                    withAnimation { page = .location }
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .padding(.horizontal, 32)
             }
-            .padding(.horizontal, 32)
 
         case .location:
             VStack(spacing: 12) {
@@ -138,5 +130,37 @@ struct OnboardingView: View {
             }
             .padding(.horizontal, 32)
         }
+    }
+
+    private var notificationPermissionActions: some View {
+        VStack(spacing: 12) {
+            Button {
+                Task {
+                    isRequesting = true
+                    _ = await NotificationManager.shared.requestAuthorization()
+                    isRequesting = false
+                    withAnimation { page = .location }
+                }
+            } label: {
+                Group {
+                    if isRequesting {
+                        ProgressView()
+                    } else {
+                        Text("onboarding.enableNotifications")
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(isRequesting)
+
+            Button("onboarding.skip") {
+                withAnimation { page = .location }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 32)
     }
 }

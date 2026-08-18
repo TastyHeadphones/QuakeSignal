@@ -1,0 +1,117 @@
+name: Unapproved native Apple screenshot candidates
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: apple-platform-screenshot-candidates-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    name: Debug Simulator candidate (${{ matrix.name }})
+    runs-on: macos-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Apple TV
+            key: tvos
+            download_platform: tvOS
+          - name: Apple Vision Pro
+            key: visionos
+            download_platform: visionOS
+          - name: Apple Watch
+            key: watchos
+            download_platform: watchOS
+
+    steps:
+      - name: Check out source-frozen revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Validate credential-free harness
+        run: |
+          set -euo pipefail
+          bash -n ios/ScreenshotAutomation/capture-platform-screenshot.sh
+          test -x ios/ScreenshotAutomation/capture-platform-screenshot.sh
+          if grep -En '\$\{\{[[:space:]]*secrets\.' .github/workflows/apple-platform-screenshots.yml; then
+            echo "::error::Screenshot candidate workflow must not reference secrets"
+            exit 1
+          fi
+
+      - name: Ensure ${{ matrix.download_platform }} Simulator runtime is available
+        env:
+          DOWNLOAD_PLATFORM: ${{ matrix.download_platform }}
+        run: |
+          set -euo pipefail
+          installed_runtimes="$(xcrun simctl list runtimes available)"
+          if grep -Eq "^${DOWNLOAD_PLATFORM}[[:space:]]" <<< "$installed_runtimes"; then
+            echo "$DOWNLOAD_PLATFORM Simulator runtime is already installed"
+            exit 0
+          fi
+          xcodebuild -downloadPlatform "$DOWNLOAD_PLATFORM" -architectureVariant universal
+          installed_runtimes="$(xcrun simctl list runtimes available)"
+          if ! grep -Eq "^${DOWNLOAD_PLATFORM}[[:space:]]" <<< "$installed_runtimes"; then
+            echo "::error::$DOWNLOAD_PLATFORM Simulator runtime is unavailable after download"
+            exit 1
+          fi
+
+      - name: Capture one native dashboard candidate
+        env:
+          PLATFORM_KEY: ${{ matrix.key }}
+        run: |
+          set -euo pipefail
+          artifact_dir="$RUNNER_TEMP/quakesignal-screenshot-candidates/$PLATFORM_KEY"
+          mkdir -p "$artifact_dir"
+          ios/ScreenshotAutomation/capture-platform-screenshot.sh \
+            "$PLATFORM_KEY" \
+            "$artifact_dir/$PLATFORM_KEY-en-dashboard.png"
+          xcrun simctl list runtimes available > "$artifact_dir/simulator-runtimes.txt"
+          echo "CANDIDATE_DIR=$artifact_dir" >> "$GITHUB_ENV"
+
+      - name: Attach explicit non-release provenance
+        env:
+          PLATFORM_KEY: ${{ matrix.key }}
+        run: |
+          set -euo pipefail
+          export SOURCE_COMMIT="$GITHUB_SHA"
+          export WORKFLOW_RUN="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          XCODE_VERSION="$(xcodebuild -version | tr '\n' ' ')"
+          export XCODE_VERSION
+          /usr/bin/ruby -rjson -rdigest -rtime -e '
+            directory = ENV.fetch("CANDIDATE_DIR")
+            platform = ENV.fetch("PLATFORM_KEY")
+            screenshot = File.join(directory, "#{platform}-en-dashboard.png")
+            metadata = {
+              schemaVersion: 1,
+              status: "unapproved-debug-simulator-candidate",
+              uploadApproved: false,
+              releaseBinaryEvidence: nil,
+              sourceCommit: ENV.fetch("SOURCE_COMMIT"),
+              platform: platform,
+              locale: "en",
+              fixture: "finalized-historical-reports",
+              screenshotFile: File.basename(screenshot),
+              screenshotSha256: Digest::SHA256.file(screenshot).hexdigest,
+              capturedAtUtc: Time.now.utc.iso8601,
+              xcodeVersion: ENV.fetch("XCODE_VERSION"),
+              workflowRun: ENV.fetch("WORKFLOW_RUN"),
+              approvalRequired: "Named visual review and runbook-required signed Release parity comparison"
+            }
+            File.write(
+              File.join(directory, "candidate-metadata.json"),
+              JSON.pretty_generate(metadata) + "\n"
+            )
+          '
+
+      - name: Upload short-lived unapproved candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: UNAPPROVED-debug-simulator-${{ matrix.key }}-${{ github.sha }}
+          path: ${{ env.CANDIDATE_DIR }}
+          if-no-files-found: error
+          retention-days: 7

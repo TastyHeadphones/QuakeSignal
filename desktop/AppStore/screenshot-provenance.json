@@ -1,11 +1,56 @@
 {
-  "version": 1,
+  "version": 2,
   "status": "pending-signed-mac-app-store-build",
-  "purpose": "Evidence record for the macOS App Store screenshot upload set. This file does not approve the committed controlled-render frames for portal upload.",
+  "purpose": "Integrity record for the redesigned QuakeSignal 1.1.0 macOS App Store screenshot set. This record does not approve portal upload.",
+  "product": {
+    "version": "1.1.0",
+    "bundleIdentifier": "com.quakesignal.desktop",
+    "configuration": "macos-app-store"
+  },
+  "capture": {
+    "capturedAtUtcRange": [
+      "2026-08-18T18:54:34Z",
+      "2026-08-18T18:59:08Z"
+    ],
+    "viewportPixels": [1280, 800],
+    "method": "QuakeSignal's production Tauri frontend, built with the Mac App Store feature flag, rendered in Chromium browser automation with a deterministic local snapshot of finalized historical reports.",
+    "sourceBaselineCommit": null,
+    "sourceTreeState": "The 1.1.0 UI was still an uncommitted release worktree at capture time. Bind this field to the frozen source commit and compare or recapture from its signed sandboxed package before upload."
+  },
+  "files": [
+    {
+      "file": "screenshots/en-US/01-home-all-clear.png",
+      "sha256": "bff12a00dbdf745a1accb94bfadd5c3177d34f8340d59c120a0548492ed1ba8f",
+      "pixels": [1280, 800],
+      "format": "png",
+      "hasAlpha": false
+    },
+    {
+      "file": "screenshots/en-US/02-event-history.png",
+      "sha256": "f698e8f297fd20c60a1cd8456db07bcba158daa8725cabd679c0fe4ff294b5d9",
+      "pixels": [1280, 800],
+      "format": "png",
+      "hasAlpha": false
+    },
+    {
+      "file": "screenshots/en-US/03-monitoring-preferences.png",
+      "sha256": "bc04e3262157e15f9c54ae9dd149668d5996e9a5e51bd53384bcaf362e588dbb",
+      "pixels": [1280, 800],
+      "format": "png",
+      "hasAlpha": false
+    },
+    {
+      "file": "screenshots/en-US/04-notification-preferences.png",
+      "sha256": "8c891d157c48a1d33fc6cc29ac7e8931fe0ce41b79c7c29e75e87b3c11a39230",
+      "pixels": [1280, 800],
+      "format": "png",
+      "hasAlpha": false
+    }
+  ],
   "requiredBeforeUpload": {
     "configuration": "macos-app-store",
     "bundleIdentifier": "com.quakesignal.desktop",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "screenshots": [
       "01-home-all-clear.png",
       "02-event-history.png",
@@ -14,15 +59,15 @@
     ],
     "evidence": [
       "signed sandboxed app or package SHA-256",
-      "source commit",
+      "frozen source commit",
       "Apple Distribution signing identity and team",
       "supported Mac model and macOS version",
-      "capture timestamp",
+      "capture or visual-comparison timestamp",
       "reviewer approval"
     ]
   },
   "currentSet": {
-    "status": "controlled-render-draft-only",
-    "reason": "The committed frames are generated from the real Mac App Store frontend configuration, but need comparison or recapture from the final signed sandboxed build before upload."
+    "status": "controlled-render-validated",
+    "reason": "All four redesigned frames were visually inspected at 1280 x 800 and mechanically checked for opaque PNG encoding. Signed-build comparison and release-owner approval remain pending."
   }
 }

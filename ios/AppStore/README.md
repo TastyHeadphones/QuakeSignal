@@ -15,15 +15,20 @@ current location, or a test-push result in product-page imagery.
 | Submission-answer worksheet | `submission-answers.md` |
 | Pre-submission checklist | `submission-checklist.md` |
 | Release 1.1 screenshot provenance | `screenshot-provenance-v1.1.json` |
+| Coordinated native-platform release runbook | `apple-platform-release.md` |
+| tvOS / visionOS / Watch metadata and screenshot plans | `platforms/` |
+| Read-only App Store Connect state and safe portal sequence | `app-store-connect-portal-audit-2026-08-19.md` |
 
 ## App record
 
-The **separate iOS App Store Connect record** for this client has been created
-as **QuakeSignal** (Apple ID `6800642443`). The macOS client uses
-`com.quakesignal.desktop`, while Apple permits a single multi-platform
-purchase record only when every platform shares the same bundle ID. Do not
-select macOS for this record, create a duplicate record, or imply a Universal
-Purchase.
+The native iOS/iPadOS, tvOS, and visionOS products share the existing
+**QuakeSignal** App Store Connect record (Apple ID `6800642443`) and
+`com.quakesignal.app` bundle ID, forming Apple's multi-platform Universal
+Purchase relationship. The embedded Watch companion also belongs to the iOS
+product in that record. The separate Tauri macOS client uses
+`com.quakesignal.desktop` and Apple ID `6800642853`; do not select macOS in the
+native shared record, attach the Tauri package there, or create a duplicate
+record.
 
 - Name: `QuakeSignal`
 - Primary language: English (U.S.)
@@ -48,11 +53,11 @@ Version `1.0` build `6` is already Ready for Distribution. Builds `2` through
 
 App Store Connect rejects a repeat upload with the same build number. The
 checked-in release candidate is coordinated as version `1.1`,
-`CFBundleVersion` `7`: `CURRENT_PROJECT_VERSION` is `7`, the Worker App Attest
-allow-list is `1,2,3,4,5,6,7`, and the protected archive workflow defaults to
-`7`. Older allowlisted versions remain deliberately available to installed
-clients. Deploy migration `0010` and the matching Worker policy before
-uploading build `7`; the protected archive lane then proves the live
+`CFBundleVersion` `8`: `CURRENT_PROJECT_VERSION` is `8`, the Worker App Attest
+allow-list is `1,2,3,4,5,6,7,8`, and the protected archive workflows default
+to `8`. Older allowlisted versions remain deliberately available to installed
+clients. Deploy all migrations through `0011` and the matching Worker policy
+before uploading build `8`; each protected archive lane then proves the live
 `/healthz` fingerprint admits that build before certificate import.
 
 Upload, processing, and internal group assignment do not by themselves
@@ -148,8 +153,15 @@ pending field.
 
 ## Required release assets
 
+> **Build-8 screenshot block:** the existing 30-file
+> `screenshot-manifest-v1.1.json` / `screenshot-provenance-v1.1.json` set
+> truthfully records a build-7 simulator capture. Preserve it as historical
+> evidence. Do not relabel or upload it for build 8. Use the separate planned
+> build-8 manifest, capture into `screenshots-v1.1-build8`, and create new
+> provenance after the build-8 source is frozen.
+
 - 1024 × 1024 App Store icon: already in `Assets.xcassets`
-- Release 1.1 screenshot inventory: exactly the 30 files declared by
+- Historical build-7 screenshot inventory: exactly the 30 files declared by
   [`screenshot-manifest-v1.1.json`](./screenshot-manifest-v1.1.json) and
   [`screenshot-provenance-v1.1.json`](./screenshot-provenance-v1.1.json)
 - Five 6.5-inch iPhone portrait screenshots per localization at
@@ -166,12 +178,9 @@ iPad-capable target and the final map/alert-preference UI.
 ### Capture workflow
 
 1. Build and install the exact public `Release` candidate for version 1.1,
-   build 7, on the devices named in
-   [`screenshot-manifest-v1.1.json`](./screenshot-manifest-v1.1.json). Before
-   uploading, verify that
-   [`screenshot-provenance-v1.1.json`](./screenshot-provenance-v1.1.json)
-   records the frozen release commit and that every listed SHA-256 still
-   matches.
+   build 8, on the devices named in
+   [`screenshot-manifest-v1.1-build8.template.json`](./screenshot-manifest-v1.1-build8.template.json).
+   Never change the build number in the historical build-7 provenance.
 2. Capture both the primary 6.5-inch iPhone and 13-inch iPad sets. Do not
    substitute a legacy 6.3-inch QA/reference set for either upload family.
 3. For each locale, launch the installed app with the matching language and
@@ -195,14 +204,14 @@ iPad-capable target and the final map/alert-preference UI.
 
    ```sh
    ios/AppStore/scripts/capture-screenshot.sh \
-     --device booted --class 6.5 en-US 01-home
+     --device booted --class 6.5 --set screenshots-v1.1-build8 en-US 01-home
 
    ios/AppStore/scripts/capture-screenshot.sh \
-     --device booted --class ipad-13 en-US 01-home
+     --device booted --class ipad-13 --set screenshots-v1.1-build8 en-US 01-home
    ```
 
-   The helper defaults to `screenshots-v1.1` and writes each frame under the
-   matching locale and device-family directory.
+   The explicit `--set screenshots-v1.1-build8` keeps the new capture separate
+   from the immutable historical build-7 evidence.
 6. Review every capture at full size, then upload the complete iPhone and iPad
    sequence for each localization to the iOS version in App Store Connect. Do
    not mix display classes within one uploaded localization.
@@ -240,7 +249,7 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    create a duplicate. After the Cloudflare bootstrap has made the final URLs
    live, set its Privacy Policy and Support URLs to the values above and
    complete the draft `1.1` metadata.
-6. Upload `1.1 (7)` through the protected TestFlight workflow. Historical 1.0
+6. Upload `1.1 (8)` through the protected TestFlight workflows. Historical 1.0
    builds are not evidence for this release and must not be attached to the 1.1
    App Store version.
 7. Complete age rating, content rights, privacy, export compliance, localized
@@ -248,7 +257,7 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    Before certifying content rights for Wolfx-supplied earthquake data, obtain
    and preserve written upstream permission using
    [`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md).
-8. After protected upload and processing, test release candidate `1.1 (7)` on
+8. After protected upload and processing, test release candidate `1.1 (8)` on
    physical hardware
    for the normal production registration, refresh, unsubscribe, re-enrollment,
    and controlled training-push evidence. Follow the exact, privacy-safe
@@ -272,7 +281,7 @@ allow one to ten screenshots and list the accepted display-size resolutions.
 9. Have a release reviewer promote
     `APP_ATTEST_PRODUCTION_ENFORCED=true` and run the protected Cloudflare
     launch deployment with `bootstrap_testflight` disabled.
-10. Only after build `1.1 (7)` is uploaded, processed, physically verified,
+10. Only after build `1.1 (8)` is uploaded, processed, physically verified,
     launch promotion and every other public-release gate are complete, attach
     it to the App Store version if it remains the accurate reviewed candidate.
     If the iOS

@@ -1,0 +1,27 @@
+QuakeSignal for Apple Vision Pro is the full native, windowed experience. It
+requires no account, sign-in, payment, demo account, or reviewer credential.
+
+For a permission-free route, skip notification and location access during
+onboarding and choose a listed city. Home, Reports, Map, Guide, and Settings
+remain reviewable. Location and notifications are optional.
+
+When a customer opts into nearby notifications, the Release target uses App
+Attest before APNs registration. Qualifying fresh warnings may be marked Time
+Sensitive, subject to system and user settings. This target has no Critical
+Alerts entitlement and does not claim guaranteed delivery or Silent/Focus
+bypass. Physical/TestFlight notification behavior is a release gate, not
+something inferred from a simulator or generic build.
+
+The alert-sound picker includes system sound, an original urgent tone, and an
+original synthesized Japanese safety voice. The voice is not a J-Alert or JMA
+recording; HTS Voice "Mei" by Nagoya Institute of Technology is credited under
+CC BY 3.0 in the release evidence.
+
+App Motion is a required visionOS portal answer. Do not select it from these
+notes alone. The release owner must assess the final Apple Vision Pro build;
+source inspection shows a windowed interface and no intentional virtual-camera
+movement.
+
+QuakeSignal is independent and non-official. Wolfx-aggregated information can
+be delayed, incomplete, revised, or inaccurate. Always follow official local
+emergency guidance.

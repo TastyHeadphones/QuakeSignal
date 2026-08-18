@@ -67,18 +67,26 @@ struct SettingsView: View {
                 }
 
                 Section("settings.section.notifications") {
-                    if notifications.authorizationStatus == .notDetermined {
-                        Button("onboarding.enableNotifications") {
-                            Task { await enableNotifications() }
+                    if PlatformCapabilities.supportsAttestedAlertRegistration {
+                        if notifications.authorizationStatus == .notDetermined {
+                            Button("onboarding.enableNotifications") {
+                                Task { await enableNotifications() }
+                            }
+                        } else if notifications.authorizationStatus == .denied {
+                            Button("settings.openSystemSettings") { openNotificationSettings() }
+                            Text("settings.pushSubscription.permissionDenied")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
-                    } else if notifications.authorizationStatus == .denied {
-                        Button("settings.openSystemSettings") { openNotificationSettings() }
-                        Text("settings.pushSubscription.permissionDenied")
+
+                        pushSubscriptionControl
+                    } else {
+                        Label("platform.alertRegistration.foregroundOnly", systemImage: "macbook")
+                            .font(.subheadline.weight(.semibold))
+                        Text("platform.alertRegistration.foregroundOnly.detail")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-
-                    pushSubscriptionControl
 
                     NavigationLink {
                         AlertSoundSelectionView()
@@ -96,7 +104,8 @@ struct SettingsView: View {
                         }
                     }
 
-                    if notifications.canRegisterForRemoteNotifications,
+                    if PlatformCapabilities.supportsAttestedAlertRegistration,
+                       notifications.canRegisterForRemoteNotifications,
                        (!notifications.hasVisibleAlertsEnabled ||
                         !notifications.hasSoundsEnabled ||
                         !notifications.hasTimeSensitiveAlertsEnabled) {
@@ -123,57 +132,59 @@ struct SettingsView: View {
                         }
                     }
 
-                    Button {
-                        Task { await sendTestAlert() }
-                    } label: {
-                        if isSendingTest {
-                            ProgressView()
-                        } else {
-                            Text("settings.testAlert")
+                    if PlatformCapabilities.supportsAttestedAlertRegistration {
+                        Button {
+                            Task { await sendTestAlert() }
+                        } label: {
+                            if isSendingTest {
+                                ProgressView()
+                            } else {
+                                Text("settings.testAlert")
+                            }
                         }
-                    }
-                    .disabled(
-                        isSendingTest ||
-                        !PushTestAlertPolicy.isAvailable(
-                            subscriptionEnabled: settings.pushSubscriptionEnabled,
-                            registrationState: settings.pushRegistrationState,
-                            hasDeviceToken: notifications.deviceToken != nil
+                        .disabled(
+                            isSendingTest ||
+                            !PushTestAlertPolicy.isAvailable(
+                                subscriptionEnabled: settings.pushSubscriptionEnabled,
+                                registrationState: settings.pushRegistrationState,
+                                hasDeviceToken: notifications.deviceToken != nil
+                            )
                         )
-                    )
 
-                    if let testResultMessage {
-                        Text(testResultMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+                        if let testResultMessage {
+                            Text(testResultMessage)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
 
 #if QUAKESIGNAL_INTERNAL_QA
-                    Button {
-                        showingDelayedTestConfirmation = true
-                    } label: {
-                        if isSchedulingDelayedTest {
-                            ProgressView()
-                        } else {
-                            Text("settings.delayedTestAlert")
+                        Button {
+                            showingDelayedTestConfirmation = true
+                        } label: {
+                            if isSchedulingDelayedTest {
+                                ProgressView()
+                            } else {
+                                Text("settings.delayedTestAlert")
+                            }
                         }
-                    }
-                    .disabled(
-                        isSchedulingDelayedTest ||
-                        !settings.pushSubscriptionEnabled ||
-                        settings.pushRegistrationState != .active ||
-                        notifications.deviceToken == nil
-                    )
+                        .disabled(
+                            isSchedulingDelayedTest ||
+                            !settings.pushSubscriptionEnabled ||
+                            settings.pushRegistrationState != .active ||
+                            notifications.deviceToken == nil
+                        )
 
-                    Text("settings.delayedTestAlert.detail")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    if let delayedTestResultMessage {
-                        Text(delayedTestResultMessage)
+                        Text("settings.delayedTestAlert.detail")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                    }
+
+                        if let delayedTestResultMessage {
+                            Text(delayedTestResultMessage)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
 #endif
+                    }
                 }
 
                 Section("settings.section.language") {
@@ -262,7 +273,8 @@ struct SettingsView: View {
     }
 
     private func resyncPushPreferences() {
-        guard settings.pushSubscriptionEnabled,
+        guard PlatformCapabilities.supportsAttestedAlertRegistration,
+              settings.pushSubscriptionEnabled,
               notifications.canRegisterForRemoteNotifications,
               notifications.deviceToken != nil else {
             return
@@ -398,13 +410,15 @@ struct SettingsView: View {
     }
 
     private func enableNotifications() async {
+        guard PlatformCapabilities.supportsAttestedAlertRegistration else { return }
         let granted = await notifications.requestAuthorization()
         guard granted else { return }
         await resumePushSubscription()
     }
 
     private func resumePushSubscription() async {
-        guard notifications.canRegisterForRemoteNotifications else { return }
+        guard PlatformCapabilities.supportsAttestedAlertRegistration,
+              notifications.canRegisterForRemoteNotifications else { return }
         isUpdatingPushSubscription = true
         pushSubscriptionMessage = nil
         settings.pushSubscriptionEnabled = true
@@ -425,7 +439,8 @@ struct SettingsView: View {
     }
 
     private func retryPushRegistration() async {
-        guard settings.pushSubscriptionEnabled else { return }
+        guard PlatformCapabilities.supportsAttestedAlertRegistration,
+              settings.pushSubscriptionEnabled else { return }
         isUpdatingPushSubscription = true
         pushSubscriptionMessage = nil
         notifications.registerForRemoteNotificationsIfAuthorized()
@@ -473,7 +488,8 @@ struct SettingsView: View {
     }
 
     private func sendTestAlert() async {
-        guard PushTestAlertPolicy.isAvailable(
+        guard PlatformCapabilities.supportsAttestedAlertRegistration,
+              PushTestAlertPolicy.isAvailable(
                   subscriptionEnabled: settings.pushSubscriptionEnabled,
                   registrationState: settings.pushRegistrationState,
                   hasDeviceToken: notifications.deviceToken != nil
@@ -508,7 +524,8 @@ struct SettingsView: View {
 
 #if QUAKESIGNAL_INTERNAL_QA
     private func scheduleDelayedTestAlert() async {
-        guard settings.pushRegistrationState == .active,
+        guard PlatformCapabilities.supportsAttestedAlertRegistration,
+              settings.pushRegistrationState == .active,
               let token = notifications.deviceToken else {
             return
         }

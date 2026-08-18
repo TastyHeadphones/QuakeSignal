@@ -154,6 +154,11 @@ function authorization(keyId, signCount, challengeId) {
   return {
     mode: "attested",
     keyId,
+    appRoute: {
+      appIdentity: "5TT564H883.com.quakesignal.app",
+      apnsTopic: "com.quakesignal.app",
+      platform: "ios",
+    },
     challenge,
     verification: {
       proofType: "assertion",

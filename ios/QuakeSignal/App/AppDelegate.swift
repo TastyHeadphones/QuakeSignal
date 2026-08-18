@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        guard !ScreenshotAutomation.isEnabled else { return true }
         NotificationManager.shared.configureForLaunch()
         return true
     }

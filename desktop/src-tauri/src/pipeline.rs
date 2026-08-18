@@ -34,6 +34,18 @@ pub fn ingest_event(app: &AppHandle, event: NormalizedEvent, is_backfill: bool) 
     }
     let Some(reason) = reason else { return };
 
+    // Terminal state is a lifecycle correction, not a new emergency takeover.
+    // Reconcile it before current preference filters: a user may change their
+    // source, magnitude, or radius settings while an alert is open, but that
+    // must not leave the old active-warning window on screen. The helper only
+    // clears a pending alert for this exact event and never creates/focuses one.
+    if let Err(error) = crate::alert_window::clear_for_terminal_event(app, &event, reason) {
+        log::warn!(
+            "failed to clear terminal alert window for {}: {error}",
+            event.id
+        );
+    }
+
     log::info!("{}: {} (M{:?})", reason_label, event.id, event.magnitude);
 
     let settings = state.settings.lock().unwrap().clone();

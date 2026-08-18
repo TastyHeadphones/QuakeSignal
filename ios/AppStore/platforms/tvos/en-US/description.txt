@@ -1,0 +1,15 @@
+QuakeSignal for Apple TV is an independent, foreground-only dashboard for reviewing selected earthquake-information feeds on a large screen.
+
+SEE THE LATEST REPORT
+Review the current headline, magnitude, report status, source, and reporting time at a glance.
+
+BROWSE RECENT ACTIVITY
+Move through a focus-friendly list of recent earthquake reports and open a report to see its hypocenter, magnitude, available intensity, depth, source, and time.
+
+REFRESH WHILE YOU WATCH
+The dashboard refreshes when opened, can be refreshed manually, and updates only while the app is active.
+
+FOREGROUND ONLY
+The Apple TV app does not register for push notifications, App Attest, alert audio, or background emergency alerts. Open QuakeSignal to review current information. Optional nearby alerts remain features of the iPhone, iPad, and Apple Vision Pro editions.
+
+QuakeSignal is independent and is not affiliated with JMA, CENC, or any government agency. It reads third-party data aggregated by the Wolfx Open API. Information can be delayed, incomplete, revised, or inaccurate. Always follow official announcements and local emergency instructions.

@@ -62,7 +62,7 @@
 /* Settings */
 "settings.title" = "Settings";
 "settings.section.language" = "Language";
-"settings.language.systemNote" = "QuakeSignal follows your iPhone's Language & Region setting. English, 日本語, and 简体中文 are supported.";
+"settings.language.systemNote" = "QuakeSignal follows this device's Language & Region setting. English, 日本語, and 简体中文 are supported.";
 "settings.openSystemSettings" = "Open Settings";
 "settings.section.sources" = "Alert Sources";
 "settings.source.jma_eew" = "JMA — Early Warning";
@@ -76,7 +76,7 @@
 "settings.section.notifications" = "Notifications";
 "settings.openNotificationSettings" = "Review Notification Settings";
 "settings.notificationDelivery.degraded" = "Some alert delivery options are off";
-"settings.notificationDelivery.degraded.detail" = "Turn on alerts, sounds, and Time Sensitive Notifications in iPhone Settings for the best available delivery. QuakeSignal does not bypass Silent Mode or Focus.";
+"settings.notificationDelivery.degraded.detail" = "Turn on alerts, sounds, and Time Sensitive Notifications in system Settings for the best available delivery. QuakeSignal does not bypass Silent Mode or Focus.";
 "settings.alertSound.title" = "Alert Sound";
 "settings.alertSound.system" = "System Default";
 "settings.alertSound.system.detail" = "Apple's standard notification sound.";
@@ -90,21 +90,21 @@
 "settings.testAlert.success" = "Test alert sent.";
 "settings.testAlert.failure" = "Couldn't send test alert: %1$@";
 "settings.delayedTestAlert" = "Schedule Background Test Alert";
-"settings.delayedTestAlert.detail" = "Schedules one clearly labelled test alert in 90 seconds. Leave QuakeSignal, then lock or terminate your iPhone.";
+"settings.delayedTestAlert.detail" = "Schedules one clearly labelled test alert in 90 seconds. Leave QuakeSignal, then lock the device or terminate the app.";
 "settings.delayedTestAlert.confirmation.title" = "Schedule background test alert?";
 "settings.delayedTestAlert.confirmation.message" = "QuakeSignal will schedule one test notification in about 90 seconds. Use this only during a reviewed test window.";
 "settings.delayedTestAlert.confirm" = "Schedule Test Alert";
-"settings.delayedTestAlert.success" = "Background test alert scheduled. Leave QuakeSignal, then lock or terminate your iPhone.";
+"settings.delayedTestAlert.success" = "Background test alert scheduled. Leave QuakeSignal, then lock the device or terminate the app.";
 "settings.delayedTestAlert.failure" = "Couldn't schedule background test alert: %1$@";
-"settings.pushSubscription.permissionDenied" = "Notifications are disabled in iPhone Settings. You can still remove any existing QuakeSignal alert registration below.";
+"settings.pushSubscription.permissionDenied" = "Notifications are disabled in system Settings. You can still remove any existing QuakeSignal alert registration below.";
 "settings.pushSubscription.waiting" = "Waiting for APNs to provide this device's registration token. You can retry after it arrives.";
 "settings.pushSubscription.remove" = "Remove Alert Registration";
-"settings.pushSubscription.remove.detail" = "Removes this device from QuakeSignal's alert service. Without an APNs token this launch, it can remove only a registration already protected by this app instance. It does not change your iPhone notification permission.";
+"settings.pushSubscription.remove.detail" = "Removes this device from QuakeSignal's alert service. Without an APNs token this launch, it can remove only a registration already protected by this app instance. It does not change the system notification permission.";
 "settings.pushSubscription.remove.confirmation.title" = "Remove alert registration?";
-"settings.pushSubscription.remove.confirmation.message" = "QuakeSignal will delete this device's alert registration. Your iPhone notification permission will remain unchanged.";
+"settings.pushSubscription.remove.confirmation.message" = "QuakeSignal will delete this device's alert registration. The system notification permission will remain unchanged.";
 "settings.pushSubscription.remove.confirm" = "Remove Registration";
 "settings.pushSubscription.remove.cancel" = "Cancel";
-"settings.pushSubscription.remove.success" = "Alert registration removed. Your iPhone notification permission was not changed.";
+"settings.pushSubscription.remove.success" = "Alert registration removed. The system notification permission was not changed.";
 "settings.pushSubscription.remove.failure" = "Couldn't remove alert registration: %1$@";
 "settings.pushSubscription.resume" = "Resume Earthquake Alerts";
 "settings.pushSubscription.resume.detail" = "Re-register this device with QuakeSignal using your saved alert preferences.";
@@ -276,7 +276,7 @@
 "disclaimer.source.jma" = "JMA public reports (aggregated)";
 "disclaimer.notOfficial" = "QuakeSignal is not an official government earthquake warning platform and does not replace official authoritative information.";
 "disclaimer.mayBeDelayed" = "Information may be delayed, incomplete, or inaccurate — always follow official announcements and local emergency instructions.";
-"disclaimer.deliveryNotGuaranteed" = "Notification delivery depends on iOS, network conditions, and device settings, and cannot be guaranteed to arrive within seconds.";
+"disclaimer.deliveryNotGuaranteed" = "Notification delivery depends on the operating system, network conditions, and device settings, and cannot be guaranteed to arrive within seconds.";
 
 /* Disaster Guide tab */
 "guide.offlineBadge" = "Available offline";
@@ -326,3 +326,15 @@
 "guide.familyCheckIn.contact" = "Contact";
 "guide.familyCheckIn.name" = "Name";
 "guide.familyCheckIn.phone" = "Phone Number";
+
+/* Apple platform experiences */
+"platform.alertRegistration.foregroundOnly" = "Foreground monitoring only on Mac";
+"platform.alertRegistration.foregroundOnly.detail" = "Secure background alert registration uses Apple App Attest, which is unavailable on Mac. Live earthquake data and the selected alert sound still work while QuakeSignal is open.";
+"platform.alertRegistration.unavailable.error" = "Secure background alert registration is unavailable on this platform.";
+"platform.foreground.badge" = "Foreground only";
+"platform.foreground.refreshUnavailable" = "Live earthquake data is temporarily unavailable.";
+"platform.tv.title" = "Earthquake dashboard";
+"platform.tv.foregroundOnly.detail" = "Apple TV refreshes earthquake information only while this dashboard is open. It does not register for background alerts.";
+"platform.watch.foregroundOnly.detail" = "Open the watch app to refresh. Background alerts remain on your paired iPhone until secure companion delivery is available.";
+"platform.refresh" = "Refresh";
+"platform.loading" = "Loading earthquake data…";

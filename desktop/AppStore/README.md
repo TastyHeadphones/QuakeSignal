@@ -41,10 +41,16 @@ be one multi-platform/Universal Purchase record.
 | Primary category | Weather |
 | Copyright | `2026 UniSphereco LLC` |
 
-Before uploading a build or submitting the macOS version, use the existing
-`1.0.0` platform version in App Store Connect (currently Prepare for
-Submission); do not create a duplicate version. Then complete the age rating,
-content rights, export-compliance and App Privacy answers.
+The read-only 2026-08-19 portal audit found an editable `1.0.0` draft with its
+old `1.0.0` build Ready to Submit, four older screenshot assets, and zero
+installs. That package and imagery predate the current reliability and
+desktop-layout work and must not be selected for review. Preserve the existing
+draft and portal evidence. If App Store Connect permits editing the unreleased
+version number, change that same canonical draft to `1.1.0` only after the new
+signed package is frozen; if it does not, stop and contact App Store Connect
+Support rather than create or delete a record. Attach only the package built
+from the frozen 1.1.0 source. Then complete the age rating, content rights,
+export-compliance and App Privacy answers.
 Before certifying content rights for Wolfx-supplied data, obtain and preserve
 written upstream permission using
 [`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md).
@@ -53,6 +59,13 @@ screenshots, and the localized metadata. For a later upload, first increase the
 checked-in desktop version and use a higher App Store build. Confirm the Mac
 App Store sandbox build does not expose the direct-distribution-only Launch at
 Login feature.
+
+The iOS multi-platform record (Apple ID `6800642443`) also contains a macOS
+draft. Do not attach this Tauri app or its metadata there: that record expects
+the shared iOS bundle ID, while this Mac app uses `com.quakesignal.desktop`.
+Leave that non-canonical draft untouched. The complete read-only portal state
+and safe action sequence are in
+[`ios/AppStore/app-store-connect-portal-audit-2026-08-19.md`](../../ios/AppStore/app-store-connect-portal-audit-2026-08-19.md).
 
 ### Final public URLs
 
@@ -84,17 +97,16 @@ English primary name `QuakeSignal for macOS`.
 
 All four PNGs are 1280 × 800 staged listing assets rendered by QuakeSignal's
 real Tauri frontend with the Mac App Store build flag enabled, using a
-controlled local snapshot of finalized historical reports. Native screen
-capture was unavailable in this workspace, so no artificial artwork or
-AI-generated imagery was used. No active warning, training alert, or test alert
-is shown.
+controlled local snapshot of finalized historical reports. They show the 1.1.0
+desktop layout and contain no artificial artwork or AI-generated imagery. No
+active warning, training alert, or test alert is shown.
 
 | Position | File | Intended message |
 | --- | --- | --- |
 | 1 | `screenshots/en-US/01-home-all-clear.png` | Normal monitoring state and source connectivity |
 | 2 | `screenshots/en-US/02-event-history.png` | Local report history |
 | 3 | `screenshots/en-US/03-monitoring-preferences.png` | Location, threshold, and source choices |
-| 4 | `screenshots/en-US/04-notification-preferences.png` | Alarm and notification preferences plus independent-app disclosure |
+| 4 | `screenshots/en-US/04-notification-preferences.png` | Selectable alarm sound, Japanese-voice license disclosure, and notification preferences |
 
 Before upload, visually compare every frame with the signed, sandboxed Mac App
 Store build on a supported Mac and record the approval in
@@ -104,6 +116,63 @@ Recapture and replace any frame that differs; the controlled-harness render
 alone is not confirmation of the final signed build. Then upload the approved
 set in the listed order and confirm App Store Connect's current screenshot
 validation rules at upload time.
+
+The protected Mac App Store lane has two mutually exclusive manual modes. Both
+inputs default to `false`; setting both to `true` is an explicit failure rather
+than an upload or a silent skip.
+
+First, freeze protected main at baseline commit `A` and create a private signed
+evidence package without contacting App Store Connect:
+
+```sh
+gh workflow run desktop-release.yml --ref main \
+  -f build_macos_app_store=true \
+  -f upload_macos_to_app_store_connect=false
+```
+
+This artifact-only mode runs mechanical listing checks, builds and verifies the
+signed sandboxed package, and retains it as a private workflow artifact. It is
+evidence/bootstrap only: it does not approve screenshots, contact App Store
+Connect, authorize review, or release anything. Install and visually compare
+that exact package on a supported Mac, then record its SHA-256, full baseline
+commit `A`, timestamps, and named reviewer in `screenshot-provenance.json`.
+Commit only the resulting `desktop/AppStore` provenance, approved assets, and
+metadata at protected-main commit `B`; any Mac application, configuration,
+icon, lockfile, packaging script, or release-workflow change requires a new
+artifact-only baseline and review.
+
+Only after that evidence commit may the protected upload mode run:
+
+```sh
+gh workflow run desktop-release.yml --ref main \
+  -f build_macos_app_store=false \
+  -f upload_macos_to_app_store_connect=true
+```
+
+Before credentials, the upload gate proves that `A` is an ancestor of `B`, that
+all Mac binary/release-relevant paths are byte-unchanged from `A` through `B`,
+and that only the excluded App Store provenance/assets/metadata account for the
+review commit. It then runs the release-ready validator with
+`--expected-source-commit=A`. The App Store Connect API key is not materialized
+in artifact-only mode and appears only immediately before the approved upload.
+
+To pass, provenance must use top-level status
+`approved`, set `capture.sourceBaselineCommit` to the full frozen 40-character
+commit, set `currentSet.status` to `signed-build-approved`, and record:
+
+```json
+"releaseApproval": {
+  "signedBuildComparison": "approved",
+  "sourceBaselineCommit": "<same 40-character commit>",
+  "signedArtifactSha256": "<64-character SHA-256>",
+  "signedBuildComparedAtUtc": "<UTC ISO-8601 timestamp>",
+  "reviewedAtUtc": "<UTC ISO-8601 timestamp>",
+  "reviewer": "<named reviewer>"
+}
+```
+
+The ordinary listing-assets check intentionally permits the current pending
+record for mechanical image review; that green check is not upload approval.
 
 ## Content guardrails
 
@@ -115,6 +184,9 @@ validation rules at upload time.
   artwork. The sandboxed build intentionally hides its local Test Alarm control.
 - The Mac App Store build does not offer Launch at Login; that feature belongs
   only to the direct-distribution build.
+- The Mac app evaluates reports locally while it is running. It has no App
+  Attest or APNs registration and must not be described as a background
+  emergency-alert service.
 - Before release, verify live foreground updates against the Wolfx WebSocket
   service on a signed build. A prolonged socket outage intentionally falls back
   to slow HTTPS history snapshots after 90 seconds; those snapshots refresh the

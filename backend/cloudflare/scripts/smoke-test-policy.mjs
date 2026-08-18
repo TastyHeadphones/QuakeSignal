@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-export const APP_ATTEST_POLICY_FORMAT = "quakesignal-app-attest-policy/v1";
+export const APP_ATTEST_POLICY_FORMAT = "quakesignal-app-attest-policy/v2";
 
 const APP_ATTEST_POLICY_FINGERPRINT_PATTERN = /^sha256:[A-Za-z0-9_-]{43}$/;
 const BUNDLE_VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/;

@@ -3,6 +3,9 @@ options:
   bundleIdPrefix: com.quakesignal
   deploymentTarget:
     iOS: "17.0"
+    tvOS: "17.0"
+    watchOS: "10.0"
+    visionOS: "1.0"
   createIntermediateGroups: true
 # Keep the public archive separate from the internal production QA build.
 # `InternalQA` is release-optimised and production-signed, but only that
@@ -15,8 +18,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "1.1"
-    CURRENT_PROJECT_VERSION: "7"
-    TARGETED_DEVICE_FAMILY: "1,2"
+    CURRENT_PROJECT_VERSION: "8"
 targets:
   QuakeSignal:
     type: application
@@ -35,11 +37,18 @@ targets:
       - path: QuakeSignal/Features
       - path: QuakeSignal/Resources
       - path: QuakeSignal/Assets.xcassets
+      - path: QuakeSignalShared/ScreenshotAutomation.swift
+    dependencies:
+      - target: QuakeSignalWatch
+        embed: true
+        platformFilter: iOS
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app
         DEVELOPMENT_TEAM: 5TT564H883
         TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: YES
+        DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -52,6 +61,7 @@ targets:
         Debug:
           CODE_SIGN_IDENTITY: Apple Development
           CODE_SIGN_ENTITLEMENTS: QuakeSignal/Supporting/QuakeSignal.entitlements
+          "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": QuakeSignal/Supporting/QuakeSignal-Catalyst.entitlements
           # Enables only the explicit unsupported-service bypass used by local
           # development and Simulator builds. Supported physical devices still
           # run the real App Attest sandbox flow.
@@ -62,6 +72,9 @@ targets:
           # entitlements so a TestFlight result remains release-representative.
           CODE_SIGN_IDENTITY: Apple Distribution
           CODE_SIGN_ENTITLEMENTS: QuakeSignal/Supporting/QuakeSignal-Release.entitlements
+          "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": QuakeSignal/Supporting/QuakeSignal-Catalyst.entitlements
+          PROVISIONING_PROFILE_SPECIFIER: $(QUAKESIGNAL_IOS_PROFILE_NAME)
+          "PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]": $(QUAKESIGNAL_CATALYST_PROFILE_NAME)
           QUAKESIGNAL_API_BASE_URL: https://quakesignal-api.hopeso.workers.dev
           QUAKESIGNAL_APP_ATTEST_MODE: production
           # Allow the hosted unit-test bundle to exercise the controlled wire
@@ -72,12 +85,138 @@ targets:
         Release:
           CODE_SIGN_IDENTITY: Apple Distribution
           CODE_SIGN_ENTITLEMENTS: QuakeSignal/Supporting/QuakeSignal-Release.entitlements
+          "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": QuakeSignal/Supporting/QuakeSignal-Catalyst.entitlements
+          PROVISIONING_PROFILE_SPECIFIER: $(QUAKESIGNAL_IOS_PROFILE_NAME)
+          "PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]": $(QUAKESIGNAL_CATALYST_PROFILE_NAME)
           # The user-approved public Cloudflare Workers hostname is the release
           # origin. The release workflow pins this exact URL before archiving.
           QUAKESIGNAL_API_BASE_URL: https://quakesignal-api.hopeso.workers.dev
           # Release code also hard-codes a fail-closed production policy, so a
           # copied Info.plist cannot turn on a bypass in a distributed build.
           QUAKESIGNAL_APP_ATTEST_MODE: production
+  QuakeSignalVision:
+    type: application
+    platform: visionOS
+    deploymentTarget: "1.0"
+    configFiles:
+      Debug: QuakeSignal/Supporting/Debug.xcconfig
+    sources:
+      - path: QuakeSignal/App
+      - path: QuakeSignal/Models
+      - path: QuakeSignal/Networking
+      - path: QuakeSignal/Notifications
+      - path: QuakeSignal/State
+      - path: QuakeSignal/Features
+      - path: QuakeSignal/Resources
+      - path: QuakeSignal/Assets.xcassets
+      - path: QuakeSignalVision/Assets.xcassets
+      - path: QuakeSignalShared/ScreenshotAutomation.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app
+        DEVELOPMENT_TEAM: 5TT564H883
+        TARGETED_DEVICE_FAMILY: "7"
+        ASSETCATALOG_COMPILER_APPICON_NAME: VisionAppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CODE_SIGN_STYLE: Automatic
+        INFOPLIST_FILE: QuakeSignalVision/Supporting/Info.plist
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: Apple Development
+          CODE_SIGN_ENTITLEMENTS: QuakeSignalVision/Supporting/QuakeSignalVision.entitlements
+          QUAKESIGNAL_APP_ATTEST_MODE: development
+        InternalQA:
+          CODE_SIGN_IDENTITY: Apple Distribution
+          CODE_SIGN_ENTITLEMENTS: QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements
+          PROVISIONING_PROFILE_SPECIFIER: $(QUAKESIGNAL_VISION_PROFILE_NAME)
+          QUAKESIGNAL_API_BASE_URL: https://quakesignal-api.hopeso.workers.dev
+          QUAKESIGNAL_APP_ATTEST_MODE: production
+          ENABLE_TESTABILITY: YES
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) QUAKESIGNAL_INTERNAL_QA
+        Release:
+          CODE_SIGN_IDENTITY: Apple Distribution
+          CODE_SIGN_ENTITLEMENTS: QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements
+          PROVISIONING_PROFILE_SPECIFIER: $(QUAKESIGNAL_VISION_PROFILE_NAME)
+          QUAKESIGNAL_API_BASE_URL: https://quakesignal-api.hopeso.workers.dev
+          QUAKESIGNAL_APP_ATTEST_MODE: production
+  QuakeSignalTV:
+    type: application
+    platform: tvOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: QuakeSignalTV/QuakeSignalTVApp.swift
+      - path: QuakeSignalTV/TVDashboardView.swift
+      - path: QuakeSignalShared/ForegroundQuakeStore.swift
+      - path: QuakeSignalShared/ScreenshotAutomation.swift
+      - path: QuakeSignal/App/Localization.swift
+      - path: QuakeSignal/Models/EEWEvent.swift
+      - path: QuakeSignal/Models/IntensityScale.swift
+      - path: QuakeSignal/Networking/WolfxClient.swift
+      - path: QuakeSignal/Resources
+        excludes:
+          - Audio
+          - PrivacyInfo.xcprivacy
+      - path: QuakeSignal/Assets.xcassets
+      - path: QuakeSignalTV/Assets.xcassets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app
+        DEVELOPMENT_TEAM: 5TT564H883
+        TARGETED_DEVICE_FAMILY: "3"
+        ASSETCATALOG_COMPILER_APPICON_NAME: TVBrandAssets
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CODE_SIGN_STYLE: Automatic
+        INFOPLIST_FILE: QuakeSignalTV/Supporting/Info.plist
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: Apple Development
+        InternalQA:
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: $(QUAKESIGNAL_TV_PROFILE_NAME)
+        Release:
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: $(QUAKESIGNAL_TV_PROFILE_NAME)
+  QuakeSignalWatch:
+    # Xcode 14+ single-target watch apps are executable watchOS application
+    # products. `application.watchapp2` is the legacy stub container and must
+    # not own Swift sources.
+    type: application
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources:
+      - path: QuakeSignalWatch/QuakeSignalWatchApp.swift
+      - path: QuakeSignalWatch/WatchDashboardView.swift
+      - path: QuakeSignalShared/ForegroundQuakeStore.swift
+      - path: QuakeSignalShared/ScreenshotAutomation.swift
+      - path: QuakeSignal/App/Localization.swift
+      - path: QuakeSignal/Models/EEWEvent.swift
+      - path: QuakeSignal/Models/IntensityScale.swift
+      - path: QuakeSignal/Networking/WolfxClient.swift
+      - path: QuakeSignal/Resources
+        excludes:
+          - Audio
+          - PrivacyInfo.xcprivacy
+      - path: QuakeSignal/Assets.xcassets
+      - path: QuakeSignalWatch/Assets.xcassets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app.watchkitapp
+        DEVELOPMENT_TEAM: 5TT564H883
+        TARGETED_DEVICE_FAMILY: "4"
+        ASSETCATALOG_COMPILER_APPICON_NAME: WatchAppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CODE_SIGN_STYLE: Automatic
+        INFOPLIST_FILE: QuakeSignalWatch/Supporting/Info.plist
+        SKIP_INSTALL: YES
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: Apple Development
+        InternalQA:
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: $(QUAKESIGNAL_WATCH_PROFILE_NAME)
+        Release:
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: $(QUAKESIGNAL_WATCH_PROFILE_NAME)
   QuakeSignalTests:
     type: bundle.unit-test
     platform: iOS
@@ -90,6 +229,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app.tests
         GENERATE_INFOPLIST_FILE: YES
+        SUPPORTS_MACCATALYST: YES
+        DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER: NO
       configs:
         # The wire-format test itself must compile with the same conditional
         # capability as its hosted InternalQA application target.
@@ -105,5 +246,29 @@ schemes:
       targets:
         - QuakeSignalTests
     # Keep the ordinary Xcode archive action on the public configuration.
+    archive:
+      config: Release
+  QuakeSignalVision:
+    build:
+      targets:
+        QuakeSignalVision: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+  QuakeSignalTV:
+    build:
+      targets:
+        QuakeSignalTV: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+  QuakeSignalWatch:
+    build:
+      targets:
+        QuakeSignalWatch: all
+    run:
+      config: Debug
     archive:
       config: Release

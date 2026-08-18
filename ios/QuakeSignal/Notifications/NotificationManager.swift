@@ -27,12 +27,17 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// deliver a cold-launch notification response before SwiftUI mounts its
     /// root view, so callbacks are buffered until RootView installs handlers.
     func configureForLaunch() {
+        guard !ScreenshotAutomation.isEnabled else { return }
         UNUserNotificationCenter.current().delegate = self
         refreshAuthorizationStatus()
     }
 
     @discardableResult
     func requestAuthorization() async -> Bool {
+        guard !ScreenshotAutomation.isEnabled,
+              PlatformCapabilities.supportsAttestedAlertRegistration else {
+            return false
+        }
         let center = UNUserNotificationCenter.current()
         do {
             // The backend marks genuinely current warnings as time-sensitive.
@@ -49,6 +54,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func refreshAuthorizationStatus() {
+        guard !ScreenshotAutomation.isEnabled else { return }
         Task { await refreshAuthorizationStatusAsync() }
     }
 
@@ -78,7 +84,9 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// Requests the current APNs token when notification permission permits
     /// it. Calling this on each app launch lets APNs rotate a token safely.
     func registerForRemoteNotificationsIfAuthorized() {
-        guard canRegisterForRemoteNotifications else { return }
+        guard !ScreenshotAutomation.isEnabled,
+              PlatformCapabilities.supportsAttestedAlertRegistration,
+              canRegisterForRemoteNotifications else { return }
         UIApplication.shared.registerForRemoteNotifications()
     }
 
@@ -91,13 +99,16 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     }
 
     var canRegisterForRemoteNotifications: Bool {
+        guard PlatformCapabilities.supportsAttestedAlertRegistration else {
+            return false
+        }
         switch authorizationStatus {
         case .authorized, .provisional, .ephemeral:
-            true
+            return true
         case .notDetermined, .denied:
-            false
+            return false
         @unknown default:
-            false
+            return false
         }
     }
 

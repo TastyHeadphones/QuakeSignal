@@ -1,0 +1,17 @@
+QuakeSignal for Apple TV is a foreground-only earthquake-information dashboard.
+It requires no account, sign-in, payment, location permission, notification
+permission, demo account, or reviewer credential.
+
+Open the app to load recent reports. Use the Siri Remote to focus the Refresh
+button, move through recent reports, and open an event detail. The upstream
+Wolfx feeds may temporarily return no reports or partial source availability;
+this is an expected network state rather than a credential gate.
+
+This tvOS target intentionally has no APNs, App Attest, Time Sensitive or
+Critical Alerts entitlement, alert audio, or background delivery. It refreshes
+only while the dashboard is active and must not be reviewed as a background
+emergency-alert service.
+
+QuakeSignal is independent and non-official. Wolfx-aggregated information can
+be delayed, incomplete, revised, or inaccurate. The UI directs customers to
+follow official local emergency guidance.

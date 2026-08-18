@@ -81,6 +81,44 @@ enum EventMergePolicy {
 }
 
 enum ForegroundPushPolicy {
+    struct IngestionDecision: Equatable {
+        let shouldMerge: Bool
+        let presentationReason: AlertPresentationReason?
+    }
+
+    static func ingestionDecision(
+        for event: EEWEvent,
+        previous: EEWEvent?,
+        requestedReason: AlertPresentationReason,
+        preferences: AlertPreferenceSnapshot,
+        now: Date = Date()
+    ) -> IngestionDecision {
+        guard EventMergePolicy.shouldAccept(event, replacing: previous) else {
+            return IngestionDecision(shouldMerge: false, presentationReason: nil)
+        }
+
+        guard let eligibleReason = ForegroundAlertPolicy.presentationReason(
+            for: event,
+            previous: previous,
+            isBackfill: false,
+            preferences: preferences,
+            now: now
+        ) else {
+            // Final, cancelled, informational, stale, and filtered frames must
+            // still retire or update the visible lifecycle monotonically. They
+            // simply must not take over the screen as a new emergency.
+            return IngestionDecision(shouldMerge: true, presentationReason: nil)
+        }
+
+        let presentationReason = eligibleReason == .training
+            ? AlertPresentationReason.training
+            : requestedReason == .updated ? .updated : eligibleReason
+        return IngestionDecision(
+            shouldMerge: true,
+            presentationReason: presentationReason
+        )
+    }
+
     static func presentationReason(
         for event: EEWEvent,
         previous: EEWEvent?,
@@ -88,19 +126,13 @@ enum ForegroundPushPolicy {
         preferences: AlertPreferenceSnapshot,
         now: Date = Date()
     ) -> AlertPresentationReason? {
-        guard EventMergePolicy.shouldAccept(event, replacing: previous),
-              let eligibleReason = ForegroundAlertPolicy.presentationReason(
-                for: event,
-                previous: previous,
-                isBackfill: false,
-                preferences: preferences,
-                now: now
-              ) else {
-            return nil
-        }
-
-        if eligibleReason == .training { return .training }
-        return requestedReason == .updated ? .updated : eligibleReason
+        ingestionDecision(
+            for: event,
+            previous: previous,
+            requestedReason: requestedReason,
+            preferences: preferences,
+            now: now
+        ).presentationReason
     }
 }
 
@@ -110,7 +142,7 @@ enum ForegroundPushPolicy {
 /// cancellations remain available in the event list without masquerading as
 /// a new emergency.
 enum ForegroundAlertPolicy {
-    static let maximumWarningAge: TimeInterval = 10 * 60
+    static let maximumWarningAge = WarningFreshnessPolicy.maximumAge
 
     static func presentationReason(
         for event: EEWEvent,
@@ -147,8 +179,6 @@ enum ForegroundAlertPolicy {
     }
 
     static func isFresh(_ event: EEWEvent, now: Date = Date()) -> Bool {
-        guard let timestamp = event.reportDate ?? event.originDate else { return false }
-        let age = now.timeIntervalSince(timestamp)
-        return age >= -60 && age <= maximumWarningAge
+        WarningFreshnessPolicy.isFresh(event, now: now)
     }
 }

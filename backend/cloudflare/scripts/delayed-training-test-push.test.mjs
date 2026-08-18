@@ -11,6 +11,11 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const cloudflareDirectory = resolve(scriptDirectory, "..");
 const expectedDelaySeconds = 90;
 const expectedMaximumLatenessSeconds = 30;
+const iosAppRoute = {
+  appIdentity: "5TT564H883.com.quakesignal.app",
+  apnsTopic: "com.quakesignal.app",
+  platform: "ios",
+};
 let workerModulePromise;
 
 async function workerModule() {
@@ -183,7 +188,7 @@ test("the public route and handler cannot reach delayed scheduling without the o
     request,
     guardedEnvironment(false),
     payload,
-    { mode: "attested", keyId, environment: "production" },
+    { mode: "attested", keyId, environment: "production", appRoute: iosAppRoute },
   );
   assert.equal(disabled.status, 403, "the checked-in false production flag blocks scheduling");
   assert.equal(schedulerAccesses, 0);
@@ -197,7 +202,7 @@ test("the public route and handler cannot reach delayed scheduling without the o
       body: { token: device.token },
       bytes: new TextEncoder().encode(JSON.stringify({ token: device.token })),
     },
-    { mode: "attested", keyId, environment: "production" },
+    { mode: "attested", keyId, environment: "production", appRoute: iosAppRoute },
   );
   assert.equal(
     immediate.status,

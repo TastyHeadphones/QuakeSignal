@@ -58,20 +58,16 @@ body {
   opacity: 0.9;
 }
 
-.countdown {
+.alert-guidance {
+  max-width: 38ch;
+  align-self: center;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
   text-align: center;
-  margin: 6px 0;
-}
-.countdown .num {
-  font-size: 44px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-.countdown .label {
-  font-size: 11px;
-  opacity: 0.85;
-  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .tip {

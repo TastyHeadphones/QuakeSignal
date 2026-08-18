@@ -66,6 +66,10 @@ jobs:
         working-directory: desktop
         run: npm ci
 
+      - name: Test frontend safety policy
+        working-directory: desktop
+        run: npm test
+
       - name: Build frontend
         working-directory: desktop
         run: npm run build

@@ -183,7 +183,16 @@ function registrationValues(
   };
 }
 
-function authorization(keyId, proofType, environment = "production") {
+function authorization(
+  keyId,
+  proofType,
+  environment = "production",
+  appRoute = {
+    appIdentity: "5TT564H883.com.quakesignal.app",
+    apnsTopic: "com.quakesignal.app",
+    platform: "ios",
+  },
+) {
   const challenge = {
     id: `challenge-${keyId}`,
     keyId,
@@ -201,6 +210,7 @@ function authorization(keyId, proofType, environment = "production") {
     keyId,
     environment,
     challenge,
+    appRoute,
     verification: proofType === "attestation"
       ? {
           proofType,
@@ -216,6 +226,68 @@ function authorization(keyId, proofType, environment = "production") {
         },
   };
 }
+
+test("attested registration persists the authenticated identity route, not a client topic", async () => {
+  const { completeAttestedRegistration } = await workerModule();
+  const keyId = "watch-route-app-attest-key";
+  const token = "watch-route-apns-token";
+  const now = "2026-08-19T00:00:00.000Z";
+  const appRoute = {
+    appIdentity: "5TT564H883.com.quakesignal.app.watchkitapp",
+    apnsTopic: "com.quakesignal.app.watchkitapp",
+    platform: "watchos",
+  };
+  const registrationAuthorization = authorization(
+    keyId,
+    "attestation",
+    "production",
+    appRoute,
+  );
+  const stateDirectory = await mkdtemp(join(tmpdir(), "quakesignal-app-route-"));
+  let adapter;
+
+  try {
+    const localArguments = ["--local", "--persist-to", stateDirectory];
+    runWrangler(["d1", "migrations", "apply", "quakesignal-production", ...localArguments]);
+    const databaseFile = localD1File(stateDirectory);
+    const seed = new DatabaseSync(databaseFile);
+    try {
+      seedChallenge(seed, registrationAuthorization.challenge, now);
+    } finally {
+      seed.close();
+    }
+    adapter = localD1Adapter(databaseFile);
+    assert.equal(
+      await completeAttestedRegistration(
+        adapter.database,
+        registrationAuthorization,
+        registrationValues(token, now),
+      ),
+      "completed",
+    );
+    assert.deepEqual(
+      adapter.all(
+        `SELECT app_attest_key_id, app_identity, apns_topic, app_platform
+         FROM devices WHERE token = ?`,
+        token,
+      ),
+      [{
+        app_attest_key_id: keyId,
+        app_identity: appRoute.appIdentity,
+        apns_topic: appRoute.apnsTopic,
+        app_platform: appRoute.platform,
+      }],
+    );
+    assert.deepEqual(
+      adapter.all("SELECT app_id FROM app_attest_keys WHERE key_id = ?", keyId),
+      [{ app_id: appRoute.appIdentity }],
+      "the same cryptographically verified identity anchors the key and device route",
+    );
+  } finally {
+    adapter?.close();
+    await rm(stateDirectory, { recursive: true, force: true });
+  }
+});
 
 test("complete attested registration safely recovers an exact token after key rotation", async () => {
   const { completeAttestedRegistration } = await workerModule();
@@ -381,6 +453,11 @@ test("a fresh App Attest key cannot claim a legacy registration with an empty de
     {
       mode: "attested",
       keyId: "fresh-key",
+      appRoute: {
+        appIdentity: "5TT564H883.com.quakesignal.app",
+        apnsTopic: "com.quakesignal.app",
+        platform: "ios",
+      },
       verification: { proofType: "attestation" },
     },
   );

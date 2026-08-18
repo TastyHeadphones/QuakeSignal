@@ -452,6 +452,320 @@ test("automatic production delivery skips historical sandbox registrations", asy
   }
 });
 
+test("dispatches each authenticated app route with its stored allow-listed APNs topic", async () => {
+  const { dispatchPushPage } = await workerModule();
+  const originalFetch = globalThis.fetch;
+  const iosIdentity = "5TT564H883.com.quakesignal.app";
+  const watchIdentity = "5TT564H883.com.quakesignal.app.watchkitapp";
+  const routes = [
+    { appIdentity: iosIdentity, apnsTopic: "com.quakesignal.app", platform: "ios" },
+    {
+      appIdentity: watchIdentity,
+      apnsTopic: "com.quakesignal.app.watchkitapp",
+      platform: "watchos",
+    },
+  ];
+  const baseRow = {
+    environment: "production",
+    locale: null,
+    sources: '["jma_eew"]',
+    min_magnitude: 0,
+    critical_alerts_enabled: 0,
+    alert_sound: "system",
+    city_name: null,
+    latitude: null,
+    longitude: null,
+    radius_km: null,
+    include_test_alerts: 1,
+    utc_offset_minutes: null,
+    notify_at_night: 1,
+    created_at: "2026-08-19T00:00:00.000Z",
+    updated_at: "2026-08-19T00:00:00.000Z",
+  };
+  const rows = routes.map((route, index) => ({
+    ...baseRow,
+    cursor: index + 1,
+    token: `${route.platform}-token`,
+    app_identity: route.appIdentity,
+    apns_topic: route.apnsTopic,
+    app_platform: route.platform,
+  }));
+  const deliveredBatches = [];
+  const requests = [];
+  const database = {
+    prepare(sql) {
+      return {
+        bind(...bindings) {
+          return {
+            async all() {
+              if (sql.includes("SELECT rowid AS cursor, * FROM devices")) {
+                return { results: rows };
+              }
+              if (
+                sql.includes("FROM notification_deliveries") ||
+                sql.includes("FROM alert_delivery_failures")
+              ) {
+                return { results: [] };
+              }
+              throw new Error(`unexpected routed delivery query: ${sql}`);
+            },
+          };
+        },
+      };
+    },
+    async batch(statements) {
+      deliveredBatches.push(statements);
+      return statements.map(() => ({ meta: { changes: 1 } }));
+    },
+  };
+  globalThis.fetch = async (url, init) => {
+    requests.push({
+      url: String(url),
+      topic: init.headers["apns-topic"],
+    });
+    return new Response(null, { status: 200, headers: { "apns-id": "routed" } });
+  };
+  const event = {
+    id: "jma_eew:routed",
+    eventId: "routed",
+    sourceId: "jma_eew",
+    serial: 1,
+    kind: "eew",
+    originTimeUtc: "2026-08-19T00:00:00.000Z",
+    reportTimeUtc: "2026-08-19T00:00:00.000Z",
+    hypocenter: "Test Region",
+    latitude: 35,
+    longitude: 135,
+    magnitude: 5.5,
+    depth: 10,
+    maxIntensity: "5-",
+    isWarn: true,
+    isFinal: false,
+    isCancel: false,
+    isTraining: false,
+    tsunami: null,
+    raw: null,
+  };
+  try {
+    const page = await dispatchPushPage(
+      {
+        APP_ATTEST_ENFORCEMENT: "required",
+        APP_ATTEST_APNS_ROUTES: JSON.stringify(routes),
+        DB: database,
+        APNS_PRIVATE_KEY: "configured-route-test-key",
+        APNS_KEY_ID: "ABCDEFGHIJ",
+        APNS_TEAM_ID: "ABCDEFGHIJ",
+      },
+      event,
+      "new",
+      "cached.provider.jwt",
+      "authenticated-route-delivery",
+    );
+    assert.equal(page.pageFailure, null);
+    assert.equal(page.retryRequired, false);
+    assert.deepEqual(requests, [
+      {
+        url: "https://api.push.apple.com/3/device/ios-token",
+        topic: "com.quakesignal.app",
+      },
+      {
+        url: "https://api.push.apple.com/3/device/watchos-token",
+        topic: "com.quakesignal.app.watchkitapp",
+      },
+    ]);
+    assert.equal(deliveredBatches.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("never sends a tampered stored topic and still completes another platform route", async () => {
+  const { dispatchPushPage } = await workerModule();
+  const originalFetch = globalThis.fetch;
+  const iosRoute = {
+    appIdentity: "5TT564H883.com.quakesignal.app",
+    apnsTopic: "com.quakesignal.app",
+    platform: "ios",
+  };
+  const common = {
+    environment: "production",
+    locale: null,
+    sources: '["jma_eew"]',
+    min_magnitude: 0,
+    critical_alerts_enabled: 0,
+    alert_sound: "system",
+    city_name: null,
+    latitude: null,
+    longitude: null,
+    radius_km: null,
+    include_test_alerts: 1,
+    utc_offset_minutes: null,
+    notify_at_night: 1,
+    app_identity: iosRoute.appIdentity,
+    app_platform: iosRoute.platform,
+    created_at: "2026-08-19T00:00:00.000Z",
+    updated_at: "2026-08-19T00:00:00.000Z",
+  };
+  const rows = [
+    { ...common, cursor: 1, token: "tampered-token", apns_topic: "attacker.topic" },
+    { ...common, cursor: 2, token: "valid-token", apns_topic: iosRoute.apnsTopic },
+  ];
+  const requests = [];
+  const delivered = [];
+  const database = {
+    prepare(sql) {
+      return {
+        bind() {
+          return {
+            async all() {
+              if (sql.includes("SELECT rowid AS cursor, * FROM devices")) {
+                return { results: rows };
+              }
+              if (
+                sql.includes("FROM notification_deliveries") ||
+                sql.includes("FROM alert_delivery_failures")
+              ) return { results: [] };
+              throw new Error(`unexpected tampered-route query: ${sql}`);
+            },
+          };
+        },
+      };
+    },
+    async batch(statements) {
+      delivered.push(statements);
+      return statements.map(() => ({ meta: { changes: 1 } }));
+    },
+  };
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), topic: init.headers["apns-topic"] });
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const page = await dispatchPushPage(
+      {
+        APP_ATTEST_ENFORCEMENT: "required",
+        APP_ATTEST_APNS_ROUTES: JSON.stringify([iosRoute]),
+        DB: database,
+        APNS_PRIVATE_KEY: "configured-route-test-key",
+        APNS_KEY_ID: "ABCDEFGHIJ",
+        APNS_TEAM_ID: "ABCDEFGHIJ",
+      },
+      {
+        id: "jma_eew:tampered-route",
+        eventId: "tampered-route",
+        sourceId: "jma_eew",
+        serial: 1,
+        kind: "eew",
+        originTimeUtc: "2026-08-19T00:00:00.000Z",
+        reportTimeUtc: "2026-08-19T00:00:00.000Z",
+        hypocenter: "Test Region",
+        latitude: 35,
+        longitude: 135,
+        magnitude: 5.5,
+        depth: 10,
+        maxIntensity: "5-",
+        isWarn: true,
+        isFinal: false,
+        isCancel: false,
+        isTraining: false,
+        tsunami: null,
+        raw: null,
+      },
+      "new",
+      "cached.provider.jwt",
+      "tampered-route-delivery",
+    );
+    assert.equal(page.retryRequired, true);
+    assert.equal(page.pageFailure.apnsReason, "AppRouteNotAllowed");
+    assert.deepEqual(requests, [{
+      url: "https://api.push.apple.com/3/device/valid-token",
+      topic: "com.quakesignal.app",
+    }]);
+    assert.equal(delivered.length, 1, "the valid route success remains durable");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("app identity routing is backward compatible, strict, and Watch-disabled by default", async () => {
+  const {
+    AppIdentityRouteConfigurationError,
+    AppIdentityRouteNotAllowedError,
+    authenticatedAppRouteForRequest,
+    configuredAppIdentityRoutes,
+  } = await workerModule();
+  const iosIdentity = "5TT564H883.com.quakesignal.app";
+  const watchIdentity = "5TT564H883.com.quakesignal.app.watchkitapp";
+  const iosRoute = {
+    appIdentity: iosIdentity,
+    apnsTopic: "com.quakesignal.app",
+    platform: "ios",
+  };
+  const watchRoute = {
+    appIdentity: watchIdentity,
+    apnsTopic: "com.quakesignal.app.watchkitapp",
+    platform: "watchos",
+  };
+
+  assert.deepEqual(configuredAppIdentityRoutes({}), [iosRoute]);
+  assert.deepEqual(
+    authenticatedAppRouteForRequest({}, {}),
+    iosRoute,
+    "an existing iOS client can omit appIdentity",
+  );
+  assert.throws(
+    () => authenticatedAppRouteForRequest({}, { appIdentity: watchIdentity }),
+    (error) => error instanceof AppIdentityRouteNotAllowedError,
+    "Watch is disabled unless its exact identity/topic route is configured",
+  );
+
+  const explicitEnvironment = {
+    APP_ATTEST_APNS_ROUTES: JSON.stringify([watchRoute, iosRoute]),
+  };
+  assert.deepEqual(
+    configuredAppIdentityRoutes(explicitEnvironment),
+    [iosRoute, watchRoute],
+    "route order is deterministic and not controlled by JSON order",
+  );
+  assert.deepEqual(
+    authenticatedAppRouteForRequest(
+      explicitEnvironment,
+      { appIdentity: watchIdentity },
+    ),
+    watchRoute,
+  );
+  assert.throws(
+    () => authenticatedAppRouteForRequest(
+      explicitEnvironment,
+      { appIdentity: watchIdentity },
+      iosIdentity,
+    ),
+    (error) => error instanceof AppIdentityRouteNotAllowedError,
+    "an existing App Attest key cannot switch its stored app identity",
+  );
+  assert.throws(
+    () => authenticatedAppRouteForRequest({}, {}, watchIdentity),
+    (error) => error instanceof AppIdentityRouteNotAllowedError,
+    "removing Watch from the allow-list disables an existing Watch identity",
+  );
+
+  for (const configured of [
+    "",
+    "not-json",
+    JSON.stringify([]),
+    JSON.stringify([watchRoute]),
+    JSON.stringify([iosRoute, iosRoute]),
+    JSON.stringify([{ ...iosRoute, enabled: true }]),
+    JSON.stringify([{ ...iosRoute, apnsTopic: "com.quakesignal.attacker" }]),
+    JSON.stringify([{ ...iosRoute, platform: "carplay" }]),
+  ]) {
+    assert.throws(
+      () => configuredAppIdentityRoutes({ APP_ATTEST_APNS_ROUTES: configured }),
+      (error) => error instanceof AppIdentityRouteConfigurationError,
+    );
+  }
+});
+
 test("rejects an over-limit health probe before it can activate the global relay", async () => {
   const { default: worker } = await workerModule();
   let relayTouched = false;
@@ -481,15 +795,23 @@ test("rejects an over-limit health probe before it can activate the global relay
 
 test("health exposes a stable non-secret App Attest policy fingerprint without extra relay work", async () => {
   const {
+    AppIdentityRouteConfigurationError,
     appAttestPolicyFingerprint,
     canonicalAppAttestPolicy,
     effectiveAppAttestPolicy,
     default: worker,
   } = await workerModule();
-  const policyFormat = "quakesignal-app-attest-policy/v1";
+  const policyFormat = "quakesignal-app-attest-policy/v2";
+  const iosRoute = {
+    appIdentity: "5TT564H883.com.quakesignal.app",
+    apnsTopic: "com.quakesignal.app",
+    platform: "ios",
+  };
+  const reviewedFingerprint = "sha256:paGI1JqZe4fM8agtkvI83In3vPpDliD3R7U57MQKomY";
   const policyEnvironment = {
     APP_ATTEST_ENFORCEMENT: "required",
     APP_ATTEST_APP_ID: "5TT564H883.com.quakesignal.app",
+    APP_ATTEST_APNS_ROUTES: JSON.stringify([iosRoute]),
     APP_ATTEST_ALLOWED_BUNDLE_VERSIONS: "2, 1, 2, invalid!",
     APP_ATTEST_REQUIRE_RELEASE_METADATA: "false",
   };
@@ -505,28 +827,70 @@ test("health exposes a stable non-secret App Attest policy fingerprint without e
       "verification_environment=production",
       "require_release_metadata=false",
       "allowed_bundle_versions=1,2",
+      'app_attest_apns_routes=[{"appIdentity":"5TT564H883.com.quakesignal.app","apnsTopic":"com.quakesignal.app","platform":"ios"}]',
       "",
     ].join("\n"),
   );
   assert.equal(
     await appAttestPolicyFingerprint(effectivePolicy),
-    "sha256:uM0AU36V0txDnHa_U1i2aEDxrCtB_FeR566slmklTbg",
+    reviewedFingerprint,
   );
   assert.equal(
     await appAttestPolicyFingerprint(effectiveAppAttestPolicy({
       ...policyEnvironment,
       APP_ATTEST_ALLOWED_BUNDLE_VERSIONS: "1,2",
     })),
-    "sha256:uM0AU36V0txDnHa_U1i2aEDxrCtB_FeR566slmklTbg",
+    reviewedFingerprint,
     "version order and duplicates must not change the effective deployment fingerprint",
+  );
+  assert.equal(
+    await appAttestPolicyFingerprint(effectiveAppAttestPolicy({
+      ...policyEnvironment,
+      APP_ATTEST_APNS_ROUTES: '[{"platform":"ios","apnsTopic":"com.quakesignal.app","appIdentity":"5TT564H883.com.quakesignal.app"}]',
+    })),
+    reviewedFingerprint,
+    "route JSON key order must not change the normalized deployment fingerprint",
   );
   assert.notEqual(
     await appAttestPolicyFingerprint(effectiveAppAttestPolicy({
       ...policyEnvironment,
       APP_ATTEST_REQUIRE_RELEASE_METADATA: "true",
     })),
-    "sha256:uM0AU36V0txDnHa_U1i2aEDxrCtB_FeR566slmklTbg",
+    reviewedFingerprint,
     "a material App Attest policy change must alter the deployment fingerprint",
+  );
+  assert.notEqual(
+    await appAttestPolicyFingerprint(effectiveAppAttestPolicy({
+      ...policyEnvironment,
+      APP_ATTEST_APNS_ROUTES: JSON.stringify([{ ...iosRoute, platform: "ipados" }]),
+    })),
+    reviewedFingerprint,
+    "changing an authenticated APNs route must alter the deployment fingerprint",
+  );
+  assert.notEqual(
+    await appAttestPolicyFingerprint(effectiveAppAttestPolicy({
+      ...policyEnvironment,
+      APP_ATTEST_APNS_ROUTES: JSON.stringify([
+        iosRoute,
+        {
+          appIdentity: "5TT564H883.com.quakesignal.app.watchkitapp",
+          apnsTopic: "com.quakesignal.app.watchkitapp",
+          platform: "watchos",
+        },
+      ]),
+    })),
+    reviewedFingerprint,
+    "adding an authenticated APNs route must alter the deployment fingerprint",
+  );
+  assert.throws(
+    () => effectiveAppAttestPolicy({
+      ...policyEnvironment,
+      APP_ATTEST_APNS_ROUTES: JSON.stringify([
+        { ...iosRoute, apnsTopic: "com.quakesignal.wrong" },
+      ]),
+    }),
+    (error) => error instanceof AppIdentityRouteConfigurationError,
+    "a wrong App Attest identity-to-topic route must fail health policy construction",
   );
 
   let relayRequests = 0;
@@ -564,7 +928,7 @@ test("health exposes a stable non-secret App Attest policy fingerprint without e
   const body = await response.json();
   assert.deepEqual(body.appAttestPolicy, {
     format: policyFormat,
-    fingerprint: "sha256:uM0AU36V0txDnHa_U1i2aEDxrCtB_FeR566slmklTbg",
+    fingerprint: reviewedFingerprint,
     allowedBundleVersions: ["1", "2"],
   });
 });
@@ -575,10 +939,11 @@ test("health returns a no-store structured 503 when the relay status call fails"
     effectiveAppAttestPolicy,
     default: worker,
   } = await workerModule();
-  const policyFormat = "quakesignal-app-attest-policy/v1";
+  const policyFormat = "quakesignal-app-attest-policy/v2";
   const policyEnvironment = {
     APP_ATTEST_ENFORCEMENT: "required",
     APP_ATTEST_APP_ID: "5TT564H883.com.quakesignal.app",
+    APP_ATTEST_APNS_ROUTES: '[{"appIdentity":"5TT564H883.com.quakesignal.app","apnsTopic":"com.quakesignal.app","platform":"ios"}]',
     APP_ATTEST_ALLOWED_BUNDLE_VERSIONS: "1,2",
     APP_ATTEST_REQUIRE_RELEASE_METADATA: "false",
   };
@@ -3996,7 +4361,15 @@ test("training pushes obtain APNs authorization from the relay cache and fail cl
     body: { token: device.token },
     bytes: new TextEncoder().encode(JSON.stringify({ token: device.token })),
   };
-  const authorization = { mode: "development_bypass", keyId: null };
+  const authorization = {
+    mode: "development_bypass",
+    keyId: null,
+    appRoute: {
+      appIdentity: "5TT564H883.com.quakesignal.app",
+      apnsTopic: "com.quakesignal.app",
+      platform: "ios",
+    },
+  };
   globalThis.fetch = async (_url, init) => {
     apnsAuthorizations.push(new Headers(init.headers).get("authorization"));
     return new Response(null, { status: 200, headers: { "apns-id": "test-id" } });
@@ -4465,6 +4838,30 @@ test("accepts only exact alert-sound registration identifiers and defaults old c
     assert.ok(response instanceof Response);
     assert.equal(response.status, 400);
   }
+  const selectedIdentity = validatedRegistrationValues({
+    ...registration,
+    appIdentity: "5TT564H883.com.quakesignal.app.watchkitapp",
+  });
+  assert.ok(!(selectedIdentity instanceof Response));
+  assert.equal(
+    Object.hasOwn(selectedIdentity, "apnsTopic"),
+    false,
+    "the client identity selector is not itself a persisted APNs route",
+  );
+  for (const injectedRoute of [
+    { apnsTopic: "attacker.topic" },
+    { apns_topic: "attacker.topic" },
+    { topic: "attacker.topic" },
+    { bundleId: "attacker.topic" },
+    { bundleIdentifier: "attacker.topic" },
+    { appPlatform: "watchos" },
+    { app_platform: "watchos" },
+    { platform: "watchos" },
+  ]) {
+    const response = validatedRegistrationValues({ ...registration, ...injectedRoute });
+    assert.ok(response instanceof Response);
+    assert.equal(response.status, 400, "a raw client route is never accepted");
+  }
 });
 
 test("calculates bounded reason-specific delivery deadlines", async () => {
@@ -4596,6 +4993,83 @@ test("migration 0010 preserves outbox state while capping pending urgent work at
       "UPDATE devices SET alert_sound = 'official-j-alert' WHERE token = 'migration-device-token'",
     ),
     /constraint/i,
+  );
+});
+
+test("migration 0011 backfills the legacy iOS route and constrains platform metadata", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "quakesignal-migration-0011-"));
+  const databasePath = join(directory, "migration.sqlite");
+  const sqlite = new DatabaseSync(databasePath);
+  t.after(async () => {
+    sqlite.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const migrationEntries = await readdir(join(cloudflareDirectory, "migrations"));
+  for (let version = 1; version <= 10; version += 1) {
+    const filename = migrationEntries.find((entry) =>
+      entry.startsWith(String(version).padStart(4, "0")),
+    );
+    assert.ok(filename, `migration ${version} must exist`);
+    sqlite.exec(await readFile(join(cloudflareDirectory, "migrations", filename), "utf8"));
+  }
+  sqlite.exec(`
+    INSERT INTO devices (
+      token, environment, sources, min_magnitude, critical_alerts_enabled,
+      include_test_alerts, notify_at_night, created_at, updated_at
+    ) VALUES (
+      'legacy-route-token', 'production', '["jma_eew"]', 0, 0, 0, 1,
+      '2026-08-19T00:00:00.000Z', '2026-08-19T00:00:00.000Z'
+    )
+  `);
+  sqlite.exec(await readFile(
+    join(cloudflareDirectory, "migrations/0011_authenticated_app_routes.sql"),
+    "utf8",
+  ));
+
+  assert.deepEqual(
+    {
+      ...sqlite.prepare(
+        `SELECT app_identity, apns_topic, app_platform
+         FROM devices WHERE token = 'legacy-route-token'`,
+      ).get(),
+    },
+    {
+      app_identity: "5TT564H883.com.quakesignal.app",
+      apns_topic: "com.quakesignal.app",
+      app_platform: "ios",
+    },
+  );
+  sqlite.exec(`
+    INSERT INTO devices (
+      token, environment, sources, min_magnitude, critical_alerts_enabled,
+      include_test_alerts, notify_at_night, app_identity, apns_topic,
+      app_platform, created_at, updated_at
+    ) VALUES (
+      'watch-route-token', 'production', '["jma_eew"]', 0, 0, 0, 1,
+      '5TT564H883.com.quakesignal.app.watchkitapp',
+      'com.quakesignal.app.watchkitapp', 'watchos',
+      '2026-08-19T00:00:00.000Z', '2026-08-19T00:00:00.000Z'
+    )
+  `);
+  assert.throws(
+    () => sqlite.exec(
+      "UPDATE devices SET app_platform = 'carplay' WHERE token = 'legacy-route-token'",
+    ),
+    /constraint/i,
+  );
+  assert.throws(
+    () => sqlite.exec(
+      "UPDATE devices SET apns_topic = '' WHERE token = 'legacy-route-token'",
+    ),
+    /constraint/i,
+  );
+  assert.deepEqual(
+    sqlite.prepare(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'index' AND name = 'idx_devices_authenticated_app_route'`,
+    ).all().map(({ name }) => name),
+    ["idx_devices_authenticated_app_route"],
   );
 });
 

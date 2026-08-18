@@ -1,0 +1,15 @@
+QuakeSignal for Apple Vision Pro brings earthquake reports, nearby context, and practical preparedness guidance into a native window.
+
+FOLLOW EARTHQUAKE INFORMATION
+Review normalized reports from selected third-party feeds aggregated through the Wolfx Open API. Preliminary, updated, final, cancelled, and training messages use distinct status treatments.
+
+UNDERSTAND WHAT IS NEARBY
+Choose a city or use your current location to review distance, direction, magnitude, available intensity, depth, timing, and epicenter context on the map.
+
+OPTIONAL PROTECTED NOTIFICATIONS
+If you opt in, QuakeSignal uses App Attest and Apple Push Notification service registration to request nearby notifications matching your selected sources, magnitude, approximate location or city, and radius. Qualifying fresh warnings may be delivered as Time Sensitive notifications, subject to Apple Vision Pro settings. QuakeSignal does not have the Critical Alerts entitlement, and delivery is not guaranteed.
+
+PREPARE OFFLINE
+Keep drop-cover-hold-on guidance, situation-specific safety actions, an emergency-kit checklist, and family check-in notes available without a network connection.
+
+QuakeSignal is independent and is not affiliated with JMA, CENC, or any government agency. Third-party information can be delayed, incomplete, revised, or inaccurate. Notifications are best-effort and are not a government emergency-alert service. Always follow official announcements and local emergency instructions.

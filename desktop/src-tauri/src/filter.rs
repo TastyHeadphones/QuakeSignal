@@ -1,8 +1,10 @@
 use crate::domain::{EventKind, NormalizedEvent, NotifyReason};
 use crate::settings::Settings;
-use chrono::{Local, Timelike, Utc};
+use chrono::{DateTime, Local, Timelike, Utc};
 
 const EARTH_RADIUS_KM: f64 = 6371.0;
+pub(crate) const MAX_ACTIVE_WARNING_AGE_SECONDS: i64 = 10 * 60;
+const MAX_FUTURE_CLOCK_SKEW_SECONDS: i64 = 60;
 
 /// Mirrors backend/src/util/geo.ts::haversineDistanceKm exactly.
 pub fn haversine_distance_km(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
@@ -36,8 +38,29 @@ pub fn is_genuine_active_warning(event: &NormalizedEvent) -> bool {
         && !event.is_training
 }
 
+fn is_fresh_active_warning_at(event: &NormalizedEvent, now: DateTime<Utc>) -> bool {
+    if !is_genuine_active_warning(event) {
+        return false;
+    }
+    let Some(timestamp) = event
+        .report_time_utc
+        .as_deref()
+        .or(event.origin_time_utc.as_deref())
+    else {
+        return false;
+    };
+    let Ok(event_time) = DateTime::parse_from_rfc3339(timestamp) else {
+        return false;
+    };
+    let age_seconds = now
+        .signed_duration_since(event_time.with_timezone(&Utc))
+        .num_seconds();
+    (-MAX_FUTURE_CLOCK_SKEW_SECONDS..=MAX_ACTIVE_WARNING_AGE_SECONDS).contains(&age_seconds)
+}
+
 pub fn is_urgent_warning_presentation(event: &NormalizedEvent, reason: NotifyReason) -> bool {
-    is_genuine_active_warning(event) && matches!(reason, NotifyReason::New | NotifyReason::Updated)
+    is_fresh_active_warning_at(event, Utc::now())
+        && matches!(reason, NotifyReason::New | NotifyReason::Updated)
 }
 
 /// Applies the same monotonic alert lifecycle as the backend: training/report
@@ -93,6 +116,9 @@ pub fn determine_reason(
         return None;
     }
     if !is_genuine_active_warning(event) {
+        return None;
+    }
+    if !is_fresh_active_warning_at(event, Utc::now()) {
         return None;
     }
     match previous {
@@ -185,7 +211,7 @@ mod tests {
             serial,
             kind: EventKind::Eew,
             origin_time_utc: None,
-            report_time_utc: None,
+            report_time_utc: Some(Utc::now().to_rfc3339()),
             hypocenter: "Test".to_string(),
             latitude: None,
             longitude: None,
@@ -261,5 +287,34 @@ mod tests {
             &final_event,
             NotifyReason::Final
         ));
+    }
+
+    #[test]
+    fn stale_or_malformed_warning_never_notifies_or_takes_over_the_screen() {
+        let mut stale = event(1, false, false);
+        stale.report_time_utc = Some((Utc::now() - chrono::Duration::minutes(11)).to_rfc3339());
+        assert_eq!(determine_reason(&stale, None), None);
+        assert!(!is_urgent_warning_presentation(&stale, NotifyReason::New));
+
+        let mut malformed = event(1, false, false);
+        malformed.report_time_utc = Some("not-a-date".to_string());
+        assert_eq!(determine_reason(&malformed, None), None);
+        assert!(!is_urgent_warning_presentation(
+            &malformed,
+            NotifyReason::New
+        ));
+    }
+
+    #[test]
+    fn warning_future_clock_skew_is_bounded_to_one_minute() {
+        let now = DateTime::parse_from_rfc3339("2026-08-19T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut warning = event(1, false, false);
+        warning.report_time_utc = Some((now + chrono::Duration::seconds(60)).to_rfc3339());
+        assert!(is_fresh_active_warning_at(&warning, now));
+
+        warning.report_time_utc = Some((now + chrono::Duration::seconds(61)).to_rfc3339());
+        assert!(!is_fresh_active_warning_at(&warning, now));
     }
 }

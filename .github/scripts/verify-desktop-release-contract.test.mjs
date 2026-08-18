@@ -11,16 +11,19 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 
 async function fixture(t, {
   mutateDesktop = (source) => source,
+  mutateDesktopConfig = (source) => source,
   mutateHomebrew = (source) => source,
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), "quakesignal-desktop-release-contract-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const [desktop, homebrew] = await Promise.all([
+  const [desktop, desktopConfig, homebrew] = await Promise.all([
     readFile(join(repositoryRoot, ".github/workflows/desktop-release.yml"), "utf8"),
+    readFile(join(repositoryRoot, "desktop/src-tauri/tauri.conf.json"), "utf8"),
     readFile(join(repositoryRoot, ".github/workflows/homebrew-tap.yml"), "utf8"),
   ]);
   for (const [path, source] of [
     [".github/workflows/desktop-release.yml", mutateDesktop(desktop)],
+    ["desktop/src-tauri/tauri.conf.json", mutateDesktopConfig(desktopConfig)],
     [".github/workflows/homebrew-tap.yml", mutateHomebrew(homebrew)],
   ]) {
     const target = join(root, path);
@@ -47,13 +50,135 @@ function replaceInMacosDirect(source, from, to, label) {
   return `${source.slice(0, offset)}${replaceOnce(source.slice(offset), from, to, label)}`;
 }
 
+function replaceInMacosAppStore(source, from, to, label) {
+  const marker = "  macos-app-store:\n";
+  const offset = source.indexOf(marker);
+  if (offset < 0) throw new Error("fixture could not locate macos-app-store job");
+  return `${source.slice(0, offset)}${replaceOnce(source.slice(offset), from, to, label)}`;
+}
+
 test("the checked-in direct macOS and Homebrew release contracts are coherent", async () => {
   const verified = await verifyDesktopReleaseContract({ root: repositoryRoot });
   assert.deepEqual(verified, {
-    directStepsFingerprint: "sha256:nKhYfHuXuux6_oG10mZ0eZm_ISVGetPQgIVhFwmc1pA",
+    directStepsFingerprint: "sha256:9_cZ-KeTzLZFiOlAwbIJw4av4Zlihs9Xr2eXsQfnbmA",
+    macAppStoreStepsFingerprint: "sha256:RfLhsMpFJdK9JCx7AT0KvvvfuHb2YSV1YwWonSaPgAE",
     releaseStepsFingerprint: "sha256:3dX8Og0fyNOioMHFK-Jt8FiTZTqwkc8dhXjbovwV2qI",
     homebrewStepsFingerprint: "sha256:NuwuAFiTLY6LC19V3jx8XcjFSwpafYQVpgHgnveCywY",
   });
+});
+
+test("fails closed if any desktop release build skips the frontend safety-policy tests", async (t) => {
+  for (const jobMarker of ["  windows:\n", "  macos-direct:\n", "  macos-app-store:\n"]) {
+    await expectFailure(t, {
+      mutateDesktop: (source) => {
+        const offset = source.indexOf(jobMarker);
+        assert.notEqual(offset, -1, `fixture must contain ${jobMarker.trim()}`);
+        const before = source.slice(0, offset);
+        const after = source.slice(offset);
+        return `${before}${replaceOnce(
+          after,
+          "      - name: Test frontend safety policy\n        working-directory: desktop\n        run: npm test\n\n",
+          "",
+          "frontend safety-policy test gate",
+        )}`;
+      },
+    }, /frontend safety-policy test gate/i);
+  }
+});
+
+test("keeps artifact-only mechanical validation separate from the upload-only exact-source approval gate", async (t) => {
+  await expectFailure(t, {
+    mutateDesktop: (source) => replaceOnce(
+      source,
+      "      - name: Validate Mac App Store listing assets\n        run: ruby .github/scripts/verify-store-assets.rb\n",
+      "      - name: Validate Mac App Store listing assets\n        run: ruby .github/scripts/verify-store-assets.rb --require-macos-release-ready --expected-source-commit=\"$GITHUB_SHA\"\n",
+      "Mac App Store artifact-only listing-assets gate",
+    ),
+  }, /artifact-only listing-assets gate/i);
+  await expectFailure(t, {
+    mutateDesktop: (source) => replaceInMacosAppStore(
+      source,
+      "            --require-macos-release-ready \\\n            --expected-source-commit=\"$baseline\"",
+      "            --expected-source-commit=\"$baseline\"",
+      "Mac App Store upload screenshot approval",
+    ),
+  }, /upload screenshot release gate/i);
+});
+
+test("fails closed if Mac App Store dispatch defaults or protected upload conditions widen", async (t) => {
+  await expectFailure(t, {
+    mutateDesktop: (source) => replaceOnce(
+      source,
+      "      upload_macos_to_app_store_connect:\n        description: Build, validate, and upload only after exact-source screenshot approval\n        required: false\n        default: false\n",
+      "      upload_macos_to_app_store_connect:\n        description: Build, validate, and upload only after exact-source screenshot approval\n        required: false\n        default: true\n",
+      "Mac App Store upload default",
+    ),
+  }, /workflow_dispatch inputs/i);
+  await expectFailure(t, {
+    mutateDesktop: (source) => replaceInMacosAppStore(
+      source,
+      "      github.ref_protected &&\n",
+      "      true &&\n",
+      "Mac App Store protected-main condition",
+    ),
+  }, /macos-app-store job/i);
+  await expectFailure(t, {
+    mutateDesktop: (source) => replaceInMacosAppStore(
+      source,
+      "        if: github.event_name == 'workflow_dispatch' && inputs.upload_macos_to_app_store_connect\n",
+      "        if: true\n",
+      "Mac App Store explicit upload consent",
+    ),
+  }, /upload screenshot release gate|upload key step must remain conditional|macos-app-store steps/i);
+  await expectFailure(t, {
+    mutateDesktop: (source) => replaceInMacosAppStore(
+      source,
+      "          if [ \"$BUILD_ARTIFACT_ONLY\" = \"true\" ] && [ \"$UPLOAD_TO_APP_STORE_CONNECT\" = \"true\" ]; then\n",
+      "          if false; then\n",
+      "Mac App Store mutually exclusive mode gate",
+    ),
+  }, /mutually exclusive mode gate/i);
+});
+
+test("fails closed if a Mac App Store post-provenance or credential-ordering step changes", async (t) => {
+  await expectFailure(t, {
+    mutateDesktop: (source) => replaceInMacosAppStore(
+      source,
+      "xcrun altool --upload-package \"$MACOS_APP_STORE_PACKAGE\"",
+      "echo upload-was-skipped \"$MACOS_APP_STORE_PACKAGE\"",
+      "Mac App Store package upload command",
+    ),
+  }, /macos-app-store steps must match the reviewed/i);
+  await expectFailure(t, {
+    mutateDesktop: (source) => replaceInMacosAppStore(
+      source,
+      "      - name: Set up Node.js\n",
+      "      - name: Set up Node.js\n        env:\n          EARLY_KEY: ${{ secrets.MACOS_APP_STORE_CONNECT_API_KEY }}\n",
+      "Mac App Store pre-credential setup",
+    ),
+  }, /macos-app-store pre-credential step Set up Node\.js/i);
+});
+
+test("fails closed if the Mac App Store source or signed artifact version/build drifts from 1.1.0", async (t) => {
+  await expectFailure(t, {
+    mutateDesktopConfig: (source) => source.replace('"version": "1.1.0"', '"version": "1.0.0"'),
+  }, /tauri\.conf\.json version must be exactly 1\.1\.0/i);
+  for (const [from, to] of [
+    ['expected_short_version="1.1.0"', 'expected_short_version="1.0.0"'],
+    [
+      '"CFBundleVersion" "$expected_bundle_version" "Mac App Store Info.plist"',
+      '"CFBundleVersion" "1.0.0" "Mac App Store Info.plist"',
+    ],
+  ]) {
+    await expectFailure(t, {
+      mutateDesktop: (source) => replaceInMacosAppStore(
+        source,
+        from,
+        to,
+        "Mac App Store signed artifact version/build assertion",
+      ),
+    }, /signed artifact version\/build verification/i);
+  }
 });
 
 test("fails closed if the protected tag or protected-main ancestry boundary widens", async (t) => {

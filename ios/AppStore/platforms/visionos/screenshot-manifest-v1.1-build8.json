@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "status": "planned-not-captured",
+  "product": {
+    "appleId": "6800642443",
+    "platform": "visionOS",
+    "marketingVersion": "1.1",
+    "build": 8,
+    "bundleIdentifier": "com.quakesignal.app",
+    "scheme": "QuakeSignalVision"
+  },
+  "specification": {
+    "officialUrl": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/",
+    "minimumCount": 1,
+    "maximumCount": 10,
+    "acceptedLandscapePixels": [[3840, 2160]],
+    "selectedPixels": [3840, 2160],
+    "acceptedFormats": ["jpeg", "jpg", "png"],
+    "alphaAllowed": false
+  },
+  "captureEvidence": {
+    "sourceBaselineCommit": null,
+    "signedArtifactSha256": null,
+    "runtime": null,
+    "device": null,
+    "capturedAtUtc": null,
+    "reviewer": null,
+    "appMotionAnswerApproved": false
+  },
+  "locales": [
+    {
+      "directory": "en-US",
+      "publicationStatus": "approved-primary-only"
+    }
+  ],
+  "frames": [
+    {
+      "file": "en-US/01-home.png",
+      "screen": "Home",
+      "purpose": "Normal nearby report and service state in the native visionOS window",
+      "setup": "Listed city; no precise current location; benign finalized historical report.",
+      "pixels": [3840, 2160],
+      "captureStatus": "pending",
+      "sha256": null
+    },
+    {
+      "file": "en-US/02-reports.png",
+      "screen": "Reports",
+      "purpose": "Filterable current and historical report list",
+      "setup": "Ordinary source data; no simulated warning.",
+      "pixels": [3840, 2160],
+      "captureStatus": "pending",
+      "sha256": null
+    },
+    {
+      "file": "en-US/03-map.png",
+      "screen": "Map",
+      "purpose": "Epicenter context, filters, and current-location control",
+      "setup": "Ordinary report markers; current-location permission not granted and no private coordinate displayed.",
+      "pixels": [3840, 2160],
+      "captureStatus": "pending",
+      "sha256": null
+    },
+    {
+      "file": "en-US/04-guide.png",
+      "screen": "Preparedness Guide",
+      "purpose": "Offline safety guidance and emergency-kit preparation",
+      "setup": "No user-entered family or personal details.",
+      "pixels": [3840, 2160],
+      "captureStatus": "pending",
+      "sha256": null
+    },
+    {
+      "file": "en-US/05-alert-preferences.png",
+      "screen": "Alert Sound",
+      "purpose": "Selectable sounds, Japanese voice attribution, and optional notification controls",
+      "setup": "Japanese safety voice selected; visible non-official and CC BY 3.0 disclosure; no notification permission prompt.",
+      "pixels": [3840, 2160],
+      "captureStatus": "pending",
+      "sha256": null
+    }
+  ]
+}

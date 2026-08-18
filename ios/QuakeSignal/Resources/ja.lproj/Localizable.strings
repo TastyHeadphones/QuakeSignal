@@ -62,7 +62,7 @@
 /* Settings */
 "settings.title" = "設定";
 "settings.section.language" = "言語";
-"settings.language.systemNote" = "QuakeSignalはiPhoneの「言語と地域」設定に従います。English、日本語、简体中文に対応しています。";
+"settings.language.systemNote" = "QuakeSignalはこのデバイスの「言語と地域」設定に従います。English、日本語、简体中文に対応しています。";
 "settings.openSystemSettings" = "設定を開く";
 "settings.section.sources" = "警報の情報源";
 "settings.source.jma_eew" = "気象庁 — 緊急地震速報";
@@ -76,7 +76,7 @@
 "settings.section.notifications" = "通知";
 "settings.openNotificationSettings" = "通知設定を確認";
 "settings.notificationDelivery.degraded" = "一部の通知機能がオフです";
-"settings.notificationDelivery.degraded.detail" = "可能な限り確実に受信するには、iPhoneの「設定」で通知、サウンド、時間指定通知をオンにしてください。QuakeSignalは消音モードや集中モードを回避しません。";
+"settings.notificationDelivery.degraded.detail" = "可能な限り確実に受信するには、システムの「設定」で通知、サウンド、時間指定通知をオンにしてください。QuakeSignalは消音モードや集中モードを回避しません。";
 "settings.alertSound.title" = "通知音";
 "settings.alertSound.system" = "システム標準";
 "settings.alertSound.system.detail" = "Apple標準の通知音を使用します。";
@@ -90,21 +90,21 @@
 "settings.testAlert.success" = "テスト通知を送信しました。";
 "settings.testAlert.failure" = "テスト通知を送信できませんでした: %1$@";
 "settings.delayedTestAlert" = "バックグラウンドテスト通知を予約";
-"settings.delayedTestAlert.detail" = "90秒後に明確にテストと表示された通知を1件予約します。QuakeSignalを離れてから、iPhoneをロックまたは終了してください。";
+"settings.delayedTestAlert.detail" = "90秒後に明確にテストと表示された通知を1件予約します。QuakeSignalを離れてから、デバイスをロックするかアプリを終了してください。";
 "settings.delayedTestAlert.confirmation.title" = "バックグラウンドテスト通知を予約しますか？";
 "settings.delayedTestAlert.confirmation.message" = "QuakeSignalは約90秒後にテスト通知を1件予約します。レビュー済みのテスト時間帯にのみ使用してください。";
 "settings.delayedTestAlert.confirm" = "テスト通知を予約";
-"settings.delayedTestAlert.success" = "バックグラウンドテスト通知を予約しました。QuakeSignalを離れてから、iPhoneをロックまたは終了してください。";
+"settings.delayedTestAlert.success" = "バックグラウンドテスト通知を予約しました。QuakeSignalを離れてから、デバイスをロックするかアプリを終了してください。";
 "settings.delayedTestAlert.failure" = "バックグラウンドテスト通知を予約できませんでした: %1$@";
-"settings.pushSubscription.permissionDenied" = "iPhoneの「設定」で通知が無効になっています。下から既存のQuakeSignal通知登録を削除できます。";
+"settings.pushSubscription.permissionDenied" = "システムの「設定」で通知が無効になっています。下から既存のQuakeSignal通知登録を削除できます。";
 "settings.pushSubscription.waiting" = "APNsからこのデバイスの登録トークンを取得しています。届いたら再試行できます。";
 "settings.pushSubscription.remove" = "通知登録を削除";
-"settings.pushSubscription.remove.detail" = "このデバイスをQuakeSignalの通知サービスから削除します。今回の起動中にAPNsトークンがない場合、このアプリインスタンスで既に保護されている登録のみを削除できます。iPhoneの通知許可は変更されません。";
+"settings.pushSubscription.remove.detail" = "このデバイスをQuakeSignalの通知サービスから削除します。今回の起動中にAPNsトークンがない場合、このアプリインスタンスで既に保護されている登録のみを削除できます。システムの通知許可は変更されません。";
 "settings.pushSubscription.remove.confirmation.title" = "通知登録を削除しますか？";
-"settings.pushSubscription.remove.confirmation.message" = "QuakeSignalはこのデバイスの通知登録を削除します。iPhoneの通知許可は変更されません。";
+"settings.pushSubscription.remove.confirmation.message" = "QuakeSignalはこのデバイスの通知登録を削除します。システムの通知許可は変更されません。";
 "settings.pushSubscription.remove.confirm" = "登録を削除";
 "settings.pushSubscription.remove.cancel" = "キャンセル";
-"settings.pushSubscription.remove.success" = "通知登録を削除しました。iPhoneの通知許可は変更されていません。";
+"settings.pushSubscription.remove.success" = "通知登録を削除しました。システムの通知許可は変更されていません。";
 "settings.pushSubscription.remove.failure" = "通知登録を削除できませんでした: %1$@";
 "settings.pushSubscription.resume" = "地震通知を再開";
 "settings.pushSubscription.resume.detail" = "保存済みの通知設定で、このデバイスをQuakeSignalに再登録します。";
@@ -275,7 +275,7 @@
 "disclaimer.source.jma" = "気象庁 公開速報（集約）";
 "disclaimer.notOfficial" = "震息は公式の政府地震警報プラットフォームではなく、公式情報の代わりにはなりません。";
 "disclaimer.mayBeDelayed" = "情報には遅延・欠落・誤差が生じる場合があります。必ず公式発表と地域の防災指示に従ってください。";
-"disclaimer.deliveryNotGuaranteed" = "通知の到達は iOS、ネットワーク状況、端末設定に左右され、秒単位での到達を保証するものではありません。";
+"disclaimer.deliveryNotGuaranteed" = "通知の到達はOS、ネットワーク状況、端末設定に左右され、秒単位での到達を保証するものではありません。";
 
 /* 防災ガイド タブ */
 "guide.offlineBadge" = "オフラインで利用可能";
@@ -325,3 +325,15 @@
 "guide.familyCheckIn.contact" = "連絡先";
 "guide.familyCheckIn.name" = "氏名";
 "guide.familyCheckIn.phone" = "電話番号";
+
+/* Apple プラットフォーム */
+"platform.alertRegistration.foregroundOnly" = "Macではフォアグラウンド監視のみ";
+"platform.alertRegistration.foregroundOnly.detail" = "安全なバックグラウンド通知登録にはApple App Attestが必要ですが、Macでは利用できません。震息を開いている間は、地震情報と選択した警報音を利用できます。";
+"platform.alertRegistration.unavailable.error" = "このプラットフォームでは安全なバックグラウンド通知登録を利用できません。";
+"platform.foreground.badge" = "フォアグラウンドのみ";
+"platform.foreground.refreshUnavailable" = "地震情報を一時的に取得できません。";
+"platform.tv.title" = "地震情報ダッシュボード";
+"platform.tv.foregroundOnly.detail" = "Apple TVでは、この画面を開いている間だけ地震情報を更新します。バックグラウンド通知の登録は行いません。";
+"platform.watch.foregroundOnly.detail" = "Watchアプリを開いて更新してください。安全なコンパニオン配信に対応するまでは、バックグラウンド通知はペアリングしたiPhoneで受信します。";
+"platform.refresh" = "更新";
+"platform.loading" = "地震情報を読み込み中…";

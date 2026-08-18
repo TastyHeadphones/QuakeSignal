@@ -5,6 +5,7 @@ import type { LocaleKey } from "./en";
 // "夜間も通知する") so the two apps read as one product.
 export const ja: Record<LocaleKey, string> = {
   "app.name": "震息",
+  "app.tagline": "独立型の地震モニター",
   "tab.home": "ホーム",
   "tab.events": "履歴",
   "tab.settings": "設定",
@@ -60,7 +61,7 @@ export const ja: Record<LocaleKey, string> = {
   "settings.source.jma_eqlist": "日本（気象庁 地震情報）",
 
   "settings.section.threshold": "最小マグニチュード",
-  "settings.threshold.hint": "この震度以上の地震のみ通知します。",
+  "settings.threshold.hint": "このマグニチュード以上の地震のみ通知します。",
 
   "settings.section.notifications": "通知",
   "settings.alarmEnabled": "警報音を自動再生",
@@ -68,6 +69,11 @@ export const ja: Record<LocaleKey, string> = {
   "settings.alarmVolume": "警報音の音量",
   "settings.alarmVolume.detail": "{volume}% — テスト警報でスピーカーを確認できます。",
   "settings.alarmVolume.storeDetail": "{volume}% — 実際の地震に対する自動警報音の音量です。",
+  "settings.alertSound": "警報音",
+  "settings.alertSound.system": "標準音",
+  "settings.alertSound.urgent": "緊急トーン",
+  "settings.alertSound.japaneseVoice": "日本語の安全案内",
+  "settings.alertSound.detail": "日本語音声は独自に合成した安全案内で、Jアラートや気象庁の公式音声ではありません。名古屋工業大学のHTS Voice MeiをCC BY 3.0の条件で使用しています。",
   "settings.includeTestAlerts": "訓練・テスト配信を受信する",
   "settings.includeTestAlerts.detail": "気象庁などが動作確認のために訓練配信を行うことがあります。",
   "settings.notifyAtNight": "夜間も通知する",
@@ -82,9 +88,9 @@ export const ja: Record<LocaleKey, string> = {
   "settings.save": "保存",
   "settings.saved": "保存しました",
 
-  "alert.countdown.label": "推定到達時間",
-  "alert.countdown.unknown": "距離不明",
-  "alert.countdown.arrived": "揺れが始まっている可能性があります",
+  "alert.guidance.active": "時刻や強さの予測は変わることがあります。今すぐ身を守り、公式情報に従ってください。",
+  "alert.guidance.training": "これは訓練配信です。実際の地震ではありません。",
+  "alert.guidance.cancelled": "この警報は取り消されました。引き続き地域の公式情報に従ってください。",
   "alert.dropCoverHoldOn": "姿勢を低く、頭を守り、動かない",
   "alert.training.note": "これは訓練配信です。実際の地震ではありません。",
   "alert.dismiss": "閉じる",

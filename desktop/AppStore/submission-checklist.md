@@ -21,6 +21,8 @@ or external permission.
   or unavailable.
 - [ ] Verify the submitted build omits the direct-distribution Test Alarm and
   Launch at Login controls; do not use a direct build as Mac App Store evidence.
+- [ ] Verify local alarms occur only from local feed evaluation while the app is
+  running, and that the package contains no App Attest or APNs registration.
 - [ ] If macOS presents notification permission, test both the optional allowed
   and denied paths. No account or reviewer credential should be required.
 
@@ -29,6 +31,15 @@ or external permission.
 - [ ] Open the existing macOS record (Apple ID `6800642853`) and verify its
   current portal state; do not create a duplicate record or claim a Universal
   Purchase with the distinct iOS bundle ID.
+- [ ] Preserve the editable 1.0.0 draft, existing Ready-to-Submit 1.0.0 build,
+  four older screenshots, and their read-only evidence. Do not select the old
+  build for review. Change that same draft to version `1.1.0` only if App Store
+  Connect permits; otherwise stop and contact support. Do not delete the draft
+  or create another Mac record.
+- [ ] Leave the macOS draft inside iOS Apple ID `6800642443` untouched. Never
+  attach the Tauri `com.quakesignal.desktop` package or metadata to it.
+- [ ] Attach only the 1.1.0 package whose frozen source and hashes match this
+  release.
 - [ ] Verify the English name, category, bundle ID, SKU, version, copyright,
   and current build against `submission-answers.md` and the signed package.
 - [ ] Enter an accountable UniSphereco LLC App Review contact name, email, and

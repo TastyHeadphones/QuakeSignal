@@ -9,6 +9,7 @@ export const repositoryRoot = resolve(scriptDirectory, "../..");
 
 const files = {
   desktop: ".github/workflows/desktop-release.yml",
+  desktopConfig: "desktop/src-tauri/tauri.conf.json",
   homebrew: ".github/workflows/homebrew-tap.yml",
 };
 
@@ -46,6 +47,15 @@ const MACOS_DIRECT_HEADER = {
   environment: { name: "macos-direct-release" },
   env: { RUST_TARGET: "universal-apple-darwin" },
 };
+const MACOS_APP_STORE_VERSION = "1.1.0";
+const MACOS_APP_STORE_BUNDLE_IDENTIFIER = "com.quakesignal.desktop";
+const MACOS_APP_STORE_HEADER = {
+  name: "macOS App Store universal",
+  if: "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.ref_protected && (inputs.build_macos_app_store == true || inputs.upload_macos_to_app_store_connect == true)",
+  "runs-on": "macos-latest",
+  environment: { name: "macos-app-store-release" },
+  env: { RUST_TARGET: "universal-apple-darwin" },
+};
 const RELEASE_HEADER = {
   name: "Publish release",
   needs: ["verify-release-provenance", "macos-direct"],
@@ -76,10 +86,11 @@ const DESKTOP_JOB_IDS = [
   "windows",
 ];
 
-// These fingerprints cover only the direct-release and Homebrew step
-// sequences. Deliberate changes therefore require a reviewed contract update,
-// without coupling this verifier to unrelated Windows or Mac App Store jobs.
-const MACOS_DIRECT_STEPS_FINGERPRINT = "sha256:nKhYfHuXuux6_oG10mZ0eZm_ISVGetPQgIVhFwmc1pA";
+// These fingerprints cover the direct-release and Homebrew step sequences.
+// The explicit frontend gate below also covers every npm-based desktop build
+// job, including Windows and the Mac App Store lane.
+const MACOS_DIRECT_STEPS_FINGERPRINT = "sha256:9_cZ-KeTzLZFiOlAwbIJw4av4Zlihs9Xr2eXsQfnbmA";
+const MACOS_APP_STORE_STEPS_FINGERPRINT = "sha256:RfLhsMpFJdK9JCx7AT0KvvvfuHb2YSV1YwWonSaPgAE";
 const RELEASE_STEPS_FINGERPRINT = "sha256:3dX8Og0fyNOioMHFK-Jt8FiTZTqwkc8dhXjbovwV2qI";
 const HOMEBREW_PUBLISH_STEPS_FINGERPRINT = "sha256:NuwuAFiTLY6LC19V3jx8XcjFSwpafYQVpgHgnveCywY";
 
@@ -275,16 +286,183 @@ function verifyDesktopWorkflow(workflow) {
   const desktopTrigger = trigger(workflow, "desktop release");
   exactRecord(record(desktopTrigger.push, "desktop release push trigger"), { tags: ["v*"] }, "desktop release push trigger");
   const inputs = dispatchInputs(workflow, "desktop release");
-  exactRecord(record(inputs.build_macos_direct, "desktop release build_macos_direct input"), {
-    description: "Build, sign, notarize, and upload the direct macOS DMG artifact",
-    required: false,
-    default: false,
-    type: "boolean",
-  }, "desktop release build_macos_direct input");
+  exactRecord(inputs, {
+    build_macos_direct: {
+      description: "Build, sign, notarize, and upload the direct macOS DMG artifact",
+      required: false,
+      default: false,
+      type: "boolean",
+    },
+    publish_to_store: {
+      description: "Submit an update for the live Microsoft Store app",
+      required: false,
+      default: false,
+      type: "boolean",
+    },
+    build_macos_app_store: {
+      description: "Build a private signed Mac App Store evidence package without uploading it",
+      required: false,
+      default: false,
+      type: "boolean",
+    },
+    upload_macos_to_app_store_connect: {
+      description: "Build, validate, and upload only after exact-source screenshot approval",
+      required: false,
+      default: false,
+      type: "boolean",
+    },
+  }, "desktop release workflow_dispatch inputs");
 
   const jobs = record(workflow.jobs, "desktop release jobs");
   if (!sameValue(Object.keys(jobs).sort(), DESKTOP_JOB_IDS)) {
     fail("desktop release must retain the reviewed job graph; a new job can otherwise bypass a protected release environment.");
+  }
+  for (const jobName of ["windows", "macos-direct", "macos-app-store"]) {
+    const jobSteps = record(jobs[jobName], `${jobName} job`).steps;
+    if (!Array.isArray(jobSteps)) fail(`${jobName} steps must be a sequence.`);
+    const installs = jobSteps
+      .map((candidate, index) => ({ candidate, index }))
+      .filter(({ candidate }) => isRecord(candidate) && candidate.run === "npm ci");
+    if (installs.length !== 1) {
+      fail(`${jobName} must install frontend dependencies exactly once with npm ci.`);
+    }
+    const testStep = jobSteps[installs[0].index + 1];
+    exactRecord(testStep, {
+      name: "Test frontend safety policy",
+      "working-directory": "desktop",
+      run: "npm test",
+    }, `${jobName} frontend safety-policy test gate`);
+  }
+  const macAppStoreSteps = exactRecordWithSteps(
+    jobs["macos-app-store"],
+    MACOS_APP_STORE_HEADER,
+    "macos-app-store job",
+  );
+  exactNames(macAppStoreSteps, [
+    "Check out repository",
+    "Validate mutually exclusive Mac App Store mode",
+    "Validate Mac App Store listing assets",
+    "Require exact-source release-approved screenshot provenance before upload",
+    "Set up Node.js",
+    "Install Rust",
+    "Cache Rust build",
+    "Install frontend dependencies",
+    "Test frontend safety policy",
+    "Test Rust core",
+    "Build unsigned universal Mac App Store app before signing material",
+    "Validate protected Mac App Store configuration",
+    "Import App Store certificates and provisioning profile",
+    "Bundle signed sandboxed universal Mac App Store app",
+    "Package and verify Mac App Store artifact",
+    "Materialize App Store Connect API key immediately before upload",
+    "Validate and upload Mac App Store package",
+    "Upload private Mac App Store package artifact",
+    "Remove App Store signing material",
+  ], "macos-app-store steps");
+  exactRecord(macAppStoreSteps[0], {
+    name: "Check out repository",
+    uses: CHECKOUT,
+    with: { "fetch-depth": 0 },
+  }, "macos-app-store checkout step");
+  exactRecord(macAppStoreSteps[1], {
+    name: "Validate mutually exclusive Mac App Store mode",
+    shell: "bash",
+    env: {
+      BUILD_ARTIFACT_ONLY: "${{ inputs.build_macos_app_store }}",
+      UPLOAD_TO_APP_STORE_CONNECT: "${{ inputs.upload_macos_to_app_store_connect }}",
+    },
+    run: [
+      "set -euo pipefail",
+      "if [ \"$BUILD_ARTIFACT_ONLY\" = \"true\" ] && [ \"$UPLOAD_TO_APP_STORE_CONNECT\" = \"true\" ]; then",
+      "  echo \"::error::Select exactly one Mac App Store mode; build-only and upload cannot both be true\"",
+      "  exit 1",
+      "fi",
+      "",
+    ].join("\n"),
+  }, "macos-app-store mutually exclusive mode gate");
+  exactRecord(macAppStoreSteps[2], {
+    name: "Validate Mac App Store listing assets",
+    run: "ruby .github/scripts/verify-store-assets.rb",
+  }, "macos-app-store artifact-only listing-assets gate");
+  const screenshotUploadGate = macAppStoreSteps[3];
+  exactRecord(screenshotUploadGate, {
+    name: "Require exact-source release-approved screenshot provenance before upload",
+    if: "github.event_name == 'workflow_dispatch' && inputs.upload_macos_to_app_store_connect",
+    shell: "bash",
+    run: [
+      "set -euo pipefail",
+      "baseline=\"$(node -p \"require('./desktop/AppStore/screenshot-provenance.json').capture.sourceBaselineCommit\")\"",
+      "if [[ ! \"$baseline\" =~ ^[0-9a-f]{40}$ ]]; then",
+      "  echo \"::error::Mac App Store screenshot provenance needs a full source baseline commit\"",
+      "  exit 1",
+      "fi",
+      "node .github/scripts/verify-macos-app-store-screenshot-baseline.mjs \\",
+      "  --baseline \"$baseline\" \\",
+      "  --current \"$GITHUB_SHA\"",
+      "ruby .github/scripts/verify-store-assets.rb \\",
+      "  --require-macos-release-ready \\",
+      "  --expected-source-commit=\"$baseline\"",
+      "",
+    ].join("\n"),
+  }, "macos-app-store upload screenshot release gate");
+  for (const safeStep of macAppStoreSteps.slice(0, 11)) {
+    assertNoSecrets(safeStep, `macos-app-store pre-credential step ${safeStep.name}`);
+  }
+  const unsignedAppStoreBuild = step(
+    macAppStoreSteps,
+    "Build unsigned universal Mac App Store app before signing material",
+    "macos-app-store unsigned build step",
+  );
+  requireText(unsignedAppStoreBuild.run, [
+    "npm run tauri -- build --no-bundle --no-sign",
+    "--target ${{ env.RUST_TARGET }} --features macos-app-store",
+    "--config src-tauri/tauri.macos-app-store.conf.json",
+  ], "macos-app-store unsigned build step.run");
+  const packageAppStoreArtifact = step(
+    macAppStoreSteps,
+    "Package and verify Mac App Store artifact",
+    "macos-app-store signed artifact verification step",
+  );
+  requireText(packageAppStoreArtifact.run, [
+    `expected_short_version="${MACOS_APP_STORE_VERSION}"`,
+    `expected_bundle_version="${MACOS_APP_STORE_VERSION}"`,
+    "assert_plist_value \"$app/Contents/Info.plist\" \"CFBundleIdentifier\" \"$expected_bundle_identifier\"",
+    "assert_plist_value \"$app/Contents/Info.plist\" \"CFBundleShortVersionString\" \"$expected_short_version\"",
+    "assert_plist_value \"$app/Contents/Info.plist\" \"CFBundleVersion\" \"$expected_bundle_version\"",
+    "xcrun productbuild --sign \"$MACOS_APP_STORE_INSTALLER_IDENTITY\"",
+    "pkgutil --check-signature \"$package\"",
+  ], "macos-app-store signed artifact version/build verification step.run");
+  const materializeAppStoreKey = step(
+    macAppStoreSteps,
+    "Materialize App Store Connect API key immediately before upload",
+    "macos-app-store upload key step",
+  );
+  exactRecord(materializeAppStoreKey.env, {
+    APP_STORE_CONNECT_KEY: "${{ secrets.MACOS_APP_STORE_CONNECT_API_KEY }}",
+    APP_STORE_CONNECT_KEY_ID: "${{ vars.MACOS_APP_STORE_CONNECT_API_KEY_ID }}",
+    APP_STORE_CONNECT_ISSUER: "${{ vars.MACOS_APP_STORE_CONNECT_API_ISSUER }}",
+  }, "macos-app-store upload key step.env");
+  if (materializeAppStoreKey.if !== "github.event_name == 'workflow_dispatch' && inputs.upload_macos_to_app_store_connect") {
+    fail("macos-app-store upload key step must remain conditional on explicit upload consent.");
+  }
+  const uploadAppStorePackage = step(
+    macAppStoreSteps,
+    "Validate and upload Mac App Store package",
+    "macos-app-store upload step",
+  );
+  if (uploadAppStorePackage.if !== "github.event_name == 'workflow_dispatch' && inputs.upload_macos_to_app_store_connect") {
+    fail("macos-app-store upload step must remain conditional on explicit upload consent.");
+  }
+  const cleanupAppStoreSecrets = step(
+    macAppStoreSteps,
+    "Remove App Store signing material",
+    "macos-app-store cleanup step",
+  );
+  if (cleanupAppStoreSecrets.if !== "always()") {
+    fail("macos-app-store cleanup step must run with if: always().");
+  }
+  if (fingerprint(macAppStoreSteps) !== MACOS_APP_STORE_STEPS_FINGERPRINT) {
+    fail("macos-app-store steps must match the reviewed provenance, safe-build, signing, artifact verification, upload-consent, and cleanup sequence.");
   }
   const directCredentialMarkers = ["MACOS_DEVELOPER_ID_", "MACOS_NOTARY_"];
   for (const [jobName, job] of Object.entries(jobs)) {
@@ -324,6 +502,7 @@ function verifyDesktopWorkflow(workflow) {
     "Install Rust",
     "Cache Rust build",
     "Install frontend dependencies",
+    "Test frontend safety policy",
     "Test Rust core",
     "Build unsigned universal macOS app before release credentials",
     "Verify protected tag matches app version",
@@ -335,9 +514,9 @@ function verifyDesktopWorkflow(workflow) {
     "Remove notarization API key",
   ];
   exactNames(directSteps, directNames, "macos-direct steps");
-  for (const safeStep of directSteps.slice(0, 8)) assertNoSecrets(safeStep, `macos-direct pre-credential step ${safeStep.name}`);
+  for (const safeStep of directSteps.slice(0, 9)) assertNoSecrets(safeStep, `macos-direct pre-credential step ${safeStep.name}`);
   exactRecord(directSteps[0], { name: "Check out repository", uses: CHECKOUT }, "macos-direct checkout step");
-  requireText(directSteps[6].run, [
+  requireText(directSteps[7].run, [
     "npm run tauri -- build --no-bundle --no-sign",
     "--target ${{ env.RUST_TARGET }}",
   ], "unsigned universal build step.run");
@@ -424,6 +603,7 @@ function verifyDesktopWorkflow(workflow) {
 
   return {
     directStepsFingerprint: fingerprint(directSteps),
+    macAppStoreStepsFingerprint: fingerprint(macAppStoreSteps),
     releaseStepsFingerprint: fingerprint(releaseSteps),
   };
 }
@@ -516,10 +696,23 @@ function verifyHomebrewWorkflow(workflow) {
 
 /** Verify offline workflow contracts for the direct macOS and Homebrew lanes. */
 export async function verifyDesktopReleaseContract({ root = repositoryRoot } = {}) {
-  const [desktopSource, homebrewSource] = await Promise.all([
+  const [desktopSource, desktopConfigSource, homebrewSource] = await Promise.all([
     readFile(resolve(root, files.desktop), "utf8"),
+    readFile(resolve(root, files.desktopConfig), "utf8"),
     readFile(resolve(root, files.homebrew), "utf8"),
   ]);
+  let desktopConfig;
+  try {
+    desktopConfig = JSON.parse(desktopConfigSource);
+  } catch {
+    fail("desktop/src-tauri/tauri.conf.json must be valid JSON.");
+  }
+  if (desktopConfig.version !== MACOS_APP_STORE_VERSION) {
+    fail(`desktop/src-tauri/tauri.conf.json version must be exactly ${MACOS_APP_STORE_VERSION} for this reviewed release.`);
+  }
+  if (desktopConfig.identifier !== MACOS_APP_STORE_BUNDLE_IDENTIFIER) {
+    fail(`desktop/src-tauri/tauri.conf.json identifier must be exactly ${MACOS_APP_STORE_BUNDLE_IDENTIFIER}.`);
+  }
   return {
     ...verifyDesktopWorkflow(parseWorkflow(desktopSource, "desktop release workflow")),
     ...verifyHomebrewWorkflow(parseWorkflow(homebrewSource, "Homebrew workflow")),
@@ -529,7 +722,7 @@ export async function verifyDesktopReleaseContract({ root = repositoryRoot } = {
 async function main() {
   try {
     const verified = await verifyDesktopReleaseContract();
-    console.log(`Verified desktop/Homebrew release contract (${verified.directStepsFingerprint}, ${verified.homebrewStepsFingerprint}).`);
+    console.log(`Verified desktop/Homebrew release contract (direct ${verified.directStepsFingerprint}, Mac App Store ${verified.macAppStoreStepsFingerprint}, Homebrew ${verified.homebrewStepsFingerprint}).`);
   } catch (error) {
     console.error(`::error::${error instanceof Error ? error.message : "desktop release contract verification failed."}`);
     process.exitCode = 1;

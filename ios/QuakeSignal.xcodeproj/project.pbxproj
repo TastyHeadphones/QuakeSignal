@@ -8,59 +8,142 @@
 
 /* Begin PBXBuildFile section */
 		00CBA3F9A30565BBA1B7E842 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5CDC5F5361A20005A34BCD0 /* APIClient.swift */; };
+		010E1BD42BF66078635BE8DA /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67D5A0D955C6D9F0A33F738C /* AppDelegate.swift */; };
+		018A6C06E10CC2E9FFC08E45 /* PushPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54ADAFC4D778C958BC996871 /* PushPayload.swift */; };
+		06EF8BFA7423886E765B25C4 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B0692F2F796B70A77314C23B /* Localizable.strings */; };
 		079822277E33C23AC7363D72 /* WolfxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6815129F2447CE72E122CE0 /* WolfxClient.swift */; };
 		0B8CEB3509599E4BA3BB5CD2 /* QuakeSignalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A0053EFB595D59068829B2 /* QuakeSignalApp.swift */; };
 		0C3EC0B633E26287A449E3EC /* SourceDisclaimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CF66A4956C46CA1A148C070 /* SourceDisclaimerView.swift */; };
 		0EA04CC2D8769B4D1119146E /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401F05AD76497DD2ACB64C7F /* LocationManager.swift */; };
+		1075621479579BA0A18B4940 /* EventRevision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BEC24C83F9F7FEB6C1D8F41 /* EventRevision.swift */; };
+		1372DEE531C64E0F42DBFFD3 /* CityPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FD76A1C9FFB9929722BA327 /* CityPickerView.swift */; };
+		15705D4E575855C973D136EF /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */; };
+		160860686FA5DA1231C9B09E /* GuideStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC4C4FFC783F65DB874CB2CD /* GuideStore.swift */; };
+		192C3E0C5150764B8635D67E /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D224641E8F2E766BEF1FA2E /* SettingsView.swift */; };
 		1931BFD99782ED3DA8A6E288 /* EEWEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */; };
 		1DAF3142799F4F35F8AE699A /* CoarseCoordinateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D470158F86E7CD243746CAA1 /* CoarseCoordinateTests.swift */; };
+		1DD243C69A61181782B08F96 /* ScreenshotAutomationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFB9D8739B07942FB63B39AD /* ScreenshotAutomationTests.swift */; };
+		1F48F6399215767F911DBAE6 /* CoarseCoordinate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F8D96701CD094BC65C3127 /* CoarseCoordinate.swift */; };
 		1FE00A80B0B13AA6832583E5 /* EEWAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C53C8F8BFB7156840BCDD1 /* EEWAlertView.swift */; };
+		21894A51778D29BC9A6E2141 /* IntensityScale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662358026FACAB4DA608E630 /* IntensityScale.swift */; };
 		219D23C4DB05DE6AC9D87B25 /* quakesignal_japanese_voice.caf in Resources */ = {isa = PBXBuildFile; fileRef = 3F0E75125AACAD64A0FAD9B7 /* quakesignal_japanese_voice.caf */; };
+		21D6D218ECC13C1844FDAC08 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = DA0B489340F90173C681EA84 /* InfoPlist.strings */; };
 		270DEBC62F5495435C5094ED /* ForegroundHTTPFallbackPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCAD92FC9E1A1EE5AFD62669 /* ForegroundHTTPFallbackPolicyTests.swift */; };
+		277BF2AD6E6D16286A094D09 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33AFA4921875AD86CEB86D47 /* Assets.xcassets */; };
+		27FF64E9AF3A6852EE097CB3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 46FE5BCBB83F7CA14C20E6FA /* Assets.xcassets */; };
 		2B3817E67944FF65B8F5D6FA /* CoarseCoordinate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F8D96701CD094BC65C3127 /* CoarseCoordinate.swift */; };
+		2B994284BC74999EA578CD1C /* WolfxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6815129F2447CE72E122CE0 /* WolfxClient.swift */; };
 		300716B6C8AD2C38974ED1C8 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = DA0B489340F90173C681EA84 /* InfoPlist.strings */; };
 		30787BE285C2AF3865685D31 /* PushPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54ADAFC4D778C958BC996871 /* PushPayload.swift */; };
+		3521C5AEBBE6BD1B200E6534 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E397F876EB72C79A9710C4 /* OnboardingView.swift */; };
 		3578006137ABBE79E0A5B06F /* FamilyCheckInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB33C47F86F32C61F4CC83CB /* FamilyCheckInView.swift */; };
+		366B308C5B296B4347A5FC12 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = DA0B489340F90173C681EA84 /* InfoPlist.strings */; };
+		3B9B81C77BE2B0DAE7FA1D6D /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16B1C64A6D002370B927BF7 /* NotificationManager.swift */; };
+		3DB9B6B8A47E1BE6F2AB4B42 /* GuideTopicDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FFEE58B247EFABCA2FBF98 /* GuideTopicDetailView.swift */; };
 		401D81C61074F8E0B821A0DC /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */; };
+		403065F07BF79FF2E24A006F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FB035B0C75FC4309B8A80D43 /* PrivacyInfo.xcprivacy */; };
+		40BA7730C3FA24F8ABAF1E85 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48820A9D89E7DA9CE7EEECA1 /* HomeView.swift */; };
+		41F5DDF967DC83F72A7D5CDF /* QuakeListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B58B74D54691C905E32B3BE /* QuakeListView.swift */; };
+		423F90193A49F30A63F386B8 /* EEWEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */; };
+		4B23C902C2E1CEF36C608191 /* EpicenterMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E59ED0E3F738AC6AE4FF165 /* EpicenterMapView.swift */; };
 		4BF03EE23D5F476E518295C2 /* QuakeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2145117E4D6B0221B490C9F4 /* QuakeStore.swift */; };
 		4CFC59C9E1BF37D668AD4138 /* GuideStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC4C4FFC783F65DB874CB2CD /* GuideStore.swift */; };
+		4DE244FF929828F55C441091 /* QuakeSignalWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 4985E067F152D33E6D3873CD /* QuakeSignalWatch.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		5965D4C2C897BD817231CFA6 /* WolfxHTTPFetchPacingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 257AE1C288EED96009491911 /* WolfxHTTPFetchPacingTests.swift */; };
+		5B28AB3AC5478552CD1AD48F /* TVDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B83B3B63C11A5EFC2AF74F28 /* TVDashboardView.swift */; };
 		6221D8ADA6A6A44E45C2C5EE /* EventRevision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BEC24C83F9F7FEB6C1D8F41 /* EventRevision.swift */; };
 		6279092DC98DB8233CEEE8B8 /* BackendConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DADE472DF1F2B627818A5F8 /* BackendConfig.swift */; };
+		65F98C5FF54AEF2261BAFBAC /* BackendConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DADE472DF1F2B627818A5F8 /* BackendConfig.swift */; };
 		662850A82C0C42CC36161123 /* DeviceRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C54A7070352BEB382AD32B /* DeviceRegistration.swift */; };
+		66C6B006713E9A9CDC9B151D /* DisasterGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0542F5FDBF2D0122F19F2A88 /* DisasterGuideView.swift */; };
+		685AE05165088DCE6A7159A5 /* ATTRIBUTION.md in Resources */ = {isa = PBXBuildFile; fileRef = C2B4DD59D0DAE82284A0FC66 /* ATTRIBUTION.md */; };
+		6AA2343197F1352D29D92CDD /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57E54B5E816643F7401A58F /* RootView.swift */; };
 		6B6E89AB5EE885007554F98A /* DisasterGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0542F5FDBF2D0122F19F2A88 /* DisasterGuideView.swift */; };
+		6DDE22A65353BC33BF456D90 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = DA0B489340F90173C681EA84 /* InfoPlist.strings */; };
+		6EE7DAFE78B108C4941CEEEB /* City.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFBDB4E5BC222EB32F6ACEA /* City.swift */; };
+		6F2DBB8C795DBC1C32545FD0 /* ScreenshotAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94136FB707EA39D05E83A74D /* ScreenshotAutomation.swift */; };
+		75F8F085EB77DC40DBFCAE5E /* WatchDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EB4A99FB4CAC9378A8C8CDB /* WatchDashboardView.swift */; };
 		76F53C375C6AC0FF550804A5 /* LiveSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BD11E3C4D40F7F456CAF5AA /* LiveSocketClient.swift */; };
+		7827673CF83997EA7184C78D /* FamilyCheckInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB33C47F86F32C61F4CC83CB /* FamilyCheckInView.swift */; };
+		79DC01D40F9258D975CAE290 /* ForegroundQuakeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC96E0CE9FD5998FC3FDFAC3 /* ForegroundQuakeStore.swift */; };
+		7B1CF70F3C72B6F019FDECC4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 68921860CD3DBD9ECC1C49F3 /* Assets.xcassets */; };
+		7B3FA17AD79618AB0802AE3E /* LiveSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BD11E3C4D40F7F456CAF5AA /* LiveSocketClient.swift */; };
+		7C5B448E50480137082D2C1B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5A17CC4550F0D6AF5C05845F /* Assets.xcassets */; };
 		7E008E58665F263BDC9DDD08 /* GuideTopicDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FFEE58B247EFABCA2FBF98 /* GuideTopicDetailView.swift */; };
+		7F4DA5A0679F788B98DEF8D9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33AFA4921875AD86CEB86D47 /* Assets.xcassets */; };
+		87147003176FF9AB1030C3AA /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */; };
+		886B1D45E82EB94236AAC86C /* quakesignal_urgent.caf in Resources */ = {isa = PBXBuildFile; fileRef = 16717A3C1A8CD585C6BE1923 /* quakesignal_urgent.caf */; };
 		8A44BDC71084D4D1C2E223D5 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48820A9D89E7DA9CE7EEECA1 /* HomeView.swift */; };
 		8AB603839990610758AFC649 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5AAEBB21DA806680D87F2BE /* AppSettings.swift */; };
+		8BC8975D02DC5BB881331F29 /* SourceDisclaimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CF66A4956C46CA1A148C070 /* SourceDisclaimerView.swift */; };
+		8D9AB68CF526637B0343B963 /* ForegroundQuakeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC96E0CE9FD5998FC3FDFAC3 /* ForegroundQuakeStore.swift */; };
 		8FB6DF50DFD1FE9B637469F8 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57E54B5E816643F7401A58F /* RootView.swift */; };
+		9267A9B731AA2EBC62DBD502 /* AlertPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665F4A0DC280B9FA949024E3 /* AlertPolicy.swift */; };
+		9327AD03393019F71997BCAE /* WolfxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6815129F2447CE72E122CE0 /* WolfxClient.swift */; };
+		940D1C06F9370AE4EA2F1040 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B0692F2F796B70A77314C23B /* Localizable.strings */; };
 		99912A9F35669522264D1A56 /* EpicenterMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E59ED0E3F738AC6AE4FF165 /* EpicenterMapView.swift */; };
 		9A1EE3D0BCEE13F790BEC7D5 /* AppAttestWireFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95F3401BE11EE7C35379E76F /* AppAttestWireFormatTests.swift */; };
 		9AAC1CF8B2A760F00E998C16 /* QuakeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5CC2AF0389FFB5D223C0DD /* QuakeDetailView.swift */; };
+		9AB557DE97E186101B9A6CC6 /* IntensityScale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662358026FACAB4DA608E630 /* IntensityScale.swift */; };
+		A0C800DDD5AA279784B297EA /* EmergencyAlertAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62512CC36041035EFC3BFF5 /* EmergencyAlertAudio.swift */; };
+		A3F9E7BE95E6C769B42F138C /* WolfxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6815129F2447CE72E122CE0 /* WolfxClient.swift */; };
+		AF5BF169FE8A1A1FD4765E0F /* IntensityScale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662358026FACAB4DA608E630 /* IntensityScale.swift */; };
 		AFAC29AA0D04F4D4CFE8247E /* AlertPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665F4A0DC280B9FA949024E3 /* AlertPolicy.swift */; };
+		AFF631C0F52D1A42169517A4 /* EEWEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */; };
+		B0F94E066C1DB2F532C98B6C /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5AAEBB21DA806680D87F2BE /* AppSettings.swift */; };
+		B1EB38045281D40C4E0A4CA2 /* ScreenshotAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94136FB707EA39D05E83A74D /* ScreenshotAutomation.swift */; };
 		B55EE7B71D09CFF033F9814A /* PushRegistrationLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE196D534922B8AE9051684 /* PushRegistrationLifecycleTests.swift */; };
 		BAD8BB0744EB1269AD91FA53 /* AppAttestClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F74B9E3617F5FBD0A063EBB7 /* AppAttestClient.swift */; };
+		C1A1A8478DD6F33434901D71 /* quakesignal_japanese_voice.caf in Resources */ = {isa = PBXBuildFile; fileRef = 3F0E75125AACAD64A0FAD9B7 /* quakesignal_japanese_voice.caf */; };
+		C30D6EEA8560C3BE4E130569 /* QuakeSignalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A0053EFB595D59068829B2 /* QuakeSignalApp.swift */; };
 		C95674FB61B4A12788753D96 /* City.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFBDB4E5BC222EB32F6ACEA /* City.swift */; };
 		CA3049CA253E701032A59F73 /* AlertPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A2C804E47294E140904C23 /* AlertPolicyTests.swift */; };
+		CA521524D78B0522245870D7 /* QuakeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5CC2AF0389FFB5D223C0DD /* QuakeDetailView.swift */; };
 		CADFF98599F67B0638D53EEA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FB035B0C75FC4309B8A80D43 /* PrivacyInfo.xcprivacy */; };
 		CB398BC7708A86279C3BF6D4 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67D5A0D955C6D9F0A33F738C /* AppDelegate.swift */; };
+		CC263C36570919DD673218A9 /* GuideContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9399D7DEA2638CABE5AFF970 /* GuideContent.swift */; };
 		CF0E4A95DE46CC7A146650EA /* GuideContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9399D7DEA2638CABE5AFF970 /* GuideContent.swift */; };
 		CF7C4292C7DB9E8F943D7B2B /* QuakeRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4C630D4060DEC1DA1AC5EB /* QuakeRowView.swift */; };
+		D02B0910A4599D3EB0BDA143 /* QuakeRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4C630D4060DEC1DA1AC5EB /* QuakeRowView.swift */; };
+		D0E886D9BCD5736BCF796408 /* ScreenshotAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94136FB707EA39D05E83A74D /* ScreenshotAutomation.swift */; };
 		D0ECDC45A65C41E446EE8134 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16B1C64A6D002370B927BF7 /* NotificationManager.swift */; };
 		D107043DF51F2F071D1E3AA2 /* QuakeListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B58B74D54691C905E32B3BE /* QuakeListView.swift */; };
 		D35D8DC38DADFC7832E3859A /* ATTRIBUTION.md in Resources */ = {isa = PBXBuildFile; fileRef = C2B4DD59D0DAE82284A0FC66 /* ATTRIBUTION.md */; };
 		D4E255D3E4F76C2C602276B9 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B0692F2F796B70A77314C23B /* Localizable.strings */; };
+		D5DCAE2BA799B31CE46B07EB /* EEWEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */; };
 		D9B498E119DDF0A3145A54BD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33AFA4921875AD86CEB86D47 /* Assets.xcassets */; };
 		DA9722C2E131BBE0CFCC8DF0 /* IntensityScale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662358026FACAB4DA608E630 /* IntensityScale.swift */; };
 		DFBD32451B2D74367698EFC2 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D224641E8F2E766BEF1FA2E /* SettingsView.swift */; };
 		E0FE82387D0BDDFAEBF74A3A /* quakesignal_urgent.caf in Resources */ = {isa = PBXBuildFile; fileRef = 16717A3C1A8CD585C6BE1923 /* quakesignal_urgent.caf */; };
+		E1D493D3A04F0B26E0FBCA49 /* QuakeSignalTVApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E461668A7F7A5EE7519E086 /* QuakeSignalTVApp.swift */; };
+		E20C48FA24EC8505F4454277 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5CDC5F5361A20005A34BCD0 /* APIClient.swift */; };
+		E220374CE96B01289FC46C11 /* AppAttestClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F74B9E3617F5FBD0A063EBB7 /* AppAttestClient.swift */; };
+		EA136C06A2A42BCC9968D99F /* QuakeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2145117E4D6B0221B490C9F4 /* QuakeStore.swift */; };
+		EA475FB51AB7D04BC5BCC93E /* DeviceRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C54A7070352BEB382AD32B /* DeviceRegistration.swift */; };
 		EB68B0A59F9F99DA6D274C91 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E397F876EB72C79A9710C4 /* OnboardingView.swift */; };
 		ED8137E396C9EC2F1EB8CCC4 /* EmergencyAlertAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62512CC36041035EFC3BFF5 /* EmergencyAlertAudio.swift */; };
+		EE1E88BCC99DC38B575F15AA /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */; };
+		EE681EF451424C59EED37927 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401F05AD76497DD2ACB64C7F /* LocationManager.swift */; };
+		EF51705BAC5681511D2032FF /* EEWAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C53C8F8BFB7156840BCDD1 /* EEWAlertView.swift */; };
+		F09197006FA5AD5D8E868EF6 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B0692F2F796B70A77314C23B /* Localizable.strings */; };
+		F1AD0AD2CB1523B566A3AC79 /* PlatformCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4BF73CDB98477AD3BAABB37 /* PlatformCapabilities.swift */; };
 		F1FFAEE76DFCC009CBCDFD11 /* ForegroundHTTPFallbackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F9DCB855FF5D952D0920F49 /* ForegroundHTTPFallbackPolicy.swift */; };
+		F24DDEE17769C40FE259C9BD /* QuakeSignalWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD0A76DD2E8AE53974060310 /* QuakeSignalWatchApp.swift */; };
+		F39A74F5F787A92968F355BB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33AFA4921875AD86CEB86D47 /* Assets.xcassets */; };
 		F44520F00F5256BBB9FE6F39 /* CityPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FD76A1C9FFB9929722BA327 /* CityPickerView.swift */; };
+		F84DF1F4E43BB15091513F3E /* ForegroundHTTPFallbackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F9DCB855FF5D952D0920F49 /* ForegroundHTTPFallbackPolicy.swift */; };
+		FB35CF93C5A3652CCB788757 /* ScreenshotAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94136FB707EA39D05E83A74D /* ScreenshotAutomation.swift */; };
+		FF530E600AA4FDE2F5585018 /* PlatformCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4BF73CDB98477AD3BAABB37 /* PlatformCapabilities.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		462F3D11641B2F03AE490559 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 935E44C805D7E6B9A9B590BC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5F9DB798086E1F4045F2BA9D;
+			remoteInfo = QuakeSignalWatch;
+		};
 		806671887B446B19EEE6FE60 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 935E44C805D7E6B9A9B590BC /* Project object */;
@@ -70,11 +153,26 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		6431C9662A0D7FB6B3066140 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				4DE244FF929828F55C441091 /* QuakeSignalWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		041E5AA38657BA9C30BAC034 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		0542F5FDBF2D0122F19F2A88 /* DisasterGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisasterGuideView.swift; sourceTree = "<group>"; };
 		0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		0B4C630D4060DEC1DA1AC5EB /* QuakeRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeRowView.swift; sourceTree = "<group>"; };
+		12ABFE7475C9CB0B85A6C404 /* QuakeSignalTV.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = QuakeSignalTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		16717A3C1A8CD585C6BE1923 /* quakesignal_urgent.caf */ = {isa = PBXFileReference; path = quakesignal_urgent.caf; sourceTree = "<group>"; };
 		1BD11E3C4D40F7F456CAF5AA /* LiveSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSocketClient.swift; sourceTree = "<group>"; };
 		1E5CC2AF0389FFB5D223C0DD /* QuakeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeDetailView.swift; sourceTree = "<group>"; };
@@ -89,34 +187,46 @@
 		3DADE472DF1F2B627818A5F8 /* BackendConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendConfig.swift; sourceTree = "<group>"; };
 		3DFCD227F9ED367CDC787519 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		3E59ED0E3F738AC6AE4FF165 /* EpicenterMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpicenterMapView.swift; sourceTree = "<group>"; };
+		3EB4A99FB4CAC9378A8C8CDB /* WatchDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchDashboardView.swift; sourceTree = "<group>"; };
 		3F0E75125AACAD64A0FAD9B7 /* quakesignal_japanese_voice.caf */ = {isa = PBXFileReference; path = quakesignal_japanese_voice.caf; sourceTree = "<group>"; };
 		3F9DCB855FF5D952D0920F49 /* ForegroundHTTPFallbackPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundHTTPFallbackPolicy.swift; sourceTree = "<group>"; };
 		401F05AD76497DD2ACB64C7F /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 		41E397F876EB72C79A9710C4 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		46FE5BCBB83F7CA14C20E6FA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		48820A9D89E7DA9CE7EEECA1 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		4985E067F152D33E6D3873CD /* QuakeSignalWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QuakeSignalWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		54ADAFC4D778C958BC996871 /* PushPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushPayload.swift; sourceTree = "<group>"; };
+		5A17CC4550F0D6AF5C05845F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		5D6A4439FF8F98D55714D2C1 /* QuakeSignalVision.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = QuakeSignalVision.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E461668A7F7A5EE7519E086 /* QuakeSignalTVApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeSignalTVApp.swift; sourceTree = "<group>"; };
 		662358026FACAB4DA608E630 /* IntensityScale.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntensityScale.swift; sourceTree = "<group>"; };
 		665F4A0DC280B9FA949024E3 /* AlertPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertPolicy.swift; sourceTree = "<group>"; };
 		6789081D324684ACBB76D43A /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		67D5A0D955C6D9F0A33F738C /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		68921860CD3DBD9ECC1C49F3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		759EAC4A90329D3CD0F82833 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		7B58B74D54691C905E32B3BE /* QuakeListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeListView.swift; sourceTree = "<group>"; };
 		80C54A7070352BEB382AD32B /* DeviceRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRegistration.swift; sourceTree = "<group>"; };
 		8DE196D534922B8AE9051684 /* PushRegistrationLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistrationLifecycleTests.swift; sourceTree = "<group>"; };
 		8ECF89FDF3F2879D09784FE3 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		9399D7DEA2638CABE5AFF970 /* GuideContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideContent.swift; sourceTree = "<group>"; };
+		94136FB707EA39D05E83A74D /* ScreenshotAutomation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotAutomation.swift; sourceTree = "<group>"; };
 		95F3401BE11EE7C35379E76F /* AppAttestWireFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAttestWireFormatTests.swift; sourceTree = "<group>"; };
 		9C1906221BBAC871B5B8BA41 /* QuakeSignalTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = QuakeSignalTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A16B1C64A6D002370B927BF7 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		A2A0053EFB595D59068829B2 /* QuakeSignalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeSignalApp.swift; sourceTree = "<group>"; };
 		A3FFEE58B247EFABCA2FBF98 /* GuideTopicDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideTopicDetailView.swift; sourceTree = "<group>"; };
 		A437B2F17AB38AB6F39F7CFE /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		A4BF73CDB98477AD3BAABB37 /* PlatformCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformCapabilities.swift; sourceTree = "<group>"; };
 		A5AAEBB21DA806680D87F2BE /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		B5C53C8F8BFB7156840BCDD1 /* EEWAlertView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EEWAlertView.swift; sourceTree = "<group>"; };
 		B5CDC5F5361A20005A34BCD0 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		B83B3B63C11A5EFC2AF74F28 /* TVDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVDashboardView.swift; sourceTree = "<group>"; };
+		BFB9D8739B07942FB63B39AD /* ScreenshotAutomationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotAutomationTests.swift; sourceTree = "<group>"; };
 		C2B4DD59D0DAE82284A0FC66 /* ATTRIBUTION.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ATTRIBUTION.md; sourceTree = "<group>"; };
 		C57E54B5E816643F7401A58F /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		CB33C47F86F32C61F4CC83CB /* FamilyCheckInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyCheckInView.swift; sourceTree = "<group>"; };
+		CD0A76DD2E8AE53974060310 /* QuakeSignalWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeSignalWatchApp.swift; sourceTree = "<group>"; };
 		D470158F86E7CD243746CAA1 /* CoarseCoordinateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoarseCoordinateTests.swift; sourceTree = "<group>"; };
 		D4F8D96701CD094BC65C3127 /* CoarseCoordinate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoarseCoordinate.swift; sourceTree = "<group>"; };
 		D62512CC36041035EFC3BFF5 /* EmergencyAlertAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmergencyAlertAudio.swift; sourceTree = "<group>"; };
@@ -124,6 +234,7 @@
 		DCAD92FC9E1A1EE5AFD62669 /* ForegroundHTTPFallbackPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundHTTPFallbackPolicyTests.swift; sourceTree = "<group>"; };
 		DCFBDB4E5BC222EB32F6ACEA /* City.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = City.swift; sourceTree = "<group>"; };
 		EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EEWEvent.swift; sourceTree = "<group>"; };
+		EC96E0CE9FD5998FC3FDFAC3 /* ForegroundQuakeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundQuakeStore.swift; sourceTree = "<group>"; };
 		F0A2C804E47294E140904C23 /* AlertPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertPolicyTests.swift; sourceTree = "<group>"; };
 		F74B9E3617F5FBD0A063EBB7 /* AppAttestClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAttestClient.swift; sourceTree = "<group>"; };
 		FB035B0C75FC4309B8A80D43 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -137,8 +248,19 @@
 			children = (
 				2372157BA03FB135F30D085A /* QuakeSignal.app */,
 				9C1906221BBAC871B5B8BA41 /* QuakeSignalTests.xctest */,
+				12ABFE7475C9CB0B85A6C404 /* QuakeSignalTV.app */,
+				5D6A4439FF8F98D55714D2C1 /* QuakeSignalVision.app */,
+				4985E067F152D33E6D3873CD /* QuakeSignalWatch.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		28E320777F20D6D814389BF3 /* QuakeSignalVision */ = {
+			isa = PBXGroup;
+			children = (
+				68921860CD3DBD9ECC1C49F3 /* Assets.xcassets */,
+			);
+			path = QuakeSignalVision;
 			sourceTree = "<group>";
 		};
 		294208A9A80DF226EF451340 /* Audio */ = {
@@ -149,6 +271,15 @@
 				16717A3C1A8CD585C6BE1923 /* quakesignal_urgent.caf */,
 			);
 			path = Audio;
+			sourceTree = "<group>";
+		};
+		35F2C22C7259A5C7CCC51D6D /* QuakeSignalShared */ = {
+			isa = PBXGroup;
+			children = (
+				EC96E0CE9FD5998FC3FDFAC3 /* ForegroundQuakeStore.swift */,
+				94136FB707EA39D05E83A74D /* ScreenshotAutomation.swift */,
+			);
+			path = QuakeSignalShared;
 			sourceTree = "<group>";
 		};
 		473DDD1B8C41FFA667D097F3 /* Map */ = {
@@ -164,6 +295,7 @@
 			children = (
 				67D5A0D955C6D9F0A33F738C /* AppDelegate.swift */,
 				0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */,
+				A4BF73CDB98477AD3BAABB37 /* PlatformCapabilities.swift */,
 				A2A0053EFB595D59068829B2 /* QuakeSignalApp.swift */,
 			);
 			path = App;
@@ -175,6 +307,16 @@
 				7B58B74D54691C905E32B3BE /* QuakeListView.swift */,
 			);
 			path = List;
+			sourceTree = "<group>";
+		};
+		716A5CDBFE79A1E814FE0830 /* QuakeSignalWatch */ = {
+			isa = PBXGroup;
+			children = (
+				5A17CC4550F0D6AF5C05845F /* Assets.xcassets */,
+				CD0A76DD2E8AE53974060310 /* QuakeSignalWatchApp.swift */,
+				3EB4A99FB4CAC9378A8C8CDB /* WatchDashboardView.swift */,
+			);
+			path = QuakeSignalWatch;
 			sourceTree = "<group>";
 		};
 		773E13E1F78CAE4B66C26A08 /* AlertDetail */ = {
@@ -229,7 +371,11 @@
 			isa = PBXGroup;
 			children = (
 				EADDBB474D5569AA3B351EC9 /* QuakeSignal */,
+				35F2C22C7259A5C7CCC51D6D /* QuakeSignalShared */,
 				BED8CC3C586E0ACA3448C11E /* QuakeSignalTests */,
+				F697A550DE8F660967BFD59D /* QuakeSignalTV */,
+				28E320777F20D6D814389BF3 /* QuakeSignalVision */,
+				716A5CDBFE79A1E814FE0830 /* QuakeSignalWatch */,
 				01C72AF1F3337BDE9EA7E857 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -281,6 +427,7 @@
 				D470158F86E7CD243746CAA1 /* CoarseCoordinateTests.swift */,
 				DCAD92FC9E1A1EE5AFD62669 /* ForegroundHTTPFallbackPolicyTests.swift */,
 				8DE196D534922B8AE9051684 /* PushRegistrationLifecycleTests.swift */,
+				BFB9D8739B07942FB63B39AD /* ScreenshotAutomationTests.swift */,
 				257AE1C288EED96009491911 /* WolfxHTTPFetchPacingTests.swift */,
 			);
 			path = QuakeSignalTests;
@@ -360,6 +507,16 @@
 			path = State;
 			sourceTree = "<group>";
 		};
+		F697A550DE8F660967BFD59D /* QuakeSignalTV */ = {
+			isa = PBXGroup;
+			children = (
+				46FE5BCBB83F7CA14C20E6FA /* Assets.xcassets */,
+				5E461668A7F7A5EE7519E086 /* QuakeSignalTVApp.swift */,
+				B83B3B63C11A5EFC2AF74F28 /* TVDashboardView.swift */,
+			);
+			path = QuakeSignalTV;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -369,16 +526,54 @@
 			buildPhases = (
 				0A028E8F3F9F59AD41E1A55C /* Sources */,
 				3BA91CA2FBB6D5449679C782 /* Resources */,
+				6431C9662A0D7FB6B3066140 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				772A7BAD5E925617A13DB93C /* PBXTargetDependency */,
 			);
 			name = QuakeSignal;
 			packageProductDependencies = (
 			);
 			productName = QuakeSignal;
 			productReference = 2372157BA03FB135F30D085A /* QuakeSignal.app */;
+			productType = "com.apple.product-type.application";
+		};
+		5F9DB798086E1F4045F2BA9D /* QuakeSignalWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1453313750A3B22F93287D69 /* Build configuration list for PBXNativeTarget "QuakeSignalWatch" */;
+			buildPhases = (
+				413852AA72D5A63B837643CC /* Sources */,
+				2739336F9E2C9793D4D50015 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = QuakeSignalWatch;
+			packageProductDependencies = (
+			);
+			productName = QuakeSignalWatch;
+			productReference = 4985E067F152D33E6D3873CD /* QuakeSignalWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+		99D8428F54FDB4F0E886322B /* QuakeSignalTV */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1400CB585C7D4D542AD6B120 /* Build configuration list for PBXNativeTarget "QuakeSignalTV" */;
+			buildPhases = (
+				D3609A46DB16E34382421CF6 /* Sources */,
+				09C5917C878BEF2817456C1D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = QuakeSignalTV;
+			packageProductDependencies = (
+			);
+			productName = QuakeSignalTV;
+			productReference = 12ABFE7475C9CB0B85A6C404 /* QuakeSignalTV.app */;
 			productType = "com.apple.product-type.application";
 		};
 		AAED90583AE429A9A2BCAF56 /* QuakeSignalTests */ = {
@@ -399,6 +594,24 @@
 			productReference = 9C1906221BBAC871B5B8BA41 /* QuakeSignalTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		FD8B41988F9A5CBD1774781A /* QuakeSignalVision */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 59997DA65EA77171D7467CD2 /* Build configuration list for PBXNativeTarget "QuakeSignalVision" */;
+			buildPhases = (
+				DB973DB500692045A4BDABC8 /* Sources */,
+				20D864D50CA9CCE82F902857 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = QuakeSignalVision;
+			packageProductDependencies = (
+			);
+			productName = QuakeSignalVision;
+			productReference = 5D6A4439FF8F98D55714D2C1 /* QuakeSignalVision.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -409,6 +622,18 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					0C571730824BD0FE25517524 = {
+						DevelopmentTeam = 5TT564H883;
+						ProvisioningStyle = Automatic;
+					};
+					5F9DB798086E1F4045F2BA9D = {
+						DevelopmentTeam = 5TT564H883;
+						ProvisioningStyle = Automatic;
+					};
+					99D8428F54FDB4F0E886322B = {
+						DevelopmentTeam = 5TT564H883;
+						ProvisioningStyle = Automatic;
+					};
+					FD8B41988F9A5CBD1774781A = {
 						DevelopmentTeam = 5TT564H883;
 						ProvisioningStyle = Automatic;
 					};
@@ -431,12 +656,52 @@
 			projectRoot = "";
 			targets = (
 				0C571730824BD0FE25517524 /* QuakeSignal */,
+				FD8B41988F9A5CBD1774781A /* QuakeSignalVision */,
+				99D8428F54FDB4F0E886322B /* QuakeSignalTV */,
+				5F9DB798086E1F4045F2BA9D /* QuakeSignalWatch */,
 				AAED90583AE429A9A2BCAF56 /* QuakeSignalTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		09C5917C878BEF2817456C1D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7F4DA5A0679F788B98DEF8D9 /* Assets.xcassets in Resources */,
+				27FF64E9AF3A6852EE097CB3 /* Assets.xcassets in Resources */,
+				21D6D218ECC13C1844FDAC08 /* InfoPlist.strings in Resources */,
+				06EF8BFA7423886E765B25C4 /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		20D864D50CA9CCE82F902857 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				685AE05165088DCE6A7159A5 /* ATTRIBUTION.md in Resources */,
+				F39A74F5F787A92968F355BB /* Assets.xcassets in Resources */,
+				7B1CF70F3C72B6F019FDECC4 /* Assets.xcassets in Resources */,
+				366B308C5B296B4347A5FC12 /* InfoPlist.strings in Resources */,
+				940D1C06F9370AE4EA2F1040 /* Localizable.strings in Resources */,
+				403065F07BF79FF2E24A006F /* PrivacyInfo.xcprivacy in Resources */,
+				C1A1A8478DD6F33434901D71 /* quakesignal_japanese_voice.caf in Resources */,
+				886B1D45E82EB94236AAC86C /* quakesignal_urgent.caf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2739336F9E2C9793D4D50015 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				277BF2AD6E6D16286A094D09 /* Assets.xcassets in Resources */,
+				7C5B448E50480137082D2C1B /* Assets.xcassets in Resources */,
+				6DDE22A65353BC33BF456D90 /* InfoPlist.strings in Resources */,
+				F09197006FA5AD5D8E868EF6 /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		3BA91CA2FBB6D5449679C782 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -486,6 +751,7 @@
 				0EA04CC2D8769B4D1119146E /* LocationManager.swift in Sources */,
 				D0ECDC45A65C41E446EE8134 /* NotificationManager.swift in Sources */,
 				EB68B0A59F9F99DA6D274C91 /* OnboardingView.swift in Sources */,
+				FF530E600AA4FDE2F5585018 /* PlatformCapabilities.swift in Sources */,
 				30787BE285C2AF3865685D31 /* PushPayload.swift in Sources */,
 				9AAC1CF8B2A760F00E998C16 /* QuakeDetailView.swift in Sources */,
 				D107043DF51F2F071D1E3AA2 /* QuakeListView.swift in Sources */,
@@ -493,9 +759,25 @@
 				0B8CEB3509599E4BA3BB5CD2 /* QuakeSignalApp.swift in Sources */,
 				4BF03EE23D5F476E518295C2 /* QuakeStore.swift in Sources */,
 				8FB6DF50DFD1FE9B637469F8 /* RootView.swift in Sources */,
+				FB35CF93C5A3652CCB788757 /* ScreenshotAutomation.swift in Sources */,
 				DFBD32451B2D74367698EFC2 /* SettingsView.swift in Sources */,
 				0C3EC0B633E26287A449E3EC /* SourceDisclaimerView.swift in Sources */,
 				079822277E33C23AC7363D72 /* WolfxClient.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		413852AA72D5A63B837643CC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AFF631C0F52D1A42169517A4 /* EEWEvent.swift in Sources */,
+				79DC01D40F9258D975CAE290 /* ForegroundQuakeStore.swift in Sources */,
+				21894A51778D29BC9A6E2141 /* IntensityScale.swift in Sources */,
+				87147003176FF9AB1030C3AA /* Localization.swift in Sources */,
+				F24DDEE17769C40FE259C9BD /* QuakeSignalWatchApp.swift in Sources */,
+				6F2DBB8C795DBC1C32545FD0 /* ScreenshotAutomation.swift in Sources */,
+				75F8F085EB77DC40DBFCAE5E /* WatchDashboardView.swift in Sources */,
+				9327AD03393019F71997BCAE /* WolfxClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -508,7 +790,70 @@
 				1DAF3142799F4F35F8AE699A /* CoarseCoordinateTests.swift in Sources */,
 				270DEBC62F5495435C5094ED /* ForegroundHTTPFallbackPolicyTests.swift in Sources */,
 				B55EE7B71D09CFF033F9814A /* PushRegistrationLifecycleTests.swift in Sources */,
+				1DD243C69A61181782B08F96 /* ScreenshotAutomationTests.swift in Sources */,
 				5965D4C2C897BD817231CFA6 /* WolfxHTTPFetchPacingTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D3609A46DB16E34382421CF6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D5DCAE2BA799B31CE46B07EB /* EEWEvent.swift in Sources */,
+				8D9AB68CF526637B0343B963 /* ForegroundQuakeStore.swift in Sources */,
+				AF5BF169FE8A1A1FD4765E0F /* IntensityScale.swift in Sources */,
+				EE1E88BCC99DC38B575F15AA /* Localization.swift in Sources */,
+				E1D493D3A04F0B26E0FBCA49 /* QuakeSignalTVApp.swift in Sources */,
+				D0E886D9BCD5736BCF796408 /* ScreenshotAutomation.swift in Sources */,
+				5B28AB3AC5478552CD1AD48F /* TVDashboardView.swift in Sources */,
+				A3F9E7BE95E6C769B42F138C /* WolfxClient.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DB973DB500692045A4BDABC8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E20C48FA24EC8505F4454277 /* APIClient.swift in Sources */,
+				9267A9B731AA2EBC62DBD502 /* AlertPolicy.swift in Sources */,
+				E220374CE96B01289FC46C11 /* AppAttestClient.swift in Sources */,
+				010E1BD42BF66078635BE8DA /* AppDelegate.swift in Sources */,
+				B0F94E066C1DB2F532C98B6C /* AppSettings.swift in Sources */,
+				65F98C5FF54AEF2261BAFBAC /* BackendConfig.swift in Sources */,
+				6EE7DAFE78B108C4941CEEEB /* City.swift in Sources */,
+				1372DEE531C64E0F42DBFFD3 /* CityPickerView.swift in Sources */,
+				1F48F6399215767F911DBAE6 /* CoarseCoordinate.swift in Sources */,
+				EA475FB51AB7D04BC5BCC93E /* DeviceRegistration.swift in Sources */,
+				66C6B006713E9A9CDC9B151D /* DisasterGuideView.swift in Sources */,
+				EF51705BAC5681511D2032FF /* EEWAlertView.swift in Sources */,
+				423F90193A49F30A63F386B8 /* EEWEvent.swift in Sources */,
+				A0C800DDD5AA279784B297EA /* EmergencyAlertAudio.swift in Sources */,
+				4B23C902C2E1CEF36C608191 /* EpicenterMapView.swift in Sources */,
+				1075621479579BA0A18B4940 /* EventRevision.swift in Sources */,
+				7827673CF83997EA7184C78D /* FamilyCheckInView.swift in Sources */,
+				F84DF1F4E43BB15091513F3E /* ForegroundHTTPFallbackPolicy.swift in Sources */,
+				CC263C36570919DD673218A9 /* GuideContent.swift in Sources */,
+				160860686FA5DA1231C9B09E /* GuideStore.swift in Sources */,
+				3DB9B6B8A47E1BE6F2AB4B42 /* GuideTopicDetailView.swift in Sources */,
+				40BA7730C3FA24F8ABAF1E85 /* HomeView.swift in Sources */,
+				9AB557DE97E186101B9A6CC6 /* IntensityScale.swift in Sources */,
+				7B3FA17AD79618AB0802AE3E /* LiveSocketClient.swift in Sources */,
+				15705D4E575855C973D136EF /* Localization.swift in Sources */,
+				EE681EF451424C59EED37927 /* LocationManager.swift in Sources */,
+				3B9B81C77BE2B0DAE7FA1D6D /* NotificationManager.swift in Sources */,
+				3521C5AEBBE6BD1B200E6534 /* OnboardingView.swift in Sources */,
+				F1AD0AD2CB1523B566A3AC79 /* PlatformCapabilities.swift in Sources */,
+				018A6C06E10CC2E9FFC08E45 /* PushPayload.swift in Sources */,
+				CA521524D78B0522245870D7 /* QuakeDetailView.swift in Sources */,
+				41F5DDF967DC83F72A7D5CDF /* QuakeListView.swift in Sources */,
+				D02B0910A4599D3EB0BDA143 /* QuakeRowView.swift in Sources */,
+				C30D6EEA8560C3BE4E130569 /* QuakeSignalApp.swift in Sources */,
+				EA136C06A2A42BCC9968D99F /* QuakeStore.swift in Sources */,
+				6AA2343197F1352D29D92CDD /* RootView.swift in Sources */,
+				B1EB38045281D40C4E0A4CA2 /* ScreenshotAutomation.swift in Sources */,
+				192C3E0C5150764B8635D67E /* SettingsView.swift in Sources */,
+				8BC8975D02DC5BB881331F29 /* SourceDisclaimerView.swift in Sources */,
+				2B994284BC74999EA578CD1C /* WolfxClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -519,6 +864,12 @@
 			isa = PBXTargetDependency;
 			target = 0C571730824BD0FE25517524 /* QuakeSignal */;
 			targetProxy = 806671887B446B19EEE6FE60 /* PBXContainerItemProxy */;
+		};
+		772A7BAD5E925617A13DB93C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = 5F9DB798086E1F4045F2BA9D /* QuakeSignalWatch */;
+			targetProxy = 462F3D11641B2F03AE490559 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -546,6 +897,32 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		00D97E676BFD0D69E104AAFA /* InternalQA */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = VisionAppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5TT564H883;
+				ENABLE_TESTABILITY = YES;
+				INFOPLIST_FILE = QuakeSignalVision/Supporting/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
+				PROVISIONING_PROFILE_SPECIFIER = "$(QUAKESIGNAL_VISION_PROFILE_NAME)";
+				QUAKESIGNAL_API_BASE_URL = "https://quakesignal-api.hopeso.workers.dev";
+				QUAKESIGNAL_APP_ATTEST_MODE = production;
+				SDKROOT = xros;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) QUAKESIGNAL_INTERNAL_QA";
+				TARGETED_DEVICE_FAMILY = 7;
+				XROS_DEPLOYMENT_TARGET = 1.0;
+			};
+			name = InternalQA;
+		};
 		050C13D6BEC425AF923AACD7 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -580,7 +957,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -604,18 +981,81 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				XROS_DEPLOYMENT_TARGET = 1.0;
 			};
 			name = Debug;
+		};
+		463FCF12078F444105715FAF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = TVBrandAssets;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5TT564H883;
+				INFOPLIST_FILE = QuakeSignalTV/Supporting/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
+				PROVISIONING_PROFILE_SPECIFIER = "$(QUAKESIGNAL_TV_PROFILE_NAME)";
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = Release;
+		};
+		482E9905C10BFC2CC404B660 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = WatchAppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5TT564H883;
+				INFOPLIST_FILE = QuakeSignalWatch/Supporting/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app.watchkitapp;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		4C1F0FB9DD366D01387D74FF /* InternalQA */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = TVBrandAssets;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5TT564H883;
+				INFOPLIST_FILE = QuakeSignalTV/Supporting/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
+				PROVISIONING_PROFILE_SPECIFIER = "$(QUAKESIGNAL_TV_PROFILE_NAME)";
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = InternalQA;
 		};
 		567F9A5741C73B23B8B2B850 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -625,6 +1065,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app.tests;
 				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/QuakeSignal.app/QuakeSignal";
 			};
@@ -634,6 +1075,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -643,8 +1085,27 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app.tests;
 				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/QuakeSignal.app/QuakeSignal";
+			};
+			name = Release;
+		};
+		7053FB8652ECF1B94AAA2743 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = WatchAppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5TT564H883;
+				INFOPLIST_FILE = QuakeSignalWatch/Supporting/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app.watchkitapp;
+				PROVISIONING_PROFILE_SPECIFIER = "$(QUAKESIGNAL_WATCH_PROFILE_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Release;
 		};
@@ -682,7 +1143,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -699,18 +1160,41 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				XROS_DEPLOYMENT_TARGET = 1.0;
 			};
 			name = InternalQA;
+		};
+		93EC18735CB71BB86B9D709F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = TVBrandAssets;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5TT564H883;
+				INFOPLIST_FILE = QuakeSignalTV/Supporting/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
+				SDKROOT = appletvos;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = Debug;
 		};
 		9D21D527E9897D4DD999EEF9 /* InternalQA */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -720,11 +1204,36 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app.tests;
 				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) QUAKESIGNAL_INTERNAL_QA";
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/QuakeSignal.app/QuakeSignal";
 			};
 			name = InternalQA;
+		};
+		9D871FEAF5F7919665E13332 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = VisionAppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5TT564H883;
+				INFOPLIST_FILE = QuakeSignalVision/Supporting/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
+				PROVISIONING_PROFILE_SPECIFIER = "$(QUAKESIGNAL_VISION_PROFILE_NAME)";
+				QUAKESIGNAL_API_BASE_URL = "https://quakesignal-api.hopeso.workers.dev";
+				QUAKESIGNAL_APP_ATTEST_MODE = production;
+				SDKROOT = xros;
+				TARGETED_DEVICE_FAMILY = 7;
+				XROS_DEPLOYMENT_TARGET = 1.0;
+			};
+			name = Release;
 		};
 		A42E66C5407563B633D16E48 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -733,8 +1242,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = QuakeSignal/Supporting/QuakeSignal.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "QuakeSignal/Supporting/QuakeSignal-Catalyst.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = 5TT564H883;
 				INFOPLIST_FILE = QuakeSignal/Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -745,10 +1256,29 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
 				QUAKESIGNAL_APP_ATTEST_MODE = development;
 				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
+		};
+		BFF9DA1BAF07497244CBD1D2 /* InternalQA */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = WatchAppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5TT564H883;
+				INFOPLIST_FILE = QuakeSignalWatch/Supporting/Info.plist;
+				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app.watchkitapp;
+				PROVISIONING_PROFILE_SPECIFIER = "$(QUAKESIGNAL_WATCH_PROFILE_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = InternalQA;
 		};
 		CE6C371746242B992840B0A8 /* InternalQA */ = {
 			isa = XCBuildConfiguration;
@@ -756,8 +1286,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "QuakeSignal/Supporting/QuakeSignal-Release.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "QuakeSignal/Supporting/QuakeSignal-Catalyst.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Automatic;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = 5TT564H883;
 				ENABLE_TESTABILITY = YES;
 				INFOPLIST_FILE = QuakeSignal/Supporting/Info.plist;
@@ -767,14 +1299,40 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
+				PROVISIONING_PROFILE_SPECIFIER = "$(QUAKESIGNAL_IOS_PROFILE_NAME)";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "$(QUAKESIGNAL_CATALYST_PROFILE_NAME)";
 				QUAKESIGNAL_API_BASE_URL = "https://quakesignal-api.hopeso.workers.dev";
 				QUAKESIGNAL_APP_ATTEST_MODE = production;
 				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) QUAKESIGNAL_INTERNAL_QA";
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = InternalQA;
+		};
+		D706C9E99EEA49819AC1B2DA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 3DFCD227F9ED367CDC787519 /* Debug.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = VisionAppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = QuakeSignalVision/Supporting/QuakeSignalVision.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 5TT564H883;
+				INFOPLIST_FILE = QuakeSignalVision/Supporting/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
+				QUAKESIGNAL_APP_ATTEST_MODE = development;
+				SDKROOT = xros;
+				TARGETED_DEVICE_FAMILY = 7;
+				XROS_DEPLOYMENT_TARGET = 1.0;
+			};
+			name = Debug;
 		};
 		E4F7239BE210D1F4F6F7A6C2 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -782,8 +1340,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "QuakeSignal/Supporting/QuakeSignal-Release.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "QuakeSignal/Supporting/QuakeSignal-Catalyst.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Automatic;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = 5TT564H883;
 				INFOPLIST_FILE = QuakeSignal/Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -792,9 +1352,12 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
+				PROVISIONING_PROFILE_SPECIFIER = "$(QUAKESIGNAL_IOS_PROFILE_NAME)";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "$(QUAKESIGNAL_CATALYST_PROFILE_NAME)";
 				QUAKESIGNAL_API_BASE_URL = "https://quakesignal-api.hopeso.workers.dev";
 				QUAKESIGNAL_APP_ATTEST_MODE = production;
 				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = YES;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -834,7 +1397,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -851,11 +1414,12 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				XROS_DEPLOYMENT_TARGET = 1.0;
 			};
 			name = Release;
 		};
@@ -878,6 +1442,36 @@
 				567F9A5741C73B23B8B2B850 /* Debug */,
 				9D21D527E9897D4DD999EEF9 /* InternalQA */,
 				696862DC809C395864282BD7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		1400CB585C7D4D542AD6B120 /* Build configuration list for PBXNativeTarget "QuakeSignalTV" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				93EC18735CB71BB86B9D709F /* Debug */,
+				4C1F0FB9DD366D01387D74FF /* InternalQA */,
+				463FCF12078F444105715FAF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		1453313750A3B22F93287D69 /* Build configuration list for PBXNativeTarget "QuakeSignalWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				482E9905C10BFC2CC404B660 /* Debug */,
+				BFF9DA1BAF07497244CBD1D2 /* InternalQA */,
+				7053FB8652ECF1B94AAA2743 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		59997DA65EA77171D7467CD2 /* Build configuration list for PBXNativeTarget "QuakeSignalVision" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D706C9E99EEA49819AC1B2DA /* Debug */,
+				00D97E676BFD0D69E104AAFA /* InternalQA */,
+				9D871FEAF5F7919665E13332 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

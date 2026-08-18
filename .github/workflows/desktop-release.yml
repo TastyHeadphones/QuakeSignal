@@ -23,12 +23,12 @@ on:
         default: false
         type: boolean
       build_macos_app_store:
-        description: Build the protected Mac App Store package artifact
+        description: Build a private signed Mac App Store evidence package without uploading it
         required: false
         default: false
         type: boolean
       upload_macos_to_app_store_connect:
-        description: Validate and upload the protected Mac App Store package to App Store Connect
+        description: Build, validate, and upload only after exact-source screenshot approval
         required: false
         default: false
         type: boolean
@@ -144,6 +144,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: desktop
         run: npm ci
+
+      - name: Test frontend safety policy
+        working-directory: desktop
+        run: npm test
 
       - name: Test Rust core
         working-directory: desktop/src-tauri
@@ -290,6 +294,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: desktop
         run: npm ci
+
+      - name: Test frontend safety policy
+        working-directory: desktop
+        run: npm test
 
       - name: Test Rust core
         working-directory: desktop/src-tauri
@@ -477,10 +485,10 @@ jobs:
     # An upload necessarily builds its package in the same protected manual run.
     if: >-
       github.event_name == 'workflow_dispatch' &&
-       github.ref == 'refs/heads/main' &&
-       github.ref_protected &&
-       (inputs.build_macos_app_store == true ||
-        inputs.upload_macos_to_app_store_connect == true)
+      github.ref == 'refs/heads/main' &&
+      github.ref_protected &&
+      (inputs.build_macos_app_store == true ||
+      inputs.upload_macos_to_app_store_connect == true)
     runs-on: macos-latest
     environment:
       name: macos-app-store-release
@@ -490,6 +498,40 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate mutually exclusive Mac App Store mode
+        shell: bash
+        env:
+          BUILD_ARTIFACT_ONLY: ${{ inputs.build_macos_app_store }}
+          UPLOAD_TO_APP_STORE_CONNECT: ${{ inputs.upload_macos_to_app_store_connect }}
+        run: |
+          set -euo pipefail
+          if [ "$BUILD_ARTIFACT_ONLY" = "true" ] && [ "$UPLOAD_TO_APP_STORE_CONNECT" = "true" ]; then
+            echo "::error::Select exactly one Mac App Store mode; build-only and upload cannot both be true"
+            exit 1
+          fi
+
+      - name: Validate Mac App Store listing assets
+        run: ruby .github/scripts/verify-store-assets.rb
+
+      - name: Require exact-source release-approved screenshot provenance before upload
+        if: github.event_name == 'workflow_dispatch' && inputs.upload_macos_to_app_store_connect
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$(node -p "require('./desktop/AppStore/screenshot-provenance.json').capture.sourceBaselineCommit")"
+          if [[ ! "$baseline" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Mac App Store screenshot provenance needs a full source baseline commit"
+            exit 1
+          fi
+          node .github/scripts/verify-macos-app-store-screenshot-baseline.mjs \
+            --baseline "$baseline" \
+            --current "$GITHUB_SHA"
+          ruby .github/scripts/verify-store-assets.rb \
+            --require-macos-release-ready \
+            --expected-source-commit="$baseline"
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -512,6 +554,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: desktop
         run: npm ci
+
+      - name: Test frontend safety policy
+        working-directory: desktop
+        run: npm test
 
       - name: Test Rust core
         working-directory: desktop/src-tauri
@@ -550,29 +596,6 @@ jobs:
             INSTALLER_CERTIFICATE_PASSWORD
             INSTALLER_IDENTITY
             PROVISIONING_PROFILE
-          )
-          missing=()
-          for name in "${required[@]}"; do
-            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
-          done
-          if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error::macos-app-store-release is missing: $(IFS=,; echo "${missing[*]}")"
-            exit 1
-          fi
-
-      - name: Validate App Store Connect upload configuration
-        if: github.event_name == 'workflow_dispatch' && inputs.upload_macos_to_app_store_connect
-        shell: bash
-        env:
-          APP_STORE_CONNECT_KEY: ${{ secrets.MACOS_APP_STORE_CONNECT_API_KEY }}
-          APP_STORE_CONNECT_KEY_ID: ${{ vars.MACOS_APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER: ${{ vars.MACOS_APP_STORE_CONNECT_API_ISSUER }}
-        run: |
-          set -euo pipefail
-          required=(
-            APP_STORE_CONNECT_KEY
-            APP_STORE_CONNECT_KEY_ID
-            APP_STORE_CONNECT_ISSUER
           )
           missing=()
           for name in "${required[@]}"; do
@@ -649,6 +672,12 @@ jobs:
           fi
           app="${apps[0]}"
           version="$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")"
+          expected_short_version="1.1.0"
+          expected_bundle_version="1.1.0"
+          if [ "$version" != "$expected_short_version" ] || [ "$version" != "$expected_bundle_version" ]; then
+            echo "::error::Mac App Store source version must remain exactly 1.1.0 for this reviewed release"
+            exit 1
+          fi
           package_dir="artifacts/macos-app-store"
           package="$package_dir/QuakeSignal_${version}_universal.pkg"
           entitlements="$RUNNER_TEMP/quakesignal-macos-app-store-entitlements.plist"
@@ -819,6 +848,8 @@ jobs:
 
           plutil -lint "$app/Contents/Info.plist" >/dev/null
           assert_plist_value "$app/Contents/Info.plist" "CFBundleIdentifier" "$expected_bundle_identifier" "Mac App Store Info.plist"
+          assert_plist_value "$app/Contents/Info.plist" "CFBundleShortVersionString" "$expected_short_version" "Mac App Store Info.plist"
+          assert_plist_value "$app/Contents/Info.plist" "CFBundleVersion" "$expected_bundle_version" "Mac App Store Info.plist"
           codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
           plutil -lint "$entitlements" >/dev/null
           assert_plist_value "$entitlements" "com.apple.application-identifier" "$expected_application_identifier" "Mac App Store signed entitlements"
@@ -847,8 +878,22 @@ jobs:
         env:
           APP_STORE_CONNECT_KEY: ${{ secrets.MACOS_APP_STORE_CONNECT_API_KEY }}
           APP_STORE_CONNECT_KEY_ID: ${{ vars.MACOS_APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER: ${{ vars.MACOS_APP_STORE_CONNECT_API_ISSUER }}
         run: |
           set -euo pipefail
+          required=(
+            APP_STORE_CONNECT_KEY
+            APP_STORE_CONNECT_KEY_ID
+            APP_STORE_CONNECT_ISSUER
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::macos-app-store-release is missing: $(IFS=,; echo "${missing[*]}")"
+            exit 1
+          fi
           key_dir="$RUNNER_TEMP/macos-app-store-private-keys"
           key_path="$key_dir/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
           mkdir -p "$key_dir"

@@ -86,6 +86,11 @@ jobs:
           set -euo pipefail
           ruby .github/scripts/test-render-homebrew-cask.rb
 
+      - name: Test App Store asset release gates
+        run: |
+          set -euo pipefail
+          ruby .github/scripts/verify-store-assets.test.rb
+
       - name: Test iOS release contract
         run: |
           set -euo pipefail
