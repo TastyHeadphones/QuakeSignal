@@ -50,6 +50,7 @@ final class ScreenshotAutomationTests: XCTestCase {
 
     func testScreenshotFixturesAreFinalHistoricalReportsNeverWarningsOrTraining() throws {
         let fixtures = ScreenshotAutomation.finalizedHistoricalEvents
+#if DEBUG
         XCTAssertFalse(fixtures.isEmpty)
         XCTAssertEqual(Set(fixtures.map(\.id)).count, fixtures.count)
 
@@ -65,5 +66,11 @@ final class ScreenshotAutomationTests: XCTestCase {
             XCTAssertFalse(event.isActiveWarning)
             XCTAssertLessThan(try XCTUnwrap(event.reportDate), newestAllowedDate)
         }
+#else
+        XCTAssertTrue(
+            fixtures.isEmpty,
+            "Screenshot fixtures must not be compiled into InternalQA or public Release products"
+        )
+#endif
     }
 }
