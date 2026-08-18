@@ -7,6 +7,13 @@ deployment. It records the physical-device evidence needed before a reviewer may
 `APP_ATTEST_PRODUCTION_ENFORCED=true` and run the production launch
 deployment.
 
+The current public `Release` candidate is `1.1 (7)`. The protected workflow
+[run 32167921337](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/32167921337)
+signed, uploaded, and validated that build, and App Store Connect now reports
+the TestFlight build as **Ready to Submit**. Those facts establish artifact and
+processing status only. They do not replace internal-group availability or any
+physical-device result required below.
+
 This is a **production** check. It must use the TestFlight release build and
 the approved notification origin
 `https://quakesignal-api.hopeso.workers.dev`. A Simulator, a Debug build, or
@@ -37,19 +44,32 @@ protected workflow then signed and uploaded `1.0 (5)` in
 [run 31811106548](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31811106548),
 but device use exposed a server-rejected App Attest credential recovery gap,
 an incorrect denied-location selection transition, and notification-settings
-routing that still needed repair. Build `5` is superseded too. The coordinated
-repair candidate is `1.0 (6)`; begin the normal production
-registration, refresh, unsubscribe, and foreground test-alert checks below
-only after its protected upload is processed and available.
+routing that still needed repair. Build `5` is superseded too.
+
+Public `Release` build `1.0 (6)` completed the 1.0 release line and is already
+**Ready for Distribution**. It remains historical evidence for that release,
+not the candidate or substitute physical-device proof for version 1.1. Do not
+attach builds `2` through `6` to the 1.1 App Store version.
+
+Public `Release` build `1.1 (7)` is the current candidate. Its protected
+workflow upload and validation are recorded in
+[run 32167921337](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/32167921337),
+and the processed TestFlight build is **Ready to Submit**. Perform the normal
+production registration, refresh, unsubscribe, foreground training-alert, and
+reinstall-smoke checks below with `1.1 (7)` only after it is assigned and
+installable in the intended internal TestFlight group. Section 6 remains a
+separate `InternalQA`-only gate; the public `Release` candidate deliberately
+does not contain its delayed scheduler.
 
 ## Before starting
 
 - Use an iPhone that supports App Attest, has normal network access, and is
-  enrolled in the QuakeSignal internal TestFlight group. Record the exact
-  marketing version and build number shown by TestFlight.
-- Install the assigned TestFlight build rather than a development/Xcode build.
-  Complete onboarding, then open the **Settings** tab and its
-  **Notifications** section.
+  enrolled in the QuakeSignal internal TestFlight group. Confirm that `1.1 (7)`
+  is available to that group and record the exact marketing version and build
+  number shown by TestFlight.
+- Install the assigned `1.1 (7)` TestFlight build rather than a historical,
+  development, or Xcode build. Complete onboarding, then open the **Settings**
+  tab and its **Notifications** section.
 - Turn off Focus or otherwise make banners visible for the notification test.
   QuakeSignal has no Critical Alerts entitlement; a normal or time-sensitive
   notification may still be delayed or summarized by iOS settings.
@@ -213,7 +233,7 @@ Copy this into the release ticket; redact all identifiers and personal data.
 
 | Check | Result | UTC time | Evidence / observed text |
 | --- | --- | --- | --- |
-| TestFlight build and physical device identified |  |  |  |
+| TestFlight public `Release` candidate `1.1 (7)` and physical device identified |  |  |  |
 | Initial production registration |  |  |  |
 | Launch/token refresh |  |  |  |
 | Token-bound unsubscribe + re-enrollment |  |  |  |
@@ -223,6 +243,8 @@ Copy this into the release ticket; redact all identifiers and personal data.
 | Fresh-key rebind after reinstall/restore | Pending unless separately evidenced |  |  |
 
 Do not promote the App Attest environment gate or submit the iOS app while a
-required row is unresolved. See the broader deployment controls in
+required row is unresolved. The workflow upload, validation, and **Ready to
+Submit** status for `1.1 (7)` do not waive any row. See the broader deployment
+controls in
 [`CLOUDFLARE_PRODUCTION.md`](CLOUDFLARE_PRODUCTION.md) and the App Store
 release sequence in [`ios/AppStore/README.md`](../ios/AppStore/README.md).
