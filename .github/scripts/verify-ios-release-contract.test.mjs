@@ -676,3 +676,29 @@ test("fails closed when generic Apple platform coverage or credential-free signi
     });
   }
 });
+
+test("fails closed when build or release jobs reintroduce Simulator downloads", async (t) => {
+  for (const relativePath of [
+    ".github/workflows/ios.yml",
+    ".github/workflows/apple-platforms.yml",
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, relativePath);
+      const contents = await readFile(path, "utf8");
+      const marker = "    steps:\n";
+      assert.ok(contents.includes(marker), `${relativePath} fixture must contain job steps`);
+      await writeFile(
+        path,
+        contents.replace(
+          marker,
+          `${marker}      - run: xcodebuild -downloadPlatform watchOS -architectureVariant arm64\n`,
+        ),
+        "utf8",
+      );
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /must not download Simulator runtimes/i,
+      );
+    });
+  }
+});

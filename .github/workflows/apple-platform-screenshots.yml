@@ -43,10 +43,22 @@ jobs:
             exit 1
           fi
 
-      - name: Install ${{ matrix.download_platform }} Simulator runtime
+      - name: Ensure ${{ matrix.download_platform }} Simulator runtime is available
         env:
           DOWNLOAD_PLATFORM: ${{ matrix.download_platform }}
-        run: xcodebuild -downloadPlatform "$DOWNLOAD_PLATFORM" -architectureVariant arm64
+        run: |
+          set -euo pipefail
+          installed_runtimes="$(xcrun simctl list runtimes available)"
+          if grep -Eq "^${DOWNLOAD_PLATFORM}[[:space:]]" <<< "$installed_runtimes"; then
+            echo "$DOWNLOAD_PLATFORM Simulator runtime is already installed"
+            exit 0
+          fi
+          xcodebuild -downloadPlatform "$DOWNLOAD_PLATFORM" -architectureVariant universal
+          installed_runtimes="$(xcrun simctl list runtimes available)"
+          if ! grep -Eq "^${DOWNLOAD_PLATFORM}[[:space:]]" <<< "$installed_runtimes"; then
+            echo "::error::$DOWNLOAD_PLATFORM Simulator runtime is unavailable after download"
+            exit 1
+          fi
 
       - name: Capture one native dashboard candidate
         env:
@@ -68,7 +80,8 @@ jobs:
           set -euo pipefail
           export SOURCE_COMMIT="$GITHUB_SHA"
           export WORKFLOW_RUN="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          export XCODE_VERSION="$(xcodebuild -version | tr '\n' ' ')"
+          XCODE_VERSION="$(xcodebuild -version | tr '\n' ' ')"
+          export XCODE_VERSION
           /usr/bin/ruby -rjson -rdigest -rtime -e '
             directory = ENV.fetch("CANDIDATE_DIR")
             platform = ENV.fetch("PLATFORM_KEY")

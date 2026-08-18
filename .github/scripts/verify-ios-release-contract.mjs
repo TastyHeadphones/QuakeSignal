@@ -79,10 +79,10 @@ const TESTFLIGHT_JOB_HEADER = {
 };
 const GENERIC_BUILD_MATRIX = {
   include: [
-    { name: "iOS/iPadOS", key: "ios", scheme: "QuakeSignal", destination: "generic/platform=iOS", download_platform: "watchOS" },
-    { name: "tvOS", key: "tvos", scheme: "QuakeSignalTV", destination: "generic/platform=tvOS", download_platform: "tvOS" },
-    { name: "visionOS", key: "visionos", scheme: "QuakeSignalVision", destination: "generic/platform=visionOS", download_platform: "visionOS" },
-    { name: "watchOS", key: "watchos", scheme: "QuakeSignalWatch", destination: "generic/platform=watchOS", download_platform: "watchOS" },
+    { name: "iOS/iPadOS", key: "ios", scheme: "QuakeSignal", destination: "generic/platform=iOS" },
+    { name: "tvOS", key: "tvos", scheme: "QuakeSignalTV", destination: "generic/platform=tvOS" },
+    { name: "visionOS", key: "visionos", scheme: "QuakeSignalVision", destination: "generic/platform=visionOS" },
+    { name: "watchOS", key: "watchos", scheme: "QuakeSignalWatch", destination: "generic/platform=watchOS" },
   ],
 };
 const GENERIC_BUILD_JOB_HEADER = {
@@ -134,10 +134,10 @@ const CLOUDFLARE_DEPLOY_PRODUCTION_HEADER = {
 // alongside its tests; an unreviewed sibling job, extra post-smoke step, or
 // edited signing/upload action fails before release automation can use
 // credentials.
-const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:jgzfpVzefzUHSVF4JxdaGpEf7_BxF107ES-PV_hj5u4";
-const WORKFLOW_JOBS_FINGERPRINT = "sha256:fs-hDf4T8FoJl_bP9FxDwV1C7tzANacYfR5haM3Uu8o";
-const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:yvcz0hlZB4DrgIHU6Yvw_eljMYMgNIcTIuRxNVs7PEU";
-const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:NKkeX3aR-QNwrQEQAp2BWmmyuP_eh1abyWoXxaHaxuE";
+const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:xM030AZh5xMVT6_k67kP87iiOa-QkUvi5Gn0_0gaTPU";
+const WORKFLOW_JOBS_FINGERPRINT = "sha256:GFimuJ4Csf-1zDTLellUSizy0YmbN4o8bIFRFolQNHc";
+const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:9zTH6eFLeuD9DBkjY5u6xQCKlM0R8iq41uNxhG7Jdhc";
+const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:emUFxjkPtvbXsmvC8IJvc8SbQdyQvypmE-MV3PDzynw";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:MVyNUXvoZoqo5wXo0qmLaZow6cqQA8aUpc_YWLVvvjI";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -605,6 +605,12 @@ function stepByName(steps, name, label) {
   return exactlyOne(matches, label);
 }
 
+function forbidSimulatorDownloads(jobs, label) {
+  if (/xcodebuild\s+-downloadPlatform\b/.test(JSON.stringify(jobs))) {
+    fail(`${label} must not download Simulator runtimes during build or release jobs.`);
+  }
+}
+
 function verifyArchiveWorkflow(workflowSource, buildNumber) {
   const workflow = parseEffectiveWorkflow(workflowSource);
   if (Object.hasOwn(workflow, "defaults")) {
@@ -640,6 +646,7 @@ function verifyArchiveWorkflow(workflowSource, buildNumber) {
   }, "iOS workflow build_number input");
 
   const jobs = record(workflow.jobs, "iOS workflow jobs");
+  forbidSimulatorDownloads(jobs, "iOS workflow");
   const genericBuilds = record(jobs["generic-platform-builds"], "generic Apple platform build job");
   exactRecordWithAllowedKeys(
     genericBuilds,
@@ -784,6 +791,7 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
   }, "native platform workflow build_number input");
 
   const jobs = record(workflow.jobs, "native platform workflow jobs");
+  forbidSimulatorDownloads(jobs, "native platform workflow");
   if (!sameValue(Object.keys(jobs), ["release"])) {
     fail("native platform workflow must expose only its reviewed protected release job.");
   }
