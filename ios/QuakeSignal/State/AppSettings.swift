@@ -18,6 +18,49 @@ enum PushRegistrationState: String, Codable, Sendable, Equatable {
     }
 }
 
+/// Stable wire values shared with the notification Worker. These identifiers
+/// deliberately describe QuakeSignal-owned sounds, not government warning
+/// systems. Custom notification audio still follows the person's Silent Mode,
+/// Focus, volume, and notification settings because the app does not request
+/// Apple's Critical Alerts entitlement.
+enum AlertSoundPreference: String, CaseIterable, Codable, Sendable, Equatable {
+    case system
+    case urgentTone = "urgent-tone"
+    case japaneseVoice = "japanese-voice"
+
+    var titleKey: String {
+        switch self {
+        case .system: "settings.alertSound.system"
+        case .urgentTone: "settings.alertSound.urgentTone"
+        case .japaneseVoice: "settings.alertSound.japaneseVoice"
+        }
+    }
+
+    var detailKey: String {
+        switch self {
+        case .system: "settings.alertSound.system.detail"
+        case .urgentTone: "settings.alertSound.urgentTone.detail"
+        case .japaneseVoice: "settings.alertSound.japaneseVoice.detail"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .system: "bell"
+        case .urgentTone: "waveform"
+        case .japaneseVoice: "person.wave.2"
+        }
+    }
+
+    var bundledFilename: String? {
+        switch self {
+        case .system: nil
+        case .urgentTone: "quakesignal_urgent.caf"
+        case .japaneseVoice: "quakesignal_japanese_voice.caf"
+        }
+    }
+}
+
 enum PushTestAlertPolicy {
     static func isAvailable(
         subscriptionEnabled: Bool,
@@ -78,6 +121,9 @@ final class AppSettings {
     var notifyAtNight: Bool {
         didSet { defaults.set(notifyAtNight, forKey: Keys.notifyAtNight) }
     }
+    var alertSound: AlertSoundPreference {
+        didSet { defaults.set(alertSound.rawValue, forKey: Keys.alertSound) }
+    }
     /// Controls whether this device is registered with QuakeSignal's alert
     /// service. It is separate from iOS notification permission, which only
     /// the user can change in Settings.
@@ -109,6 +155,7 @@ final class AppSettings {
         static let sources = "settings.sources"
         static let includeTestAlerts = "settings.includeTestAlerts"
         static let notifyAtNight = "settings.notifyAtNight"
+        static let alertSound = "settings.alertSound"
         static let pushSubscriptionEnabled = "settings.pushSubscriptionEnabled"
         static let pushRegistrationState = "settings.pushRegistrationState"
     }
@@ -130,6 +177,9 @@ final class AppSettings {
         }
         includeTestAlerts = defaults.object(forKey: Keys.includeTestAlerts) as? Bool ?? false
         notifyAtNight = defaults.object(forKey: Keys.notifyAtNight) as? Bool ?? true
+        alertSound = defaults.string(forKey: Keys.alertSound)
+            .flatMap(AlertSoundPreference.init(rawValue:))
+            ?? .system
         // Preserve existing installations' behavior. A device cannot be
         // registered until it has both notification permission and an APNs
         // device token, so this default does not opt an unprompted install in.

@@ -44,6 +44,14 @@ pages are durably inserted before their parent message is acknowledged.
 The Worker also imports any legacy Durable Object or Queue hand-off found
 during this upgrade into the D1 outbox before acknowledging the old copy.
 
+Fresh `new`/`updated` EEW warning work has a ten-minute event/creation deadline.
+Reports and meaningful final/cancel lifecycle notices retain a one-hour
+nonurgent window; training keeps its separate thirty-minute window. Only a
+fresh `isWarn && !isFinal && !isCancel && !isTraining` EEW receives Time
+Sensitive interruption and the registration's allow-listed bundled sound
+(`system`, `urgent-tone`, or `japanese-voice`). The APNs payload includes a
+bounded typed event snapshot and remains below the regular 4 KB payload limit.
+
 All four APNs Worker secrets are mandatory. A missing secret, provider-token,
 topic, payload, transport, or APNs-service failure retries the exact outbox
 page through the bounded Queue policy and then records a DLQ incident if it
@@ -146,7 +154,9 @@ after applying only the earlier schema. `0008_alert_delivery_reliability.sql`
 adds page-level provider-failure health, delivery deadlines, and terminal-outbox
 retention. `0009_production_training_test_push_limit.sql` adds the durable,
 token-free UTC-day App Attest claim required before a production training test
-push. Both migrations are required by this Worker revision.
+push. `0010_alert_sound_and_urgent_eew_deadline.sql` adds the exact alert-sound
+preference values and the shorter delivery deadline for urgent EEW warnings.
+Migrations `0008` through `0010` are required by this Worker revision.
 
 The protected **Cloudflare Worker → Run workflow → deploy_production** job is
 the sole normal route for remote D1 migrations and `wrangler deploy`. It runs

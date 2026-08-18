@@ -171,7 +171,11 @@ final class AppAttestWireFormatTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            AppAttestProofRecoveryPolicy.action(for: error, proofType: .attestation),
+            AppAttestProofRecoveryPolicy.action(
+                for: error,
+                proofType: .attestation,
+                operation: .deviceRegistration
+            ),
             .replaceKey
         )
     }
@@ -185,9 +189,34 @@ final class AppAttestWireFormatTests: XCTestCase {
         XCTAssertEqual(
             AppAttestProofRecoveryPolicy.action(
                 for: serverUnavailable,
-                proofType: .assertion
+                proofType: .assertion,
+                operation: .deviceRegistration
             ),
             .replaceKey
+        )
+    }
+
+    func testAssertionFailureDuringDeletionPreservesTheOnlyOwningKey() {
+        let failure = NSError(
+            domain: DCErrorDomain,
+            code: DCError.unknownSystemFailure.rawValue
+        )
+
+        XCTAssertEqual(
+            AppAttestProofRecoveryPolicy.action(
+                for: failure,
+                proofType: .assertion,
+                operation: .deviceDeletion
+            ),
+            .fail
+        )
+        XCTAssertEqual(
+            AppAttestProofRecoveryPolicy.action(
+                for: failure,
+                proofType: .assertion,
+                operation: .testPush
+            ),
+            .fail
         )
     }
 

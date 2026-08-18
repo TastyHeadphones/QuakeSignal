@@ -24,7 +24,7 @@ export async function dispatchPush(event: NormalizedEvent, reason: NotifyReason)
   if (devices.length === 0) return;
 
   for (const device of devices) {
-    const notification = buildNotification(event, reason);
+    const notification = buildNotification(event, reason, device.alertSound);
     const result = await provider.send(notification, device.token);
     for (const failure of result.failed) {
       const why = failure.response?.reason ?? failure.error?.message ?? "unknown";
@@ -44,7 +44,7 @@ export async function sendDirectPush(event: NormalizedEvent, reason: NotifyReaso
     throw new Error("APNs is not configured on the server (set APNS_* env vars)");
   }
 
-  const notification = buildNotification(event, reason);
+  const notification = buildNotification(event, reason, device.alertSound);
   const result = await provider.send(notification, device.token);
   if (result.failed.length > 0) {
     const failure = result.failed[0];

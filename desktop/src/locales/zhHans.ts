@@ -19,6 +19,7 @@ export const zhHans: Record<LocaleKey, string> = {
   "home.testAlert.button": "测试警报声和通知",
   "home.lastEvent.none": "暂无记录。",
   "home.viewAll": "查看全部记录",
+  "storage.persistenceUnavailable": "目前无法保存本地记录。本次会话将继续监测，现有数据库不会被更改。",
 
   "events.empty": "暂无地震记录。",
   "events.magnitudeShort": "M",

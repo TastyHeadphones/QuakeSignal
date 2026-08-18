@@ -34,6 +34,15 @@ export interface NormalizedEvent {
 
 export type DeviceEnvironment = "sandbox" | "production";
 
+/** Exact wire/storage identifiers accepted for an alert sound preference. */
+export const ALERT_SOUND_IDS = [
+  "system",
+  "urgent-tone",
+  "japanese-voice",
+] as const;
+
+export type AlertSound = (typeof ALERT_SOUND_IDS)[number];
+
 export interface DeviceRecord {
   token: string;
   environment: DeviceEnvironment;
@@ -43,6 +52,8 @@ export interface DeviceRecord {
   sources: WolfxSourceId[];
   minMagnitude: number;
   criticalAlertsEnabled: boolean;
+  /** Bundled notification sound selected for fresh active EEW warnings. */
+  alertSound: AlertSound;
   /** Subscribed city, e.g. "成都市" -- display label; latitude/longitude/radiusKm are what actually drive filtering. */
   cityName: string | null;
   latitude: number | null;
@@ -56,8 +67,8 @@ export interface DeviceRecord {
   /**
    * If false, suppress push for reason "report" (routine informational
    * quake reports) between 22:00-07:00 device-local time. Never applies to
-   * "new"/"updated"/"final"/"cancelled" (active EEW warnings) -- a
-   * life-safety alert is never silenced by a quiet-hours preference.
+   * fresh "new"/"updated" active EEW warnings. Final/cancel lifecycle notices
+   * also bypass this preference so a warning is not left visibly active.
    */
   notifyAtNight: boolean;
   createdAt: string;

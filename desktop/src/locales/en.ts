@@ -17,6 +17,7 @@ export const en = {
   "home.testAlert.button": "Test Alarm & Notification",
   "home.lastEvent.none": "Nothing to report yet.",
   "home.viewAll": "View all events",
+  "storage.persistenceUnavailable": "Local history cannot be saved right now. Monitoring will continue for this session, and the existing database was left untouched.",
 
   "events.empty": "No earthquakes recorded yet.",
   "events.magnitudeShort": "M",

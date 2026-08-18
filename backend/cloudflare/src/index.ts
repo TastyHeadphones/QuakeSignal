@@ -7,10 +7,24 @@ import {
   normalizeScFjEew,
 } from "../../src/alerts/normalize";
 import type {
+  AlertSound,
   DeviceRecord,
   NormalizedEvent,
   NotifyReason,
 } from "../../src/types/domain";
+import {
+  buildPushPayload,
+  DEFAULT_ALERT_SOUND,
+  isAlertSound,
+  normalizedAlertSound,
+  notificationReasonForEvent,
+  reconcileEventRevision,
+  URGENT_EEW_DELIVERY_TTL_MS,
+} from "../../src/push/policy";
+
+// Named exports keep the safety policy directly exercisable by the focused
+// bundled Worker tests without duplicating its implementation in a fixture.
+export { buildPushPayload, notificationReasonForEvent, reconcileEventRevision };
 import {
   ALL_WOLFX_SOURCES,
   isHeartbeat,
@@ -142,6 +156,7 @@ interface DeviceRow {
   sources: string;
   min_magnitude: number;
   critical_alerts_enabled: number;
+  alert_sound?: string | null;
   city_name: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -164,36 +179,6 @@ const EEW_SOURCES: WolfxSourceId[] = [
 ];
 const UPSTREAM_ROUTES = ["all_eew", "cenc_eqlist", "jma_eqlist"] as const;
 type UpstreamRoute = (typeof UPSTREAM_ROUTES)[number];
-const SOURCE_LABEL: Record<string, string> = {
-  jma_eew: "JMA",
-  sc_eew: "Sichuan EQA",
-  cenc_eew: "CENC",
-  fj_eew: "Fujian EQA",
-  cq_eew: "Chongqing EQA",
-  cenc_eqlist: "CENC",
-  jma_eqlist: "JMA",
-};
-const LOC_KEYS: Record<NotifyReason, { title: string; body: string }> = {
-  new: { title: "eew.push.new.title", body: "eew.push.new.body" },
-  updated: {
-    title: "eew.push.updated.title",
-    body: "eew.push.updated.body",
-  },
-  final: { title: "eew.push.final.title", body: "eew.push.final.body" },
-  cancelled: {
-    title: "eew.push.cancelled.title",
-    body: "eew.push.cancelled.body",
-  },
-  report: {
-    title: "quake.push.report.title",
-    body: "quake.push.report.body",
-  },
-  training: {
-    title: "eew.push.training.title",
-    body: "eew.push.training.body",
-  },
-};
-
 const APNS_MAX_CONCURRENT_DELIVERIES = 2;
 // Keep one queue message comfortably below Workers' subrequest limits: a page
 // has at most 20 APNs requests plus a small, fixed number of D1 operations.
@@ -416,11 +401,10 @@ const DEFAULT_ALERT_DELIVERY_DLQ_FALLBACK_NAME =
 const CLOUDFLARE_QUEUE_NAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
 // Emergency alerts lose operational value quickly. Bound both their event
 // timestamp lifetime and any source clock skew by the outbox creation time.
-// Keep a real retry window after APNs' documented 15-minute 5XX retry floor.
-// APNs still receives expiration=0, so this only bounds Worker/Queue work and
-// never asks Apple to retain a stale emergency notification for an offline
-// device.
-const EEW_DELIVERY_TTL_MS = 30 * 60_000;
+// An urgent warning intentionally expires before APNs' conservative 15-minute
+// provider-error retry floor rather than arriving stale. APNs still receives
+// expiration=0, so Apple is never asked to retain it for an offline device.
+const TRAINING_DELIVERY_TTL_MS = 30 * 60_000;
 const REPORT_DELIVERY_TTL_MS = 60 * 60_000;
 
 interface ApnsDeliveryResult {
@@ -523,6 +507,7 @@ interface OutboxDeliveryState {
 }
 
 type AlertDeliveryExpiryPolicy =
+  | "eew_10m"
   | "eew_30m"
   | "report_60m"
   | "training_30m"
@@ -943,13 +928,21 @@ export function resolveAlertDeliveryQueueNames(
 }
 
 function isNotifyReason(value: unknown): value is NotifyReason {
-  return typeof value === "string" && Object.hasOwn(LOC_KEYS, value);
+  return (
+    value === "new" ||
+    value === "updated" ||
+    value === "final" ||
+    value === "cancelled" ||
+    value === "report" ||
+    value === "training"
+  );
 }
 
 function isAlertDeliveryExpiryPolicy(
   value: unknown,
 ): value is AlertDeliveryExpiryPolicy {
   return (
+    value === "eew_10m" ||
     value === "eew_30m" ||
     value === "report_60m" ||
     value === "training_30m" ||
@@ -963,13 +956,13 @@ function expiryPolicyForReason(
   switch (reason) {
     case "report":
     case "final":
+    case "cancelled":
       return { policy: "report_60m", ttlMs: REPORT_DELIVERY_TTL_MS };
     case "training":
-      return { policy: "training_30m", ttlMs: EEW_DELIVERY_TTL_MS };
+      return { policy: "training_30m", ttlMs: TRAINING_DELIVERY_TTL_MS };
     case "new":
     case "updated":
-    case "cancelled":
-      return { policy: "eew_30m", ttlMs: EEW_DELIVERY_TTL_MS };
+      return { policy: "eew_10m", ttlMs: URGENT_EEW_DELIVERY_TTL_MS };
   }
 }
 
@@ -1183,17 +1176,37 @@ function messageExpiry(
   message: Pick<AlertDeliveryMessage, "event" | "reason" | "expiresAtUtc" | "expiryPolicy">,
   createdAtUtc: string,
 ): { expiresAtUtc: string; expiryPolicy: AlertDeliveryExpiryPolicy } {
+  const calculated = calculateAlertDeliveryExpiry(
+    message.event,
+    message.reason,
+    createdAtUtc,
+  );
   if (
     typeof message.expiresAtUtc === "string" &&
     Number.isFinite(Date.parse(message.expiresAtUtc)) &&
     isAlertDeliveryExpiryPolicy(message.expiryPolicy)
   ) {
+    // Queue copies created before build 7 may still carry the deployed 30-minute
+    // label. Preserve an earlier deadline, but never let that legacy envelope
+    // extend a real new/update warning past the reviewed ten-minute policy.
+    if (
+      message.expiryPolicy === "eew_30m" &&
+      (message.reason === "new" || message.reason === "updated")
+    ) {
+      return {
+        expiresAtUtc: new Date(Math.min(
+          Date.parse(message.expiresAtUtc),
+          Date.parse(calculated.expiresAtUtc),
+        )).toISOString(),
+        expiryPolicy: "eew_10m",
+      };
+    }
     return {
       expiresAtUtc: message.expiresAtUtc,
       expiryPolicy: message.expiryPolicy,
     };
   }
-  return calculateAlertDeliveryExpiry(message.event, message.reason, createdAtUtc);
+  return calculated;
 }
 
 function isQueuedEvent(value: unknown): value is QueuedEvent {
@@ -1746,6 +1759,7 @@ function rowToDevice(row: DeviceRow): DeviceRecord {
     // Critical Alerts are not approved for this public bundle. Keep legacy
     // storage readable, but never let a saved or forged preference enable it.
     criticalAlertsEnabled: false,
+    alertSound: normalizedAlertSound(row.alert_sound),
     cityName: row.city_name,
     latitude: row.latitude,
     longitude: row.longitude,
@@ -1997,19 +2011,6 @@ function sourceFromMessage(message: unknown): WolfxSourceId | null {
     : null;
 }
 
-function determineReason(
-  event: NormalizedEvent,
-  previous: NormalizedEvent | null,
-): NotifyReason | null {
-  if (event.isTraining) return previous === null ? "training" : null;
-  if (event.kind === "report") return previous === null ? "report" : null;
-  if (event.isCancel) return previous?.isCancel ? null : "cancelled";
-  if (previous === null) return "new";
-  if (event.isFinal && !previous.isFinal) return "final";
-  if (event.serial > previous.serial) return "updated";
-  return null;
-}
-
 function isRecentHttpRecoveryEvent(event: NormalizedEvent): boolean {
   const timestamp = event.reportTimeUtc ?? event.originTimeUtc;
   if (!timestamp) return false;
@@ -2054,9 +2055,13 @@ function eventUpsertStatement(
         magnitude = excluded.magnitude,
         depth = excluded.depth,
         max_intensity = excluded.max_intensity,
-        is_warn = excluded.is_warn,
-        is_final = excluded.is_final,
-        is_cancel = excluded.is_cancel,
+        is_warn = CASE
+          WHEN excluded.serial = events.serial
+            THEN MAX(events.is_warn, excluded.is_warn)
+          ELSE excluded.is_warn
+        END,
+        is_final = MAX(events.is_final, excluded.is_final),
+        is_cancel = MAX(events.is_cancel, excluded.is_cancel),
         is_training = excluded.is_training,
         tsunami = excluded.tsunami,
         raw_json = excluded.raw_json,
@@ -2105,7 +2110,15 @@ export function outboxInsertStatement(
       ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       WHERE NOT EXISTS (
         SELECT 1 FROM events
-        WHERE id = ? AND serial > ?
+        WHERE id = ? AND (
+          serial > ?
+          OR (
+            serial = ? AND (
+              (is_cancel = 1 AND ? != 'cancelled')
+              OR (is_final = 1 AND ? IN ('new', 'updated'))
+            )
+          )
+        )
       )`,
     )
     .bind(
@@ -2124,17 +2137,22 @@ export function outboxInsertStatement(
       expiry.expiryPolicy,
       // This runs after the guarded event upsert in the same D1 batch. A
       // concurrent newer revision can therefore make an old insert a no-op
-      // rather than resurrecting stale emergency work.
+      // rather than resurrecting stale emergency work. The status predicates
+      // also close the same-serial final/cancel race while permitting the
+      // matching terminal lifecycle notification itself.
       message.event.id,
       message.event.serial,
+      message.event.serial,
+      message.reason,
+      message.reason,
     );
 }
 
 /**
- * Terminalize one queued page only when D1 already contains a newer committed
- * revision of its event. This correlated update is the delivery-time serial
- * fence: a delayed Queue copy cannot send an old EEW revision after the newer
- * revision is durable.
+ * Terminalize one queued page when D1 already contains a newer committed
+ * revision or a same-serial terminal lifecycle that supersedes its reason.
+ * This correlated delivery-time fence prevents a delayed Queue copy from
+ * presenting active warning work after final/cancel is durable.
  */
 export function supersedeOutboxIfNewerRevisionStatement(
   db: D1Database,
@@ -2153,16 +2171,27 @@ export function supersedeOutboxIfNewerRevisionStatement(
          AND EXISTS (
            SELECT 1 FROM events
            WHERE events.id = alert_delivery_outbox.event_ref
-             AND events.serial > alert_delivery_outbox.event_serial
+             AND (
+               events.serial > alert_delivery_outbox.event_serial
+               OR (
+                 events.serial = alert_delivery_outbox.event_serial AND (
+                   (events.is_cancel = 1
+                     AND alert_delivery_outbox.notification_reason != 'cancelled')
+                   OR (events.is_final = 1
+                     AND alert_delivery_outbox.notification_reason IN ('new', 'updated'))
+                 )
+               )
+             )
          )`,
     )
     .bind(now, outboxId);
 }
 
 /**
- * Once a newer event revision commits, retire every still-pending older page
- * in the same D1 batch. The delivery-time fence above protects Queue copies
- * that were already handed off before this transaction committed.
+ * Once a newer event revision or same-serial terminal lifecycle commits,
+ * retire every incompatible pending page in the same D1 batch. The
+ * delivery-time fence above protects Queue copies that were already handed
+ * off before this transaction committed.
  */
 function supersedeOlderOutboxRowsForEventStatement(
   db: D1Database,
@@ -2181,7 +2210,17 @@ function supersedeOlderOutboxRowsForEventStatement(
          AND EXISTS (
            SELECT 1 FROM events
            WHERE events.id = alert_delivery_outbox.event_ref
-             AND events.serial > alert_delivery_outbox.event_serial
+             AND (
+               events.serial > alert_delivery_outbox.event_serial
+               OR (
+                 events.serial = alert_delivery_outbox.event_serial AND (
+                   (events.is_cancel = 1
+                     AND alert_delivery_outbox.notification_reason != 'cancelled')
+                   OR (events.is_final = 1
+                     AND alert_delivery_outbox.notification_reason IN ('new', 'updated'))
+                 )
+               )
+             )
          )`,
     )
     .bind(now, eventId);
@@ -2196,16 +2235,21 @@ function supersedeOlderOutboxRowsForEventStatement(
 async function persistEventAndOutbox(
   db: D1Database,
   event: NormalizedEvent,
-  createMessage: (previous: NormalizedEvent | null) => AlertDeliveryMessage | null,
+  createMessage: (
+    acceptedEvent: NormalizedEvent,
+    previous: NormalizedEvent | null,
+  ) => AlertDeliveryMessage | null,
 ): Promise<{
   previous: NormalizedEvent | null;
   message: AlertDeliveryMessage | null;
 }> {
   const previous = await getEvent(db, event.id);
-  const message = createMessage(previous);
+  const acceptedEvent = reconcileEventRevision(event, previous);
+  if (acceptedEvent === null) return { previous, message: null };
+  const message = createMessage(acceptedEvent, previous);
   const now = new Date().toISOString();
   const statements = [
-    eventUpsertStatement(db, event, now),
+    eventUpsertStatement(db, acceptedEvent, now),
     // Keep this after the guarded event upsert: D1 executes the batch in order
     // transactionally, so a newly committed revision retires its older pages
     // before this transaction is visible to a Queue consumer.
@@ -2253,22 +2297,24 @@ async function persistHttpSnapshotEvents(
   for (const snapshot of snapshots) {
     const event: NormalizedEvent = { ...snapshot, raw: null };
     const previous = previousById.get(event.id) ?? null;
-    const reason = determineReason(event, previous);
+    const acceptedEvent = reconcileEventRevision(event, previous);
+    if (acceptedEvent === null) continue;
+    const reason = notificationReasonForEvent(acceptedEvent, previous);
     const message =
       reason === null ||
         mode === "initial" ||
-        (mode === "recovery" && !isRecentHttpRecoveryEvent(event))
+        (mode === "recovery" && !isRecentHttpRecoveryEvent(acceptedEvent))
         ? null
-        : createAlertDeliveryMessage(event, reason);
+        : createAlertDeliveryMessage(acceptedEvent, reason);
     statements.push(
-      eventUpsertStatement(db, event, now),
-      supersedeOlderOutboxRowsForEventStatement(db, event.id, now),
+      eventUpsertStatement(db, acceptedEvent, now),
+      supersedeOlderOutboxRowsForEventStatement(db, acceptedEvent.id, now),
     );
     if (message) {
       statements.push(outboxInsertStatement(db, message, message.deliveryId, now));
     }
   }
-  await db.batch(statements);
+  if (statements.length > 0) await db.batch(statements);
 }
 
 async function appendOutbox(
@@ -2603,46 +2649,6 @@ async function deactivateDevice(
   }
 }
 
-function buildPushPayload(
-  event: NormalizedEvent,
-  reason: NotifyReason,
-): Record<string, unknown> {
-  const keys = LOC_KEYS[reason];
-  const sourceLabel = SOURCE_LABEL[event.sourceId] ?? event.sourceId;
-  return {
-    aps: {
-      alert: {
-        "title-loc-key": keys.title,
-        "title-loc-args": [sourceLabel],
-        "loc-key": keys.body,
-        "loc-args": [
-          event.hypocenter || sourceLabel,
-          event.magnitude?.toFixed(1) ?? "--",
-          event.maxIntensity ?? "--",
-        ],
-      },
-      // This bundle does not hold Apple's Critical Alerts entitlement.
-      sound: "default",
-      "interruption-level":
-        reason === "training"
-          ? "active"
-          : "time-sensitive",
-      "relevance-score":
-        reason === "cancelled" || reason === "training" ? 0.3 : 1,
-      category: reason === "training" ? "EEW_TRAINING" : "EEW_ALERT",
-    },
-    eventId: event.eventId,
-    sourceId: event.sourceId,
-    kind: event.kind,
-    reason,
-    magnitude: event.magnitude,
-    maxIntensity: event.maxIntensity,
-    latitude: event.latitude,
-    longitude: event.longitude,
-    originTimeUtc: event.originTimeUtc,
-  };
-}
-
 export class ApnsRequestTimeoutError extends Error {
   constructor() {
     super("APNs request timed out");
@@ -2706,7 +2712,7 @@ async function sendPush(
         "apns-id": crypto.randomUUID(),
         "content-type": "application/json",
       },
-      body: JSON.stringify(buildPushPayload(event, reason)),
+      body: JSON.stringify(buildPushPayload(event, reason, device.alertSound)),
       signal,
     }),
   );
@@ -6595,13 +6601,13 @@ export class QuakeRelay {
     const { message } = await persistEventAndOutbox(
       this.env.DB,
       event,
-      (previous) => {
-        const reason = determineReason(event, previous);
+      (acceptedEvent, previous) => {
+        const reason = notificationReasonForEvent(acceptedEvent, previous);
         if (!reason || mode === "initial") return null;
-        if (mode === "recovery" && !isRecentHttpRecoveryEvent(event)) {
+        if (mode === "recovery" && !isRecentHttpRecoveryEvent(acceptedEvent)) {
           return null;
         }
-        return createAlertDeliveryMessage(event, reason);
+        return createAlertDeliveryMessage(acceptedEvent, reason);
       },
     );
     // The D1 transaction above is the durability boundary. A failed Queue
@@ -7175,6 +7181,7 @@ interface DeviceRegistrationValues {
   locale: string | null;
   sources: string;
   minMagnitude: number;
+  alertSound: AlertSound;
   cityName: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -7568,6 +7575,7 @@ function registrationValues(body: Record<string, unknown>): DeviceRegistrationVa
     locale: typeof body.locale === "string" ? body.locale : null,
     sources: JSON.stringify(sources),
     minMagnitude: typeof body.minMagnitude === "number" ? body.minMagnitude : 0,
+    alertSound: normalizedAlertSound(body.alertSound),
     cityName: typeof body.cityName === "string" ? body.cityName : null,
     latitude: typeof body.latitude === "number" ? body.latitude : null,
     longitude: typeof body.longitude === "number" ? body.longitude : null,
@@ -7592,10 +7600,10 @@ export function registrationStatement(
     .prepare(
       `INSERT INTO devices (
         token, environment, locale, sources, min_magnitude,
-        critical_alerts_enabled, city_name, latitude, longitude, radius_km,
+        critical_alerts_enabled, alert_sound, city_name, latitude, longitude, radius_km,
         include_test_alerts, utc_offset_minutes, notify_at_night,
         app_attest_key_id, created_at, updated_at
-      ) SELECT ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      ) SELECT ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       WHERE ${guardSql}
       ON CONFLICT(token) DO UPDATE SET
         environment = excluded.environment,
@@ -7603,6 +7611,7 @@ export function registrationStatement(
         sources = excluded.sources,
         min_magnitude = excluded.min_magnitude,
         critical_alerts_enabled = 0,
+        alert_sound = excluded.alert_sound,
         city_name = excluded.city_name,
         latitude = excluded.latitude,
         longitude = excluded.longitude,
@@ -7622,6 +7631,7 @@ export function registrationStatement(
       values.locale,
       values.sources,
       values.minMagnitude,
+      values.alertSound ?? DEFAULT_ALERT_SOUND,
       values.cityName,
       values.latitude,
       values.longitude,
@@ -8179,7 +8189,7 @@ async function handleAppAttestChallenge(
   );
 }
 
-function validatedRegistrationValues(
+export function validatedRegistrationValues(
   body: Record<string, unknown>,
 ): DeviceRegistrationValues | Response {
   const token = body.token;
@@ -8199,6 +8209,7 @@ function validatedRegistrationValues(
   if (
     !isOptionalBoundedString(body.locale, 35) ||
     !isOptionalBoundedString(body.cityName, MAX_DEVICE_TEXT_LENGTH) ||
+    (body.alertSound !== undefined && !isAlertSound(body.alertSound)) ||
     !isOptionalFiniteNumber(body.minMagnitude, 0, 10) ||
     !isOptionalFiniteNumber(body.radiusKm, 0, 2_000) ||
     !isOptionalFiniteNumber(body.utcOffsetMinutes, -840, 840) ||
@@ -8954,7 +8965,7 @@ async function handleRequest(
       [
         {
           heading: "Data we process",
-          body: "If you enable notifications, the service stores the APNs device token, app locale, selected earthquake sources, magnitude threshold, alert preferences (including a test-alert preference), alert radius, optional selected-city label, registration timestamps, and one approximate coordinate on a 0.1° grid. That coordinate is derived from either the selected city's coordinate or the current device location; neither an exact GPS fix nor an unrounded selected-city coordinate is sent. To prevent fraudulent subscription changes, the service also stores an opaque Apple App Attest key identifier, public verification key, attestation receipt, monotonic assertion counter, and integrity timestamps; newer Apple proofs may additionally carry the app build version and distribution category. The app does not require an account, name, email address, contacts, photos, or advertising identifier.",
+          body: "If you enable notifications, the service stores the APNs device token, app locale, selected earthquake sources, magnitude threshold, alert preferences (including the exact alert-sound identifier and a test-alert preference), alert radius, optional selected-city label, registration timestamps, and one approximate coordinate on a 0.1° grid. That coordinate is derived from either the selected city's coordinate or the current device location; neither an exact GPS fix nor an unrounded selected-city coordinate is sent. To prevent fraudulent subscription changes, the service also stores an opaque Apple App Attest key identifier, public verification key, attestation receipt, monotonic assertion counter, and integrity timestamps; newer Apple proofs may additionally carry the app build version and distribution category. The app does not require an account, name, email address, contacts, photos, or advertising identifier.",
         },
         {
           heading: "How data is used",

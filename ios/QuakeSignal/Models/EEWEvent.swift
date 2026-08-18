@@ -97,20 +97,6 @@ extension EEWEvent {
         return eventLocation.distance(from: fromLocation) / 1000.0
     }
 
-    /// Simplified EEW countdown: estimated S-wave (strong shaking) arrival,
-    /// assuming a typical shallow-crust S-wave velocity. Real EEW systems
-    /// factor in depth, wave-propagation models, and per-station travel
-    /// times; this is a deliberately simple approximation for a "how long do
-    /// I have" display, not a precise seismological estimate.
-    static let sWaveVelocityKmPerSecond = 4.0
-
-    func secondsUntilShaking(at coordinate: CLLocationCoordinate2D, now: Date = Date()) -> Int? {
-        guard let originDate, let distance = distanceKm(from: coordinate) else { return nil }
-        let estimatedArrival = originDate.addingTimeInterval(distance / Self.sWaveVelocityKmPerSecond)
-        let remaining = estimatedArrival.timeIntervalSince(now)
-        return remaining > 0 ? Int(remaining.rounded()) : nil
-    }
-
     /// 8-point compass direction from `coordinate` to this event's epicenter, e.g. "NW".
     func compassDirection(from coordinate: CLLocationCoordinate2D) -> CompassDirection? {
         guard let latitude, let longitude else { return nil }

@@ -14,8 +14,8 @@ only after the listed evidence is complete. Use it together with
 | Name | `QuakeSignal` — approved English (U.S.) name | `README.md` |
 | Bundle ID | `com.quakesignal.app` | `ios/project.yml` |
 | SKU | `quakesignal-ios` | `README.md` |
-| Version | `1.0` | `ios/project.yml` |
-| Release candidate | Coordinated repair `1.0 (6)` is **PENDING** protected upload, processing, physical QA, public attachment, and App Review. Uploaded builds `1.0 (3)`, `1.0 (4)`, and `1.0 (5)` are superseded and must not be selected. | [build-5 upload run 31811106548](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31811106548), `README.md` build-number rule |
+| Version | `1.1` | `ios/project.yml` |
+| Release candidate | Version `1.0 (6)` is already Ready for Distribution. The new `1.1 (7)` candidate is **PENDING** protected Worker deployment, TestFlight upload and processing, physical-device QA, public attachment, and App Review. Builds `1.0 (2)` through `1.0 (5)` remain historical QA or superseded. | App Store Connect record `6800642443`; prior submission `295fd2ba-11c4-4dc9-945b-2bf6a9fc7bbe`; `README.md` build-number rule |
 | TestFlight build 2 | Legacy QA-only; never attach it to App Review | `README.md`, `docs/IOS_TESTFLIGHT_PHYSICAL_QA.md` |
 | Primary / secondary category | Weather / Utilities | `README.md` |
 | Price / availability | Free; **PENDING** release-owner territory decision | release owner |
@@ -65,5 +65,5 @@ Collected” merely because the app has no account.
 | Export Compliance | Answer Apple's current encryption/export questions for the final signed archive | **PENDING** legal/release-owner confirmation |
 | Availability / pricing schedule | Select approved territories and distribution timing | **PENDING** release-owner decision |
 | Japanese / Simplified Chinese listing | Exact product-page names, availability, and trademark review | **PENDING**; keep English-only until approved |
-| Screenshots | Recapture and approve all primary 6.5-inch frames from the signed public Release candidate | **PENDING** build >=3 provenance evidence |
+| Screenshots | Five 6.5-inch iPhone and five 13-inch iPad Release-simulator frames for each approved locale | **VALIDATED LOCALLY; PENDING** final source-commit provenance update and release-owner upload approval — see `screenshot-provenance-v1.1.json` |
 | Physical QA / launch | Complete TestFlight proof, production health/readiness proof, and App Attest launch promotion; terminal-DLQ monitoring remains an optional operational control | **PENDING** — see `docs/IOS_TESTFLIGHT_PHYSICAL_QA.md` and `docs/CLOUDFLARE_PRODUCTION.md` |

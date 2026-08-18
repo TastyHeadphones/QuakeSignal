@@ -8,11 +8,25 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
     private(set) var deviceToken: String?
     private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
-    var onNotificationTapped: ((PushPayload) -> Void)?
+    private(set) var alertSetting: UNNotificationSetting = .notSupported
+    private(set) var soundSetting: UNNotificationSetting = .notSupported
+    private(set) var timeSensitiveSetting: UNNotificationSetting = .notSupported
+    var onNotificationTapped: ((PushPayload) -> Void)? {
+        didSet { drainPendingTappedPayloads() }
+    }
+    var onForegroundNotification: ((PushPayload) -> Void)? {
+        didSet { drainPendingForegroundPayloads() }
+    }
+
+    private var pendingTappedPayloads: [PushPayload] = []
+    private var pendingForegroundPayloads: [PushPayload] = []
 
     private override init() { super.init() }
 
-    func configure() {
+    /// Must be called synchronously from `didFinishLaunching`. Apple may
+    /// deliver a cold-launch notification response before SwiftUI mounts its
+    /// root view, so callbacks are buffered until RootView installs handlers.
+    func configureForLaunch() {
         UNUserNotificationCenter.current().delegate = self
         refreshAuthorizationStatus()
     }
@@ -41,6 +55,9 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     private func refreshAuthorizationStatusAsync() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         authorizationStatus = settings.authorizationStatus
+        alertSetting = settings.alertSetting
+        soundSetting = settings.soundSetting
+        timeSensitiveSetting = settings.timeSensitiveSetting
         registerForRemoteNotificationsIfAuthorized()
     }
 
@@ -84,6 +101,50 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    var hasVisibleAlertsEnabled: Bool {
+        canRegisterForRemoteNotifications && alertSetting == .enabled
+    }
+
+    var hasSoundsEnabled: Bool {
+        canRegisterForRemoteNotifications && soundSetting == .enabled
+    }
+
+    var hasTimeSensitiveAlertsEnabled: Bool {
+        canRegisterForRemoteNotifications && timeSensitiveSetting == .enabled
+    }
+
+    private func deliverTapped(_ payload: PushPayload) {
+        if let onNotificationTapped {
+            onNotificationTapped(payload)
+        } else {
+            pendingTappedPayloads.append(payload)
+            pendingTappedPayloads = Array(pendingTappedPayloads.suffix(5))
+        }
+    }
+
+    private func deliverForeground(_ payload: PushPayload) {
+        if let onForegroundNotification {
+            onForegroundNotification(payload)
+        } else {
+            pendingForegroundPayloads.append(payload)
+            pendingForegroundPayloads = Array(pendingForegroundPayloads.suffix(5))
+        }
+    }
+
+    private func drainPendingTappedPayloads() {
+        guard let onNotificationTapped, !pendingTappedPayloads.isEmpty else { return }
+        let pending = pendingTappedPayloads
+        pendingTappedPayloads.removeAll()
+        pending.forEach(onNotificationTapped)
+    }
+
+    private func drainPendingForegroundPayloads() {
+        guard let onForegroundNotification, !pendingForegroundPayloads.isEmpty else { return }
+        let pending = pendingForegroundPayloads
+        pendingForegroundPayloads.removeAll()
+        pending.forEach(onForegroundNotification)
+    }
+
     // MARK: UNUserNotificationCenterDelegate
     // These are called by the system off the main actor, so they're kept
     // nonisolated and hop back to the main actor explicitly before touching
@@ -93,7 +154,15 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .sound, .list]
+        let payload = PushPayload(userInfo: notification.request.content.userInfo)
+        await MainActor.run {
+            self.deliverForeground(payload)
+        }
+        // Real event audio is played once by the shared foreground alert
+        // policy. A token test has no event ID and keeps the APNs sound.
+        return payload.compositeEventId == nil
+            ? [.banner, .sound, .list]
+            : [.list]
     }
 
     nonisolated func userNotificationCenter(
@@ -102,7 +171,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     ) async {
         let payload = PushPayload(userInfo: response.notification.request.content.userInfo)
         await MainActor.run {
-            self.onNotificationTapped?(payload)
+            self.deliverTapped(payload)
         }
     }
 }

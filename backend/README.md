@@ -184,7 +184,7 @@ as volumes. Never deploy this Compose service or mount a production APNs key.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/v1/devices` | Register/update a device: `{ token, environment, locale, sources[], minMagnitude, cityName?, latitude?, longitude?, radiusKm?, includeTestAlerts?, utcOffsetMinutes?, notifyAtNight? }` |
+| `POST` | `/v1/devices` | Register/update a device: `{ token, environment, locale, sources[], minMagnitude, alertSound?, cityName?, latitude?, longitude?, radiusKm?, includeTestAlerts?, utcOffsetMinutes?, notifyAtNight? }` |
 | `DELETE` | `/v1/devices` | Unregister a device: `{ token }` in the JSON body |
 | `POST` | `/v1/devices/test` | Local-only training-push experiment: `{ token }` in the JSON body |
 | `GET` | `/healthz` | Notification watcher + per-source connection status |
@@ -208,8 +208,13 @@ to fall back to magnitude-only filtering.
 
 - **Dedup/update logic** (`alerts/pipeline.ts`): EEW messages for the same
   `EventID` arrive repeatedly as the estimate refines. A push is sent again
-  only when `Serial`/`ReportNum` increases or the event transitions to
-  final/cancelled — not on every re-broadcast of unchanged data.
+  only after the event is a genuine warning. The first warning transition is
+  `new`; a later warning serial is `updated`. Informational EEW frames stay
+  silent, while final/cancelled notices require a prior warning lifecycle.
+- **Sound policy**: `alertSound` accepts only `system`, `urgent-tone`, or
+  `japanese-voice` and defaults to `system`. A selected bundled sound and Time
+  Sensitive interruption are used only for a fresh active warning. Every push
+  also contains a bounded typed `event` snapshot for cold notification opens.
 - **Cold-start backfill**: on boot, each source is seeded once via its plain
   HTTP GET endpoint (silently, no push) before the WebSocket takes over, so a
   restart doesn't replay recent history as if it were breaking news.

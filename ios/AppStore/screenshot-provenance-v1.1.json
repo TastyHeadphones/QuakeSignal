@@ -1,0 +1,342 @@
+{
+  "version": 2,
+  "status": "release-simulator-validated",
+  "purpose": "Reproducibility and integrity record for the QuakeSignal 1.1 App Store Connect screenshot upload set.",
+  "product": {
+    "marketingVersion": "1.1",
+    "build": 7,
+    "bundleIdentifier": "com.quakesignal.app",
+    "configuration": "Release"
+  },
+  "capture": {
+    "capturedAtUtcRange": [
+      "2026-08-18T16:20:05Z",
+      "2026-08-18T17:02:39Z"
+    ],
+    "xcode": "26.6 (17F113)",
+    "runtime": "iOS 26.5 (23F77)",
+    "devices": [
+      {
+        "name": "QuakeSignal App Store 6.5",
+        "model": "iPhone 11 Pro Max",
+        "udid": "8360F1B3-8D49-440E-A488-7A395B0358D2"
+      },
+      {
+        "name": "QuakeSignal iPad 13",
+        "model": "iPad Pro 13-inch (M4)",
+        "udid": "6780874D-C761-4774-8EC2-3709E7390FED"
+      }
+    ],
+    "sourceBaselineCommit": "90074a8edf87a872ff36f065156e6ffc9bd755b8",
+    "sourceTreeState": "Release 1.1 working tree; record must be updated with the release commit before upload.",
+    "method": "Installed Release simulator product, fixed status bar, deterministic non-sensitive settings, localized launch arguments, localized simulator system-language reboot for iPad status-bar dates, simctl JPEG capture."
+  },
+  "reviewNotes": [
+    "All 30 files were visually inspected after capture and mechanically validated for exact dimensions, JPEG encoding, and absence of alpha.",
+    "The screenshots use current ordinary upstream earthquake data and do not fabricate an active warning.",
+    "No precise user location, APNs token, App Attest material, or personal data is visible.",
+    "This is simulator evidence, not a signed physical-device release-candidate attestation."
+  ],
+  "files": [
+    {
+      "file": "en-US/ipad-13/01-home.jpg",
+      "sha256": "82379f8b1fe554cdd8f9ccd071f24d19d9ebaf5185b1503bf172b1558b0a85d6",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "en-US/ipad-13/02-reports.jpg",
+      "sha256": "ba4f74059c7695096dda8852c3192b6754924a017cac8a61adcf6173b9c2a64a",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "en-US/ipad-13/03-map.jpg",
+      "sha256": "f8ab5574703bc47cc3ae629a2d531c2981cf881019e32d15b3a76f9a14336665",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "en-US/ipad-13/04-guide.jpg",
+      "sha256": "e525b29051fb6a8e0fb4e0e1b2e1b122c5e3ee453a5b22ed0e0567a8e6f8f4ea",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "en-US/ipad-13/05-alert-preferences.jpg",
+      "sha256": "d2f86ed0cf74405fec6cd8ea2c7e0a599ebf7bc8db112f2c8ab896770ddc250e",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "en-US/iphone-6.5/01-home.jpg",
+      "sha256": "4ebd68e6c580e42514e9aefd1cb92f34842479b60e8f15b39ae7e4ec668ccb56",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "en-US/iphone-6.5/02-reports.jpg",
+      "sha256": "ad77a39ad4d3f6c4ab42aa02c27e2a01e9a63403a3de70d9dc7869eae1ad00f6",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "en-US/iphone-6.5/03-map.jpg",
+      "sha256": "c9a5a11c5707a9afb55b0f1e1f58275ad150cf2bfe7d3ffcbfbbeba234c918c7",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "en-US/iphone-6.5/04-guide.jpg",
+      "sha256": "ebe9322bd2ce7713266f8d6dab2cf2017253d2e3ad4b5c635e9d629590138b74",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "en-US/iphone-6.5/05-alert-preferences.jpg",
+      "sha256": "1794d16ed250ee2feeed3fd66e285d4257c9a5b26774f14e35b0dd7108026951",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "ja/ipad-13/01-home.jpg",
+      "sha256": "db84feaa8689aca921a8f4a9bb00492f95c640c77865613ac10310167436364a",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "ja/ipad-13/02-reports.jpg",
+      "sha256": "f50d94de8c3d5454963fb6e28e0fa6e8e0c8249ad1b233d97629ffdb72867cbf",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "ja/ipad-13/03-map.jpg",
+      "sha256": "afcfa5f26c85a958e1844311c3f699aa93a54048dd0d9d7f04b0fd6bfa02d0de",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "ja/ipad-13/04-guide.jpg",
+      "sha256": "be4fb3b4768ac20874eb44df2dbdc93fb61680d6ea4cf71879b7de78d8237b74",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "ja/ipad-13/05-alert-preferences.jpg",
+      "sha256": "bd9f6bbd3fb810b87c7aa7c422977d9c1a56cb34c02cf8ad224d479a02ce7332",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "ja/iphone-6.5/01-home.jpg",
+      "sha256": "8ab139a5f1dbea05511a67f7f6f1c2414bdc5e872d070ca600a103c208c7a692",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "ja/iphone-6.5/02-reports.jpg",
+      "sha256": "6c5ae9c91608d3fa6f8171254bcae4184cf49a50cf692c4dfb1857236f1560c1",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "ja/iphone-6.5/03-map.jpg",
+      "sha256": "c473d68d4716841775b1a76683ac3fab3ef0b47b53387e116a2d65fb4278c416",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "ja/iphone-6.5/04-guide.jpg",
+      "sha256": "8e59c5f3c97eed8d88ed0e1d4a855e4db234033b3c31ef04ad483c66d8c2334b",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "ja/iphone-6.5/05-alert-preferences.jpg",
+      "sha256": "4d851b01879ed069083946c100995917395362a25579220e4480b5aa77d9a707",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "zh-Hans/ipad-13/01-home.jpg",
+      "sha256": "ddc50462c05422dcfb97550b4cf1bcb4009dacc69b5fe83d4823ed566be4eb44",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "zh-Hans/ipad-13/02-reports.jpg",
+      "sha256": "459345ebabb1e1d50a8fdf03d797f348a24932fed0dac9d1a91e9a9c1c9d7502",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "zh-Hans/ipad-13/03-map.jpg",
+      "sha256": "98dd3ef54ba5485ce9470de5c3c2520b7195039958d1227507f0c79535dda096",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "zh-Hans/ipad-13/04-guide.jpg",
+      "sha256": "f128119fb59e366a65d02ac44407c6b64daa05f543979491e4a4d61bfc2b8e85",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "zh-Hans/ipad-13/05-alert-preferences.jpg",
+      "sha256": "d6a291f7a68c48424d86124d597db4be28d3aa2c703ecee7330b58e2da4e32fd",
+      "pixels": [
+        2064,
+        2752
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "zh-Hans/iphone-6.5/01-home.jpg",
+      "sha256": "8696f8f6d8f15adecfe0fe57a1d582c3915f9919b35bc4c6fad8143cac9a7a6a",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "zh-Hans/iphone-6.5/02-reports.jpg",
+      "sha256": "ce27e0a4208c3243ca679c616f69455286d55e375945137b1437ae664d0ead7e",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "zh-Hans/iphone-6.5/03-map.jpg",
+      "sha256": "474bcb2920c49f61fa4c0020f6eb5c19f59775482add70e6986abde31658296b",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "zh-Hans/iphone-6.5/04-guide.jpg",
+      "sha256": "8015ab4751002fe8f500a8611c1c4b795132fb6ebb0c8566c08f8f818ea898a5",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    },
+    {
+      "file": "zh-Hans/iphone-6.5/05-alert-preferences.jpg",
+      "sha256": "db3a8cd11ebb4847842e27be047ca21a1645b89bc1d0a826009e03d9a6bc30c3",
+      "pixels": [
+        1242,
+        2688
+      ],
+      "format": "jpeg",
+      "hasAlpha": false
+    }
+  ]
+}

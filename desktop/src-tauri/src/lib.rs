@@ -20,6 +20,7 @@ use tauri::Manager;
 
 pub struct AppState {
     pub db: Mutex<rusqlite::Connection>,
+    pub database_persistence_available: bool,
     pub settings: Mutex<Settings>,
     /// Sources that have delivered at least one message since app launch —
     /// gates the backfill/no-notify behavior on a fresh connection. See
@@ -54,11 +55,28 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
 
-            let conn = db::open(&handle).expect("failed to open local database");
+            let (conn, database_persistence_available) = match db::open(&handle) {
+                Ok(connection) => (connection, true),
+                Err(persistent_error) => {
+                    // Never delete, replace, or reset an unreadable database
+                    // automatically. Keep live monitoring available for this
+                    // session and expose the degraded state to the frontend.
+                    log::error!(
+                        "persistent database unavailable; using an in-memory database: {persistent_error}"
+                    );
+                    let fallback = db::open_ephemeral().map_err(|ephemeral_error| {
+                        std::io::Error::other(format!(
+                            "persistent database failed ({persistent_error}); in-memory fallback failed ({ephemeral_error})"
+                        ))
+                    })?;
+                    (fallback, false)
+                }
+            };
             let loaded_settings = Settings::load(&handle);
 
             app.manage(AppState {
                 db: Mutex::new(conn),
+                database_persistence_available,
                 settings: Mutex::new(loaded_settings),
                 seeded_sources: Mutex::new(HashSet::new()),
                 connection_status: Mutex::new(
@@ -98,6 +116,7 @@ pub fn run() {
         commands::list_recent_events,
         commands::list_revisions,
         commands::get_connection_status,
+        commands::get_database_persistence_available,
         commands::get_pending_alert,
     ]);
 
@@ -108,6 +127,7 @@ pub fn run() {
         commands::list_recent_events,
         commands::list_revisions,
         commands::get_connection_status,
+        commands::get_database_persistence_available,
         commands::get_pending_alert,
         commands::send_test_alert,
     ]);

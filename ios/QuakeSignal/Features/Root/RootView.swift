@@ -7,6 +7,7 @@ struct RootView: View {
     @State private var locationManager = LocationManager.shared
     @State private var isSynchronizingPushRegistration = false
     @State private var needsPushRegistration = false
+    @State private var showingUnavailableAlert = false
     @AppStorage("onboarding.completed") private var hasCompletedOnboarding = false
 
     var body: some View {
@@ -37,12 +38,15 @@ struct RootView: View {
             }
         }
         .task {
-            notifications.configure()
             notifications.onNotificationTapped = { payload in
                 Task { await handleTap(payload) }
             }
-            // `configure()` asks APNs for a fresh token on every authorized
-            // launch; this schedules registration immediately if one arrives.
+            notifications.onForegroundNotification = { payload in
+                Task { await handleForegroundNotification(payload) }
+            }
+            // AppDelegate configures the notification delegate before launch
+            // finishes; callbacks buffered before this task are drained when
+            // these handlers are installed.
             schedulePushRegistration()
             if AppSettings.shared.useCurrentLocation {
                 locationManager.requestCurrentLocation()
@@ -76,6 +80,11 @@ struct RootView: View {
             // re-registration bounded while still resyncing after the first
             // current-location result or a meaningful movement.
             schedulePushRegistration()
+        }
+        .alert("notification.unavailable.title", isPresented: $showingUnavailableAlert) {
+            Button("alert.dismiss", role: .cancel) {}
+        } message: {
+            Text("notification.unavailable.message")
         }
     }
 
@@ -130,7 +139,12 @@ struct RootView: View {
     /// serves earthquake data.
     private func handleTap(_ payload: PushPayload) async {
         guard let compositeId = payload.compositeEventId else { return }
-        let reason = payload.reason ?? "new"
+        let reason = AlertPresentationReason(wireValue: payload.reason)
+
+        if let snapshot = payload.eventSnapshot, snapshot.id == compositeId {
+            store.ingestTapped(event: snapshot, reason: reason)
+            return
+        }
 
         if let cached = store.events.first(where: { $0.id == compositeId }) {
             store.presentedAlert = PresentedAlert(event: cached, reason: reason)
@@ -139,7 +153,26 @@ struct RootView: View {
 
         await store.refresh()
         if let fetched = store.events.first(where: { $0.id == compositeId }) {
-            store.ingest(event: fetched, reason: reason)
+            store.ingestTapped(event: fetched, reason: reason)
+        } else {
+            showingUnavailableAlert = true
+        }
+    }
+
+    private func handleForegroundNotification(_ payload: PushPayload) async {
+        guard let compositeId = payload.compositeEventId else { return }
+        let reason = AlertPresentationReason(wireValue: payload.reason)
+        if let snapshot = payload.eventSnapshot, snapshot.id == compositeId {
+            store.ingestForegroundNotification(event: snapshot, reason: reason)
+            return
+        }
+        if let cached = store.events.first(where: { $0.id == compositeId }) {
+            store.ingestForegroundNotification(event: cached, reason: reason)
+            return
+        }
+        await store.refresh()
+        if let fetched = store.events.first(where: { $0.id == compositeId }) {
+            store.ingestForegroundNotification(event: fetched, reason: reason)
         }
     }
 }

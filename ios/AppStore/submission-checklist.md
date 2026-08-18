@@ -8,8 +8,8 @@ value.
 
 ## Public-build and service gate
 
-- [ ] Identify the exact signed public `Release` archive/IPA, source commit,
-  SHA-256, and `CFBundleVersion` of at least `3`.
+- [ ] Identify the exact signed public `Release` 1.1 archive/IPA, source
+  commit, SHA-256, and `CFBundleVersion` `7`.
 - [ ] Confirm that this is not the legacy TestFlight `1.0 (2)` InternalQA-only
   evidence build and that it contains no delayed background-training control.
 - [ ] Confirm the App Attest version policy admits exactly that public build and
@@ -38,8 +38,9 @@ value.
   Terms/EULA option only after release-owner approval.
 - [ ] Keep Japanese and Simplified Chinese localizations unpublished until the
   exact display names, availability, and trademark review are approved.
-- [ ] Replace the draft screenshot provenance with signed-public-build evidence
-  and visually approve one consistent 6.5-inch set for every uploaded locale.
+- [ ] Freeze `screenshot-provenance-v1.1.json`, verify all 30 hashes, and
+  visually approve the five 6.5-inch iPhone and five 13-inch iPad screenshots
+  for every uploaded locale.
 
 ## Privacy, rights, and Apple questionnaires
 
@@ -60,5 +61,5 @@ value.
 - [ ] Have a release owner verify that every item above is complete, every
   required App Store Connect field matches the selected archive, and no
   protected production gate remains false.
-- [ ] Only then attach the new public Release build to version `1.0` and submit
+- [ ] Only then attach the new public Release build to version `1.1` and submit
   it for App Review.

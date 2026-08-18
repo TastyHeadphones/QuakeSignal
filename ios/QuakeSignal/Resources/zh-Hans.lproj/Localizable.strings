@@ -74,6 +74,18 @@
 "settings.source.cq_eew" = "重庆市地震局 — 地震预警";
 "settings.section.threshold" = "最小震级";
 "settings.section.notifications" = "通知";
+"settings.openNotificationSettings" = "检查通知设置";
+"settings.notificationDelivery.degraded" = "部分提醒功能已关闭";
+"settings.notificationDelivery.degraded.detail" = "请在 iPhone 设置中开启提醒、声音和时效性通知，以获得系统允许的最佳送达效果。QuakeSignal 不会绕过静音模式或专注模式。";
+"settings.alertSound.title" = "提醒声音";
+"settings.alertSound.system" = "系统默认";
+"settings.alertSound.system.detail" = "使用 Apple 标准通知声音。";
+"settings.alertSound.urgentTone" = "QuakeSignal 紧急提示音";
+"settings.alertSound.urgentTone.detail" = "QuakeSignal 原创的醒目双音警示声。";
+"settings.alertSound.japaneseVoice" = "日语安全语音";
+"settings.alertSound.japaneseVoice.detail" = "使用经许可的 HTS Voice “Mei”（CC BY 3.0）合成的日语安全语音。";
+"settings.alertSound.preview" = "试听所选声音";
+"settings.alertSound.disclosure" = "紧急提示音和文案由 QuakeSignal 原创。日语语音使用名古屋工业大学的 HTS Voice “Mei”（CC BY 3.0）。均非 J-Alert 或日本气象厅录音。声音遵循音量、静音模式、专注模式及通知设置，且不保证送达。";
 "settings.testAlert" = "发送测试预警";
 "settings.testAlert.success" = "测试预警已发送。";
 "settings.testAlert.failure" = "测试预警发送失败：%1$@";
@@ -191,6 +203,10 @@
 "alert.cancelled.note" = "此前的预警信息已被取消，该事件可能为误报或已被修正。";
 "alert.training.note" = "这是一条训练/演习信息，并非真实地震，用于演练应对流程。可在「设置」中关闭测试信息的接收。";
 "alert.endTest" = "结束测试";
+"alert.action.now" = "请立即采取防护措施";
+"notification.unavailable.title" = "提醒详情已不可用";
+"notification.unavailable.message" = "数据源已不再提供此事件。请查看当地官方指引以获取最新信息。";
+"error.wolfx.invalidResponse" = "Wolfx 返回了无效的 %1$@ 快照。";
 
 /* 详情：速报更新时间线 */
 "detail.field.coordinates" = "经纬度";
@@ -222,6 +238,8 @@
 "map.window.day" = "24 小时";
 "map.window.week" = "7 天";
 "map.window.month" = "30 天";
+"map.filter.timeWindow" = "时间范围";
+"map.filter.minimumMagnitude" = "最低震级";
 "map.share" = "分享";
 
 /* 城市/位置选择 */

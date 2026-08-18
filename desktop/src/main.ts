@@ -10,6 +10,7 @@ import type { NormalizedEvent, Settings } from "./types";
 let settings: Settings;
 let recentEvents: NormalizedEvent[] = [];
 let connectionStatus: Record<string, boolean> = {};
+let databasePersistenceAvailable = true;
 let expandedEventId: string | null = null;
 const revisionsCache: Record<string, NormalizedEvent[]> = {};
 const isMacAppStoreBuild = import.meta.env.VITE_MAC_APP_STORE === "true";
@@ -20,11 +21,17 @@ async function main() {
   settings = await api.getSettings();
   setLanguage(settings.language);
 
-  await Promise.all([refreshEvents(), refreshStatus()]);
+  const [, , persistenceAvailable] = await Promise.all([
+    refreshEvents(),
+    refreshStatus(),
+    api.getDatabasePersistenceAvailable(),
+  ]);
+  databasePersistenceAvailable = persistenceAvailable;
 
   wireTabBar();
   wireSettingsForm();
   applyStaticStrings();
+  $("storage-warning").hidden = databasePersistenceAvailable;
   renderHome();
   renderEvents();
   renderSettingsForm();
@@ -418,6 +425,7 @@ function applyStaticStrings() {
   $("tab-settings-label").textContent = t("tab.settings");
   $("test-alert-btn").textContent = t("home.testAlert.button");
   $("recent-title").textContent = t("tab.events");
+  $("storage-warning").textContent = t("storage.persistenceUnavailable");
 
   $("s-title-language").textContent = t("settings.section.language");
   const langSelect = $<HTMLSelectElement>("f-language");

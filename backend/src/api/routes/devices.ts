@@ -4,6 +4,7 @@ import { ALL_WOLFX_SOURCES, type WolfxSourceId } from "../../types/wolfx.js";
 import type { DeviceEnvironment, NormalizedEvent } from "../../types/domain.js";
 import { sendDirectPush } from "../../push/dispatch.js";
 import { createLogger } from "../../logger.js";
+import { isAlertSound, normalizedAlertSound } from "../../push/policy.js";
 
 const log = createLogger("api:devices");
 export const devicesRouter = Router();
@@ -32,6 +33,7 @@ devicesRouter.post("/", (req, res) => {
     locale,
     sources,
     minMagnitude,
+    alertSound,
     cityName,
     latitude,
     longitude,
@@ -50,6 +52,7 @@ devicesRouter.post("/", (req, res) => {
     (cityName !== undefined && (typeof cityName !== "string" || cityName.length > 120)) ||
     (sources !== undefined && !isValidSources(sources)) ||
     (minMagnitude !== undefined && !isFiniteInRange(minMagnitude, 0, 10)) ||
+    (alertSound !== undefined && !isAlertSound(alertSound)) ||
     (latitude !== undefined && !isFiniteInRange(latitude, -90, 90)) ||
     (longitude !== undefined && !isFiniteInRange(longitude, -180, 180)) ||
     (radiusKm !== undefined && !isFiniteInRange(radiusKm, 1, 2_000)) ||
@@ -72,6 +75,7 @@ devicesRouter.post("/", (req, res) => {
     // The public bundle does not have Apple's Critical Alerts entitlement.
     // Never accept a caller-controlled opt-in for an unavailable capability.
     criticalAlertsEnabled: false,
+    alertSound: normalizedAlertSound(alertSound),
     cityName: typeof cityName === "string" ? cityName : null,
     latitude: typeof latitude === "number" ? latitude : null,
     longitude: typeof longitude === "number" ? longitude : null,

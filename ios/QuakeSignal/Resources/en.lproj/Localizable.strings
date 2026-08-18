@@ -74,6 +74,18 @@
 "settings.source.cq_eew" = "Chongqing EQA — Early Warning";
 "settings.section.threshold" = "Minimum Magnitude";
 "settings.section.notifications" = "Notifications";
+"settings.openNotificationSettings" = "Review Notification Settings";
+"settings.notificationDelivery.degraded" = "Some alert delivery options are off";
+"settings.notificationDelivery.degraded.detail" = "Turn on alerts, sounds, and Time Sensitive Notifications in iPhone Settings for the best available delivery. QuakeSignal does not bypass Silent Mode or Focus.";
+"settings.alertSound.title" = "Alert Sound";
+"settings.alertSound.system" = "System Default";
+"settings.alertSound.system.detail" = "Apple's standard notification sound.";
+"settings.alertSound.urgentTone" = "QuakeSignal Urgent Tone";
+"settings.alertSound.urgentTone.detail" = "An original, distinctive two-note warning tone.";
+"settings.alertSound.japaneseVoice" = "Japanese Safety Voice";
+"settings.alertSound.japaneseVoice.detail" = "A Japanese safety message synthesized with the licensed HTS Voice ‘Mei’ (CC BY 3.0).";
+"settings.alertSound.preview" = "Preview Selected Sound";
+"settings.alertSound.disclosure" = "The urgent tone and wording are original. Japanese speech uses HTS Voice ‘Mei’ by Nagoya Institute of Technology (CC BY 3.0). None are J-Alert or JMA recordings. Sounds follow volume, Silent Mode, Focus, and notification settings; delivery is not guaranteed.";
 "settings.testAlert" = "Send Test Alert";
 "settings.testAlert.success" = "Test alert sent.";
 "settings.testAlert.failure" = "Couldn't send test alert: %1$@";
@@ -192,6 +204,10 @@
 "alert.cancelled.note" = "The earlier warning for this event has been cancelled. It may have been a false detection, or has since been corrected.";
 "alert.training.note" = "This is a training/drill message, not a real earthquake. It's used to practice your response. You can turn drill messages off in Settings.";
 "alert.endTest" = "End Test";
+"alert.action.now" = "Take protective action now";
+"notification.unavailable.title" = "Alert details no longer available";
+"notification.unavailable.message" = "The source no longer provides this event. Check official local guidance for current information.";
+"error.wolfx.invalidResponse" = "Wolfx returned an invalid %1$@ snapshot.";
 
 /* Detail: revision timeline */
 "detail.field.coordinates" = "Coordinates";
@@ -223,6 +239,8 @@
 "map.window.day" = "24 hours";
 "map.window.week" = "7 days";
 "map.window.month" = "30 days";
+"map.filter.timeWindow" = "Time Range";
+"map.filter.minimumMagnitude" = "Minimum Magnitude";
 "map.share" = "Share";
 
 /* City / location picker */

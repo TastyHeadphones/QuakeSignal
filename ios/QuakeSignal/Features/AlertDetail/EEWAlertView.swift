@@ -1,15 +1,15 @@
 import SwiftUI
-import CoreLocation
 
 /// Full-screen, system-presented-over-anything alert. Layout adapts to the
 /// event's ReportStatus (preliminary/final/cancelled/training) -- these are
 /// visually distinct states in the source design, not just a badge swap.
 struct EEWAlertView: View {
     let event: EEWEvent
-    let reason: String
+    let reason: AlertPresentationReason
     let onDismiss: () -> Void
 
     @State private var store = QuakeStore.shared
+    @State private var hapticTrigger = 0
 
     var body: some View {
         NavigationStack {
@@ -22,8 +22,8 @@ struct EEWAlertView: View {
                     VStack(spacing: 20) {
                         header
 
-                        if event.reportStatus == .preliminary, let coordinate = store.effectiveCoordinate {
-                            CountdownView(event: event, coordinate: coordinate)
+                        if event.reportStatus == .preliminary {
+                            protectiveActionBanner
                         }
 
                         magnitudeBlock
@@ -61,15 +61,23 @@ struct EEWAlertView: View {
             }
             .toolbarBackground(.hidden, for: .navigationBar)
         }
-        .sensoryFeedback(.warning, trigger: event.id)
+        .task { hapticTrigger += 1 }
+        .sensoryFeedback(.warning, trigger: hapticTrigger)
     }
 
     private var backgroundColor: Color {
         switch event.reportStatus {
-        case .preliminary: return event.severity.color
-        case .final: return Color("BrandDeepColor")
-        case .cancelled: return Color("GraphiteColor")
-        case .training: return Color("TestColor")
+        case .preliminary:
+            switch event.severity {
+            case .minor: return Color(red: 0.05, green: 0.24, blue: 0.48)
+            case .moderate: return Color(red: 0.42, green: 0.24, blue: 0.02)
+            case .strong: return Color(red: 0.48, green: 0.15, blue: 0.01)
+            case .severe: return Color(red: 0.48, green: 0.03, blue: 0.06)
+            case .cancelled: return Color(red: 0.12, green: 0.12, blue: 0.14)
+            }
+        case .final: return Color(red: 0.04, green: 0.23, blue: 0.36)
+        case .cancelled: return Color(red: 0.12, green: 0.12, blue: 0.14)
+        case .training: return Color(red: 0.28, green: 0.12, blue: 0.42)
         }
     }
 
@@ -77,6 +85,7 @@ struct EEWAlertView: View {
         VStack(spacing: 6) {
             Image(systemName: headerSymbol)
                 .font(.title)
+                .accessibilityHidden(true)
             Text(headerTitleKey)
                 .font(.title3.bold())
             Text(event.reportStatus.labelKey)
@@ -108,9 +117,23 @@ struct EEWAlertView: View {
 
     private var badgeKeyForReason: LocalizedStringKey {
         switch reason {
-        case "updated": return "alert.badge.updated"
+        case .updated: return "alert.badge.updated"
         default: return "alert.badge.new"
         }
+    }
+
+    private var protectiveActionBanner: some View {
+        Label("alert.action.now", systemImage: "shield.fill")
+            .font(.headline)
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(.black.opacity(0.2))
+            )
+            .padding(.horizontal, 24)
     }
 
     @ViewBuilder
@@ -242,29 +265,6 @@ private struct AlertFieldRow: View {
     }
 }
 
-/// Live-updating "estimated shaking in N seconds" -- ticks every second
-/// without a manually-managed Timer.
-private struct CountdownView: View {
-    let event: EEWEvent
-    let coordinate: CLLocationCoordinate2D
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            if let seconds = event.secondsUntilShaking(at: coordinate, now: context.date) {
-                VStack(spacing: 2) {
-                    Text("\(seconds)")
-                        .font(.system(size: 64, weight: .heavy, design: .rounded))
-                        .monospacedDigit()
-                        .contentTransition(.numericText(countsDown: true))
-                    Text("alert.countdown.label")
-                        .font(.caption)
-                }
-                .foregroundStyle(.white)
-            }
-        }
-    }
-}
-
 private struct DropCoverHoldView: View {
     private let steps: [(symbol: String, key: LocalizedStringKey)] = [
         ("arrow.down.to.line", "alert.step.drop"),
@@ -281,9 +281,12 @@ private struct DropCoverHoldView: View {
                             .font(.title2)
                             .frame(width: 44, height: 44)
                             .background(Circle().fill(.white.opacity(0.18)))
+                            .accessibilityHidden(true)
                         Text(steps[index].key)
                             .font(.caption)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(Text(steps[index].key))
                 }
             }
             VStack(spacing: 4) {

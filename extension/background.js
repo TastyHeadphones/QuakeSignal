@@ -1,6 +1,9 @@
 import {
   DEFAULT_SETTINGS,
   determineReason,
+  enqueueRecovering,
+  isUrgentNotification,
+  mergeEventRevision,
   mergeEvents,
   normalizeMessage,
   passesFilters,
@@ -21,6 +24,7 @@ const sockets = new Map();
 const seededSources = new Set();
 let ingestQueue = Promise.resolve();
 let connectionQueue = Promise.resolve();
+let offscreenCreationPromise = null;
 
 async function initialize() {
   const stored = await chrome.storage.local.get(["settings", "events", "connectionStatus"]);
@@ -66,7 +70,11 @@ function connectRoute(route) {
     if (!sourceId) return;
     const isBackfill = !seededSources.has(sourceId);
     seededSources.add(sourceId);
-    ingestQueue = ingestQueue.then(() => ingest(sourceId, payload, isBackfill));
+    ingestQueue = enqueueRecovering(
+      ingestQueue,
+      () => ingest(sourceId, payload, isBackfill),
+      (error) => console.warn("QuakeSignal ingest failed; later messages will continue", error),
+    );
   });
 
   const reconnect = () => {
@@ -85,12 +93,16 @@ function connectRoute(route) {
 }
 
 async function updateConnection(sourceIds, connected) {
-  connectionQueue = connectionQueue.then(async () => {
-    const { connectionStatus = {} } = await chrome.storage.local.get("connectionStatus");
-    for (const sourceId of sourceIds) connectionStatus[sourceId] = connected;
-    await chrome.storage.local.set({ connectionStatus });
-    chrome.runtime.sendMessage({ type: "stateUpdated" }).catch(() => {});
-  });
+  connectionQueue = enqueueRecovering(
+    connectionQueue,
+    async () => {
+      const { connectionStatus = {} } = await chrome.storage.local.get("connectionStatus");
+      for (const sourceId of sourceIds) connectionStatus[sourceId] = connected;
+      await chrome.storage.local.set({ connectionStatus });
+      chrome.runtime.sendMessage({ type: "stateUpdated" }).catch(() => {});
+    },
+    (error) => console.warn("QuakeSignal connection status update failed; later updates will continue", error),
+  );
   return connectionQueue;
 }
 
@@ -100,13 +112,28 @@ async function ingest(sourceId, payload, isBackfill) {
   const { events = [], settings = DEFAULT_SETTINGS } = await chrome.storage.local.get(["events", "settings"]);
   const previousById = new Map(events.map((event) => [event.id, event]));
   const notifications = [];
+  const reconciledIncoming = [];
   for (const event of incoming) {
-    const reason = determineReason(event, previousById.get(event.id));
-    if (!isBackfill && reason && passesFilters(event, settings)) notifications.push({ event, reason });
+    const previous = previousById.get(event.id);
+    const reconciled = mergeEventRevision(previous, event);
+    previousById.set(event.id, reconciled);
+    reconciledIncoming.push(reconciled);
+    const reason = determineReason(reconciled, previous);
+    if (!isBackfill && reason && passesFilters(reconciled, settings)) {
+      notifications.push({ event: reconciled, reason });
+    }
   }
-  await chrome.storage.local.set({ events: mergeEvents(events, incoming) });
+  await chrome.storage.local.set({ events: mergeEvents(events, reconciledIncoming) });
   chrome.runtime.sendMessage({ type: "stateUpdated" }).catch(() => {});
-  for (const notification of notifications) await notify(notification.event, notification.reason, settings);
+  for (const notification of notifications) {
+    try {
+      await notify(notification.event, notification.reason, settings);
+    } catch (error) {
+      // Persistence is authoritative. A browser notification or speaker
+      // failure must not reject the ingest queue and block later earthquakes.
+      console.warn("QuakeSignal notification delivery failed", error);
+    }
+  }
 }
 
 function localizedNotification(event, reason) {
@@ -130,28 +157,44 @@ function localizedNotification(event, reason) {
 
 async function notify(event, reason, settings) {
   const copy = localizedNotification(event, reason);
+  const urgent = isUrgentNotification(event, reason);
   await chrome.notifications.create(event.id, {
     type: "basic",
     iconUrl: "icons/128.png",
     title: copy.title,
     message: copy.message,
-    priority: reason === "report" ? 0 : 2,
+    priority: urgent ? 2 : 0,
   });
   await chrome.action.setBadgeBackgroundColor({ color: "#E53935" });
   await chrome.action.setBadgeText({ text: "!" });
-  if (settings.alarmEnabled && reason !== "report") await playAlarm(settings.alarmVolume);
+  // Lifecycle notifications remain visible but silent. The explicit training
+  // button may still exercise the opted-in alarm without pretending to be a
+  // live warning.
+  if (settings.alarmEnabled && (urgent || reason === "training")) {
+    await playAlarm(settings.alarmVolume);
+  }
 }
 
 async function playAlarm(volume) {
   const url = chrome.runtime.getURL("offscreen.html");
-  const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"], documentUrls: [url] });
-  if (!contexts.length) {
-    await chrome.offscreen.createDocument({
-      url: "offscreen.html",
-      reasons: ["AUDIO_PLAYBACK"],
-      justification: "Play the user-enabled earthquake alarm sound",
+  if (!offscreenCreationPromise) {
+    offscreenCreationPromise = (async () => {
+      const contexts = await chrome.runtime.getContexts({
+        contextTypes: ["OFFSCREEN_DOCUMENT"],
+        documentUrls: [url],
+      });
+      if (!contexts.length) {
+        await chrome.offscreen.createDocument({
+          url: "offscreen.html",
+          reasons: ["AUDIO_PLAYBACK"],
+          justification: "Play the user-enabled earthquake alarm sound",
+        });
+      }
+    })().finally(() => {
+      offscreenCreationPromise = null;
     });
   }
+  await offscreenCreationPromise;
   await chrome.runtime.sendMessage({ target: "offscreen", type: "playAlarm", volume });
 }
 

@@ -1,10 +1,13 @@
 import Foundation
 
 enum WolfxError: LocalizedError {
-    case invalidResponse
+    case invalidResponse(source: String)
 
     var errorDescription: String? {
-        "Invalid response from Wolfx"
+        switch self {
+        case .invalidResponse(let source):
+            return L("error.wolfx.invalidResponse", source)
+        }
     }
 }
 
@@ -65,6 +68,25 @@ enum WolfxHTTPFetchPacing {
     }
 }
 
+/// A process-wide reservation gate. Multiple refreshes can overlap (manual,
+/// startup, and socket recovery), so per-refresh index delays alone do not
+/// enforce Wolfx's aggregate two-requests-per-second ceiling.
+actor WolfxHTTPRequestPacer {
+    static let shared = WolfxHTTPRequestPacer()
+
+    private var nextRequestUptimeNanoseconds: UInt64 = 0
+
+    func waitForTurn() async throws {
+        let now = DispatchTime.now().uptimeNanoseconds
+        let scheduled = max(now, nextRequestUptimeNanoseconds)
+        nextRequestUptimeNanoseconds = scheduled + WolfxHTTPFetchPacing.requestIntervalNanoseconds
+        if scheduled > now {
+            try await Task.sleep(nanoseconds: scheduled - now)
+        }
+        try Task.checkCancellation()
+    }
+}
+
 /// Fetches earthquake data straight from the public Wolfx API. Cloudflare is
 /// intentionally not part of foreground data access; it only delivers APNs.
 final class WolfxClient: Sendable {
@@ -82,12 +104,9 @@ final class WolfxClient: Sendable {
     /// refresh error rather than presenting a deliberately partial result.
     func fetchRecentQuakes(limit: Int = 50) async throws -> [EEWEvent] {
         let batches = try await withThrowingTaskGroup(of: [EEWEvent].self) { group in
-            for (index, source) in Self.sources.enumerated() {
-                let delayNanoseconds = WolfxHTTPFetchPacing.delayNanoseconds(forSourceIndex: index)
+            for source in Self.sources {
                 group.addTask { [session, httpBaseURL] in
-                    if delayNanoseconds > 0 {
-                        try await Task.sleep(nanoseconds: delayNanoseconds)
-                    }
+                    try await WolfxHTTPRequestPacer.shared.waitForTurn()
                     return try await Self.fetchEvents(
                         session: session,
                         httpBaseURL: httpBaseURL,
@@ -116,13 +135,10 @@ final class WolfxClient: Sendable {
     /// sources still refresh the UI; cancellation still propagates normally.
     func fetchRecentQuakesAllowingPartialResults(limit: Int = 50) async throws -> WolfxSnapshotFetchResult {
         let outcomes = try await withThrowingTaskGroup(of: SourceFetchOutcome.self) { group in
-            for (index, source) in Self.sources.enumerated() {
-                let delayNanoseconds = WolfxHTTPFetchPacing.delayNanoseconds(forSourceIndex: index)
+            for source in Self.sources {
                 group.addTask { [session, httpBaseURL] in
                     do {
-                        if delayNanoseconds > 0 {
-                            try await Task.sleep(nanoseconds: delayNanoseconds)
-                        }
+                        try await WolfxHTTPRequestPacer.shared.waitForTurn()
                         try Task.checkCancellation()
                         return .success(
                             source: source,
@@ -178,9 +194,9 @@ final class WolfxClient: Sendable {
         let (data, response) = try await session.data(from: url)
         guard let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode) else {
-            throw WolfxError.invalidResponse
+            throw WolfxError.invalidResponse(source: source)
         }
-        return WolfxNormalizer.events(source: source, data: data)
+        return try WolfxNormalizer.validatedEvents(source: source, data: data)
     }
 
     private enum SourceFetchOutcome: Sendable {
@@ -197,6 +213,55 @@ enum WolfxNormalizer {
             return []
         }
         return events(source: source, object: object)
+    }
+
+    /// HTTP snapshots fail closed. Wolfx's documented feeds retain at least
+    /// one event, so malformed JSON, an idle-looking empty object, a wrong
+    /// source envelope, or a partially normalizable list is a source failure
+    /// rather than a successful empty refresh.
+    static func validatedEvents(source: String, data: Data) throws -> [EEWEvent] {
+        guard WolfxClient.sources.contains(source),
+              let json = try? JSONSerialization.jsonObject(with: data),
+              let object = json as? Object else {
+            throw WolfxError.invalidResponse(source: source)
+        }
+        let normalized = events(source: source, object: object)
+        guard !normalized.isEmpty,
+              Set(normalized.map(\.id)).count == normalized.count,
+              normalized.allSatisfy({ event in
+                  event.sourceId == source &&
+                  !event.eventId.isEmpty &&
+                  event.serial >= 0 &&
+                  (event.reportDate ?? event.originDate) != nil
+              }) else {
+            throw WolfxError.invalidResponse(source: source)
+        }
+
+        if source.hasSuffix("_eew") {
+            if let declaredSource = object["type"] as? String,
+               WolfxClient.sources.contains(declaredSource),
+               declaredSource != source {
+                throw WolfxError.invalidResponse(source: source)
+            }
+            guard normalized.count == 1,
+                  let event = normalized.first,
+                  !event.hypocenter.isEmpty,
+                  event.coordinate != nil,
+                  event.magnitude != nil else {
+                throw WolfxError.invalidResponse(source: source)
+            }
+        } else {
+            guard let md5 = object["md5"] as? String, !md5.isEmpty else {
+                throw WolfxError.invalidResponse(source: source)
+            }
+            let entries = rankedEntries(object)
+            guard !entries.isEmpty,
+                  entries.count == normalized.count,
+                  entries.count <= 50 else {
+                throw WolfxError.invalidResponse(source: source)
+            }
+        }
+        return normalized
     }
 
     static func events(source: String, object: Object) -> [EEWEvent] {

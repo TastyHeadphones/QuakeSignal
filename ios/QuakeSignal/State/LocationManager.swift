@@ -1,5 +1,33 @@
 import CoreLocation
 
+enum LocationFixPolicy {
+    static let maximumAge: TimeInterval = 2 * 60
+    static let maximumHorizontalAccuracy: CLLocationAccuracy = 5_000
+
+    static func isUsable(_ location: CLLocation, now: Date = Date()) -> Bool {
+        let age = now.timeIntervalSince(location.timestamp)
+        return location.horizontalAccuracy >= 0 &&
+            location.horizontalAccuracy <= maximumHorizontalAccuracy &&
+            age >= -10 &&
+            age <= maximumAge &&
+            CLLocationCoordinate2DIsValid(location.coordinate)
+    }
+
+    static func bestUsableLocation(
+        in locations: [CLLocation],
+        now: Date = Date()
+    ) -> CLLocation? {
+        locations
+            .filter { isUsable($0, now: now) }
+            .max { left, right in
+                if left.timestamp != right.timestamp {
+                    return left.timestamp < right.timestamp
+                }
+                return left.horizontalAccuracy > right.horizontalAccuracy
+            }
+    }
+}
+
 enum LocationSelectionStatus: Equatable {
     case permissionRequired
     case denied
@@ -74,11 +102,13 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     private(set) var lastRequestFailed = false
 
     private let manager = CLLocationManager()
+    private var locationExpirationTask: Task<Void, Never>?
 
     private override init() {
         authorizationStatus = .notDetermined
         super.init()
         manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         authorizationStatus = manager.authorizationStatus
     }
 
@@ -92,6 +122,11 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 
         switch currentAuthorization {
         case .authorizedAlways, .authorizedWhenInUse:
+            // Never present a previous trip's coordinate as a fresh fix while
+            // a new request is in flight.
+            currentLocation = nil
+            locationExpirationTask?.cancel()
+            locationExpirationTask = nil
             isRequestingLocation = true
             manager.requestLocation()
         case .notDetermined:
@@ -99,9 +134,13 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
             manager.requestWhenInUseAuthorization()
         case .denied, .restricted:
             currentLocation = nil
+            locationExpirationTask?.cancel()
+            locationExpirationTask = nil
             isRequestingLocation = false
         @unknown default:
             currentLocation = nil
+            locationExpirationTask?.cancel()
+            locationExpirationTask = nil
             isRequestingLocation = false
         }
     }
@@ -129,24 +168,56 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
                 self.manager.requestLocation()
             } else {
                 self.currentLocation = nil
+                self.locationExpirationTask?.cancel()
+                self.locationExpirationTask = nil
                 self.isRequestingLocation = false
             }
         }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let coordinate = locations.last?.coordinate else { return }
+        guard let coordinate = LocationFixPolicy.bestUsableLocation(in: locations)?.coordinate else {
+            Task { @MainActor in
+                self.currentLocation = nil
+                self.isRequestingLocation = false
+                self.lastRequestFailed = true
+            }
+            return
+        }
         Task { @MainActor in
             self.currentLocation = coordinate
             self.isRequestingLocation = false
             self.lastRequestFailed = false
+            self.scheduleLocationExpiration(for: coordinate)
         }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         Task { @MainActor in
+            self.currentLocation = nil
+            self.locationExpirationTask?.cancel()
+            self.locationExpirationTask = nil
             self.isRequestingLocation = false
             self.lastRequestFailed = true
+        }
+    }
+
+    private func scheduleLocationExpiration(for coordinate: CLLocationCoordinate2D) {
+        locationExpirationTask?.cancel()
+        locationExpirationTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(LocationFixPolicy.maximumAge))
+            } catch {
+                return
+            }
+            guard let self,
+                  self.currentLocation?.latitude == coordinate.latitude,
+                  self.currentLocation?.longitude == coordinate.longitude else {
+                return
+            }
+            self.currentLocation = nil
+            self.lastRequestFailed = true
+            self.locationExpirationTask = nil
         }
     }
 }
