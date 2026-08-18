@@ -10,9 +10,10 @@ deployment.
 The current public `Release` candidate is `1.1 (7)`. The protected workflow
 [run 32167921337](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/32167921337)
 signed, uploaded, and validated that build, and App Store Connect now reports
-the TestFlight build as **Ready to Submit**. Those facts establish artifact and
-processing status only. They do not replace internal-group availability or any
-physical-device result required below.
+the TestFlight build as **Ready to Submit**. It is assigned to the existing
+`QuakeSignal Internal QA` group. Those facts establish artifact, processing,
+and group-assignment status only; they do not replace any physical-device
+result required below.
 
 This is a **production** check. It must use the TestFlight release build and
 the approved notification origin
@@ -54,12 +55,12 @@ attach builds `2` through `6` to the 1.1 App Store version.
 Public `Release` build `1.1 (7)` is the current candidate. Its protected
 workflow upload and validation are recorded in
 [run 32167921337](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/32167921337),
-and the processed TestFlight build is **Ready to Submit**. Perform the normal
-production registration, refresh, unsubscribe, foreground training-alert, and
-reinstall-smoke checks below with `1.1 (7)` only after it is assigned and
-installable in the intended internal TestFlight group. Section 6 remains a
-separate `InternalQA`-only gate; the public `Release` candidate deliberately
-does not contain its delayed scheduler.
+and the processed TestFlight build is **Ready to Submit** and assigned to
+`QuakeSignal Internal QA`. Perform the normal production registration,
+refresh, unsubscribe, foreground training-alert, and reinstall-smoke checks
+below with `1.1 (7)` after the tester confirms it is installable from that
+group. Section 6 remains a separate `InternalQA`-only gate; the public
+`Release` candidate deliberately does not contain its delayed scheduler.
 
 ## Before starting
 
