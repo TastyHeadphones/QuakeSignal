@@ -65,6 +65,11 @@ pub fn get_connection_status(state: State<AppState>) -> HashMap<String, bool> {
 }
 
 #[tauri::command]
+pub fn get_database_persistence_available(state: State<AppState>) -> bool {
+    state.database_persistence_available
+}
+
+#[tauri::command]
 pub fn get_pending_alert(state: State<AppState>) -> Option<serde_json::Value> {
     state.pending_alert.lock().unwrap().clone()
 }

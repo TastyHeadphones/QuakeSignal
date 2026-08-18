@@ -1,5 +1,13 @@
 import Foundation
 
+enum LiveSocketLivenessPolicy {
+    static let silenceTimeout: TimeInterval = 90
+
+    static func isStale(lastActivity: Date, now: Date = Date()) -> Bool {
+        now.timeIntervalSince(lastActivity) > silenceTimeout
+    }
+}
+
 private enum WolfxRoute: Hashable {
     case combinedEEW
     case source(String)
@@ -26,6 +34,15 @@ private enum WolfxRoute: Hashable {
             return []
         }
     }
+
+    var sourceIDs: Set<String> {
+        switch self {
+        case .combinedEEW:
+            return ["jma_eew", "sc_eew", "cenc_eew", "fj_eew", "cq_eew"]
+        case .source(let source):
+            return [source]
+        }
+    }
 }
 
 /// Foreground-only direct connections to Wolfx. APNs remains the background
@@ -50,6 +67,8 @@ final class LiveSocketClient {
     private var connectedRoutes: Set<WolfxRoute> = []
     private var seededSources: Set<String> = []
     private var reconnectDelays: [WolfxRoute: TimeInterval] = [:]
+    private var watchdogTasks: [WolfxRoute: Task<Void, Never>] = [:]
+    private var lastActivityByRoute: [WolfxRoute: Date] = [:]
     private var shouldReconnect = true
 
     func start() {
@@ -66,7 +85,12 @@ final class LiveSocketClient {
         for task in tasks.values {
             task.cancel(with: .goingAway, reason: nil)
         }
+        for watchdog in watchdogTasks.values {
+            watchdog.cancel()
+        }
         tasks.removeAll()
+        watchdogTasks.removeAll()
+        lastActivityByRoute.removeAll()
         connectedRoutes.removeAll()
         updateConnectionState()
     }
@@ -76,9 +100,15 @@ final class LiveSocketClient {
               let url = URL(string: "wss://ws-api.wolfx.jp/\(route.endpoint)") else { return }
 
         let task = URLSession.shared.webSocketTask(with: url)
+        // Every connection begins with retained snapshots. Mark the first
+        // frame for each route source as baseline again; QuakeStore's
+        // monotonic comparison can still recognize a genuinely newer warning.
+        seededSources.subtract(route.sourceIDs)
         tasks[route] = task
+        lastActivityByRoute[route] = Date()
         task.resume()
         receiveNext(route, task: task)
+        startWatchdog(route, task: task)
 
         Task {
             for query in route.initialQueries {
@@ -93,6 +123,7 @@ final class LiveSocketClient {
                 guard let self, let task, self.tasks[route] === task else { return }
                 switch result {
                 case .success(let message):
+                    self.lastActivityByRoute[route] = Date()
                     self.connectedRoutes.insert(route)
                     self.reconnectDelays[route] = 1
                     self.updateConnectionState()
@@ -108,6 +139,9 @@ final class LiveSocketClient {
                     self.receiveNext(route, task: task)
 
                 case .failure:
+                    self.watchdogTasks[route]?.cancel()
+                    self.watchdogTasks[route] = nil
+                    self.lastActivityByRoute[route] = nil
                     self.tasks[route] = nil
                     self.connectedRoutes.remove(route)
                     self.updateConnectionState()
@@ -154,6 +188,31 @@ final class LiveSocketClient {
             try? await Task.sleep(for: .seconds(delay))
             guard let self, self.shouldReconnect, self.tasks[route] == nil else { return }
             self.connect(route)
+        }
+    }
+
+    private func startWatchdog(_ route: WolfxRoute, task: URLSessionWebSocketTask) {
+        watchdogTasks[route]?.cancel()
+        watchdogTasks[route] = Task { @MainActor [weak self, weak task] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(30))
+                } catch {
+                    return
+                }
+                guard let self, let task, self.tasks[route] === task else { return }
+                let lastActivity = self.lastActivityByRoute[route] ?? .distantPast
+                guard LiveSocketLivenessPolicy.isStale(lastActivity: lastActivity) else { continue }
+
+                task.cancel(with: .goingAway, reason: nil)
+                self.tasks[route] = nil
+                self.connectedRoutes.remove(route)
+                self.lastActivityByRoute[route] = nil
+                self.watchdogTasks[route] = nil
+                self.updateConnectionState()
+                self.scheduleReconnect(route)
+                return
+            }
         }
     }
 

@@ -19,6 +19,7 @@ export const ja: Record<LocaleKey, string> = {
   "home.testAlert.button": "警報音と通知をテスト",
   "home.lastEvent.none": "まだ記録はありません。",
   "home.viewAll": "すべての履歴を見る",
+  "storage.persistenceUnavailable": "現在、履歴を保存できません。このセッションの監視は継続し、既存のデータベースは変更せずに保持されています。",
 
   "events.empty": "地震の記録はまだありません。",
   "events.magnitudeShort": "M",

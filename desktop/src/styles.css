@@ -123,6 +123,17 @@ button {
   color: #fff;
   background: linear-gradient(155deg, var(--normal), #279943);
 }
+
+.storage-warning {
+  border: 1px solid color-mix(in srgb, var(--caution) 55%, transparent);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: color-mix(in srgb, var(--caution) 12%, var(--card));
+  color: var(--graphite);
+  font-size: 12px;
+  line-height: 1.4;
+}
 .status-banner.caution {
   background: linear-gradient(155deg, var(--caution), var(--strong));
 }

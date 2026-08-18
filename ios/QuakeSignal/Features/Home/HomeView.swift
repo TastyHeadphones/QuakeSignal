@@ -11,7 +11,7 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    if let loadError = store.loadError, !store.events.isEmpty {
+                    if let loadError = store.loadError {
                         InlineBanner(symbol: "wifi.slash", titleKey: "home.banner.offline", detail: loadError, actionKey: "home.banner.retry") {
                             Task { await store.refresh() }
                         }
@@ -23,13 +23,14 @@ struct HomeView: View {
                         }
                     }
 
-                    StatusCardView(
-                        bannerState: store.bannerState,
-                        activeWarning: store.activeWarning,
-                        recentReport: store.recentNearbyReport,
-                        radiusKm: settings.radiusKm,
-                        coordinate: store.effectiveCoordinate
-                    )
+                    if let statusEvent = store.activeWarning ?? store.recentNearbyReport {
+                        NavigationLink(value: statusEvent) {
+                            statusCard
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        statusCard
+                    }
 
                     if let highlighted = store.activeWarning ?? store.recentNearbyReport ?? store.nearbyEvents.first {
                         LatestQuakeCardView(
@@ -87,6 +88,16 @@ struct HomeView: View {
             return String(localized: "city.currentLocation")
         }
         return String(localized: "app.name")
+    }
+
+    private var statusCard: some View {
+        StatusCardView(
+            bannerState: store.bannerState,
+            activeWarning: store.activeWarning,
+            recentReport: store.recentNearbyReport,
+            radiusKm: settings.radiusKm,
+            coordinate: store.effectiveCoordinate
+        )
     }
 }
 

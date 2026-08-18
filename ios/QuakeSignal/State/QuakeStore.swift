@@ -3,8 +3,8 @@ import CoreLocation
 
 struct PresentedAlert: Identifiable, Equatable {
     let event: EEWEvent
-    let reason: String
-    var id: String { "\(event.id)#\(reason)#\(event.serial)" }
+    let reason: AlertPresentationReason
+    var id: String { "\(event.id)#\(reason.rawValue)#\(event.serial)" }
 }
 
 @Observable
@@ -24,6 +24,10 @@ final class QuakeStore {
     private var revisionsByEvent: [String: [EventRevision]] = [:]
     private var isForegroundActive = true
     private var foregroundHTTPFallbackTask: Task<Void, Never>?
+    private var expirationClockTask: Task<Void, Never>?
+    private var refreshGeneration = 0
+    private var clockNow = Date()
+    private var alertedRevisionKeys: Set<String> = []
 
     var isConnected: Bool { liveSocket.isConnected }
 
@@ -41,6 +45,7 @@ final class QuakeStore {
     func start() async {
         liveSocket.start()
         updateForegroundHTTPFallback()
+        updateExpirationClock()
         await refresh()
     }
 
@@ -51,21 +56,29 @@ final class QuakeStore {
     func setForegroundActive(_ isActive: Bool) {
         isForegroundActive = isActive
         updateForegroundHTTPFallback()
+        updateExpirationClock()
     }
 
     func refresh() async {
-        await refresh(allowingPartialResults: false)
+        // The upstream feeds are independent. One malformed or temporarily
+        // unavailable source must not hide validated reports from every
+        // healthy source. The partial path still fails closed when all
+        // sources fail and keeps a concise degradation message for the UI.
+        await refresh(allowingPartialResults: true)
     }
 
     private func refresh(allowingPartialResults: Bool) async {
+        refreshGeneration += 1
+        let generation = refreshGeneration
         isLoading = true
         loadError = nil
         do {
             if allowingPartialResults {
                 let snapshot = try await wolfx.fetchRecentQuakesAllowingPartialResults()
+                guard generation == refreshGeneration else { return }
                 guard snapshot.hasSuccessfulSources else {
                     loadError = snapshot.statusDescription
-                        ?? "Wolfx snapshot unavailable."
+                    ?? "Wolfx snapshot unavailable."
                     isLoading = false
                     return
                 }
@@ -75,12 +88,18 @@ final class QuakeStore {
                 // removing the refreshed event list.
                 loadError = snapshot.statusDescription
             } else {
-                applyFetchedEvents(try await wolfx.fetchRecentQuakes())
+                let snapshot = try await wolfx.fetchRecentQuakes()
+                guard generation == refreshGeneration else { return }
+                applyFetchedEvents(snapshot)
             }
         } catch {
-            loadError = error.localizedDescription
+            if generation == refreshGeneration {
+                loadError = error.localizedDescription
+            }
         }
-        isLoading = false
+        if generation == refreshGeneration {
+            isLoading = false
+        }
     }
 
     func registerForPush(token: String) async throws {
@@ -111,7 +130,8 @@ final class QuakeStore {
             radiusKm: coordinate != nil ? settings.radiusKm : nil,
             includeTestAlerts: settings.includeTestAlerts,
             utcOffsetMinutes: TimeZone.current.secondsFromGMT() / 60,
-            notifyAtNight: settings.notifyAtNight
+            notifyAtNight: settings.notifyAtNight,
+            alertSound: settings.alertSound
         )
         do {
             try await api.registerDevice(request)
@@ -141,18 +161,45 @@ final class QuakeStore {
         AppSettings.shared.pushRegistrationState = .unregistered
     }
 
-    /// Applies an update from either the live socket or a tapped push notification.
-    func ingest(event: EEWEvent, reason: String) {
+    /// Presents a notification the person explicitly tapped. The event still
+    /// merges monotonically, but a tap is navigation intent and is therefore
+    /// not re-filtered as a new unsolicited emergency.
+    func ingestTapped(event: EEWEvent, reason: AlertPresentationReason) {
+        merge(event)
+        let displayedEvent = events.first(where: { $0.id == event.id }) ?? event
+        presentedAlert = PresentedAlert(event: displayedEvent, reason: reason)
+    }
+
+    /// Applies a real push received while the app is foreground. It shares the
+    /// same merge and preference policy as direct WebSocket delivery, which
+    /// prevents duplicate full-screen UI and duplicate sound.
+    func ingestForegroundNotification(
+        event: EEWEvent,
+        reason requestedReason: AlertPresentationReason
+    ) {
+        let previous = events.first(where: { $0.id == event.id })
+        guard let reason = ForegroundPushPolicy.presentationReason(
+            for: event,
+            previous: previous,
+            requestedReason: requestedReason,
+            preferences: alertPreferenceSnapshot,
+            now: clockNow
+        ) else { return }
+        merge(event)
+        let mergedEvent = events.first(where: { $0.id == event.id }) ?? event
+        presentEmergencyIfNeeded(event: mergedEvent, reason: reason)
+    }
+
+    private func merge(_ event: EEWEvent) {
+        let previous = events.first(where: { $0.id == event.id })
+        guard EventMergePolicy.shouldAccept(event, replacing: previous) else { return }
         recordRevision(for: event)
         if let index = events.firstIndex(where: { $0.id == event.id }) {
             events[index] = event
         } else {
             events.insert(event, at: 0)
         }
-
-        if event.isEew {
-            presentedAlert = PresentedAlert(event: event, reason: reason)
-        }
+        sortAndLimitEvents()
     }
 
     func revisions(for eventID: String) -> [EventRevision] {
@@ -161,30 +208,30 @@ final class QuakeStore {
 
     private func ingestDirect(event: EEWEvent, isBackfill: Bool) {
         let previous = events.first(where: { $0.id == event.id })
-        let reason: String
-        if event.isTraining {
-            reason = "training"
-        } else if event.isCancel {
-            reason = "cancel"
-        } else if previous == nil {
-            reason = "new"
-        } else if event.isFinal && previous?.isFinal == false {
-            reason = "final"
-        } else {
-            reason = "update"
-        }
+        guard EventMergePolicy.shouldAccept(event, replacing: previous) else { return }
+        let reason = ForegroundAlertPolicy.presentationReason(
+            for: event,
+            previous: previous,
+            isBackfill: isBackfill,
+            preferences: alertPreferenceSnapshot,
+            now: clockNow
+        )
 
-        recordRevision(for: event)
-        if let index = events.firstIndex(where: { $0.id == event.id }) {
-            events[index] = event
-        } else {
-            events.append(event)
-        }
-        events.sort { ($0.reportTimeUtc ?? $0.originTimeUtc ?? "") > ($1.reportTimeUtc ?? $1.originTimeUtc ?? "") }
+        merge(event)
 
-        if !isBackfill, event.isEew {
-            presentedAlert = PresentedAlert(event: event, reason: reason)
+        if let reason {
+            presentEmergencyIfNeeded(event: event, reason: reason)
         }
+    }
+
+    private func presentEmergencyIfNeeded(
+        event: EEWEvent,
+        reason: AlertPresentationReason
+    ) {
+        let key = "\(event.id)#\(event.serial)#\(event.isWarn)#\(event.isFinal)#\(event.isCancel)#\(event.isTraining)"
+        guard alertedRevisionKeys.insert(key).inserted else { return }
+        presentedAlert = PresentedAlert(event: event, reason: reason)
+        EmergencyAlertAudio.shared.playSelectedSound(for: event, reason: reason)
     }
 
     private func recordRevision(for event: EEWEvent) {
@@ -263,10 +310,59 @@ final class QuakeStore {
     }
 
     private func applyFetchedEvents(_ fetchedEvents: [EEWEvent]) {
-        events = fetchedEvents
-            .sorted { ($0.reportTimeUtc ?? "") > ($1.reportTimeUtc ?? "") }
+        var newestByID = Dictionary(uniqueKeysWithValues: events.map { ($0.id, $0) })
+        for event in fetchedEvents {
+            if let current = newestByID[event.id] {
+                newestByID[event.id] = EventMergePolicy.preferred(current, event)
+            } else {
+                newestByID[event.id] = event
+            }
+        }
+        events = Array(newestByID.values)
+        sortAndLimitEvents()
         for event in events {
             recordRevision(for: event)
+        }
+    }
+
+    private func sortAndLimitEvents() {
+        events.sort {
+            ($0.reportTimeUtc ?? $0.originTimeUtc ?? "") >
+            ($1.reportTimeUtc ?? $1.originTimeUtc ?? "")
+        }
+        if events.count > 50 {
+            events.removeLast(events.count - 50)
+        }
+    }
+
+    private var alertPreferenceSnapshot: AlertPreferenceSnapshot {
+        let settings = AppSettings.shared
+        return AlertPreferenceSnapshot(
+            subscriptionEnabled: settings.pushSubscriptionEnabled,
+            enabledSources: settings.enabledSources,
+            minimumMagnitude: settings.minMagnitude,
+            coordinate: effectiveCoordinate,
+            radiusKm: settings.radiusKm,
+            includeTraining: settings.includeTestAlerts
+        )
+    }
+
+    private func updateExpirationClock() {
+        guard isForegroundActive else {
+            expirationClockTask?.cancel()
+            expirationClockTask = nil
+            return
+        }
+        guard expirationClockTask == nil else { return }
+        expirationClockTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                self?.clockNow = Date()
+                do {
+                    try await Task.sleep(for: .seconds(15))
+                } catch {
+                    return
+                }
+            }
         }
     }
 
@@ -303,7 +399,6 @@ final class QuakeStore {
     }
 
     var activeWarning: EEWEvent? {
-        let now = Date()
         return nearbyEvents.first { event in
             guard event.isActiveWarning, let timestamp = event.reportDate ?? event.originDate else {
                 return false
@@ -311,8 +406,8 @@ final class QuakeStore {
             // Some upstream EEW endpoints retain their last message while idle.
             // A preliminary message is only actionable for a short window; an
             // old retained payload must never look like a current warning.
-            let age = now.timeIntervalSince(timestamp)
-            return age >= -60 && age <= 10 * 60
+            let age = clockNow.timeIntervalSince(timestamp)
+            return age >= -60 && age <= ForegroundAlertPolicy.maximumWarningAge
         }
     }
 

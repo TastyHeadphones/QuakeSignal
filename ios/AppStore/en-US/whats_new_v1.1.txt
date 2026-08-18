@@ -1,0 +1,8 @@
+New in 1.1:
+
+• Choose System, an original Urgent Tone, or a Japanese safety voice synthesized with licensed HTS Voice “Mei” (CC BY 3.0) for qualifying earthquake warnings. None use official J-Alert or JMA audio.
+• Use the new current-location control on the map.
+• Improved alert freshness, filtering, reconnection handling, accessibility, and iPad layout.
+• Removed the estimated shaking countdown, which could imply false precision.
+
+QuakeSignal remains independent and non-official. Always follow official emergency guidance.

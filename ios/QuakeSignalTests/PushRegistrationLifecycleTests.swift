@@ -65,6 +65,74 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "settings.cityId"), "tokyo")
     }
 
+    func testAlertSoundPreferencePersistsAndUsesStableWireValue() throws {
+        let suiteName = "PushRegistrationLifecycleTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let settings = AppSettings(defaults: defaults)
+        XCTAssertEqual(settings.alertSound, .system)
+        settings.alertSound = .japaneseVoice
+        XCTAssertEqual(AppSettings(defaults: defaults).alertSound, .japaneseVoice)
+
+        let request = DeviceRegistrationRequest(
+            token: "token",
+            environment: "sandbox",
+            locale: "ja_JP",
+            sources: ["jma_eew"],
+            minMagnitude: 4,
+            cityName: "東京",
+            latitude: 35.7,
+            longitude: 139.7,
+            radiusKm: 100,
+            includeTestAlerts: false,
+            utcOffsetMinutes: 540,
+            notifyAtNight: true,
+            alertSound: .japaneseVoice
+        )
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any]
+        )
+        XCTAssertEqual(object["alertSound"] as? String, "japanese-voice")
+    }
+
+    func testPushPayloadDecodesCompactEventSnapshot() throws {
+        let event = EEWEvent(
+            id: "jma_eew:test",
+            sourceId: "jma_eew",
+            eventId: "test",
+            serial: 2,
+            kind: "eew",
+            originTimeUtc: "2026-08-19T01:00:00Z",
+            reportTimeUtc: "2026-08-19T01:00:02Z",
+            hypocenter: "Test",
+            latitude: 35,
+            longitude: 140,
+            magnitude: 5,
+            depth: 10,
+            maxIntensity: "5-",
+            isWarn: true,
+            isFinal: false,
+            isCancel: false,
+            isTraining: false,
+            tsunami: nil
+        )
+        var snapshot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(event)) as? [String: Any]
+        )
+        snapshot.removeValue(forKey: "id")
+        let payload = PushPayload(userInfo: [
+            "sourceId": "jma_eew",
+            "eventId": "test",
+            "reason": "updated",
+            "event": snapshot,
+        ])
+
+        XCTAssertEqual(payload.compositeEventId, event.id)
+        XCTAssertEqual(payload.eventSnapshot, event)
+        XCTAssertEqual(AlertPresentationReason(wireValue: payload.reason), .updated)
+    }
+
     func testLocationSelectionStatusDistinguishesGPSFallbackAndPermissionStates() {
         XCTAssertEqual(
             LocationSelectionStatus.resolve(

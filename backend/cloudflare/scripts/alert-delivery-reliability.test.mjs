@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 import { build } from "esbuild";
@@ -214,12 +215,12 @@ function d1Results(json) {
   return value[0].results;
 }
 
-function message(serial) {
+function message(serial, reason = "new") {
   return {
     version: 1,
     outboxId: `outbox-${serial}`,
-    deliveryId: `v1:jma_eew:example:${serial}:new`,
-    rootDeliveryId: `v1:jma_eew:example:${serial}:new`,
+    deliveryId: `v1:jma_eew:example:${serial}:${reason}`,
+    rootDeliveryId: `v1:jma_eew:example:${serial}:${reason}`,
     event: {
       id: "jma_eew:example",
       eventId: "example",
@@ -229,7 +230,7 @@ function message(serial) {
       originTimeUtc: "2026-08-12T00:00:00.000Z",
       reportTimeUtc: "2026-08-12T00:00:00.000Z",
     },
-    reason: "new",
+    reason,
     expiresAtUtc: "2026-08-12T00:30:00.000Z",
     expiryPolicy: "eew_30m",
   };
@@ -2938,11 +2939,15 @@ function isLivePointJournalKey(key) {
   return typeof key === "string" && key.startsWith("pending-ingest:");
 }
 
-function createLivePointEventHarness({ failD1Batches = () => false } = {}) {
+function createLivePointEventHarness({
+  failD1Batches = () => false,
+  storedEventRow = null,
+} = {}) {
   const values = new Map();
   const writes = [];
   let alarmAt = null;
   let d1BatchAttempts = 0;
+  const d1Batches = [];
   const storage = {
     async get(key) {
       return values.get(key);
@@ -2985,7 +2990,7 @@ function createLivePointEventHarness({ failD1Batches = () => false } = {}) {
             sql,
             bindings,
             async first() {
-              return null;
+              return storedEventRow;
             },
           };
         },
@@ -2994,6 +2999,7 @@ function createLivePointEventHarness({ failD1Batches = () => false } = {}) {
     async batch(statements) {
       d1BatchAttempts += 1;
       if (failD1Batches()) throw new Error("simulated live point-event D1 failure");
+      d1Batches.push(statements);
       return statements.map(() => ({ meta: { changes: 1 } }));
     },
   };
@@ -3004,6 +3010,9 @@ function createLivePointEventHarness({ failD1Batches = () => false } = {}) {
     database,
     get d1BatchAttempts() {
       return d1BatchAttempts;
+    },
+    get d1Batches() {
+      return d1Batches;
     },
   };
 }
@@ -3176,6 +3185,56 @@ test("a resident relay skips exact committed point-event replays without suppres
     ["put", "delete", "put", "delete"],
     "a genuine normalized change must receive fresh durable journal work",
   );
+});
+
+test("Worker persistence cannot reopen final or cancelled events on same or higher active serials", async () => {
+  const { QuakeRelay } = await workerModule();
+
+  for (const terminal of ["final", "cancelled"]) {
+    const event = livePointEvent();
+    const storedEventRow = {
+      id: event.id,
+      source_id: event.sourceId,
+      event_id: event.eventId,
+      serial: event.serial,
+      kind: event.kind,
+      origin_time_utc: event.originTimeUtc,
+      report_time_utc: event.reportTimeUtc,
+      hypocenter: event.hypocenter,
+      latitude: event.latitude,
+      longitude: event.longitude,
+      magnitude: event.magnitude,
+      depth: event.depth,
+      max_intensity: event.maxIntensity,
+      is_warn: 1,
+      is_final: terminal === "final" ? 1 : 0,
+      is_cancel: terminal === "cancelled" ? 1 : 0,
+      is_training: 0,
+      tsunami: null,
+      raw_json: null,
+    };
+    const harness = createLivePointEventHarness({ storedEventRow });
+    const relay = new QuakeRelay(harness.state, { DB: harness.database });
+    relay.flushAlertDeliveryOutbox = async () => {};
+
+    await relay.ingest(event, "live", null);
+    assert.equal(
+      harness.d1BatchAttempts,
+      0,
+      `a same-serial active replay after ${terminal} must be rejected before D1`,
+    );
+
+    await relay.ingest({ ...event, serial: event.serial + 1 }, "live", null);
+    assert.equal(harness.d1BatchAttempts, 1);
+    assert.equal(
+      harness.d1Batches[0].length,
+      2,
+      `a higher active replay after ${terminal} may update data but cannot enqueue delivery`,
+    );
+    const eventBindings = harness.d1Batches[0][0].bindings;
+    assert.equal(eventBindings[14], terminal === "final" ? 1 : 0);
+    assert.equal(eventBindings[15], terminal === "cancelled" ? 1 : 0);
+  }
 });
 
 test("a resident relay preserves a pending point event without duplicate journal writes or D1 retries", async () => {
@@ -4184,6 +4243,230 @@ test("keeps a short websocket reconnect alarm ahead of routine relay work", asyn
   assert.equal(preferredRelayAlarmAt(now + 60_000, now), now + 60_000);
 });
 
+test("notifies only genuine EEW warning transitions and meaningful lifecycle states", async () => {
+  const { notificationReasonForEvent, reconcileEventRevision } = await workerModule();
+  const event = {
+    id: "jma_eew:transition-test",
+    sourceId: "jma_eew",
+    eventId: "transition-test",
+    serial: 1,
+    kind: "eew",
+    originTimeUtc: "2026-08-19T00:00:00.000Z",
+    reportTimeUtc: "2026-08-19T00:00:05.000Z",
+    hypocenter: "Test Region",
+    latitude: 35,
+    longitude: 135,
+    magnitude: 5.5,
+    depth: 10,
+    maxIntensity: "5-",
+    isWarn: false,
+    isFinal: false,
+    isCancel: false,
+    isTraining: false,
+    tsunami: null,
+    raw: null,
+  };
+  assert.equal(notificationReasonForEvent(event, null), null);
+  assert.equal(
+    notificationReasonForEvent({ ...event, serial: 2 }, event),
+    null,
+    "an informational EEW serial update must stay silent",
+  );
+
+  const warning = { ...event, isWarn: true };
+  assert.equal(notificationReasonForEvent(warning, null), "new");
+  assert.equal(
+    notificationReasonForEvent(warning, event),
+    "new",
+    "a same-serial transition into warning state must notify",
+  );
+  assert.equal(
+    notificationReasonForEvent({ ...warning, serial: 2 }, warning),
+    "updated",
+  );
+  assert.equal(
+    notificationReasonForEvent({ ...event, isFinal: true }, null),
+    null,
+  );
+  assert.equal(
+    notificationReasonForEvent({ ...warning, isFinal: true }, warning),
+    "final",
+  );
+  assert.equal(
+    notificationReasonForEvent({ ...event, isCancel: true }, null),
+    null,
+  );
+  assert.equal(
+    notificationReasonForEvent({ ...warning, isCancel: true }, warning),
+    "cancelled",
+  );
+
+  const finalWarning = { ...warning, isFinal: true };
+  assert.equal(
+    reconcileEventRevision(warning, finalWarning),
+    null,
+    "a same-serial active replay cannot replace a final warning",
+  );
+  assert.equal(notificationReasonForEvent(warning, finalWarning), null);
+  const higherAfterFinal = reconcileEventRevision(
+    { ...warning, serial: warning.serial + 1 },
+    finalWarning,
+  );
+  assert.equal(higherAfterFinal?.serial, warning.serial + 1);
+  assert.equal(higherAfterFinal?.isFinal, true);
+  assert.equal(notificationReasonForEvent(higherAfterFinal, finalWarning), null);
+
+  const cancelledAfterFinal = {
+    ...warning,
+    serial: warning.serial + 1,
+    isCancel: true,
+  };
+  const acceptedCancellation = reconcileEventRevision(
+    cancelledAfterFinal,
+    finalWarning,
+  );
+  assert.equal(acceptedCancellation?.isFinal, true);
+  assert.equal(acceptedCancellation?.isCancel, true);
+  assert.equal(
+    notificationReasonForEvent(acceptedCancellation, finalWarning),
+    "cancelled",
+    "final to cancelled remains a valid terminal transition",
+  );
+
+  assert.equal(
+    reconcileEventRevision(
+      { ...warning, serial: cancelledAfterFinal.serial },
+      acceptedCancellation,
+    ),
+    null,
+    "a same-serial active replay cannot replace a cancellation",
+  );
+  const higherAfterCancellation = reconcileEventRevision(
+    { ...warning, serial: cancelledAfterFinal.serial + 1 },
+    acceptedCancellation,
+  );
+  assert.equal(higherAfterCancellation?.isCancel, true);
+  assert.equal(
+    notificationReasonForEvent(higherAfterCancellation, acceptedCancellation),
+    null,
+  );
+});
+
+test("builds bounded typed APNs snapshots and reserves custom Time Sensitive sound for fresh warnings", async () => {
+  const { buildPushPayload } = await workerModule();
+  const nowMs = Date.parse("2026-08-19T00:05:00.000Z");
+  const warning = {
+    id: "jma_eew:payload-test",
+    sourceId: "jma_eew",
+    eventId: "payload-test",
+    serial: 7,
+    kind: "eew",
+    originTimeUtc: "2026-08-19T00:04:00.000Z",
+    reportTimeUtc: "2026-08-19T00:04:30.000Z",
+    hypocenter: "能登半島沖",
+    latitude: 37.4,
+    longitude: 137.2,
+    magnitude: 6.1,
+    depth: 12,
+    maxIntensity: "6-",
+    isWarn: true,
+    isFinal: false,
+    isCancel: false,
+    isTraining: false,
+    tsunami: "checking",
+    raw: { mustNotLeak: true },
+  };
+  const expectedSnapshot = {
+    sourceId: warning.sourceId,
+    eventId: warning.eventId,
+    serial: warning.serial,
+    kind: warning.kind,
+    originTimeUtc: warning.originTimeUtc,
+    reportTimeUtc: warning.reportTimeUtc,
+    hypocenter: warning.hypocenter,
+    latitude: warning.latitude,
+    longitude: warning.longitude,
+    magnitude: warning.magnitude,
+    depth: warning.depth,
+    maxIntensity: warning.maxIntensity,
+    isWarn: warning.isWarn,
+    isFinal: warning.isFinal,
+    isCancel: warning.isCancel,
+    isTraining: warning.isTraining,
+    tsunami: warning.tsunami,
+  };
+  for (const [alertSound, expectedFile] of [
+    ["system", "default"],
+    ["urgent-tone", "quakesignal_urgent.caf"],
+    ["japanese-voice", "quakesignal_japanese_voice.caf"],
+  ]) {
+    const payload = buildPushPayload(warning, "new", alertSound, nowMs);
+    assert.equal(payload.aps.sound, expectedFile);
+    assert.equal(payload.aps["interruption-level"], "time-sensitive");
+    assert.deepEqual(payload.event, expectedSnapshot);
+    assert.deepEqual(JSON.parse(JSON.stringify(payload)).event, expectedSnapshot);
+    assert.equal(payload.eventId, warning.eventId, "legacy payload fields remain available");
+    assert.equal("raw" in payload.event, false);
+  }
+
+  const stale = buildPushPayload(
+    warning,
+    "new",
+    "japanese-voice",
+    Date.parse("2026-08-19T00:15:01.000Z"),
+  );
+  assert.equal(stale.aps.sound, "default");
+  assert.equal(stale.aps["interruption-level"], "active");
+  for (const [reason, lifecycle] of [
+    ["final", { isFinal: true }],
+    ["cancelled", { isCancel: true }],
+    ["training", { isTraining: true }],
+  ]) {
+    const payload = buildPushPayload(
+      { ...warning, ...lifecycle },
+      reason,
+      "urgent-tone",
+      nowMs,
+    );
+    assert.equal(payload.aps.sound, "default");
+    assert.equal(payload.aps["interruption-level"], "active");
+  }
+
+  const oversizedSource = {
+    ...warning,
+    eventId: "🫨".repeat(4_000),
+    hypocenter: "震源地域".repeat(4_000),
+    maxIntensity: "最大震度".repeat(4_000),
+    tsunami: "津波調査中".repeat(4_000),
+  };
+  const bounded = buildPushPayload(
+    oversizedSource,
+    "new",
+    "urgent-tone",
+    nowMs,
+  );
+  assert.ok(
+    new TextEncoder().encode(JSON.stringify(bounded)).byteLength <= 4_096,
+    "the complete regular APNs payload must stay within 4 KB",
+  );
+});
+
+test("accepts only exact alert-sound registration identifiers and defaults old clients to system", async () => {
+  const { validatedRegistrationValues } = await workerModule();
+  const registration = { token: "0123456789abcdef" };
+  const legacy = validatedRegistrationValues(registration);
+  assert.equal(legacy.alertSound, "system");
+  for (const alertSound of ["system", "urgent-tone", "japanese-voice"]) {
+    const values = validatedRegistrationValues({ ...registration, alertSound });
+    assert.equal(values.alertSound, alertSound);
+  }
+  for (const alertSound of [null, "", "urgent", "Urgent-Tone", "japanese_voice", 1]) {
+    const response = validatedRegistrationValues({ ...registration, alertSound });
+    assert.ok(response instanceof Response);
+    assert.equal(response.status, 400);
+  }
+});
+
 test("calculates bounded reason-specific delivery deadlines", async () => {
   const { calculateAlertDeliveryExpiry } = await workerModule();
   const event = {
@@ -4192,7 +4475,7 @@ test("calculates bounded reason-specific delivery deadlines", async () => {
   };
   assert.deepEqual(
     calculateAlertDeliveryExpiry(event, "new", "2026-08-12T00:10:00.000Z"),
-    { expiresAtUtc: "2026-08-12T00:35:00.000Z", expiryPolicy: "eew_30m" },
+    { expiresAtUtc: "2026-08-12T00:15:00.000Z", expiryPolicy: "eew_10m" },
   );
   assert.deepEqual(
     calculateAlertDeliveryExpiry(event, "final", "2026-08-12T00:10:00.000Z"),
@@ -4212,7 +4495,7 @@ test("calculates bounded reason-specific delivery deadlines", async () => {
       "new",
       "2026-08-12T00:10:00.000Z",
     ),
-    { expiresAtUtc: "2026-08-12T00:30:00.000Z", expiryPolicy: "eew_30m" },
+    { expiresAtUtc: "2026-08-12T00:10:00.000Z", expiryPolicy: "eew_10m" },
   );
   assert.deepEqual(
     calculateAlertDeliveryExpiry(
@@ -4220,7 +4503,99 @@ test("calculates bounded reason-specific delivery deadlines", async () => {
       "new",
       "2026-08-12T00:10:00.000Z",
     ),
-    { expiresAtUtc: "2026-08-12T00:40:00.000Z", expiryPolicy: "eew_30m" },
+    { expiresAtUtc: "2026-08-12T00:20:00.000Z", expiryPolicy: "eew_10m" },
+  );
+  assert.deepEqual(
+    calculateAlertDeliveryExpiry(event, "cancelled", "2026-08-12T00:10:00.000Z"),
+    { expiresAtUtc: "2026-08-12T01:05:00.000Z", expiryPolicy: "report_60m" },
+  );
+});
+
+test("migration 0010 preserves outbox state while capping pending urgent work at ten minutes", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "quakesignal-migration-0010-"));
+  const databasePath = join(directory, "migration.sqlite");
+  const sqlite = new DatabaseSync(databasePath);
+  t.after(async () => {
+    sqlite.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const migrationEntries = await readdir(join(cloudflareDirectory, "migrations"));
+  for (let version = 1; version <= 9; version += 1) {
+    const filename = migrationEntries.find((entry) =>
+      entry.startsWith(String(version).padStart(4, "0")),
+    );
+    assert.ok(filename, `migration ${version} must exist`);
+    sqlite.exec(await readFile(join(cloudflareDirectory, "migrations", filename), "utf8"));
+  }
+  sqlite.exec(`
+    INSERT INTO devices (
+      token, environment, sources, min_magnitude, critical_alerts_enabled,
+      include_test_alerts, notify_at_night, created_at, updated_at
+    ) VALUES (
+      'migration-device-token', 'production', '["jma_eew"]', 0, 0, 0, 1,
+      '2026-08-19T00:00:00.000Z', '2026-08-19T00:00:00.000Z'
+    );
+    INSERT INTO alert_delivery_outbox (
+      id, dedupe_key, delivery_id, root_delivery_id, event_ref, event_serial,
+      notification_reason, event_json, created_at_utc, next_enqueue_at_utc,
+      expires_at_utc, expiry_policy
+    ) VALUES (
+      'migration-outbox', 'migration-dedupe', 'migration-delivery',
+      'migration-root', 'jma_eew:migration', 4, 'updated', '{}',
+      '2026-08-19T00:00:00.000Z', '2026-08-19T00:00:00.000Z',
+      '2026-08-19T00:30:00.000Z', 'eew_30m'
+    );
+  `);
+  sqlite.exec(await readFile(
+    join(
+      cloudflareDirectory,
+      "migrations/0010_alert_sound_and_urgent_eew_deadline.sql",
+    ),
+    "utf8",
+  ));
+
+  assert.deepEqual(
+    {
+      ...sqlite.prepare(
+        "SELECT token, alert_sound FROM devices WHERE token = 'migration-device-token'",
+      ).get(),
+    },
+    { token: "migration-device-token", alert_sound: "system" },
+  );
+  assert.deepEqual(
+    {
+      ...sqlite.prepare(
+        `SELECT delivery_id, root_delivery_id, event_serial, expires_at_utc,
+                expiry_policy
+         FROM alert_delivery_outbox WHERE id = 'migration-outbox'`,
+      ).get(),
+    },
+    {
+      delivery_id: "migration-delivery",
+      root_delivery_id: "migration-root",
+      event_serial: 4,
+      expires_at_utc: "2026-08-19T00:10:00.000Z",
+      expiry_policy: "eew_10m",
+    },
+  );
+  assert.deepEqual(
+    sqlite.prepare(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'index' AND name LIKE 'idx_alert_delivery_outbox_%'
+       ORDER BY name`,
+    ).all().map(({ name }) => name),
+    [
+      "idx_alert_delivery_outbox_leased_pending",
+      "idx_alert_delivery_outbox_pending",
+      "idx_alert_delivery_outbox_terminal_retention",
+    ],
+  );
+  assert.throws(
+    () => sqlite.exec(
+      "UPDATE devices SET alert_sound = 'official-j-alert' WHERE token = 'migration-device-token'",
+    ),
+    /constraint/i,
   );
 });
 
@@ -4794,7 +5169,7 @@ test("DLQ terminal guard ignores stale terminal outboxes but retains canonical D
   }
 });
 
-test("D1 outbox insert atomically rejects an old revision after a higher serial commits", async () => {
+test("D1 outbox insert atomically rejects superseded serials and lifecycle reasons", async () => {
   const { outboxInsertStatement } = await workerModule();
   const createdAt = "2026-08-12T00:10:00.000Z";
   const staleCapture = capturedStatementDatabase();
@@ -4805,13 +5180,29 @@ test("D1 outbox insert atomically rejects an old revision after a higher serial 
     createdAt,
   );
   assert.match(staleCapture.captured.sql, /WHERE NOT EXISTS/i);
-  assert.match(staleCapture.captured.sql, /WHERE id = \? AND serial > \?/i);
+  assert.match(staleCapture.captured.sql, /serial > \?/i);
+  assert.match(staleCapture.captured.sql, /is_cancel = 1/i);
+  assert.match(staleCapture.captured.sql, /is_final = 1/i);
 
   const freshCapture = capturedStatementDatabase();
   outboxInsertStatement(
     freshCapture.database,
     message(2),
     "fresh-dedupe",
+    createdAt,
+  );
+  const finalCapture = capturedStatementDatabase();
+  outboxInsertStatement(
+    finalCapture.database,
+    message(2, "final"),
+    "final-dedupe",
+    createdAt,
+  );
+  const cancelledCapture = capturedStatementDatabase();
+  outboxInsertStatement(
+    cancelledCapture.database,
+    message(2, "cancelled"),
+    "cancelled-dedupe",
     createdAt,
   );
 
@@ -4870,15 +5261,107 @@ test("D1 outbox insert atomically rejects an old revision after a higher serial 
     ]));
     assert.deepEqual(rows, [{
       event_serial: 2,
-      expires_at_utc: "2026-08-12T00:30:00.000Z",
-      expiry_policy: "eew_30m",
+      expires_at_utc: "2026-08-12T00:10:00.000Z",
+      expiry_policy: "eew_10m",
     }]);
+
+    runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      "DELETE FROM alert_delivery_outbox; UPDATE events SET is_final = 1",
+    ]);
+    runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      bindSql(freshCapture.captured.sql, freshCapture.captured.bindings),
+    ]);
+    rows = d1Results(runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      "SELECT COUNT(*) AS count FROM alert_delivery_outbox",
+      "--json",
+    ]));
+    assert.equal(rows[0].count, 0, "same-serial active work must not enqueue after final");
+
+    runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      bindSql(finalCapture.captured.sql, finalCapture.captured.bindings),
+    ]);
+    rows = d1Results(runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      "SELECT notification_reason FROM alert_delivery_outbox",
+      "--json",
+    ]));
+    assert.deepEqual(rows, [{ notification_reason: "final" }]);
+
+    runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      "DELETE FROM alert_delivery_outbox; UPDATE events SET is_cancel = 1",
+    ]);
+    runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      bindSql(finalCapture.captured.sql, finalCapture.captured.bindings),
+    ]);
+    rows = d1Results(runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      "SELECT COUNT(*) AS count FROM alert_delivery_outbox",
+      "--json",
+    ]));
+    assert.equal(rows[0].count, 0, "final work must not enqueue after cancellation");
+
+    runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      bindSql(cancelledCapture.captured.sql, cancelledCapture.captured.bindings),
+    ]);
+    rows = d1Results(runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      "SELECT notification_reason FROM alert_delivery_outbox",
+      "--json",
+    ]));
+    assert.deepEqual(rows, [{ notification_reason: "cancelled" }]);
   } finally {
     await rm(stateDirectory, { recursive: true, force: true });
   }
 });
 
-test("D1 delivery serial fence terminalizes an already-pending lower revision", async () => {
+test("D1 delivery fence terminalizes lower serials and same-serial active work", async () => {
   const { supersedeOutboxIfNewerRevisionStatement } = await workerModule();
   const createdAt = "2026-08-12T00:10:00.000Z";
   const supersedeCapture = capturedStatementDatabase();
@@ -4891,6 +5374,8 @@ test("D1 delivery serial fence terminalizes an already-pending lower revision", 
     supersedeCapture.captured.sql,
     /events\.serial > alert_delivery_outbox\.event_serial/i,
   );
+  assert.match(supersedeCapture.captured.sql, /events\.is_final = 1/i);
+  assert.match(supersedeCapture.captured.sql, /events\.is_cancel = 1/i);
 
   const stateDirectory = await mkdtemp(join(tmpdir(), "quakesignal-d1-test-"));
   try {
@@ -4936,7 +5421,7 @@ test("D1 delivery serial fence terminalizes an already-pending lower revision", 
       "--command",
       bindSql(supersedeCapture.captured.sql, supersedeCapture.captured.bindings),
     ]);
-    const rows = d1Results(runWrangler([
+    let rows = d1Results(runWrangler([
       "d1",
       "execute",
       "quakesignal-production",
@@ -4953,6 +5438,102 @@ test("D1 delivery serial fence terminalizes an already-pending lower revision", 
       terminal_reason: "superseded",
       final_status: null,
     }]);
+
+    const sameSerialFinalCapture = capturedStatementDatabase();
+    supersedeOutboxIfNewerRevisionStatement(
+      sameSerialFinalCapture.database,
+      "outbox-pending-same-serial-active",
+      createdAt,
+    );
+    runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      `UPDATE events SET is_final = 1;
+       INSERT INTO alert_delivery_outbox (
+         id, dedupe_key, delivery_id, root_delivery_id, event_ref, event_serial,
+         notification_reason, event_json, created_at_utc, next_enqueue_at_utc,
+         expires_at_utc, expiry_policy
+       ) VALUES (
+         'outbox-pending-same-serial-active', 'pending-same-serial-active',
+         'v1:jma_eew:example:2:new', 'v1:jma_eew:example:2:new',
+         'jma_eew:example', 2, 'new', '{}', '${createdAt}', '${createdAt}',
+         '2026-08-12T00:30:00.000Z', 'eew_30m'
+       )`,
+    ]);
+    runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      bindSql(
+        sameSerialFinalCapture.captured.sql,
+        sameSerialFinalCapture.captured.bindings,
+      ),
+    ]);
+    rows = d1Results(runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      `SELECT acknowledged_at_utc IS NOT NULL AS terminalized, terminal_reason
+       FROM alert_delivery_outbox
+       WHERE id = 'outbox-pending-same-serial-active'`,
+      "--json",
+    ]));
+    assert.deepEqual(rows, [{ terminalized: 1, terminal_reason: "superseded" }]);
+
+    const sameSerialCancelCapture = capturedStatementDatabase();
+    supersedeOutboxIfNewerRevisionStatement(
+      sameSerialCancelCapture.database,
+      "outbox-pending-same-serial-final",
+      createdAt,
+    );
+    runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      `UPDATE events SET is_cancel = 1;
+       INSERT INTO alert_delivery_outbox (
+         id, dedupe_key, delivery_id, root_delivery_id, event_ref, event_serial,
+         notification_reason, event_json, created_at_utc, next_enqueue_at_utc,
+         expires_at_utc, expiry_policy
+       ) VALUES (
+         'outbox-pending-same-serial-final', 'pending-same-serial-final',
+         'v1:jma_eew:example:2:final', 'v1:jma_eew:example:2:final',
+         'jma_eew:example', 2, 'final', '{}', '${createdAt}', '${createdAt}',
+         '2026-08-12T00:30:00.000Z', 'eew_30m'
+       )`,
+    ]);
+    runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      bindSql(
+        sameSerialCancelCapture.captured.sql,
+        sameSerialCancelCapture.captured.bindings,
+      ),
+    ]);
+    rows = d1Results(runWrangler([
+      "d1",
+      "execute",
+      "quakesignal-production",
+      ...localArguments,
+      "--command",
+      `SELECT acknowledged_at_utc IS NOT NULL AS terminalized, terminal_reason
+       FROM alert_delivery_outbox
+       WHERE id = 'outbox-pending-same-serial-final'`,
+      "--json",
+    ]));
+    assert.deepEqual(rows, [{ terminalized: 1, terminal_reason: "superseded" }]);
   } finally {
     await rm(stateDirectory, { recursive: true, force: true });
   }

@@ -80,6 +80,39 @@ struct SettingsView: View {
 
                     pushSubscriptionControl
 
+                    NavigationLink {
+                        AlertSoundSelectionView()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: settings.alertSound.systemImage)
+                                .foregroundStyle(Color("BrandColor"))
+                                .frame(width: 24)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("settings.alertSound.title")
+                                Text(LocalizedStringKey(settings.alertSound.titleKey))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    if notifications.canRegisterForRemoteNotifications,
+                       (!notifications.hasVisibleAlertsEnabled ||
+                        !notifications.hasSoundsEnabled ||
+                        !notifications.hasTimeSensitiveAlertsEnabled) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("settings.notificationDelivery.degraded", systemImage: "exclamationmark.triangle.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.orange)
+                            Text("settings.notificationDelivery.degraded.detail")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Button("settings.openNotificationSettings") {
+                                openNotificationSettings()
+                            }
+                        }
+                    }
+
                     Toggle("settings.notifyAtNight", isOn: $settings.notifyAtNight)
                     Toggle(isOn: $settings.includeTestAlerts) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -195,6 +228,7 @@ struct SettingsView: View {
             .onChange(of: settings.minMagnitude) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.notifyAtNight) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.includeTestAlerts) { _, _ in resyncPushPreferences() }
+            .onChange(of: settings.alertSound) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.radiusKm) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.selectedCityId) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.useCurrentLocation) { _, _ in resyncPushPreferences() }
@@ -492,6 +526,65 @@ struct SettingsView: View {
         }
     }
 #endif
+}
+
+private struct AlertSoundSelectionView: View {
+    @State private var settings = AppSettings.shared
+
+    var body: some View {
+        @Bindable var settings = settings
+
+        List {
+            Section {
+                ForEach(AlertSoundPreference.allCases, id: \.self) { preference in
+                    Button {
+                        settings.alertSound = preference
+                    } label: {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: preference.systemImage)
+                                .font(.title3)
+                                .foregroundStyle(Color("BrandColor"))
+                                .frame(width: 30, height: 30)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(LocalizedStringKey(preference.titleKey))
+                                    .font(.body.weight(.medium))
+                                    .foregroundStyle(.primary)
+                                Text(LocalizedStringKey(preference.detailKey))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            Spacer(minLength: 8)
+                            if settings.alertSound == preference {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(Color("BrandColor"))
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        .padding(.vertical, 5)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(settings.alertSound == preference ? .isSelected : [])
+                }
+            }
+
+            Section {
+                Button {
+                    EmergencyAlertAudio.shared.preview(settings.alertSound)
+                } label: {
+                    Label("settings.alertSound.preview", systemImage: "play.circle.fill")
+                }
+            }
+
+            Section {
+                Label("settings.alertSound.disclosure", systemImage: "info.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("settings.alertSound.title")
+        .navigationBarTitleDisplayMode(.inline)
+    }
 }
 
 private struct TierChip: View {

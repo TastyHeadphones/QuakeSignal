@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, SOURCE_IDS } from "./core.js";
+import { DEFAULT_SETTINGS, SOURCE_IDS, isActiveWarning } from "./core.js";
 
 const $ = (id) => document.getElementById(id);
 const message = (key, substitutions) => chrome.i18n.getMessage(key, substitutions) || key;
@@ -29,7 +29,7 @@ function render(state) {
   $("connection").textContent = message("sourcesConnected", [String(connected), String(SOURCE_IDS.length)]);
   $("connection").classList.toggle("online", connected > 0);
 
-  const warning = events.find((event) => event.kind === "eew" && event.isWarn && !event.isCancel && !event.isTraining);
+  const warning = events.find((event) => isActiveWarning(event));
   const card = $("status-card");
   if (warning) {
     card.classList.add("warning");
@@ -103,4 +103,5 @@ chrome.runtime.onMessage.addListener((event) => {
   if (event?.type === "stateUpdated") void load();
 });
 chrome.runtime.sendMessage({ type: "clearBadge" }).catch(() => {});
+window.setInterval(() => void load(), 30_000);
 void load();

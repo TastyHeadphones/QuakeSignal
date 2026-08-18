@@ -1,0 +1,84 @@
+{
+  "version": 2,
+  "marketingVersion": "1.1",
+  "build": 7,
+  "configuration": "Release",
+  "platform": "iOS/iPadOS",
+  "rootDirectory": "screenshots-v1.1",
+  "locales": [
+    {
+      "directory": "en-US",
+      "appleLanguage": "en-US",
+      "appleLocale": "en_US"
+    },
+    {
+      "directory": "ja",
+      "appleLanguage": "ja",
+      "appleLocale": "ja_JP"
+    },
+    {
+      "directory": "zh-Hans",
+      "appleLanguage": "zh-Hans",
+      "appleLocale": "zh_CN"
+    }
+  ],
+  "displayClasses": {
+    "iphone-6.5": {
+      "device": "iPhone 11 Pro Max",
+      "portraitPixels": [
+        1242,
+        2688
+      ],
+      "upload": true
+    },
+    "ipad-13": {
+      "device": "iPad Pro 13-inch (M4)",
+      "portraitPixels": [
+        2064,
+        2752
+      ],
+      "upload": true
+    }
+  },
+  "frames": [
+    {
+      "file": "01-home.jpg",
+      "screen": "Home",
+      "purpose": "Current nearby earthquake report and at-a-glance service status",
+      "setup": "Generic Fukuoka city selection, no precise current location, loaded benign report state."
+    },
+    {
+      "file": "02-reports.jpg",
+      "screen": "Reports",
+      "purpose": "Filterable current and historical earthquake reports",
+      "setup": "Non-empty benign report list with ordinary source data."
+    },
+    {
+      "file": "03-map.jpg",
+      "screen": "Map",
+      "purpose": "Epicenter context, accessible markers, filters, and the native current-location control",
+      "setup": "Loaded ordinary report markers; no active-emergency simulation and no precise user location displayed."
+    },
+    {
+      "file": "04-guide.jpg",
+      "screen": "Preparedness Guide",
+      "purpose": "Offline earthquake safety guidance and emergency-kit preparation",
+      "setup": "Normal guide root with no user-entered personal details."
+    },
+    {
+      "file": "05-alert-preferences.jpg",
+      "screen": "Alert Sound",
+      "purpose": "Selectable system, original urgent-tone, and licensed Japanese safety-voice alert options",
+      "setup": "Japanese safety voice selected; disclosure credits HTS Voice Mei under CC BY 3.0 and states that it is not an official J-Alert or JMA broadcast."
+    }
+  ],
+  "captureSetup": {
+    "onboardingComplete": true,
+    "cityId": "fukuoka",
+    "useCurrentLocation": false,
+    "radiusKm": 300,
+    "minimumMagnitude": 3,
+    "alertSound": "japanese-voice",
+    "statusBarTime": "09:41"
+  }
+}

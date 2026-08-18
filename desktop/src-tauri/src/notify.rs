@@ -1,5 +1,6 @@
 use crate::alarm;
-use crate::domain::{EventKind, NormalizedEvent, NotifyReason};
+use crate::domain::{NormalizedEvent, NotifyReason};
+use crate::filter;
 use crate::settings::Settings;
 use tauri::AppHandle;
 use tauri_plugin_notification::NotificationExt;
@@ -139,7 +140,8 @@ pub fn dispatch(
     let body = render(s.body_template, event);
 
     let mut builder = app.notification().builder().title(s.title).body(&body);
-    if event.is_severe() && reason != NotifyReason::Cancelled && reason != NotifyReason::Training {
+    let urgent = filter::is_urgent_warning_presentation(event, reason);
+    if urgent && event.is_severe() {
         builder = builder.sound("default");
     }
     if let Err(e) = builder.show() {
@@ -148,14 +150,7 @@ pub fn dispatch(
 
     alarm::play_for_event(settings, event, reason);
 
-    let should_pop_alert_window = event.kind == EventKind::Eew
-        && matches!(
-            reason,
-            NotifyReason::New
-                | NotifyReason::Updated
-                | NotifyReason::Final
-                | NotifyReason::Cancelled
-        );
+    let should_pop_alert_window = urgent;
     if should_pop_alert_window {
         if let Err(e) = crate::alert_window::show_alert(app, event, reason, &lang) {
             log::warn!("failed to show alert window: {e}");

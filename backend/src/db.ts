@@ -7,6 +7,7 @@ import type { WolfxSourceId } from "./types/wolfx.js";
 import { createLogger } from "./logger.js";
 import { haversineDistanceKm } from "./util/geo.js";
 import { isQuietHours } from "./util/time.js";
+import { normalizedAlertSound, reconcileEventRevision } from "./push/policy.js";
 
 const log = createLogger("db");
 
@@ -27,6 +28,8 @@ db.exec(`
     sources TEXT NOT NULL,
     min_magnitude REAL NOT NULL DEFAULT 0,
     critical_alerts_enabled INTEGER NOT NULL DEFAULT 0,
+    alert_sound TEXT NOT NULL DEFAULT 'system'
+      CHECK (alert_sound IN ('system', 'urgent-tone', 'japanese-voice')),
     city_name TEXT,
     latitude REAL,
     longitude REAL,
@@ -79,6 +82,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_events_source ON events(source_id);
 `);
 
+// `CREATE TABLE IF NOT EXISTS` does not add columns to an existing local
+// relay database. Upgrade the legacy SQLite schema in place while keeping the
+// same strict allow-list used by the public Worker registration endpoint.
+const deviceColumns = db.prepare("PRAGMA table_info(devices)").all() as Array<{
+  name: string;
+}>;
+if (!deviceColumns.some(({ name }) => name === "alert_sound")) {
+  db.exec(`
+    ALTER TABLE devices ADD COLUMN alert_sound TEXT NOT NULL DEFAULT 'system'
+      CHECK (alert_sound IN ('system', 'urgent-tone', 'japanese-voice'))
+  `);
+}
+
 log.info(`sqlite ready at ${config.dbPath}`);
 
 function rowToDevice(row: any): DeviceRecord {
@@ -91,6 +107,7 @@ function rowToDevice(row: any): DeviceRecord {
     // Legacy schema column; the public bundle is not approved for Critical
     // Alerts, so a persisted or forged preference can never enable them.
     criticalAlertsEnabled: false,
+    alertSound: normalizedAlertSound(row.alert_sound),
     cityName: row.city_name,
     latitude: row.latitude,
     longitude: row.longitude,
@@ -106,12 +123,12 @@ function rowToDevice(row: any): DeviceRecord {
 const upsertDeviceStmt = db.prepare(`
   INSERT INTO devices (
     token, environment, locale, sources, min_magnitude, critical_alerts_enabled,
-    city_name, latitude, longitude, radius_km, include_test_alerts,
+    alert_sound, city_name, latitude, longitude, radius_km, include_test_alerts,
     utc_offset_minutes, notify_at_night, created_at, updated_at
   )
   VALUES (
     @token, @environment, @locale, @sources, @minMagnitude, @criticalAlertsEnabled,
-    @cityName, @latitude, @longitude, @radiusKm, @includeTestAlerts,
+    @alertSound, @cityName, @latitude, @longitude, @radiusKm, @includeTestAlerts,
     @utcOffsetMinutes, @notifyAtNight, @now, @now
   )
   ON CONFLICT(token) DO UPDATE SET
@@ -120,6 +137,7 @@ const upsertDeviceStmt = db.prepare(`
     sources = excluded.sources,
     min_magnitude = excluded.min_magnitude,
     critical_alerts_enabled = excluded.critical_alerts_enabled,
+    alert_sound = excluded.alert_sound,
     city_name = excluded.city_name,
     latitude = excluded.latitude,
     longitude = excluded.longitude,
@@ -139,6 +157,7 @@ export function upsertDevice(input: DeviceRegistrationInput): DeviceRecord {
     sources: JSON.stringify(input.sources),
     minMagnitude: input.minMagnitude,
     criticalAlertsEnabled: 0,
+    alertSound: input.alertSound,
     cityName: input.cityName,
     latitude: input.latitude,
     longitude: input.longitude,
@@ -249,57 +268,68 @@ const upsertEventStmt = db.prepare(`
     magnitude = excluded.magnitude,
     depth = excluded.depth,
     max_intensity = excluded.max_intensity,
-    is_warn = excluded.is_warn,
-    is_final = excluded.is_final,
-    is_cancel = excluded.is_cancel,
+    is_warn = CASE
+      WHEN excluded.serial = events.serial
+        THEN MAX(events.is_warn, excluded.is_warn)
+      ELSE excluded.is_warn
+    END,
+    is_final = MAX(events.is_final, excluded.is_final),
+    is_cancel = MAX(events.is_cancel, excluded.is_cancel),
     is_training = excluded.is_training,
     tsunami = excluded.tsunami,
     raw_json = excluded.raw_json,
     last_updated_utc = excluded.last_updated_utc
+  WHERE excluded.serial >= events.serial
 `);
 
 /** Insert-or-update and report back whether the row was new / what changed, so callers can decide whether to push. */
-export function upsertEvent(event: NormalizedEvent): { previous: NormalizedEvent | null } {
+export function upsertEvent(event: NormalizedEvent): {
+  previous: NormalizedEvent | null;
+  acceptedEvent: NormalizedEvent | null;
+} {
   const previous = getEvent(event.id);
+  const acceptedEvent = reconcileEventRevision(event, previous);
+  if (acceptedEvent === null) return { previous, acceptedEvent: null };
   const now = new Date().toISOString();
   upsertEventStmt.run({
-    id: event.id,
-    sourceId: event.sourceId,
-    eventId: event.eventId,
-    serial: event.serial,
-    kind: event.kind,
-    originTimeUtc: event.originTimeUtc,
-    reportTimeUtc: event.reportTimeUtc,
-    hypocenter: event.hypocenter,
-    latitude: event.latitude,
-    longitude: event.longitude,
-    magnitude: event.magnitude,
-    depth: event.depth,
-    maxIntensity: event.maxIntensity,
-    isWarn: event.isWarn ? 1 : 0,
-    isFinal: event.isFinal ? 1 : 0,
-    isCancel: event.isCancel ? 1 : 0,
-    isTraining: event.isTraining ? 1 : 0,
-    tsunami: event.tsunami,
-    rawJson: JSON.stringify(event.raw ?? null),
+    id: acceptedEvent.id,
+    sourceId: acceptedEvent.sourceId,
+    eventId: acceptedEvent.eventId,
+    serial: acceptedEvent.serial,
+    kind: acceptedEvent.kind,
+    originTimeUtc: acceptedEvent.originTimeUtc,
+    reportTimeUtc: acceptedEvent.reportTimeUtc,
+    hypocenter: acceptedEvent.hypocenter,
+    latitude: acceptedEvent.latitude,
+    longitude: acceptedEvent.longitude,
+    magnitude: acceptedEvent.magnitude,
+    depth: acceptedEvent.depth,
+    maxIntensity: acceptedEvent.maxIntensity,
+    isWarn: acceptedEvent.isWarn ? 1 : 0,
+    isFinal: acceptedEvent.isFinal ? 1 : 0,
+    isCancel: acceptedEvent.isCancel ? 1 : 0,
+    isTraining: acceptedEvent.isTraining ? 1 : 0,
+    tsunami: acceptedEvent.tsunami,
+    rawJson: JSON.stringify(acceptedEvent.raw ?? null),
     now,
   });
 
-  if (isMeaningfulRevision(event, previous)) {
+  const persistedEvent = getEvent(acceptedEvent.id) ?? acceptedEvent;
+  if (isMeaningfulRevision(persistedEvent, previous)) {
     insertRevisionStmt.run({
-      eventRef: event.id,
-      serial: event.serial,
-      magnitude: event.magnitude,
-      maxIntensity: event.maxIntensity,
-      isWarn: event.isWarn ? 1 : 0,
-      isFinal: event.isFinal ? 1 : 0,
-      isCancel: event.isCancel ? 1 : 0,
-      reportTimeUtc: event.reportTimeUtc,
+      eventRef: persistedEvent.id,
+      serial: persistedEvent.serial,
+      magnitude: persistedEvent.magnitude,
+      maxIntensity: persistedEvent.maxIntensity,
+      isWarn: persistedEvent.isWarn ? 1 : 0,
+      isFinal: persistedEvent.isFinal ? 1 : 0,
+      isCancel: persistedEvent.isCancel ? 1 : 0,
+      reportTimeUtc: persistedEvent.reportTimeUtc,
       now,
     });
   }
 
-  return { previous };
+  return { previous, acceptedEvent: persistedEvent };
 }
 
 export function listRecentEvents(limit = 50, sourceId?: string): NormalizedEvent[] {

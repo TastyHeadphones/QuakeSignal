@@ -182,7 +182,8 @@ actor AppAttestClient {
             guard mayRotateKey,
                   AppAttestProofRecoveryPolicy.action(
                       for: error,
-                      proofType: challenge.proofType
+                      proofType: challenge.proofType,
+                      operation: binding.operation
                   ) == .replaceKey else {
                 throw AppAttestError.proofGenerationFailed(underlying: error)
             }
@@ -320,11 +321,18 @@ enum AppAttestProofRecoveryAction: Equatable {
 enum AppAttestProofRecoveryPolicy {
     static func action(
         for error: Error,
-        proofType: AppAttestChallenge.ProofType
+        proofType: AppAttestChallenge.ProofType,
+        operation: AppAttestOperation
     ) -> AppAttestProofRecoveryAction {
         if error is CancellationError {
             return .fail
         }
+
+        // Registration is the only operation that can safely hand ownership
+        // to a replacement key. Rotating during deletion could discard the
+        // sole credential capable of removing the existing registration;
+        // rotating during a test would create a key that owns no device.
+        guard operation == .deviceRegistration else { return .fail }
 
         let nsError = error as NSError
         if proofType == .attestation,
@@ -401,7 +409,8 @@ struct AppAttestProofGenerator: Sendable {
                 } catch {
                     guard AppAttestProofRecoveryPolicy.action(
                         for: error,
-                        proofType: .attestation
+                        proofType: .attestation,
+                        operation: .deviceRegistration
                     ) == .retrySameKey else {
                         throw error
                     }

@@ -159,13 +159,19 @@ function seedChallenge(sqlite, challenge, now, environment = "production") {
     );
 }
 
-function registrationValues(token, now, environment = "production") {
+function registrationValues(
+  token,
+  now,
+  environment = "production",
+  alertSound = "system",
+) {
   return {
     token,
     environment,
     locale: null,
     sources: '["jma_eew"]',
     minMagnitude: 0,
+    alertSound,
     cityName: null,
     latitude: null,
     longitude: null,
@@ -244,7 +250,7 @@ test("complete attested registration safely recovers an exact token after key ro
     }
 
     adapter = localD1Adapter(databaseFile);
-    const values = registrationValues(token, now);
+    const values = registrationValues(token, now, "production", "japanese-voice");
     const assertionOutcome = await completeAttestedRegistration(
       adapter.database,
       authorization(assertionKey, "assertion"),
@@ -264,9 +270,12 @@ test("complete attested registration safely recovers an exact token after key ro
     );
     assert.equal(recoveryOutcome, "completed");
     assert.deepEqual(
-      adapter.all("SELECT app_attest_key_id FROM devices WHERE token = ?", token),
-      [{ app_attest_key_id: freshKey }],
-      "a fresh attestation plus the exact token must rebind one subscription",
+      adapter.all(
+        "SELECT app_attest_key_id, alert_sound FROM devices WHERE token = ?",
+        token,
+      ),
+      [{ app_attest_key_id: freshKey, alert_sound: "japanese-voice" }],
+      "a fresh attestation must rebind the subscription and its validated sound",
     );
     assert.deepEqual(
       adapter.all("SELECT key_id FROM app_attest_keys ORDER BY key_id"),

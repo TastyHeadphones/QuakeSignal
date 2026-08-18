@@ -49,15 +49,12 @@ fn pattern_for(
         #[cfg(feature = "macos-app-store")]
         return None;
     }
-    if event.is_training
-        || event.is_cancel
-        || matches!(reason, NotifyReason::Cancelled | NotifyReason::Training)
-    {
-        return None;
-    }
-    match event.kind {
-        EventKind::Eew => Some(AlarmPattern::Warning),
-        EventKind::Report => Some(AlarmPattern::Report),
+    match (event.kind, reason) {
+        (EventKind::Eew, _) if crate::filter::is_urgent_warning_presentation(event, reason) => {
+            Some(AlarmPattern::Warning)
+        }
+        (EventKind::Report, NotifyReason::Report) => Some(AlarmPattern::Report),
+        _ => None,
     }
 }
 
@@ -208,6 +205,20 @@ mod tests {
         training.is_training = true;
         assert_eq!(
             pattern_for(&settings, &training, NotifyReason::Training, false),
+            None
+        );
+
+        let mut informational = event(EventKind::Eew);
+        informational.is_warn = false;
+        assert_eq!(
+            pattern_for(&settings, &informational, NotifyReason::New, false),
+            None
+        );
+
+        let mut final_event = event(EventKind::Eew);
+        final_event.is_final = true;
+        assert_eq!(
+            pattern_for(&settings, &final_event, NotifyReason::Final, false),
             None
         );
 

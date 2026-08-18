@@ -7,5 +7,6 @@ export const api = {
   listRecentEvents: (limit = 100) => invoke<NormalizedEvent[]>("list_recent_events", { limit }),
   listRevisions: (eventId: string) => invoke<NormalizedEvent[]>("list_revisions", { eventId }),
   getConnectionStatus: () => invoke<Record<string, boolean>>("get_connection_status"),
+  getDatabasePersistenceAvailable: () => invoke<boolean>("get_database_persistence_available"),
   getPendingAlert: () => invoke<PendingAlert | null>("get_pending_alert"),
 };

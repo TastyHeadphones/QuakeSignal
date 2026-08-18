@@ -13,6 +13,7 @@ struct DeviceRegistrationRequest: Encodable {
     let includeTestAlerts: Bool
     let utcOffsetMinutes: Int
     let notifyAtNight: Bool
+    let alertSound: AlertSoundPreference
 }
 
 /// The token-bearing request used by the ordinary, user-visible test alert.

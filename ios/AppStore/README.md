@@ -1,9 +1,11 @@
 # App Store Connect release kit
 
 This directory is the source of truth for QuakeSignal's localized App Store
-metadata and screenshot plan. Upload only assets captured from the signed,
-shipping build; never use a system permission prompt, a real device token, an
-exact current location, or a test-push result in product-page imagery.
+metadata and screenshot plan. Upload only assets captured from the frozen
+public `Release` UI that matches the shipping build; a simulator capture is
+acceptable only when its exact runtime and source are recorded in the release
+provenance. Never use a system permission prompt, a real device token, an exact
+current location, or a test-push result in product-page imagery.
 
 | App Store Connect field | Versioned source |
 | --- | --- |
@@ -12,7 +14,7 @@ exact current location, or a test-push result in product-page imagery.
 | App Review notes | `review-notes.txt` |
 | Submission-answer worksheet | `submission-answers.md` |
 | Pre-submission checklist | `submission-checklist.md` |
-| Screenshot provenance / signed-candidate approval | `screenshot-provenance.json` |
+| Release 1.1 screenshot provenance | `screenshot-provenance-v1.1.json` |
 
 ## App record
 
@@ -31,7 +33,7 @@ Purchase.
 - Primary category: Weather
 - Secondary category: Utilities
 - Price: Free
-- Version: `1.0`
+- Version: `1.1`
 - Copyright: `2026 UniSphereco LLC`
 
 The bundle ID must be registered to the selected Apple Developer team before
@@ -40,45 +42,25 @@ archiving. If `com.quakesignal.app` is unavailable in that team, change it in
 
 ### Build-number rule
 
-TestFlight build `1.0 (2)` is already uploaded to the internal QA group. It is
-a **legacy QA-only** archive uploaded before the current `InternalQA`
-configuration existed; it includes **Schedule Background Test Alert**, a
-delayed-training feature that is deliberately absent from a public `Release`
-archive. Use build `2` only to collect the physical-device evidence in the
-TestFlight runbook. Do not attach it to the App Store version, select it for
-App Review, or release it publicly.
+Version `1.0` build `6` is already Ready for Distribution. Builds `2` through
+`5` are historical QA or superseded archives and must not be attached to the
+1.1 submission.
 
-App Store Connect will reject a repeat upload with the same build number. The
-checked-in replacement-candidate source is coordinated for `CFBundleVersion`
-`6`: `CURRENT_PROJECT_VERSION` is `6`, the Worker App Attest allow-list is
-`1,2,3,4,5,6`, and the protected archive workflow defaults to `6`. Older
-allowlisted versions are preserved deliberately for existing clients. The
-protected workflow signed and uploaded `1.0 (3)` to TestFlight in
-[run 31784685472](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31784685472).
-Physical use exposed location-selection and foreground test-alert defects, so
-build `3` is superseded and must not be attached or submitted. The protected
-workflow signed and uploaded build `4` in
-[run 31793143181](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31793143181);
-App Store Connect has processed it and assigned it to `QuakeSignal Internal
-QA`. Device use then exposed an App Attest proof-recovery failure and remaining
-current-location state defects, so build `4` is also superseded and must not be
-attached or submitted. The protected workflow signed and uploaded build `5` in
-[run 31811106548](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/31811106548).
-Device use then exposed a server-rejected App Attest credential recovery gap,
-an incorrect denied-location selection transition, and notification-settings
-routing that still needed repair, so build `5` is also superseded. Build `6`
-contains the coordinated replacements; it is not a review candidate until its
-protected upload has completed. Upload, processing, and internal
-group assignment do not by themselves establish physical-device evidence,
-Content Rights, protected launch promotion, App Review, or public release. The
-checked-in verifier rejects a mismatched manual `build_number`, Xcode project,
-Worker policy, or archive command before signing material is used. It also
-derives a non-secret policy fingerprint; the protected archive flow requires
-the live production `/healthz` response to match that fingerprint and admit the
-selected build before certificate import. This is deployment-consistency
-evidence, not a claim that every iOS 17–26 App Attest proof carries optional
-Apple release metadata. Do not override only the workflow input or reuse build
-`2`.
+App Store Connect rejects a repeat upload with the same build number. The
+checked-in release candidate is coordinated as version `1.1`,
+`CFBundleVersion` `7`: `CURRENT_PROJECT_VERSION` is `7`, the Worker App Attest
+allow-list is `1,2,3,4,5,6,7`, and the protected archive workflow defaults to
+`7`. Older allowlisted versions remain deliberately available to installed
+clients. Deploy migration `0010` and the matching Worker policy before
+uploading build `7`; the protected archive lane then proves the live
+`/healthz` fingerprint admits that build before certificate import.
+
+Upload, processing, and internal group assignment do not by themselves
+establish physical-device evidence, Content Rights, protected launch
+promotion, App Review, or public release. The checked-in verifier rejects a
+mismatched manual `build_number`, Xcode project, Worker policy, or archive
+command before signing material is used. Do not override only the workflow
+input or reuse a historical build number.
 The protected TestFlight archive and production Worker deployment share a
 non-cancelling concurrency lock, so the checked live policy cannot change
 between that smoke proof and IPA upload.
@@ -167,30 +149,31 @@ pending field.
 ## Required release assets
 
 - 1024 × 1024 App Store icon: already in `Assets.xcassets`
-- 1–10 iPhone screenshots per localization; the five planned frames are in
-  [`screenshot-manifest.json`](./screenshot-manifest.json)
-- Primary product-page set: 6.5-inch portrait, at `1242 × 2688` pixels
-- Optional QA/reference sets: 6.9-inch portrait, at `1260 × 2736`,
-  `1290 × 2796`, or `1320 × 2868` pixels; or 6.3-inch portrait, at
-  `1179 × 2556` or `1206 × 2622` pixels
+- Release 1.1 screenshot inventory: exactly the 30 files declared by
+  [`screenshot-manifest-v1.1.json`](./screenshot-manifest-v1.1.json) and
+  [`screenshot-provenance-v1.1.json`](./screenshot-provenance-v1.1.json)
+- Five 6.5-inch iPhone portrait screenshots per localization at
+  `1242 × 2688` pixels
+- Five 13-inch iPad portrait screenshots per localization at
+  `2064 × 2752` pixels
 - JPEG or PNG only, with no alpha channel or transparency. The capture helper
   emits high-quality JPEG files to guarantee an uploadable, opaque asset.
 
-The existing files in `docs/screenshots/` are 6.3-inch reference images only.
-They contain an alpha channel and must not be uploaded as-is.
+Do not upload the legacy `screenshot-manifest.json`, `screenshot-provenance.json`,
+`screenshots/`, or `docs/screenshots/` sets for release 1.1. They predate the
+iPad-capable target and the final map/alert-preference UI.
 
 ### Capture workflow
 
-1. Build and install the exact signed public `Release` candidate (build `3` or
-   later) on an iPhone 6.5-inch Simulator or supported physical device. Before
-   uploading, replace the pending record in
-   [`screenshot-provenance.json`](./screenshot-provenance.json) with the
-   archive/IPA SHA-256, source commit, build number, device/OS, capture time,
-   and reviewer approval. The committed screenshots are structurally valid
-   drafts, not evidence for an earlier build or public submission.
-2. If only the current `QuakeSignal Test` simulator is available, capture an
-   optional 6.3-inch QA set and create the primary set later on a supported
-   6.5-inch simulator.
+1. Build and install the exact public `Release` candidate for version 1.1,
+   build 7, on the devices named in
+   [`screenshot-manifest-v1.1.json`](./screenshot-manifest-v1.1.json). Before
+   uploading, verify that
+   [`screenshot-provenance-v1.1.json`](./screenshot-provenance-v1.1.json)
+   records the frozen release commit and that every listed SHA-256 still
+   matches.
+2. Capture both the primary 6.5-inch iPhone and 13-inch iPad sets. Do not
+   substitute a legacy 6.3-inch QA/reference set for either upload family.
 3. For each locale, launch the installed app with the matching language and
    locale. For example, after the app has been installed:
 
@@ -213,13 +196,16 @@ They contain an alpha channel and must not be uploaded as-is.
    ```sh
    ios/AppStore/scripts/capture-screenshot.sh \
      --device booted --class 6.5 en-US 01-home
+
+   ios/AppStore/scripts/capture-screenshot.sh \
+     --device booted --class ipad-13 en-US 01-home
    ```
 
-   Use `--class 6.9` or `--class 6.3` only for optional QA/reference sets. The
-   helper writes `ios/AppStore/screenshots/<locale>/iphone-<class>/<frame>.jpg`.
-6. Review every capture at full size, then upload one consistent 6.5-inch
-   sequence per localization to the iOS version in App Store Connect. Do not
-   mix display classes within one uploaded localization.
+   The helper defaults to `screenshots-v1.1` and writes each frame under the
+   matching locale and device-family directory.
+6. Review every capture at full size, then upload the complete iPhone and iPad
+   sequence for each localization to the iOS version in App Store Connect. Do
+   not mix display classes within one uploaded localization.
 
 Apple's current [screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/)
 allow one to ten screenshots and list the accepted display-size resolutions.
@@ -253,35 +239,30 @@ allow one to ten screenshots and list the accepted display-size resolutions.
 5. Open the existing App Store Connect record (Apple ID `6800642443`); do not
    create a duplicate. After the Cloudflare bootstrap has made the final URLs
    live, set its Privacy Policy and Support URLs to the values above and
-   complete the draft `1.0` metadata.
-6. Use the existing `1.0 (2)` **legacy QA-only** TestFlight upload for the
-   delayed background/locked/terminated production physical-device evidence in
-   step 8. It predates the current
-   InternalQA configuration but contains **Schedule Background Test Alert**;
-   it must not be used as the archive attached to the App Store version or
-   submitted as the public candidate.
+   complete the draft `1.1` metadata.
+6. Upload `1.1 (7)` through the protected TestFlight workflow. Historical 1.0
+   builds are not evidence for this release and must not be attached to the 1.1
+   App Store version.
 7. Complete age rating, content rights, privacy, export compliance, localized
    metadata, and screenshot fields.
    Before certifying content rights for Wolfx-supplied earthquake data, obtain
    and preserve written upstream permission using
    [`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md).
-8. After protected upload and processing, test the TestFlight-only replacement
-   Release candidate `1.0 (6)` on physical hardware
+8. After protected upload and processing, test release candidate `1.1 (7)` on
+   physical hardware
    for the normal production registration, refresh, unsubscribe, re-enrollment,
-   and controlled training-push evidence. Use the legacy QA-only build `1.0 (2)`
-   (or a later explicitly `InternalQA` build) for delayed background/locked/
-   terminated evidence. Follow the exact, privacy-safe
+   and controlled training-push evidence. Follow the exact, privacy-safe
    [`iOS TestFlight physical-device runbook`](../../docs/IOS_TESTFLIGHT_PHYSICAL_QA.md)
    for production App Attest registration, refresh, token-bound unsubscribe,
    key-owned empty-body unsubscribe, re-enrollment, and the controlled
    training-push path against
    `https://quakesignal-api.hopeso.workers.dev`; a Simulator or staging-bypass result is
-   insufficient. The runbook makes clear that deterministic
-   background/terminated APNs evidence requires the legacy QA-only build
-   `1.0 (2)`, or an explicitly later `InternalQA` build, with **Schedule
-   Background Test Alert**, plus a reviewed temporary production test window.
-   A public `Release` deliberately does not contain that control. The evidence
-   remains incomplete until it is exercised on a physical device.
+   insufficient. If deterministic background/terminated evidence requires an
+   `InternalQA` build with **Schedule Background Test Alert**, build it from the
+   frozen 1.1 source under the reviewed temporary production test window and
+   never attach it to App Review. A public `Release` deliberately does not
+   contain that control. The evidence remains incomplete until it is exercised
+   on a physical device.
    It also identifies the separate controlled evidence needed for a verified
    fresh-key rebind after reinstall/restore. Verify foreground live updates
    after the Wolfx WebSocket service has recovered. When a socket route is
@@ -290,9 +271,8 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    presenting a local emergency alert for the recovered history.
 9. Have a release reviewer promote
     `APP_ATTEST_PRODUCTION_ENFORCED=true` and run the protected Cloudflare
-    launch deployment with `bootstrap_testflight` disabled. This does not make
-    build `2` public; it remains a legacy QA-only evidence build.
-10. Only after build `1.0 (6)` is uploaded, processed, physically verified,
+    launch deployment with `bootstrap_testflight` disabled.
+10. Only after build `1.1 (7)` is uploaded, processed, physically verified,
     launch promotion and every other public-release gate are complete, attach
     it to the App Store version if it remains the accurate reviewed candidate.
     If the iOS
