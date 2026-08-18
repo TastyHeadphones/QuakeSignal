@@ -48,6 +48,50 @@ final class ScreenshotAutomationTests: XCTestCase {
         XCTAssertFalse(ScreenshotAutomation.isEnabled)
     }
 
+    func testMapTimelineUsesFixtureClockOnlyForScreenshotAutomation() {
+        let fixtureDate = Date(timeIntervalSince1970: 1_700_000_000)
+        var readLiveClock = false
+
+        let referenceDate = MapTimelineReference.resolve(
+            screenshotAutomationEnabled: true,
+            fixtureLastUpdated: fixtureDate
+        ) {
+            readLiveClock = true
+            return .distantFuture
+        }
+
+        XCTAssertEqual(referenceDate, fixtureDate)
+        XCTAssertFalse(readLiveClock)
+    }
+
+    func testMapTimelineFailsClosedWhenScreenshotFixtureDateIsMissing() {
+        var readLiveClock = false
+
+        let referenceDate = MapTimelineReference.resolve(
+            screenshotAutomationEnabled: true,
+            fixtureLastUpdated: nil
+        ) {
+            readLiveClock = true
+            return .distantFuture
+        }
+
+        XCTAssertNil(referenceDate)
+        XCTAssertFalse(readLiveClock)
+    }
+
+    func testMapTimelineUsesLiveClockOutsideScreenshotAutomation() {
+        let liveDate = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let referenceDate = MapTimelineReference.resolve(
+            screenshotAutomationEnabled: false,
+            fixtureLastUpdated: .distantPast
+        ) {
+            liveDate
+        }
+
+        XCTAssertEqual(referenceDate, liveDate)
+    }
+
     func testScreenshotFixturesAreFinalHistoricalReportsNeverWarningsOrTraining() throws {
         let fixtures = ScreenshotAutomation.finalizedHistoricalEvents
 #if DEBUG
