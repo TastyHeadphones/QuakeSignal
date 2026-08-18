@@ -47,7 +47,7 @@ enum ScreenshotAutomation {
                 kind: "report",
                 originTimeUtc: "2024-01-01T07:10:09Z",
                 reportTimeUtc: "2024-01-01T07:20:00Z",
-                hypocenter: "Noto Peninsula, Ishikawa",
+                hypocenter: "Noto Peninsula · Ishikawa",
                 latitude: 37.498,
                 longitude: 137.242,
                 magnitude: 7.6,

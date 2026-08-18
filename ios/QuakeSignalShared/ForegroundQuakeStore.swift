@@ -34,6 +34,13 @@ final class ForegroundQuakeStore {
         ForegroundHeadlinePolicy.headline(from: events, now: headlineEvaluationDate)
     }
 
+    /// Lets foreground-only companion views clearly label deterministic
+    /// screenshot data as historical. Public and InternalQA products contain
+    /// no fixture events, so this can never annotate live data by mistake.
+    var isShowingHistoricalFixture: Bool {
+        screenshotAutomationEnabled && !events.isEmpty
+    }
+
     func refresh(limit: Int = 24) async {
         guard !screenshotAutomationEnabled else { return }
         guard !isLoading else { return }

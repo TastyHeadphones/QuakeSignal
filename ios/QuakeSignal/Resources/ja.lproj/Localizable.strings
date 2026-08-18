@@ -332,8 +332,11 @@
 "platform.alertRegistration.unavailable.error" = "このプラットフォームでは安全なバックグラウンド通知登録を利用できません。";
 "platform.foreground.badge" = "フォアグラウンドのみ";
 "platform.foreground.refreshUnavailable" = "地震情報を一時的に取得できません。";
+"platform.historical.badge" = "履歴";
+"platform.historical.reports" = "過去の地震情報";
 "platform.tv.title" = "地震情報ダッシュボード";
 "platform.tv.foregroundOnly.detail" = "Apple TVでは、この画面を開いている間だけ地震情報を更新します。バックグラウンド通知の登録は行いません。";
 "platform.watch.foregroundOnly.detail" = "Watchアプリを開いて更新してください。安全なコンパニオン配信に対応するまでは、バックグラウンド通知はペアリングしたiPhoneで受信します。";
+"platform.watch.foregroundOnly.short" = "開いている間に更新。通知はペアリング中のiPhoneで受信します。";
 "platform.refresh" = "更新";
 "platform.loading" = "地震情報を読み込み中…";

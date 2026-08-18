@@ -12,6 +12,7 @@ on:
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
       - "ios/QuakeSignal/Supporting/Info.plist"
+      - "ios/ScreenshotAutomation/**"
       - "backend/cloudflare/wrangler.jsonc"
       - "backend/cloudflare/scripts/smoke-test.mjs"
       - "backend/cloudflare/scripts/smoke-test-policy.mjs"
@@ -28,6 +29,7 @@ on:
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
       - "ios/QuakeSignal/Supporting/Info.plist"
+      - "ios/ScreenshotAutomation/**"
       - "backend/cloudflare/wrangler.jsonc"
       - "backend/cloudflare/scripts/smoke-test.mjs"
       - "backend/cloudflare/scripts/smoke-test-policy.mjs"
@@ -90,6 +92,17 @@ jobs:
         run: |
           set -euo pipefail
           ruby .github/scripts/verify-store-assets.test.rb
+
+      - name: Test credential-free Apple screenshot harness
+        run: |
+          set -euo pipefail
+          bash -n ios/ScreenshotAutomation/capture-platform-screenshot.sh
+          bash -n ios/ScreenshotAutomation/watch-capture-guard.sh
+          bash -n ios/ScreenshotAutomation/watch-capture-guard.test.sh
+          /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
+          bash ios/ScreenshotAutomation/watch-capture-guard.test.sh
+          /usr/bin/ruby ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
 
       - name: Test iOS release contract
         run: |

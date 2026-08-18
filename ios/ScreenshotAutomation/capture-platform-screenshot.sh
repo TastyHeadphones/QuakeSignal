@@ -14,6 +14,9 @@ rejected so review candidates remain CI/manual artifacts until approved.
 Optional environment:
   QUAKESIGNAL_SCREENSHOT_LOCALE=en|ja|zh-Hans  (default: en)
   QUAKESIGNAL_SCREENSHOT_KEEP_SIMULATOR=1      (preserve disposable simulator)
+  QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT=/absolute/path.json
+      Write an explicitly unapproved capture sidecar containing the exact
+      selected Simulator runtime identifier and device type/model.
 USAGE
 }
 
@@ -26,6 +29,7 @@ platform="$1"
 requested_output="$2"
 locale="${QUAKESIGNAL_SCREENSHOT_LOCALE:-en}"
 keep_simulator="${QUAKESIGNAL_SCREENSHOT_KEEP_SIMULATOR:-0}"
+requested_provenance_output="${QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT:-}"
 
 case "$locale" in
   en) apple_locale="en_US" ;;
@@ -40,6 +44,7 @@ esac
 script_dir="$(cd "$(dirname "$0")" && pwd -P)"
 ios_root="$(cd "$script_dir/.." && pwd -P)"
 repo_root="$(cd "$ios_root/.." && pwd -P)"
+source "$script_dir/watch-capture-guard.sh"
 
 if [[ "$requested_output" != /* ]] || [[ "$requested_output" != *.png ]]; then
   echo "error: output must be an absolute .png path" >&2
@@ -60,6 +65,29 @@ esac
 if [ -e "$output" ]; then
   echo "error: refusing to overwrite existing artifact: $output" >&2
   exit 73
+fi
+
+provenance_output=""
+if [ -n "$requested_provenance_output" ]; then
+  if [[ "$requested_provenance_output" != /* ]] || [[ "$requested_provenance_output" != *.json ]]; then
+    echo "error: provenance output must be an absolute .json path" >&2
+    exit 64
+  fi
+
+  provenance_output_dir="$(dirname "$requested_provenance_output")"
+  mkdir -p "$provenance_output_dir"
+  provenance_output_dir="$(cd "$provenance_output_dir" && pwd -P)"
+  provenance_output="$provenance_output_dir/$(basename "$requested_provenance_output")"
+  case "$provenance_output" in
+    "$repo_root"/*)
+      echo "error: provenance output must be outside the repository: $repo_root" >&2
+      exit 64
+      ;;
+  esac
+  if [ -e "$provenance_output" ]; then
+    echo "error: refusing to overwrite existing provenance artifact: $provenance_output" >&2
+    exit 73
+  fi
 fi
 
 case "$platform" in
@@ -146,8 +174,11 @@ runtime_identifier="$({ xcrun simctl list runtimes available -j; } | /usr/bin/ru
 temporary_root="$(mktemp -d "${TMPDIR:-/tmp}/quakesignal-screenshot.XXXXXX")"
 simulator_id=""
 paired_phone_id=""
+screenshot_pid=""
+watch_reactivation_pid=""
 
 cleanup() {
+  quakesignal_stop_processes "$screenshot_pid" "$watch_reactivation_pid"
   if [ -n "$simulator_id" ] && [ "$keep_simulator" != "1" ]; then
     xcrun simctl shutdown "$simulator_id" >/dev/null 2>&1 || true
     xcrun simctl delete "$simulator_id" >/dev/null 2>&1 || true
@@ -158,10 +189,13 @@ cleanup() {
   fi
   rm -rf "$temporary_root"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 available_device_types="$(xcrun simctl list devicetypes -j)"
 selected_device_type=""
+selected_device_model=""
 for candidate in "${device_types[@]}"; do
   if ! /usr/bin/ruby -rjson -e '
     requested = ARGV.fetch(0)
@@ -177,6 +211,13 @@ for candidate in "${device_types[@]}"; do
       "$runtime_identifier" 2>/dev/null)"; then
     simulator_id="$created_id"
     selected_device_type="$candidate"
+    selected_device_model="$(/usr/bin/ruby -rjson -e '
+      requested = ARGV.fetch(0)
+      types = JSON.parse(STDIN.read).fetch("devicetypes")
+      selected = types.find { |type| type["identifier"] == requested }
+      abort "missing selected device type" unless selected
+      puts selected.fetch("name")
+    ' "$candidate" <<<"$available_device_types")"
     break
   fi
 done
@@ -200,6 +241,7 @@ fi
 
 echo "Using runtime: $runtime_identifier"
 echo "Using device:  $selected_device_type"
+echo "Device model:  $selected_device_model"
 echo "Simulator:     $simulator_id"
 
 if [ "$platform" = "watchos" ]; then
@@ -284,15 +326,19 @@ fi
 
 xcrun simctl install "$simulator_id" "$app_path"
 
-/usr/bin/env \
-  SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1 \
-  "SIMCTL_CHILD_AppleLanguages=($locale)" \
-  "SIMCTL_CHILD_AppleLocale=$apple_locale" \
-  SIMCTL_CHILD_TZ=UTC \
-  xcrun simctl launch --terminate-running-process \
+launch_fixture_app() {
+  /usr/bin/env \
+    SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1 \
+    "SIMCTL_CHILD_AppleLanguages=($locale)" \
+    "SIMCTL_CHILD_AppleLocale=$apple_locale" \
+    SIMCTL_CHILD_TZ=UTC \
+    xcrun simctl launch "$@" \
     "$simulator_id" \
     "$bundle_id" \
     --quakesignal-screenshot-automation
+}
+
+launch_fixture_app --terminate-running-process
 
 # SwiftUI needs a short, bounded settling period after the process becomes
 # launchable. The fixture does not issue network or permission requests.
@@ -301,7 +347,20 @@ sleep 5
 candidate="$temporary_root/$platform-$locale.png"
 # Simulator's black device mask preserves native pixels while avoiding a
 # transparent corner channel on rounded Watch captures.
-xcrun simctl io "$simulator_id" screenshot --type=png --mask=black "$candidate"
+if [ "$platform" = "watchos" ]; then
+  # CoreSimulator can take several minutes to service the first Watch
+  # screenshot request. Restart it deterministically every 45 seconds so
+  # watchOS cannot return to the clock after its two-minute foreground timeout,
+  # and stop all child work at a five-minute hard deadline.
+  if ! quakesignal_capture_watch_screenshot \
+      "$simulator_id" "$bundle_id" "$candidate" "$locale" "$apple_locale" \
+      300 45; then
+    echo "error: Watch screenshot capture failed while maintaining foreground state" >&2
+    exit 70
+  fi
+else
+  xcrun simctl io "$simulator_id" screenshot --type=png --mask=black "$candidate"
+fi
 
 pixel_width="$(sips -g pixelWidth "$candidate" | awk '/pixelWidth:/ { print $2 }')"
 pixel_height="$(sips -g pixelHeight "$candidate" | awk '/pixelHeight:/ { print $2 }')"
@@ -317,10 +376,59 @@ if [ "$has_alpha" = "yes" ]; then
   exit 65
 fi
 
+if [ "$platform" = "watchos" ]; then
+  # The deterministic Watch fixture always renders platform.foreground.badge
+  # in CautionColor (#ff9500) near the top of the app. Convert only a temporary
+  # validation copy to an uncompressed BMP so stock Ruby can inspect pixels;
+  # the native PNG remains untouched. Reject clock-face or other stale captures.
+  watch_validation_bmp="$temporary_root/watch-foreground-validation.bmp"
+  sips -s format bmp "$candidate" --out "$watch_validation_bmp" >/dev/null
+  /usr/bin/ruby "$script_dir/validate-watch-foreground-badge.rb" \
+    "$watch_validation_bmp" "$expected_width" "$expected_height"
+fi
+
 mv "$candidate" "$output"
-shasum -a 256 "$output"
+screenshot_sha256="$(shasum -a 256 "$output" | awk '{ print $1 }')"
+echo "$screenshot_sha256  $output"
 echo "Captured native review candidate: $output (${pixel_width}x${pixel_height})"
 echo "This artifact still requires named visual review before any metadata upload."
+
+if [ -n "$provenance_output" ]; then
+  export CAPTURE_PLATFORM="$platform"
+  export CAPTURE_LOCALE="$locale"
+  export CAPTURE_SCREENSHOT_FILE="$(basename "$output")"
+  export CAPTURE_SCREENSHOT_SHA256="$screenshot_sha256"
+  export CAPTURE_PIXEL_WIDTH="$pixel_width"
+  export CAPTURE_PIXEL_HEIGHT="$pixel_height"
+  export CAPTURE_RUNTIME_IDENTIFIER="$runtime_identifier"
+  export CAPTURE_DEVICE_TYPE_IDENTIFIER="$selected_device_type"
+  export CAPTURE_DEVICE_MODEL="$selected_device_model"
+  export CAPTURE_SIMULATOR_UDID="$simulator_id"
+  /usr/bin/ruby -rjson -rtime -e '
+    metadata = {
+      schemaVersion: 1,
+      status: "unapproved-debug-simulator-capture-evidence",
+      uploadApproved: false,
+      platform: ENV.fetch("CAPTURE_PLATFORM"),
+      locale: ENV.fetch("CAPTURE_LOCALE"),
+      screenshotFile: ENV.fetch("CAPTURE_SCREENSHOT_FILE"),
+      screenshotSha256: ENV.fetch("CAPTURE_SCREENSHOT_SHA256"),
+      pixels: [
+        Integer(ENV.fetch("CAPTURE_PIXEL_WIDTH"), 10),
+        Integer(ENV.fetch("CAPTURE_PIXEL_HEIGHT"), 10)
+      ],
+      capturedAtUtc: Time.now.utc.iso8601,
+      selectedSimulator: {
+        runtimeIdentifier: ENV.fetch("CAPTURE_RUNTIME_IDENTIFIER"),
+        deviceTypeIdentifier: ENV.fetch("CAPTURE_DEVICE_TYPE_IDENTIFIER"),
+        deviceModel: ENV.fetch("CAPTURE_DEVICE_MODEL"),
+        udid: ENV.fetch("CAPTURE_SIMULATOR_UDID")
+      }
+    }
+    File.write(ARGV.fetch(0), JSON.pretty_generate(metadata) + "\n")
+  ' "$provenance_output"
+  echo "Recorded unapproved capture provenance: $provenance_output"
+fi
 
 if [ "$keep_simulator" = "1" ]; then
   echo "Preserved simulator: $simulator_id"

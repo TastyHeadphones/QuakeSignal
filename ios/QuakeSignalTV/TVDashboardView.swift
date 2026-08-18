@@ -25,7 +25,6 @@ struct TVDashboardView: View {
                     .padding(.vertical, 54)
                 }
             }
-            .navigationTitle("app.name")
         }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
@@ -61,6 +60,7 @@ struct TVDashboardView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .tint(Color("CautionColor"))
             .disabled(store.isLoading)
         }
     }
@@ -114,6 +114,7 @@ struct TVDashboardView: View {
                 )
             }
             .buttonStyle(.plain)
+            .foregroundStyle(.primary)
         } else if store.isLoading {
             ProgressView("platform.loading")
                 .controlSize(.large)
@@ -136,13 +137,24 @@ struct TVDashboardView: View {
     private var recentEvents: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text("home.section.recent")
-                    .font(.title2.bold())
+                if store.isShowingHistoricalFixture {
+                    Label("platform.historical.reports", systemImage: "clock.arrow.circlepath")
+                        .font(.title2.bold())
+                } else {
+                    Text("home.section.recent")
+                        .font(.title2.bold())
+                }
                 Spacer()
                 if let lastUpdated = store.lastUpdated {
-                    Text(L("home.status.lastUpdated", lastUpdated.formatted(date: .omitted, time: .shortened)))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    if store.isShowingHistoricalFixture {
+                        Text(lastUpdated.formatted(date: .abbreviated, time: .omitted))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(L("home.status.lastUpdated", lastUpdated.formatted(date: .omitted, time: .shortened)))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -160,6 +172,7 @@ struct TVDashboardView: View {
                         TVEventRow(event: event)
                     }
                     .buttonStyle(.plain)
+                    .foregroundStyle(.primary)
                 }
             }
         }
@@ -174,11 +187,14 @@ private struct TVEventRow: View {
             Text(event.magnitudeText)
                 .font(.title.bold().monospacedDigit())
                 .foregroundStyle(event.severity.color)
-                .frame(width: 90)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .frame(width: 130)
             VStack(alignment: .leading, spacing: 7) {
                 Text(event.hypocenter)
                     .font(.title3.weight(.semibold))
                     .lineLimit(1)
+                    .foregroundStyle(.primary)
                 HStack(spacing: 14) {
                     Text(event.reportStatus.labelKey)
                     Text(event.sourceLabelKey)

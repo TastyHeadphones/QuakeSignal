@@ -230,6 +230,10 @@ async function writeFixture(options = {}) {
   const files = fixtureFiles(options);
   files[".github/workflows/ios.yml"] = await fixtureWorkflow(options);
   files[".github/workflows/apple-platforms.yml"] = await fixturePlatformWorkflow(options);
+  files[".github/workflows/apple-platform-screenshots.yml"] = await readFile(
+    join(repositoryRoot, ".github/workflows/apple-platform-screenshots.yml"),
+    "utf8",
+  );
   files[".github/workflows/cloudflare.yml"] = await readFile(
     join(repositoryRoot, ".github/workflows/cloudflare.yml"),
     "utf8",
@@ -698,6 +702,38 @@ test("fails closed when build or release jobs reintroduce Simulator downloads", 
       await assert.rejects(
         verifyIOSReleaseContract({ root }),
         /must not download Simulator runtimes/i,
+      );
+    });
+  }
+});
+
+test("fails closed when the credential-free screenshot harness checks drift", async (t) => {
+  for (const [from, to] of [
+    [
+      "          bash -n ios/ScreenshotAutomation/watch-capture-guard.sh\n",
+      "          true # skipped Watch capture guard syntax check\n",
+    ],
+    [
+      "          bash ios/ScreenshotAutomation/watch-capture-guard.test.sh\n",
+      "          true # skipped Watch capture process-supervisor test\n",
+    ],
+    [
+      "          /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.rb\n",
+      "          true # skipped Watch foreground badge validator syntax check\n",
+    ],
+    [
+      "          /usr/bin/ruby ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb\n",
+      "          true # skipped Watch foreground badge validator test\n",
+    ],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/apple-platform-screenshots.yml");
+      const contents = await readFile(path, "utf8");
+      assert.ok(contents.includes(from), `screenshot workflow fixture must contain ${from.trim()}`);
+      await writeFile(path, contents.replace(from, to), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /native screenshot candidate workflow jobs must match the reviewed capture graph fingerprint/i,
       );
     });
   }

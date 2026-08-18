@@ -265,16 +265,19 @@ private struct QuickActionsRow: View {
             } label: {
                 QuickActionButtonLabel(labelKey: "tab.map", systemImage: "map")
             }
+            .buttonStyle(.plain)
             NavigationLink {
                 DisasterGuideView()
             } label: {
                 QuickActionButtonLabel(labelKey: "tab.guide", systemImage: "cross.case")
             }
+            .buttonStyle(.plain)
             NavigationLink {
                 SettingsView()
             } label: {
                 QuickActionButtonLabel(labelKey: "home.action.notify", systemImage: "bell")
             }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal)
     }
