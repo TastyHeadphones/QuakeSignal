@@ -27,8 +27,8 @@
         "udid": "6780874D-C761-4774-8EC2-3709E7390FED"
       }
     ],
-    "sourceBaselineCommit": "90074a8edf87a872ff36f065156e6ffc9bd755b8",
-    "sourceTreeState": "Release 1.1 working tree; record must be updated with the release commit before upload.",
+    "sourceBaselineCommit": "19b9260801e99a77b2352931dc2d701045d4eb94",
+    "sourceTreeState": "Frozen QuakeSignal 1.1 app source and release assets at this commit; the following release-record-only commit records this binding and locale conditions.",
     "method": "Installed Release simulator product, fixed status bar, deterministic non-sensitive settings, localized launch arguments, localized simulator system-language reboot for iPad status-bar dates, simctl JPEG capture."
   },
   "reviewNotes": [

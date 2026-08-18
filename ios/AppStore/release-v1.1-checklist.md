@@ -8,10 +8,11 @@ recorded in the existing submission documents.
 > describe the earlier iPhone-only 1.0 asset set.
 
 - Use `screenshot-manifest-v1.1.json`, not the earlier 1.0 manifest.
-- Upload the five JPEGs in `screenshots-v1.1/<locale>/iphone-6.5/` for each of
-  `en-US`, `ja`, and `zh-Hans`.
-- Upload the five JPEGs in `screenshots-v1.1/<locale>/ipad-13/` for each locale.
-- Copy the matching `whats_new_v1.1.txt` into each localization.
+- Upload the five JPEGs in `screenshots-v1.1/<locale>/iphone-6.5/` and the five
+  JPEGs in `screenshots-v1.1/<locale>/ipad-13/` for every approved locale.
+  English (`en-US`) is approved; keep `ja` and `zh-Hans` unpublished until the
+  product-page name, availability, and trademark approvals are recorded.
+- Copy the matching `whats_new_v1.1.txt` only into each approved localization.
 - Confirm `screenshot-provenance-v1.1.json` names the frozen release source and
   that all 30 file hashes still match immediately before upload.
 - Deploy D1 migration 0010 and the build-7 Worker contract first. Confirm the
