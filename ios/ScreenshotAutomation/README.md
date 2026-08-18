@@ -59,7 +59,30 @@ fixture, captures an untouched PNG, checks pixel size and alpha, prints its
 SHA-256, and deletes the simulator. Set
 `QUAKESIGNAL_SCREENSHOT_KEEP_SIMULATOR=1` only for manual visual debugging.
 For watchOS, it also creates and boots a disposable paired iPhone Simulator;
-no existing personal simulator pair is reused.
+no existing personal simulator pair is reused. CoreSimulator may take longer
+than watchOS's two-minute return-to-clock interval to service its first Watch
+screenshot. While that request is pending, the harness deterministically
+restarts QuakeSignal in the foreground every 45 seconds without changing
+private Simulator preferences. The screenshot and restart children share a
+five-minute hard deadline and are both stopped with bounded TERM-to-KILL
+cleanup on timeout or interruption.
+The harness then converts a temporary validation copy to BMP and fails closed
+unless the upper portion contains the orange `platform.foreground.badge`
+pixels. The native PNG is never converted or modified, and a clock-face capture
+is not emitted.
+
+The bounded Watch foreground supervisor has a credential-free shell test:
+
+```sh
+bash ios/ScreenshotAutomation/watch-capture-guard.test.sh
+/usr/bin/ruby ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
+```
+
+The tests exercise fast and slow captures, periodic
+`--terminate-running-process` reactivation, command failures, the wall-clock
+hard-timeout return path, TERM status preservation, actual child-PID cleanup,
+forced cleanup when TERM is ignored, and badge-pixel acceptance and rejection
+without booting a Simulator.
 
 Set `QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT` to an absolute `.json` path
 outside the repository when the capture needs machine-readable evidence. The
@@ -89,4 +112,6 @@ unapproved.
 
 If the required runtime is unavailable, the script exits before building and
 prints the exact `xcodebuild -downloadPlatform` command. It never substitutes a
-different resolution or fabricates a capture.
+different resolution or fabricates a capture. A Watch foreground-reactivation,
+screenshot, five-minute timeout, dimension, opacity, or badge-content failure
+also exits before the requested output or provenance sidecar is written.

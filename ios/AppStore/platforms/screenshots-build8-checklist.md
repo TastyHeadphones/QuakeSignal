@@ -63,6 +63,12 @@ This checklist creates no approval by itself.
   Ultra 2 / Ultra. If the release owner selects another accepted class, update
   every frame and every localization before capture; Apple requires one
   consistent Watch size across all localizations.
+- [ ] Confirm the capture log says `Validated Watch foreground-only badge`.
+  Reject any artifact that shows a clock face or lacks the orange `Foreground
+  only` badge, even if its dimensions, hash, and provenance metadata pass.
+- [ ] Confirm Watch capture finished before the harness's five-minute hard
+  deadline. A foreground-restart failure or timeout is a rejected capture, not
+  permission to reuse the last PNG.
 - [ ] Verify the Watch app is installed from the signed iOS host, refreshes when
   opened, scrolls correctly, and opens event details on a paired Apple Watch.
 - [ ] Ensure the screenshots make no independent background-alert claim.

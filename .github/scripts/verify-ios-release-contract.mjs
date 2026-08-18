@@ -19,6 +19,7 @@ const contractFiles = {
   workerConfig: "backend/cloudflare/wrangler.jsonc",
   iosWorkflow: ".github/workflows/ios.yml",
   platformWorkflow: ".github/workflows/apple-platforms.yml",
+  screenshotWorkflow: ".github/workflows/apple-platform-screenshots.yml",
   cloudflareWorkflow: ".github/workflows/cloudflare.yml",
 };
 
@@ -60,6 +61,10 @@ const PLATFORM_ROOT_ENV = {
 const PLATFORM_ROOT_CONCURRENCY = {
   group: "apple-platforms-${{ github.workflow }}-${{ github.ref }}-${{ inputs.platform }}",
   "cancel-in-progress": false,
+};
+const SCREENSHOT_ROOT_CONCURRENCY = {
+  group: "apple-platform-screenshot-candidates-${{ github.ref }}",
+  "cancel-in-progress": true,
 };
 // The production Worker deploy and the TestFlight signing job share this
 // lock. That serializes a policy-changing deploy with the live policy smoke
@@ -138,6 +143,7 @@ const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:xM030AZh5xMVT6_k67kP8
 const WORKFLOW_JOBS_FINGERPRINT = "sha256:GFimuJ4Csf-1zDTLellUSizy0YmbN4o8bIFRFolQNHc";
 const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:9zTH6eFLeuD9DBkjY5u6xQCKlM0R8iq41uNxhG7Jdhc";
 const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:emUFxjkPtvbXsmvC8IJvc8SbQdyQvypmE-MV3PDzynw";
+const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:KqK_JYFbg7zm-IgdGk2ZW2HBJ0mdkgZUxIQUXI_Jwnk";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:MVyNUXvoZoqo5wXo0qmLaZow6cqQA8aUpc_YWLVvvjI";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -875,6 +881,36 @@ function verifyProductionDeploymentSerialization(workflowSource) {
   }
 }
 
+function verifyScreenshotCandidateWorkflow(workflowSource) {
+  const label = "native screenshot candidate workflow";
+  const workflow = parseEffectiveWorkflow(
+    workflowSource,
+    label,
+    ".github/workflows/apple-platform-screenshots.yml",
+  );
+  if (Object.hasOwn(workflow, "defaults")) {
+    fail("native screenshot candidate workflow-level defaults are forbidden.");
+  }
+  exactRecord(workflow.permissions, ROOT_PERMISSIONS, "native screenshot candidate workflow permissions");
+  exactRecord(workflow.concurrency, SCREENSHOT_ROOT_CONCURRENCY, "native screenshot candidate workflow concurrency");
+  exactRecord(
+    workflow.on ?? workflow.true,
+    { workflow_dispatch: null },
+    "native screenshot candidate workflow triggers",
+  );
+
+  if (/\$\{\{\s*secrets\./i.test(JSON.stringify(workflow))) {
+    fail("native screenshot candidate workflow must remain credential-free.");
+  }
+  const jobs = record(workflow.jobs, "native screenshot candidate workflow jobs");
+  if (!sameValue(Object.keys(jobs), ["capture"])) {
+    fail("native screenshot candidate workflow must expose only its reviewed capture job.");
+  }
+  if (workflowSequenceFingerprint(jobs) !== SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT) {
+    fail("native screenshot candidate workflow jobs must match the reviewed capture graph fingerprint.");
+  }
+}
+
 /**
  * Verify the static release boundary shared by the iOS archive and the Worker
  * App Attest policy. The protected workflow separately proves that the live
@@ -885,13 +921,14 @@ export async function verifyIOSReleaseContract({
   expectedBuildNumber,
 } = {}) {
   const path = (relativePath) => resolve(root, relativePath);
-  const [project, projectFile, infoPlists, workerConfig, iosWorkflow, platformWorkflow, cloudflareWorkflow] = await Promise.all([
+  const [project, projectFile, infoPlists, workerConfig, iosWorkflow, platformWorkflow, screenshotWorkflow, cloudflareWorkflow] = await Promise.all([
     readFile(path(contractFiles.project), "utf8"),
     readFile(path(contractFiles.projectFile), "utf8"),
     Promise.all(contractFiles.infoPlists.map((relativePath) => readFile(path(relativePath), "utf8"))),
     readFile(path(contractFiles.workerConfig), "utf8"),
     readFile(path(contractFiles.iosWorkflow), "utf8"),
     readFile(path(contractFiles.platformWorkflow), "utf8"),
+    readFile(path(contractFiles.screenshotWorkflow), "utf8"),
     readFile(path(contractFiles.cloudflareWorkflow), "utf8"),
   ]);
   const buildNumber = captureProjectBuildNumber(project);
@@ -923,6 +960,7 @@ export async function verifyIOSReleaseContract({
   }
   verifyArchiveWorkflow(iosWorkflow, buildNumber);
   verifyPlatformArchiveWorkflow(platformWorkflow, buildNumber);
+  verifyScreenshotCandidateWorkflow(screenshotWorkflow);
   verifyProductionDeploymentSerialization(cloudflareWorkflow);
   return {
     buildNumber,

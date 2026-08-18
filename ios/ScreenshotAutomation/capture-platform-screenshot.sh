@@ -44,6 +44,7 @@ esac
 script_dir="$(cd "$(dirname "$0")" && pwd -P)"
 ios_root="$(cd "$script_dir/.." && pwd -P)"
 repo_root="$(cd "$ios_root/.." && pwd -P)"
+source "$script_dir/watch-capture-guard.sh"
 
 if [[ "$requested_output" != /* ]] || [[ "$requested_output" != *.png ]]; then
   echo "error: output must be an absolute .png path" >&2
@@ -173,8 +174,11 @@ runtime_identifier="$({ xcrun simctl list runtimes available -j; } | /usr/bin/ru
 temporary_root="$(mktemp -d "${TMPDIR:-/tmp}/quakesignal-screenshot.XXXXXX")"
 simulator_id=""
 paired_phone_id=""
+screenshot_pid=""
+watch_reactivation_pid=""
 
 cleanup() {
+  quakesignal_stop_processes "$screenshot_pid" "$watch_reactivation_pid"
   if [ -n "$simulator_id" ] && [ "$keep_simulator" != "1" ]; then
     xcrun simctl shutdown "$simulator_id" >/dev/null 2>&1 || true
     xcrun simctl delete "$simulator_id" >/dev/null 2>&1 || true
@@ -185,7 +189,9 @@ cleanup() {
   fi
   rm -rf "$temporary_root"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 available_device_types="$(xcrun simctl list devicetypes -j)"
 selected_device_type=""
@@ -320,15 +326,19 @@ fi
 
 xcrun simctl install "$simulator_id" "$app_path"
 
-/usr/bin/env \
-  SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1 \
-  "SIMCTL_CHILD_AppleLanguages=($locale)" \
-  "SIMCTL_CHILD_AppleLocale=$apple_locale" \
-  SIMCTL_CHILD_TZ=UTC \
-  xcrun simctl launch --terminate-running-process \
+launch_fixture_app() {
+  /usr/bin/env \
+    SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1 \
+    "SIMCTL_CHILD_AppleLanguages=($locale)" \
+    "SIMCTL_CHILD_AppleLocale=$apple_locale" \
+    SIMCTL_CHILD_TZ=UTC \
+    xcrun simctl launch "$@" \
     "$simulator_id" \
     "$bundle_id" \
     --quakesignal-screenshot-automation
+}
+
+launch_fixture_app --terminate-running-process
 
 # SwiftUI needs a short, bounded settling period after the process becomes
 # launchable. The fixture does not issue network or permission requests.
@@ -337,7 +347,20 @@ sleep 5
 candidate="$temporary_root/$platform-$locale.png"
 # Simulator's black device mask preserves native pixels while avoiding a
 # transparent corner channel on rounded Watch captures.
-xcrun simctl io "$simulator_id" screenshot --type=png --mask=black "$candidate"
+if [ "$platform" = "watchos" ]; then
+  # CoreSimulator can take several minutes to service the first Watch
+  # screenshot request. Restart it deterministically every 45 seconds so
+  # watchOS cannot return to the clock after its two-minute foreground timeout,
+  # and stop all child work at a five-minute hard deadline.
+  if ! quakesignal_capture_watch_screenshot \
+      "$simulator_id" "$bundle_id" "$candidate" "$locale" "$apple_locale" \
+      300 45; then
+    echo "error: Watch screenshot capture failed while maintaining foreground state" >&2
+    exit 70
+  fi
+else
+  xcrun simctl io "$simulator_id" screenshot --type=png --mask=black "$candidate"
+fi
 
 pixel_width="$(sips -g pixelWidth "$candidate" | awk '/pixelWidth:/ { print $2 }')"
 pixel_height="$(sips -g pixelHeight "$candidate" | awk '/pixelHeight:/ { print $2 }')"
@@ -351,6 +374,17 @@ fi
 if [ "$has_alpha" = "yes" ]; then
   echo "error: native capture contains an alpha channel, which App Store Connect rejects" >&2
   exit 65
+fi
+
+if [ "$platform" = "watchos" ]; then
+  # The deterministic Watch fixture always renders platform.foreground.badge
+  # in CautionColor (#ff9500) near the top of the app. Convert only a temporary
+  # validation copy to an uncompressed BMP so stock Ruby can inspect pixels;
+  # the native PNG remains untouched. Reject clock-face or other stale captures.
+  watch_validation_bmp="$temporary_root/watch-foreground-validation.bmp"
+  sips -s format bmp "$candidate" --out "$watch_validation_bmp" >/dev/null
+  /usr/bin/ruby "$script_dir/validate-watch-foreground-badge.rb" \
+    "$watch_validation_bmp" "$expected_width" "$expected_height"
 fi
 
 mv "$candidate" "$output"

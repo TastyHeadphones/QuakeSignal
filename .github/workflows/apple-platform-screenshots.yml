@@ -37,6 +37,12 @@ jobs:
         run: |
           set -euo pipefail
           bash -n ios/ScreenshotAutomation/capture-platform-screenshot.sh
+          bash -n ios/ScreenshotAutomation/watch-capture-guard.sh
+          bash -n ios/ScreenshotAutomation/watch-capture-guard.test.sh
+          /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
+          bash ios/ScreenshotAutomation/watch-capture-guard.test.sh
+          /usr/bin/ruby ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
           test -x ios/ScreenshotAutomation/capture-platform-screenshot.sh
           if grep -En '\$\{\{[[:space:]]*secrets\.' .github/workflows/apple-platform-screenshots.yml; then
             echo "::error::Screenshot candidate workflow must not reference secrets"
