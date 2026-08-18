@@ -61,6 +61,14 @@ SHA-256, and deletes the simulator. Set
 For watchOS, it also creates and boots a disposable paired iPhone Simulator;
 no existing personal simulator pair is reused.
 
+Set `QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT` to an absolute `.json` path
+outside the repository when the capture needs machine-readable evidence. The
+harness writes the screenshot hash, native dimensions, capture time, exact
+selected runtime identifier, device-type identifier, human-readable device
+model, and disposable Simulator UDID. The sidecar is always marked
+`unapproved-debug-simulator-capture-evidence` with `uploadApproved: false`; it
+does not grant review or upload approval.
+
 ## CI artifact use
 
 The same commands are credential-free on a macOS runner. Point the output at
@@ -70,6 +78,14 @@ reviewer must compare the candidate to the source-frozen UI and approve it;
 where the release runbook requires binary parity evidence, compare it with the
 signed Release artifact before metadata upload. The Debug-only fixture must
 never be described as having run in a signed Release binary.
+
+`.github/workflows/apple-platform-screenshots.yml` requests the capture
+sidecar, validates that its platform, locale, filename, and SHA-256 match the
+PNG, and embeds its `selectedSimulator` object in `candidate-metadata.json`.
+`simulator-runtimes.txt` remains a diagnostic inventory; it is not used as a
+substitute for recording the runtime and device that actually produced the
+candidate. Both JSON files and the artifact name remain explicitly
+unapproved.
 
 If the required runtime is unavailable, the script exits before building and
 prints the exact `xcodebuild -downloadPlatform` command. It never substitutes a

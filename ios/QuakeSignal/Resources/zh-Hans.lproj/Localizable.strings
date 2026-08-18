@@ -332,8 +332,11 @@
 "platform.alertRegistration.unavailable.error" = "此平台不支持安全的后台提醒注册。";
 "platform.foreground.badge" = "仅限前台";
 "platform.foreground.refreshUnavailable" = "暂时无法获取实时地震信息。";
+"platform.historical.badge" = "历史";
+"platform.historical.reports" = "历史地震报告";
 "platform.tv.title" = "地震信息看板";
 "platform.tv.foregroundOnly.detail" = "Apple TV 仅在此看板打开时更新地震信息，不会注册后台提醒。";
 "platform.watch.foregroundOnly.detail" = "打开手表 App 即可刷新。在安全的伴侣设备推送可用前，后台提醒仍由已配对的 iPhone 接收。";
+"platform.watch.foregroundOnly.short" = "打开时刷新。提醒仍由配对的 iPhone 接收。";
 "platform.refresh" = "刷新";
 "platform.loading" = "正在加载地震信息…";

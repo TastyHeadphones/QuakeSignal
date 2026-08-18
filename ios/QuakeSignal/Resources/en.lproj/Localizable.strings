@@ -333,8 +333,11 @@
 "platform.alertRegistration.unavailable.error" = "Secure background alert registration is unavailable on this platform.";
 "platform.foreground.badge" = "Foreground only";
 "platform.foreground.refreshUnavailable" = "Live earthquake data is temporarily unavailable.";
+"platform.historical.badge" = "Historical";
+"platform.historical.reports" = "Historical reports";
 "platform.tv.title" = "Earthquake dashboard";
 "platform.tv.foregroundOnly.detail" = "Apple TV refreshes earthquake information only while this dashboard is open. It does not register for background alerts.";
 "platform.watch.foregroundOnly.detail" = "Open the watch app to refresh. Background alerts remain on your paired iPhone until secure companion delivery is available.";
+"platform.watch.foregroundOnly.short" = "Refreshes while open. Alerts stay on the paired iPhone.";
 "platform.refresh" = "Refresh";
 "platform.loading" = "Loading earthquake data…";

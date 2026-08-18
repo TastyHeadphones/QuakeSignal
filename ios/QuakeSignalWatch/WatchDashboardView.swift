@@ -8,15 +8,24 @@ struct WatchDashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Label("platform.foreground.badge", systemImage: "applewatch")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color("CautionColor"))
+                    HStack(spacing: 8) {
+                        Label("platform.foreground.badge", systemImage: "applewatch")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color("CautionColor"))
 
-                    Text("platform.watch.foregroundOnly.detail")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        if store.isShowingHistoricalFixture {
+                            Label("platform.historical.badge", systemImage: "clock.arrow.circlepath")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
 
                     headline
+
+                    Text("platform.watch.foregroundOnly.short")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
 
                     Button {
                         Task { await store.refresh(limit: 12) }
@@ -74,7 +83,7 @@ struct WatchDashboardView: View {
                         .font(.headline)
                         .lineLimit(2)
                     if let date = event.reportDate ?? event.originDate {
-                        Text(date.formatted(date: .omitted, time: .shortened))
+                        Text(date.formatted(date: .numeric, time: .shortened))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }

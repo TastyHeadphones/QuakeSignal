@@ -18,7 +18,10 @@ This checklist creates no approval by itself.
   signed-Release parity comparison required by the platform runbook.
 - [ ] Install the exact platform runtime or use physical hardware. Record Xcode,
   OS/runtime, device model, device identifier where appropriate, capture time,
-  and reviewer.
+  and reviewer. For automated Simulator candidates, verify
+  `candidate-metadata.json` contains the harness-recorded
+  `selectedSimulator.runtimeIdentifier`, `deviceTypeIdentifier`, and
+  `deviceModel`; the full runtime inventory log alone is not capture evidence.
 - [ ] Use English (U.S.) only until localized names and listings are approved.
 - [ ] Use a benign finalized historical report. Never stage an active warning,
   a training/test notification, a system permission prompt, an exact user

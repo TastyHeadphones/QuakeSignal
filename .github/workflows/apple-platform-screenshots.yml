@@ -67,9 +67,11 @@ jobs:
           set -euo pipefail
           artifact_dir="$RUNNER_TEMP/quakesignal-screenshot-candidates/$PLATFORM_KEY"
           mkdir -p "$artifact_dir"
+          export QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT="$artifact_dir/capture-provenance.json"
           ios/ScreenshotAutomation/capture-platform-screenshot.sh \
             "$PLATFORM_KEY" \
             "$artifact_dir/$PLATFORM_KEY-en-dashboard.png"
+          test -s "$QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT"
           xcrun simctl list runtimes available > "$artifact_dir/simulator-runtimes.txt"
           echo "CANDIDATE_DIR=$artifact_dir" >> "$GITHUB_ENV"
 
@@ -82,12 +84,30 @@ jobs:
           export WORKFLOW_RUN="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           XCODE_VERSION="$(xcodebuild -version | tr '\n' ' ')"
           export XCODE_VERSION
-          /usr/bin/ruby -rjson -rdigest -rtime -e '
+          /usr/bin/ruby -rjson -rdigest -e '
             directory = ENV.fetch("CANDIDATE_DIR")
             platform = ENV.fetch("PLATFORM_KEY")
             screenshot = File.join(directory, "#{platform}-en-dashboard.png")
+            evidence_path = File.join(directory, "capture-provenance.json")
+            evidence = JSON.parse(File.read(evidence_path))
+            unless evidence.fetch("schemaVersion") == 1 &&
+                evidence.fetch("status") == "unapproved-debug-simulator-capture-evidence" &&
+                evidence.fetch("uploadApproved") == false
+              abort "capture provenance is not explicitly unapproved schema version 1 evidence"
+            end
+            unless evidence.fetch("platform") == platform &&
+                evidence.fetch("locale") == "en" &&
+                evidence.fetch("screenshotFile") == File.basename(screenshot) &&
+                evidence.fetch("screenshotSha256") == Digest::SHA256.file(screenshot).hexdigest
+              abort "capture provenance does not match the selected platform screenshot"
+            end
+            selected_simulator = evidence.fetch("selectedSimulator")
+            %w[runtimeIdentifier deviceTypeIdentifier deviceModel udid].each do |key|
+              value = selected_simulator.fetch(key)
+              abort "capture provenance selectedSimulator.#{key} is empty" unless value.is_a?(String) && !value.empty?
+            end
             metadata = {
-              schemaVersion: 1,
+              schemaVersion: 2,
               status: "unapproved-debug-simulator-candidate",
               uploadApproved: false,
               releaseBinaryEvidence: nil,
@@ -97,7 +117,16 @@ jobs:
               fixture: "finalized-historical-reports",
               screenshotFile: File.basename(screenshot),
               screenshotSha256: Digest::SHA256.file(screenshot).hexdigest,
-              capturedAtUtc: Time.now.utc.iso8601,
+              pixels: evidence.fetch("pixels"),
+              capturedAtUtc: evidence.fetch("capturedAtUtc"),
+              selectedSimulator: {
+                runtimeIdentifier: selected_simulator.fetch("runtimeIdentifier"),
+                deviceTypeIdentifier: selected_simulator.fetch("deviceTypeIdentifier"),
+                deviceModel: selected_simulator.fetch("deviceModel"),
+                udid: selected_simulator.fetch("udid")
+              },
+              captureEvidenceFile: File.basename(evidence_path),
+              captureEvidenceSha256: Digest::SHA256.file(evidence_path).hexdigest,
               xcodeVersion: ENV.fetch("XCODE_VERSION"),
               workflowRun: ENV.fetch("WORKFLOW_RUN"),
               approvalRequired: "Named visual review and runbook-required signed Release parity comparison"

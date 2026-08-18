@@ -14,6 +14,9 @@ rejected so review candidates remain CI/manual artifacts until approved.
 Optional environment:
   QUAKESIGNAL_SCREENSHOT_LOCALE=en|ja|zh-Hans  (default: en)
   QUAKESIGNAL_SCREENSHOT_KEEP_SIMULATOR=1      (preserve disposable simulator)
+  QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT=/absolute/path.json
+      Write an explicitly unapproved capture sidecar containing the exact
+      selected Simulator runtime identifier and device type/model.
 USAGE
 }
 
@@ -26,6 +29,7 @@ platform="$1"
 requested_output="$2"
 locale="${QUAKESIGNAL_SCREENSHOT_LOCALE:-en}"
 keep_simulator="${QUAKESIGNAL_SCREENSHOT_KEEP_SIMULATOR:-0}"
+requested_provenance_output="${QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT:-}"
 
 case "$locale" in
   en) apple_locale="en_US" ;;
@@ -60,6 +64,29 @@ esac
 if [ -e "$output" ]; then
   echo "error: refusing to overwrite existing artifact: $output" >&2
   exit 73
+fi
+
+provenance_output=""
+if [ -n "$requested_provenance_output" ]; then
+  if [[ "$requested_provenance_output" != /* ]] || [[ "$requested_provenance_output" != *.json ]]; then
+    echo "error: provenance output must be an absolute .json path" >&2
+    exit 64
+  fi
+
+  provenance_output_dir="$(dirname "$requested_provenance_output")"
+  mkdir -p "$provenance_output_dir"
+  provenance_output_dir="$(cd "$provenance_output_dir" && pwd -P)"
+  provenance_output="$provenance_output_dir/$(basename "$requested_provenance_output")"
+  case "$provenance_output" in
+    "$repo_root"/*)
+      echo "error: provenance output must be outside the repository: $repo_root" >&2
+      exit 64
+      ;;
+  esac
+  if [ -e "$provenance_output" ]; then
+    echo "error: refusing to overwrite existing provenance artifact: $provenance_output" >&2
+    exit 73
+  fi
 fi
 
 case "$platform" in
@@ -162,6 +189,7 @@ trap cleanup EXIT INT TERM
 
 available_device_types="$(xcrun simctl list devicetypes -j)"
 selected_device_type=""
+selected_device_model=""
 for candidate in "${device_types[@]}"; do
   if ! /usr/bin/ruby -rjson -e '
     requested = ARGV.fetch(0)
@@ -177,6 +205,13 @@ for candidate in "${device_types[@]}"; do
       "$runtime_identifier" 2>/dev/null)"; then
     simulator_id="$created_id"
     selected_device_type="$candidate"
+    selected_device_model="$(/usr/bin/ruby -rjson -e '
+      requested = ARGV.fetch(0)
+      types = JSON.parse(STDIN.read).fetch("devicetypes")
+      selected = types.find { |type| type["identifier"] == requested }
+      abort "missing selected device type" unless selected
+      puts selected.fetch("name")
+    ' "$candidate" <<<"$available_device_types")"
     break
   fi
 done
@@ -200,6 +235,7 @@ fi
 
 echo "Using runtime: $runtime_identifier"
 echo "Using device:  $selected_device_type"
+echo "Device model:  $selected_device_model"
 echo "Simulator:     $simulator_id"
 
 if [ "$platform" = "watchos" ]; then
@@ -318,9 +354,47 @@ if [ "$has_alpha" = "yes" ]; then
 fi
 
 mv "$candidate" "$output"
-shasum -a 256 "$output"
+screenshot_sha256="$(shasum -a 256 "$output" | awk '{ print $1 }')"
+echo "$screenshot_sha256  $output"
 echo "Captured native review candidate: $output (${pixel_width}x${pixel_height})"
 echo "This artifact still requires named visual review before any metadata upload."
+
+if [ -n "$provenance_output" ]; then
+  export CAPTURE_PLATFORM="$platform"
+  export CAPTURE_LOCALE="$locale"
+  export CAPTURE_SCREENSHOT_FILE="$(basename "$output")"
+  export CAPTURE_SCREENSHOT_SHA256="$screenshot_sha256"
+  export CAPTURE_PIXEL_WIDTH="$pixel_width"
+  export CAPTURE_PIXEL_HEIGHT="$pixel_height"
+  export CAPTURE_RUNTIME_IDENTIFIER="$runtime_identifier"
+  export CAPTURE_DEVICE_TYPE_IDENTIFIER="$selected_device_type"
+  export CAPTURE_DEVICE_MODEL="$selected_device_model"
+  export CAPTURE_SIMULATOR_UDID="$simulator_id"
+  /usr/bin/ruby -rjson -rtime -e '
+    metadata = {
+      schemaVersion: 1,
+      status: "unapproved-debug-simulator-capture-evidence",
+      uploadApproved: false,
+      platform: ENV.fetch("CAPTURE_PLATFORM"),
+      locale: ENV.fetch("CAPTURE_LOCALE"),
+      screenshotFile: ENV.fetch("CAPTURE_SCREENSHOT_FILE"),
+      screenshotSha256: ENV.fetch("CAPTURE_SCREENSHOT_SHA256"),
+      pixels: [
+        Integer(ENV.fetch("CAPTURE_PIXEL_WIDTH"), 10),
+        Integer(ENV.fetch("CAPTURE_PIXEL_HEIGHT"), 10)
+      ],
+      capturedAtUtc: Time.now.utc.iso8601,
+      selectedSimulator: {
+        runtimeIdentifier: ENV.fetch("CAPTURE_RUNTIME_IDENTIFIER"),
+        deviceTypeIdentifier: ENV.fetch("CAPTURE_DEVICE_TYPE_IDENTIFIER"),
+        deviceModel: ENV.fetch("CAPTURE_DEVICE_MODEL"),
+        udid: ENV.fetch("CAPTURE_SIMULATOR_UDID")
+      }
+    }
+    File.write(ARGV.fetch(0), JSON.pretty_generate(metadata) + "\n")
+  ' "$provenance_output"
+  echo "Recorded unapproved capture provenance: $provenance_output"
+fi
 
 if [ "$keep_simulator" = "1" ]; then
   echo "Preserved simulator: $simulator_id"
