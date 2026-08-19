@@ -132,6 +132,154 @@ final class AlertPolicyTests: XCTestCase {
         XCTAssertNil(ForegroundHeadlinePolicy.headline(from: [futureWarning], now: now))
     }
 
+    func testHomeReportSelectionUsesTimeInsteadOfNearbyDistanceOrder() {
+        let nearerButOlder = makeHomeEvent(
+            id: "jma_eqlist:nearer-older",
+            reportDate: now.addingTimeInterval(-120)
+        )
+        let fartherButNewer = makeHomeEvent(
+            id: "jma_eqlist:farther-newer",
+            reportDate: now.addingTimeInterval(-30)
+        )
+        let nearestFirst = [nearerButOlder, fartherButNewer]
+
+        XCTAssertEqual(
+            HomeReportSelectionPolicy.newestReport(from: nearestFirst, now: now),
+            fartherButNewer
+        )
+        XCTAssertEqual(
+            HomeReportSelectionPolicy.newestReport(
+                from: nearestFirst,
+                now: now,
+                maximumAge: HomeReportSelectionPolicy.maximumRecentAge
+            ),
+            fartherButNewer
+        )
+    }
+
+    func testHomeReportSelectionFallsBackToOriginAndRejectsMissingTimestamps() {
+        let originOnly = makeHomeEvent(
+            id: "jma_eqlist:origin-only",
+            originDate: now.addingTimeInterval(-60),
+            reportDate: nil
+        )
+        let missingTimestamp = makeHomeEvent(
+            id: "jma_eqlist:missing-time",
+            originDate: nil,
+            reportDate: nil
+        )
+
+        XCTAssertEqual(
+            HomeReportSelectionPolicy.newestReport(
+                from: [missingTimestamp, originOnly],
+                now: now
+            ),
+            originOnly
+        )
+        XCTAssertNil(HomeReportSelectionPolicy.newestReport(
+            from: [missingTimestamp],
+            now: now
+        ))
+    }
+
+    func testHomeRecentReportSelectionEnforcesInclusiveAgeAndFutureBounds() {
+        let boundary = makeHomeEvent(
+            id: "jma_eqlist:boundary",
+            reportDate: now.addingTimeInterval(-HomeReportSelectionPolicy.maximumRecentAge)
+        )
+        let tooOld = makeHomeEvent(
+            id: "jma_eqlist:too-old",
+            reportDate: now.addingTimeInterval(-HomeReportSelectionPolicy.maximumRecentAge - 1)
+        )
+        let allowedFuture = makeHomeEvent(
+            id: "jma_eqlist:allowed-future",
+            reportDate: now.addingTimeInterval(HomeReportSelectionPolicy.allowedFutureSkew)
+        )
+        let tooFarFuture = makeHomeEvent(
+            id: "jma_eqlist:too-far-future",
+            reportDate: now.addingTimeInterval(HomeReportSelectionPolicy.allowedFutureSkew + 1)
+        )
+
+        XCTAssertEqual(
+            HomeReportSelectionPolicy.newestReport(
+                from: [tooOld, boundary],
+                now: now,
+                maximumAge: HomeReportSelectionPolicy.maximumRecentAge
+            ),
+            boundary
+        )
+        XCTAssertEqual(
+            HomeReportSelectionPolicy.newestReport(
+                from: [tooFarFuture, boundary, allowedFuture],
+                now: now,
+                maximumAge: HomeReportSelectionPolicy.maximumRecentAge
+            ),
+            allowedFuture
+        )
+        XCTAssertNil(HomeReportSelectionPolicy.newestReport(
+            from: [tooOld, tooFarFuture],
+            now: now,
+            maximumAge: HomeReportSelectionPolicy.maximumRecentAge
+        ))
+    }
+
+    func testHomeReportSelectionRejectsNonReportEEWFrames() {
+        let informationalEEW = makeHomeEvent(
+            id: "jma_eew:informational",
+            kind: "eew",
+            reportDate: now,
+            isWarn: false,
+            isFinal: false
+        )
+        let finalEEW = makeHomeEvent(
+            id: "jma_eew:final",
+            kind: "eew",
+            reportDate: now,
+            isWarn: true,
+            isFinal: true
+        )
+        let cancelledEEW = makeHomeEvent(
+            id: "jma_eew:cancelled",
+            kind: "eew",
+            reportDate: now,
+            isWarn: true,
+            isFinal: false,
+            isCancel: true
+        )
+        let report = makeHomeEvent(
+            id: "jma_eqlist:report",
+            reportDate: now.addingTimeInterval(-1)
+        )
+
+        XCTAssertEqual(
+            HomeReportSelectionPolicy.newestReport(
+                from: [informationalEEW, finalEEW, cancelledEEW, report],
+                now: now
+            ),
+            report
+        )
+    }
+
+    func testHomeReportSelectionBreaksTimestampTiesDeterministically() {
+        let alphabeticallyLater = makeHomeEvent(id: "jma_eqlist:z", reportDate: now)
+        let alphabeticallyEarlier = makeHomeEvent(id: "jma_eqlist:a", reportDate: now)
+
+        XCTAssertEqual(
+            HomeReportSelectionPolicy.newestReport(
+                from: [alphabeticallyLater, alphabeticallyEarlier],
+                now: now
+            ),
+            alphabeticallyEarlier
+        )
+        XCTAssertEqual(
+            HomeReportSelectionPolicy.newestReport(
+                from: [alphabeticallyEarlier, alphabeticallyLater],
+                now: now
+            ),
+            alphabeticallyEarlier
+        )
+    }
+
     func testTrainingRequiresExplicitOptInAndReconnectUpdateIsRecognized() {
         let training = makeEvent(reportDate: now, isWarn: false, isTraining: true)
         XCTAssertNil(reason(for: training, preferences: preferences(includeTraining: false)))
@@ -499,6 +647,37 @@ final class AlertPolicyTests: XCTestCase {
             isFinal: isFinal,
             isCancel: isCancel,
             isTraining: isTraining,
+            tsunami: nil
+        )
+    }
+
+    private func makeHomeEvent(
+        id: String,
+        kind: String = "report",
+        originDate: Date? = nil,
+        reportDate: Date?,
+        isWarn: Bool = false,
+        isFinal: Bool = true,
+        isCancel: Bool = false
+    ) -> EEWEvent {
+        EEWEvent(
+            id: id,
+            sourceId: kind == "report" ? "jma_eqlist" : "jma_eew",
+            eventId: id,
+            serial: 1,
+            kind: kind,
+            originTimeUtc: originDate.map { ISO8601DateFormatter().string(from: $0) },
+            reportTimeUtc: reportDate.map { ISO8601DateFormatter().string(from: $0) },
+            hypocenter: "Test",
+            latitude: 35.0,
+            longitude: 139.0,
+            magnitude: 5,
+            depth: 10,
+            maxIntensity: "5-",
+            isWarn: isWarn,
+            isFinal: isFinal,
+            isCancel: isCancel,
+            isTraining: false,
             tsunami: nil
         )
     }

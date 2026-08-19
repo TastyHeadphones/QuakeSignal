@@ -1,6 +1,42 @@
 import Foundation
 import CoreLocation
 
+/// Selects the ordinary earthquake report shown on Home without changing the
+/// distance ordering used by the nearby-event list. Reports with unusable or
+/// implausibly future timestamps are ignored so malformed feed data cannot
+/// displace a valid earthquake.
+enum HomeReportSelectionPolicy {
+    static let maximumRecentAge: TimeInterval = 24 * 60 * 60
+    static let allowedFutureSkew = WarningFreshnessPolicy.allowedFutureSkew
+
+    static func newestReport(
+        from events: [EEWEvent],
+        now: Date,
+        maximumAge: TimeInterval? = nil
+    ) -> EEWEvent? {
+        events.compactMap { event -> (event: EEWEvent, timestamp: Date)? in
+            guard event.kind == "report",
+                  let timestamp = event.reportDate ?? event.originDate else {
+                return nil
+            }
+            let age = now.timeIntervalSince(timestamp)
+            guard age >= -allowedFutureSkew else { return nil }
+            if let maximumAge, age > maximumAge { return nil }
+            return (event, timestamp)
+        }
+        .sorted { left, right in
+            if left.timestamp != right.timestamp {
+                return left.timestamp > right.timestamp
+            }
+            if left.event.id != right.event.id {
+                return left.event.id < right.event.id
+            }
+            return left.event.serial > right.event.serial
+        }
+        .first?.event
+    }
+}
+
 struct PresentedAlert: Identifiable, Equatable {
     let event: EEWEvent
     let reason: AlertPresentationReason
@@ -492,13 +528,20 @@ final class QuakeStore {
         }
     }
 
-    /// A recent (last 24h), non-warning event nearby -- drives the "caution" banner state.
+    /// The newest ordinary report in the nearby set. This is intentionally
+    /// independent of `nearbyEvents`' nearest-first presentation order.
+    var latestNearbyReport: EEWEvent? {
+        HomeReportSelectionPolicy.newestReport(from: nearbyEvents, now: clockNow)
+    }
+
+    /// The newest ordinary report from the last 24 hours -- drives the
+    /// "caution" banner state.
     var recentNearbyReport: EEWEvent? {
-        let cutoff = Date().addingTimeInterval(-24 * 3600)
-        return nearbyEvents.first { event in
-            guard let reportDate = event.reportDate else { return false }
-            return reportDate >= cutoff
-        }
+        HomeReportSelectionPolicy.newestReport(
+            from: nearbyEvents,
+            now: clockNow,
+            maximumAge: HomeReportSelectionPolicy.maximumRecentAge
+        )
     }
 
     var bannerState: HomeBannerState {
