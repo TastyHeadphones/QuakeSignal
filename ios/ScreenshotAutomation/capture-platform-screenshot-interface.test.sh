@@ -105,4 +105,25 @@ for detail_source in \
   }
 done
 
+ruby - "$script_dir/../QuakeSignalWatch/WatchDashboardView.swift" <<'RUBY'
+source = File.read(ARGV.fetch(0))
+detail = source[/private struct WatchEventDetailView: View \{.*?(?=\nprivate func localizedDepthLabel)/m]
+abort "error: Watch detail view block is missing" unless detail
+
+checks = {
+  "use a ScrollView as its first body container" =>
+    /var body: some View \{\s*ScrollView \{/m,
+  "place the foreground banner before the first metric row" =>
+    /ScrollView \{\s*VStack\(alignment: \.leading, spacing: 10\) \{\s*foregroundBadge\s*HStack/m,
+  "show localized depth beside magnitude in the first-baseline row" =>
+    /HStack\(alignment: \.firstTextBaseline, spacing: 8\) \{\s*Text\(event\.magnitudeText\).*?Label\(localizedDepthLabel\(depth\), systemImage: "arrow\.down"\)/m,
+  "reserve inline navigation-title space above its foreground banner" =>
+    /\.navigationTitle\("detail\.title"\)\s*\.navigationBarTitleDisplayMode\(\.inline\)/m
+}
+
+checks.each do |requirement, pattern|
+  abort "error: Watch detail must #{requirement}" unless detail.match?(pattern)
+end
+RUBY
+
 echo "Platform screenshot interface tests passed"

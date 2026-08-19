@@ -152,38 +152,47 @@ private struct WatchEventDetailView: View {
     let event: EEWEvent
 
     var body: some View {
-        VStack(spacing: 8) {
-            foregroundBadge
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                foregroundBadge
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(event.magnitudeText)
                         .font(.system(size: 46, weight: .bold, design: .rounded))
                         .foregroundStyle(event.severity.color)
-                    Text(event.hypocenter)
-                        .font(.headline)
-                    Label(event.reportStatus.labelKey, systemImage: "waveform.path.ecg")
-                    if let maxIntensity = event.maxIntensity {
-                        Label(L("quake.intensity.label", maxIntensity), systemImage: "gauge.with.dots.needle.67percent")
-                    }
+
+                    Spacer(minLength: 4)
+
                     if let depth = event.depth {
                         Label(localizedDepthLabel(depth), systemImage: "arrow.down")
-                    }
-                    Text(event.sourceLabelKey)
-                        .foregroundStyle(.secondary)
-                    if let date = event.reportDate ?? event.originDate {
-                        Text(date.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                     }
-                    Divider()
-                    Text("platform.watch.foregroundOnly.detail")
-                        .font(.caption2)
+                }
+
+                Text(event.hypocenter)
+                    .font(.headline)
+                Label(event.reportStatus.labelKey, systemImage: "waveform.path.ecg")
+                if let maxIntensity = event.maxIntensity {
+                    Label(L("quake.intensity.label", maxIntensity), systemImage: "gauge.with.dots.needle.67percent")
+                }
+                Text(event.sourceLabelKey)
+                    .foregroundStyle(.secondary)
+                if let date = event.reportDate ?? event.originDate {
+                    Text(date.formatted(date: .abbreviated, time: .shortened))
                         .foregroundStyle(.secondary)
                 }
-                .font(.caption)
+                Divider()
+                Text("platform.watch.foregroundOnly.detail")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
+            .font(.caption)
         }
         .navigationTitle("detail.title")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private var foregroundBadge: some View {

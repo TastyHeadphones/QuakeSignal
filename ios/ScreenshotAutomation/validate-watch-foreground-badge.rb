@@ -28,8 +28,9 @@ first_badge_percent, last_badge_percent, minimum_orange_pixels, maximum_orange_p
   when "watchos-headline", "watchos-recent-reports"
     [20, 45, 100, dashboard_maximum]
   when "watchos-event-detail"
-    # The detail route pins a filled caution banner above its ScrollView. Its
-    # density distinguishes it from the text-sized dashboard/list badges. The
+    # The detail route places a filled caution banner first inside its
+    # ScrollView. Its density distinguishes it from the text-sized
+    # dashboard/list badges. The
     # banner begins directly below the navigation title, so include the whole
     # upper content area instead of assuming one safe-area offset.
     [0, 45, detail_minimum, nil]
