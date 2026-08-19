@@ -20,14 +20,17 @@ end
 expected_width = parse_dimension.call(ARGV.fetch(1), "width")
 expected_height = parse_dimension.call(ARGV.fetch(2), "height")
 frame_selector = ARGV.fetch(3)
+pixel_area = expected_width * expected_height
+dashboard_maximum = [(pixel_area * 12) / 1_000, 100].max
+detail_minimum = [(pixel_area * 15) / 1_000, 150].max
 
-first_badge_percent, last_badge_percent = case frame_selector
+first_badge_percent, last_badge_percent, minimum_orange_pixels, maximum_orange_pixels = case frame_selector
   when "watchos-headline", "watchos-recent-reports"
-    [20, 45]
+    [20, 45, 100, dashboard_maximum]
   when "watchos-event-detail"
-    # The detail route renders its foreground-only label as the first row below
-    # the navigation title, above the dashboard/list badge band.
-    [0, 20]
+    # The detail route pins a filled caution banner above its ScrollView. Its
+    # density distinguishes it from the text-sized dashboard/list badges.
+    [15, 40, detail_minimum, nil]
   else
     fail_validation "unreviewed Watch frame selector"
   end
@@ -80,12 +83,18 @@ badge_columns = (width * 4) / 5
   end
 end
 
-minimum_orange_pixels = 100
 if orange_pixels < minimum_orange_pixels
   fail_validation(
     "Watch screenshot lacks the orange foreground-only badge " \
     "(found #{orange_pixels}, need #{minimum_orange_pixels} pixels); " \
     "refusing stale or clock-face capture",
+  )
+end
+if maximum_orange_pixels && orange_pixels > maximum_orange_pixels
+  fail_validation(
+    "Watch screenshot has an unexpected orange marker density " \
+    "(found #{orange_pixels}, maximum #{maximum_orange_pixels} pixels); " \
+    "refusing a mismatched Watch route",
   )
 end
 

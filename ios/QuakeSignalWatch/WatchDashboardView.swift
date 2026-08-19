@@ -151,35 +151,53 @@ private struct WatchEventDetailView: View {
     let event: EEWEvent
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                Label("platform.foreground.badge", systemImage: "eye")
-                    .foregroundStyle(Color("CautionColor"))
-                Text(event.magnitudeText)
-                    .font(.system(size: 46, weight: .bold, design: .rounded))
-                    .foregroundStyle(event.severity.color)
-                Text(event.hypocenter)
-                    .font(.headline)
-                Label(event.reportStatus.labelKey, systemImage: "waveform.path.ecg")
-                if let maxIntensity = event.maxIntensity {
-                    Label(L("quake.intensity.label", maxIntensity), systemImage: "gauge.with.dots.needle.67percent")
-                }
-                if let depth = event.depth {
-                    Label(L("quake.depth.label", depth), systemImage: "arrow.down")
-                }
-                Text(event.sourceLabelKey)
-                    .foregroundStyle(.secondary)
-                if let date = event.reportDate ?? event.originDate {
-                    Text(date.formatted(date: .abbreviated, time: .shortened))
+        VStack(spacing: 8) {
+            foregroundBadge
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(event.magnitudeText)
+                        .font(.system(size: 46, weight: .bold, design: .rounded))
+                        .foregroundStyle(event.severity.color)
+                    Text(event.hypocenter)
+                        .font(.headline)
+                    Label(event.reportStatus.labelKey, systemImage: "waveform.path.ecg")
+                    if let maxIntensity = event.maxIntensity {
+                        Label(L("quake.intensity.label", maxIntensity), systemImage: "gauge.with.dots.needle.67percent")
+                    }
+                    if let depth = event.depth {
+                        Label(L("quake.depth.label", depth), systemImage: "arrow.down")
+                    }
+                    Text(event.sourceLabelKey)
+                        .foregroundStyle(.secondary)
+                    if let date = event.reportDate ?? event.originDate {
+                        Text(date.formatted(date: .abbreviated, time: .shortened))
+                            .foregroundStyle(.secondary)
+                    }
+                    Divider()
+                    Text("platform.watch.foregroundOnly.detail")
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                Divider()
-                Text("platform.watch.foregroundOnly.detail")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                .font(.caption)
             }
-            .font(.caption)
         }
         .navigationTitle("detail.title")
+    }
+
+    private var foregroundBadge: some View {
+        Label("platform.foreground.badge", systemImage: "eye")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.black)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                Color("CautionColor"),
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+            .accessibilityIdentifier("watch-event-detail-foreground-badge")
     }
 }
