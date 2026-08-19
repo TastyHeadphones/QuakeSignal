@@ -126,4 +126,31 @@ checks.each do |requirement, pattern|
 end
 RUBY
 
+ruby - "$script_dir/capture-platform-screenshot.sh" <<'RUBY'
+source = File.read(ARGV.fetch(0))
+
+build_destination_assignments = source.lines.grep(/^build_destination=/).map(&:chomp)
+unless build_destination_assignments == ['build_destination="generic/platform=$destination_platform"']
+  abort "error: native capture builds must use exactly one generic simulator platform assignment"
+end
+destination_flags = source.lines.grep(/^\s+-destination /).map(&:strip)
+unless destination_flags == Array.new(2, '-destination "$build_destination" \\')
+  abort "error: build and build-settings discovery must share the generic simulator destination"
+end
+if source.include?('destination="platform=$destination_platform,id=$simulator_id"') ||
+   source.match?(/-destination "\$simulator_id"/)
+  abort "error: xcodebuild must not depend on rediscovering the ephemeral simulator UUID"
+end
+
+{
+  "install" => /xcrun simctl install "\$simulator_id" "\$app_path"/,
+  "launch" => /xcrun simctl launch.*?"\$simulator_id"\s*\\\s*"\$bundle_id"/m,
+  "screenshot" => /xcrun simctl io "\$simulator_id" screenshot/,
+  "provenance" => /CAPTURE_SIMULATOR_UDID="\$simulator_id"/
+}.each do |operation, pattern|
+  abort "error: native #{operation} must remain bound to the exact selected simulator UUID" unless
+    source.match?(pattern)
+end
+RUBY
+
 echo "Platform screenshot interface tests passed"

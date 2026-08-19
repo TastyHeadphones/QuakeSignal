@@ -312,13 +312,13 @@ xcrun simctl bootstatus "$simulator_id" -b
 if [ -z "$derived_data" ]; then
   derived_data="$temporary_root/DerivedData"
 fi
-destination="platform=$destination_platform,id=$simulator_id"
+build_destination="generic/platform=$destination_platform"
 
 xcodebuild build \
   -project "$ios_root/QuakeSignal.xcodeproj" \
   -scheme "$scheme" \
   -configuration Debug \
-  -destination "$destination" \
+  -destination "$build_destination" \
   -derivedDataPath "$derived_data" \
   CODE_SIGNING_ALLOWED=NO
 
@@ -327,7 +327,7 @@ xcodebuild -showBuildSettings \
   -project "$ios_root/QuakeSignal.xcodeproj" \
   -scheme "$scheme" \
   -configuration Debug \
-  -destination "$destination" \
+  -destination "$build_destination" \
   -derivedDataPath "$derived_data" \
   CODE_SIGNING_ALLOWED=NO > "$build_settings"
 
