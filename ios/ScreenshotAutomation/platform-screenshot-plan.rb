@@ -110,7 +110,11 @@ module QuakeSignalPlatformScreenshotPlan
     root = Pathname.new(repository_root).realpath
     manifest_path = root.join(expected.fetch(:manifest))
     source = manifest_path.read
-    manifest = JSON.parse(source, object_class: DuplicateRejectingHash)
+    manifest = JSON.parse(
+      source,
+      object_class: DuplicateRejectingHash,
+      allow_duplicate_key: false,
+    )
 
     require_equal(
       manifest.keys.sort,

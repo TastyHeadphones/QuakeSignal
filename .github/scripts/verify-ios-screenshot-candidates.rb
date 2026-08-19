@@ -357,7 +357,11 @@ class IOSBuild8ScreenshotCandidateValidator
   private
 
   def parse_json_object!(path)
-    value = JSON.parse(path.read, object_class: DuplicateRejectingJSONObject)
+    value = JSON.parse(
+      path.read,
+      object_class: DuplicateRejectingJSONObject,
+      allow_duplicate_key: false,
+    )
     return value if value.is_a?(Hash)
 
     raise IOSBuild8ScreenshotCandidateValidationError, "#{path} must contain a JSON object"

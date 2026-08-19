@@ -157,7 +157,11 @@ module QuakeSignalPlatformScreenshotProvenance
   private_class_method :capture_inventory
 
   def parse_json(source, label)
-    JSON.parse(source, object_class: QuakeSignalPlatformScreenshotPlan::DuplicateRejectingHash)
+    JSON.parse(
+      source,
+      object_class: QuakeSignalPlatformScreenshotPlan::DuplicateRejectingHash,
+      allow_duplicate_key: false,
+    )
   rescue JSON::ParserError, QuakeSignalPlatformScreenshotPlan::Error => error
     raise Error, "invalid JSON in #{label}: #{error.message}"
   end
