@@ -110,8 +110,9 @@ screenshot and restart children share a five-minute hard deadline and are both
 stopped with bounded TERM-to-KILL cleanup on timeout or interruption.
 
 Each Watch frame contains the orange foreground-only badge. A temporary BMP
-validation copy is inspected for those pixels; the native PNG is never
-converted or modified. A clock-face or stale-route capture is rejected.
+validation copy is inspected in the reviewed frame-specific upper content
+band; the native PNG is never converted or modified. A clock-face, wrong-band,
+or stale-route capture is rejected.
 
 Credential-free tests cover the exact plan, aggregate provenance, Watch
 process supervision, selector preservation, and badge validation:

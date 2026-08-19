@@ -403,7 +403,7 @@ if [ "$platform" = "watchos" ]; then
   watch_validation_bmp="$temporary_root/watch-foreground-validation.bmp"
   sips -s format bmp "$candidate" --out "$watch_validation_bmp" >/dev/null
   /usr/bin/ruby "$script_dir/validate-watch-foreground-badge.rb" \
-    "$watch_validation_bmp" "$expected_width" "$expected_height"
+    "$watch_validation_bmp" "$expected_width" "$expected_height" "$frame_selector"
 fi
 
 if [ -e "$output" ] || [ -L "$output" ]; then

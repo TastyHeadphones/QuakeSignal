@@ -4,8 +4,8 @@ def fail_validation(message)
   abort "error: #{message}"
 end
 
-unless ARGV.length == 3
-  fail_validation "usage: validate-watch-foreground-badge.rb <bitmap> <width> <height>"
+unless ARGV.length == 4
+  fail_validation "usage: validate-watch-foreground-badge.rb <bitmap> <width> <height> <frame-selector>"
 end
 
 bitmap_path = ARGV.fetch(0)
@@ -19,6 +19,18 @@ end
 
 expected_width = parse_dimension.call(ARGV.fetch(1), "width")
 expected_height = parse_dimension.call(ARGV.fetch(2), "height")
+frame_selector = ARGV.fetch(3)
+
+first_badge_percent, last_badge_percent = case frame_selector
+  when "watchos-headline", "watchos-recent-reports"
+    [20, 45]
+  when "watchos-event-detail"
+    # The detail route renders its foreground-only label as the first row below
+    # the navigation title, above the dashboard/list badge band.
+    [0, 20]
+  else
+    fail_validation "unreviewed Watch frame selector"
+  end
 
 begin
   data = File.binread(bitmap_path)
@@ -48,12 +60,12 @@ row_stride = ((width * 3 + 3) / 4) * 4
 required_size = pixel_offset + row_stride * height
 fail_validation "truncated Watch validation bitmap" if data.bytesize < required_size
 
-# The badge occupies the upper-left content band on every supported Watch
-# size. This tolerance includes antialiasing around CautionColor (#ff9500)
-# without admitting the chartreuse/peach numerals on the default clock face.
+# The badge occupies a reviewed upper-left content band for each Watch route.
+# This tolerance includes antialiasing around CautionColor (#ff9500) without
+# admitting the chartreuse/peach numerals on the default clock face.
 orange_pixels = 0
-first_badge_row = (height * 20) / 100
-last_badge_row = (height * 45) / 100
+first_badge_row = (height * first_badge_percent) / 100
+last_badge_row = (height * last_badge_percent) / 100
 badge_columns = (width * 4) / 5
 
 (first_badge_row...last_badge_row).each do |display_y|

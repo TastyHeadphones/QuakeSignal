@@ -28,8 +28,8 @@ def build_bitmap(path, pixels)
   File.binwrite(path, file_header + dib_header + pixel_bytes)
 end
 
-def run_validator(path, width: WIDTH, height: HEIGHT)
-  Open3.capture3(RbConfig.ruby, VALIDATOR, path, width.to_s, height.to_s)
+def run_validator(path, width: WIDTH, height: HEIGHT, frame: "watchos-headline")
+  Open3.capture3(RbConfig.ruby, VALIDATOR, path, width.to_s, height.to_s, frame)
 end
 
 def assert(condition, message)
@@ -46,6 +46,20 @@ Dir.mktmpdir("quakesignal-watch-badge-test.") do |directory|
   stdout, stderr, status = run_validator(good_path)
   assert(status.success?, "100 in-region badge pixels should pass: #{stderr}")
   assert(stdout.include?("100 orange pixels"), "validator should report the accepted pixel count")
+  _stdout, _stderr, status = run_validator(good_path, frame: "watchos-event-detail")
+  assert(!status.success?, "dashboard-only badge pixels must not pass the detail route band")
+
+  detail_pixels = {}
+  (5...15).each do |y|
+    (5...15).each { |x| detail_pixels[[x, y]] = [255, 149, 0] }
+  end
+  detail_path = File.join(directory, "detail.bmp")
+  build_bitmap(detail_path, detail_pixels)
+  stdout, stderr, status = run_validator(detail_path, frame: "watchos-event-detail")
+  assert(status.success?, "detail badge pixels in the route-specific upper band should pass: #{stderr}")
+  assert(stdout.include?("100 orange pixels"), "detail validator should report the accepted pixel count")
+  _stdout, _stderr, status = run_validator(detail_path, frame: "watchos-headline")
+  assert(!status.success?, "detail-only upper pixels must not widen the dashboard badge band")
 
   clock_pixels = {}
   (25...35).each do |y|
@@ -57,6 +71,9 @@ Dir.mktmpdir("quakesignal-watch-badge-test.") do |directory|
   _stdout, stderr, status = run_validator(clock_path)
   assert(!status.success?, "clock-face chartreuse and peach pixels must fail")
   assert(stderr.include?("found 0, need 100"), "clock rejection should report zero qualifying pixels")
+  _stdout, stderr, status = run_validator(clock_path, frame: "watchos-event-detail")
+  assert(!status.success?, "clock-face colors must also fail the detail route band")
+  assert(stderr.include?("found 0, need 100"), "detail clock rejection should report zero qualifying pixels")
 
   outside_pixels = {}
   (50...60).each do |y|
@@ -84,6 +101,10 @@ Dir.mktmpdir("quakesignal-watch-badge-test.") do |directory|
   _stdout, stderr, status = run_validator(truncated_path)
   assert(!status.success?, "truncated bitmap must fail")
   assert(stderr.include?("truncated Watch validation bitmap"), "truncation failure should be explicit")
+
+  _stdout, stderr, status = run_validator(good_path, frame: "watchos-unreviewed")
+  assert(!status.success?, "an unreviewed frame selector must fail")
+  assert(stderr.include?("unreviewed Watch frame selector"), "selector failure should be explicit")
 end
 
 puts "Watch foreground badge validator tests passed"
