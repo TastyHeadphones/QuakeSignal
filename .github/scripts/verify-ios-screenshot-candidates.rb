@@ -121,17 +121,26 @@ class ListingAssetsWorkflowContract
     ios/AppStore/**
     ios/QuakeSignal/**
     ios/QuakeSignalShared/**
+    ios/QuakeSignalTV/**
+    ios/QuakeSignalVision/**
+    ios/QuakeSignalWatch/**
     ios/project.yml
     ios/QuakeSignal.xcodeproj/project.pbxproj
+    ios/QuakeSignal.xcodeproj/project.xcworkspace/contents.xcworkspacedata
     ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignal.xcscheme
+    ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**
     .github/scripts/verify-ios-screenshot-candidates.rb
     .github/scripts/verify-ios-screenshot-candidates.test.rb
+    .github/scripts/verify-native-apple-screenshot-candidates.rb
+    .github/scripts/verify-native-apple-screenshot-candidates.test.rb
     .github/workflows/listing-assets.yml
   ].freeze
   REQUIRED_COMMANDS = %w[
     ruby\ .github/scripts/verify-store-assets.rb
     ruby\ .github/scripts/verify-ios-screenshot-candidates.test.rb
     ruby\ .github/scripts/verify-ios-screenshot-candidates.rb
+    ruby\ .github/scripts/verify-native-apple-screenshot-candidates.test.rb
+    ruby\ .github/scripts/verify-native-apple-screenshot-candidates.rb
   ].freeze
 
   def self.validate!(source)

@@ -20,6 +20,7 @@ token, an exact current location, or a test-push result in product-page imagery.
 | Unapproved build-8 English candidate images | `screenshots-v1.1-build8/en-US/` |
 | Coordinated native-platform release runbook | `apple-platform-release.md` |
 | tvOS / visionOS / Watch metadata and screenshot plans | `platforms/` |
+| Unapproved tvOS / visionOS / Watch candidate packages | `platforms/screenshot-candidates-v1.1-build8/` |
 | Read-only App Store Connect state and safe portal sequence | `app-store-connect-portal-audit-2026-08-19.md` |
 
 ## App record
@@ -175,6 +176,10 @@ pending field.
   [`screenshot-manifest-v1.1-build8.json`](./screenshot-manifest-v1.1-build8.json)
   and
   [`screenshot-provenance-v1.1-build8.json`](./screenshot-provenance-v1.1-build8.json)
+- Native build-8 candidate inventory: exactly three Apple TV PNGs at
+  `1920 × 1080`, three Apple Watch PNGs at `410 × 502`, and five Apple Vision
+  Pro PNGs at `3840 × 2160`, with full unapproved provenance under
+  [`platforms/screenshot-candidates-v1.1-build8/`](./platforms/screenshot-candidates-v1.1-build8/)
 - No build-8 Japanese or Simplified Chinese screenshot set is captured or
   publishable until its localized name, trademark, and availability approvals
   are recorded.

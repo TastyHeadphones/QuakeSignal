@@ -55,8 +55,20 @@ Each platform directory contains:
   and `keywords.txt`. The app name and subtitle belong to the shared app record,
   so this kit does not invent platform-specific replacements for them.
 - Reviewer instructions in `review-notes.txt`.
-- A planned screenshot manifest for the frozen build-8 binary. Every image is
-  still marked pending and has no invented hash or capture evidence.
+- An immutable screenshot capture plan. Its pending/null fields are deliberate:
+  the source-frozen capture packages hash that exact plan, so recording results
+  in place would invalidate their provenance.
+
+The complete source-frozen Debug Simulator packages from successful workflow
+run `32287156910` are preserved under
+`screenshot-candidates-v1.1-build8/`. They contain all 3 Apple TV, 3 Apple
+Watch, and 5 Apple Vision Pro PNGs, per-frame evidence, aggregate provenance,
+runtime inventory, and schema-3 candidate metadata. Every package is bound to
+commit `fca25e9ee7719259debbbb218cc5e9d35f18fe83` and remains explicitly
+unapproved (`uploadApproved: false`, `reviewer: null`, and no signed Release
+evidence). The capture-run receipt retains the short-lived GitHub artifact IDs
+and archive digests; the checked-in validator proves the full local hash chain.
+These files are durable review candidates, not permission to upload them.
 
 Apple Watch has no separate platform description field for this companion.
 Apple requires the iOS description to explain the Watch functionality. The
@@ -72,9 +84,10 @@ owner approves each exact display name, availability, and trademark review.
 - [ ] Freeze the exact source commit and build 8 archives.
 - [ ] Obtain target-specific App Store provisioning profiles and validate the
   embedded Watch signature.
-- [ ] Capture each platform screenshot from the matching signed or Release
-  binary at the dimensions in the platform manifest; record hashes and visual
-  approval.
+- [ ] Compare the preserved, source-frozen Debug Simulator candidates with the
+  matching signed Release artifacts, record those artifact hashes, and obtain
+  named visual approval before upload. Debug capture and hash validation are
+  complete, but do not satisfy this signed-parity/reviewer gate.
 - [ ] Complete platform QA. Generic compilation and source inspection are not
   simulator, Apple TV, Apple Vision Pro, Apple Watch, or signed-device evidence.
   App Attest, APNs, Focus, Silent Mode, remote-focus, and background-delivery

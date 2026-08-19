@@ -274,7 +274,10 @@ Mac app (`com.quakesignal.desktop`); leave it untouched and use Apple ID
 The existing 30-image iPhone/iPad provenance records build 7 and remains
 historical evidence. A separate ten-image English iPhone/iPad build-8 Debug
 Simulator candidate has now been captured with exact source/build provenance,
-but it is unsigned, reviewer-null, and not approved for upload. tvOS requires a
-new `1920 × 1080` set, visionOS requires `3840 × 2160`, and the planned Watch
-set uses `410 × 502` consistently. No native-platform screenshot is approved;
-signed-build evidence and named release-owner review remain pending.
+but it is unsigned, reviewer-null, and not approved for upload. A separate
+source-frozen native capture now preserves three tvOS frames at
+`1920 × 1080`, five visionOS frames at `3840 × 2160`, and three Watch frames
+at `410 × 502`, together with their full unapproved provenance under
+`platforms/screenshot-candidates-v1.1-build8/`. No native-platform screenshot
+is approved; signed-build evidence and named release-owner review remain
+pending.

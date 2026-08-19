@@ -60,11 +60,12 @@ Collected” merely because the app has no account.
 
 | Platform | Intended 1.1 (8) behavior | Portal / evidence status |
 | --- | --- | --- |
-| Apple Watch companion | Foreground-only compact dashboard embedded in the iOS upload; no independent APNs, App Attest, alert audio, or background emergency alerts | **PENDING** signed host + Watch profile, paired-device QA, Watch screenshots, and shared iOS description/review approval |
-| tvOS | Foreground-only large-screen dashboard; no APNs, App Attest, alert audio, or background emergency alerts | Portal has an empty `1.0` draft; **PENDING** edit to 1.1 where permitted, build 8, profile, platform QA, metadata, and 1920 × 1080 screenshots |
-| visionOS | Full native windowed foreground app; no APNs, App Attest, Time Sensitive, Critical Alerts, or background emergency delivery. Qualifying live warnings may appear in-app and play the selected local sound only while the app is open. | Portal has an empty `1.0` draft; **PENDING** edit to 1.1 where permitted, build 8, profile, platform QA, App Motion answer, metadata, and 3840 × 2160 screenshots |
+| Apple Watch companion | Foreground-only compact dashboard embedded in the iOS upload; no independent APNs, App Attest, alert audio, or background emergency alerts | Three source-frozen `410 × 502` Debug Simulator candidates are retained and unapproved; **PENDING** signed host + Watch profile, paired-device QA, signed parity, named screenshot review, and shared iOS description/review approval |
+| tvOS | Foreground-only large-screen dashboard; no APNs, App Attest, alert audio, or background emergency alerts | Three source-frozen `1920 × 1080` Debug Simulator candidates are retained and unapproved. Portal has an empty `1.0` draft; **PENDING** edit to 1.1 where permitted, build 8, profile, platform QA, metadata, signed parity, and named screenshot review |
+| visionOS | Full native windowed foreground app; no APNs, App Attest, Time Sensitive, Critical Alerts, or background emergency delivery. Qualifying live warnings may appear in-app and play the selected local sound only while the app is open. | Five source-frozen `3840 × 2160` Debug Simulator candidates are retained and unapproved. Portal has an empty `1.0` draft; **PENDING** edit to 1.1 where permitted, build 8, profile, platform QA, App Motion answer, metadata, signed parity, and named screenshot review |
 
-Use `platforms/` for exact copy, review notes, and pending screenshot manifests.
+Use `platforms/` for exact copy, review notes, immutable screenshot plans, and
+the separately retained unapproved candidate packages.
 Use `app-store-connect-portal-audit-2026-08-19.md` for the read-only portal
 contradictions and safe action order. Do not delete or repurpose an existing
 draft from this worksheet.

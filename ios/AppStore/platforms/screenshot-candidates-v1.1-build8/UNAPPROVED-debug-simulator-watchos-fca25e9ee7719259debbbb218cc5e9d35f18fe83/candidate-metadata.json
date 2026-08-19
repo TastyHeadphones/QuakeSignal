@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 3,
+  "status": "unapproved-debug-simulator-candidate",
+  "uploadApproved": false,
+  "releaseBinaryEvidence": null,
+  "reviewer": null,
+  "sourceCommit": "fca25e9ee7719259debbbb218cc5e9d35f18fe83",
+  "debugLocalOverridePresent": false,
+  "platform": "watchos",
+  "locale": "en-US",
+  "fixture": "finalized-historical-reports",
+  "planManifest": {
+    "file": "ios/AppStore/platforms/watchos/screenshot-manifest-v1.1-build8.json",
+    "sha256": "ec918e620780442f4085beb8891a4c2ad09f0289109238101d30e815ba28501d"
+  },
+  "captureWindowUtc": {
+    "startedAt": "2026-08-19T18:41:33Z",
+    "completedAt": "2026-08-19T18:59:14Z"
+  },
+  "frames": [
+    {
+      "captureSelector": "watchos-headline",
+      "file": "en-US/01-headline.png",
+      "screen": "Watch dashboard headline",
+      "screenshotSha256": "3bc58b9e5d6428002a4833b943e0fecc0350e38e19b8a896b31fe4a223eab362",
+      "pixels": [
+        410,
+        502
+      ],
+      "capturedAtUtc": "2026-08-19T18:41:33Z",
+      "selectedSimulator": {
+        "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.watchOS-26-5",
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra-2-49mm",
+        "deviceModel": "Apple Watch Ultra 2 (49mm)",
+        "udid": "4AD86BC5-959B-4F4A-9746-29D600C55444"
+      },
+      "captureEvidenceFile": "frame-capture-evidence/watchos-headline.json",
+      "captureEvidenceSha256": "8f2bc4c82b7816c4c98f0fedcc3ce37143468de4767c182d3a3b2d7bec9b1fbb"
+    },
+    {
+      "captureSelector": "watchos-recent-reports",
+      "file": "en-US/02-recent-reports.png",
+      "screen": "Recent reports",
+      "screenshotSha256": "5e74f5d8cd823c5a125ce1f93e865c3d0a2d9db3c15d2b340f16e95f17d0bc68",
+      "pixels": [
+        410,
+        502
+      ],
+      "capturedAtUtc": "2026-08-19T18:50:32Z",
+      "selectedSimulator": {
+        "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.watchOS-26-5",
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra-2-49mm",
+        "deviceModel": "Apple Watch Ultra 2 (49mm)",
+        "udid": "DD573D1D-94F4-4226-8E83-99BAF28B606C"
+      },
+      "captureEvidenceFile": "frame-capture-evidence/watchos-recent-reports.json",
+      "captureEvidenceSha256": "e07ef5ed0c278b79eb1687bec7708f9aefd0f0ba477c1e1c0d4eee943cf331b9"
+    },
+    {
+      "captureSelector": "watchos-event-detail",
+      "file": "en-US/03-event-detail.png",
+      "screen": "Event detail",
+      "screenshotSha256": "b1b113d6381e8eafe5b37c6cf1082db112c8179fd0e9c290f0d759fdea82a57a",
+      "pixels": [
+        410,
+        502
+      ],
+      "capturedAtUtc": "2026-08-19T18:59:14Z",
+      "selectedSimulator": {
+        "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.watchOS-26-5",
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra-2-49mm",
+        "deviceModel": "Apple Watch Ultra 2 (49mm)",
+        "udid": "BCC9EA6A-A66D-414F-894A-B8519281C4E3"
+      },
+      "captureEvidenceFile": "frame-capture-evidence/watchos-event-detail.json",
+      "captureEvidenceSha256": "96540419f0328b21a2e158b397326ed9929f1550d3d18b63f5c5db41abf0cf03"
+    }
+  ],
+  "captureEvidenceFile": "capture-provenance.json",
+  "captureEvidenceSha256": "3294120cb8c5979ce77ae7d1f54140ee0038cb49174c49e0aef08abdd0ac0ef6",
+  "xcodeVersion": "Xcode 26.6 Build version 17F113 ",
+  "workflowRun": "https://github.com/TastyHeadphones/QuakeSignal/actions/runs/32287156910",
+  "approvalRequired": "Named visual review and runbook-required signed Release parity comparison"
+}

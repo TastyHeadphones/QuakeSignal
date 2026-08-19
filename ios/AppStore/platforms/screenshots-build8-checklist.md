@@ -32,11 +32,12 @@ This checklist creates no approval by itself.
 - [ ] Confirm every file is opaque, in JPEG/JPG/PNG, at the exact selected
   dimensions, and visually free of clipping, focus, localization, or safe-area
   defects.
-- [ ] Replace each planned manifest's `null` evidence and hash values only from
-  the completed capture. Keep the fail-closed candidate manifest unapproved;
-  record any later named approval and signed-Release parity in separately
-  reviewed release evidence unless the schema and validator are deliberately
-  extended together.
+- [x] Preserve each planned manifest byte-for-byte. The completed capture
+  packages hash those exact pending/null plans; changing a plan in place would
+  invalidate the provenance chain. Store results in the separate fail-closed
+  candidate package and keep it unapproved. Record any later named approval and
+  signed-Release parity in separately reviewed release evidence unless the
+  schema and validator are deliberately extended together.
 
 ## Apple TV
 
@@ -46,8 +47,8 @@ This checklist creates no approval by itself.
   or the matching simulator runtime.
 - [ ] Ensure the visible copy says foreground only and no screenshot implies a
   background alert, notification, alert sound, App Attest, or location feature.
-- [ ] Update `tvos/screenshot-manifest-v1.1-build8.json` with evidence and
-  SHA-256 values.
+- [x] Preserve the Apple TV plan and retain the separate candidate metadata,
+  aggregate/per-frame evidence, runtime inventory, and PNG SHA-256 values.
 
 ## Apple Vision Pro
 
@@ -59,8 +60,9 @@ This checklist creates no approval by itself.
 - [ ] Ensure the visible copy is truthful about foreground-only monitoring and
   does not imply APNs, App Attest, Time Sensitive, Critical Alerts, or
   background emergency delivery on visionOS.
-- [ ] Update `visionos/screenshot-manifest-v1.1-build8.json` with evidence and
-  SHA-256 values.
+- [x] Preserve the Apple Vision Pro plan and retain the separate candidate
+  metadata, aggregate/per-frame evidence, runtime inventory, and PNG SHA-256
+  values.
 
 ## Apple Watch
 
@@ -77,8 +79,8 @@ This checklist creates no approval by itself.
 - [ ] Verify the Watch app is installed from the signed iOS host, refreshes when
   opened, scrolls correctly, and opens event details on a paired Apple Watch.
 - [ ] Ensure the screenshots make no independent background-alert claim.
-- [ ] Update `watchos/screenshot-manifest-v1.1-build8.json` with host/watch
-  evidence and SHA-256 values.
+- [x] Preserve the Apple Watch plan and retain the separate candidate metadata,
+  aggregate/per-frame evidence, runtime inventory, and PNG SHA-256 values.
 
 ## Historical build-7 evidence and current build-8 candidate
 
@@ -113,3 +115,14 @@ The build-8 recapture sequence is:
 
 No current iPhone, iPad, Apple TV, Apple Vision Pro, or Apple Watch screenshot
 asset is approved for a build-8 App Store upload.
+
+The exact native candidates captured from commit
+`fca25e9ee7719259debbbb218cc5e9d35f18fe83` by successful workflow run
+`32287156910` are preserved under
+`screenshot-candidates-v1.1-build8/`. The directory contains three exact
+`UNAPPROVED-debug-simulator-*` packages plus `capture-run-receipt.json`. The
+packages collectively contain 3 Apple TV, 3 Apple Watch, and 5 Apple Vision
+Pro frames. Their source, plan, runtime, dimensions, opacity, per-frame hashes,
+aggregate provenance, and unapproved status must pass
+`.github/scripts/verify-native-apple-screenshot-candidates.rb`; this still does
+not supply a signed Release comparison or named upload approval.

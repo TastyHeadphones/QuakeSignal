@@ -1185,9 +1185,20 @@ class ListingAssetsWorkflowContractTest < Minitest::Test
         "        with:\n          fetch-depth: 0\n          ref: main\n",
       ],
       ["      - \"ios/QuakeSignal/**\"\n", ""],
+      ["      - \"ios/QuakeSignalTV/**\"\n", ""],
+      ["      - \"ios/QuakeSignalVision/**\"\n", ""],
+      ["      - \"ios/QuakeSignalWatch/**\"\n", ""],
+      [
+        "      - \"ios/QuakeSignal.xcodeproj/project.xcworkspace/contents.xcworkspacedata\"\n",
+        "",
+      ],
+      ["      - \"ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**\"\n", ""],
       ["      - \".github/scripts/verify-ios-screenshot-candidates.rb\"\n", ""],
+      ["      - \".github/scripts/verify-native-apple-screenshot-candidates.rb\"\n", ""],
       ["ruby .github/scripts/verify-ios-screenshot-candidates.test.rb", "ruby -v"],
       ["ruby .github/scripts/verify-ios-screenshot-candidates.rb", "ruby -v"],
+      ["ruby .github/scripts/verify-native-apple-screenshot-candidates.test.rb", "ruby -v"],
+      ["ruby .github/scripts/verify-native-apple-screenshot-candidates.rb", "ruby -v"],
       [
         "        run: ruby .github/scripts/verify-ios-screenshot-candidates.rb\n",
         "        run: |\n" \

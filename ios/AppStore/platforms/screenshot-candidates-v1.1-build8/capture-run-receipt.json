@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "status": "unapproved-debug-simulator-candidate-run-receipt",
+  "uploadApproved": false,
+  "releaseBinaryEvidence": null,
+  "reviewer": null,
+  "repository": "TastyHeadphones/QuakeSignal",
+  "workflowFile": ".github/workflows/apple-platform-screenshots.yml",
+  "sourceCommit": "fca25e9ee7719259debbbb218cc5e9d35f18fe83",
+  "contentManifestAlgorithm": "sha256 of sorted UTF-8 records: <file-sha256><two spaces><relative-path><newline>",
+  "workflowRun": {
+    "id": 32287156910,
+    "attempt": 1,
+    "url": "https://github.com/TastyHeadphones/QuakeSignal/actions/runs/32287156910",
+    "event": "workflow_dispatch",
+    "conclusion": "success",
+    "createdAtUtc": "2026-08-19T18:24:26Z",
+    "completedAtUtc": "2026-08-19T19:04:39Z"
+  },
+  "archivePreservation": {
+    "verifiedAtUtc": "2026-08-19T19:29:11Z",
+    "verification": "Each downloaded ZIP SHA-256 matched the GitHub artifact digest and unzip integrity testing passed",
+    "archivesCheckedIntoRepository": false
+  },
+  "artifacts": [
+    {
+      "platform": "tvos",
+      "directory": "UNAPPROVED-debug-simulator-tvos-fca25e9ee7719259debbbb218cc5e9d35f18fe83",
+      "artifactId": 9378322291,
+      "archiveDigest": "sha256:af384d92eb48f3b1ecea0fb10b1155c1e1ba165b1cbc1c7337d0bf680b572333",
+      "archiveSizeInBytes": 4503647,
+      "extractedSizeInBytes": 4525874,
+      "fileCount": 9,
+      "contentManifestSha256": "87d9c958c81bba580a2b3451928b4d875817460349a58fc31470a975823f7db9",
+      "createdAtUtc": "2026-08-19T18:32:08Z",
+      "remoteExpiresAtUtc": "2026-08-26T18:32:05Z"
+    },
+    {
+      "platform": "watchos",
+      "directory": "UNAPPROVED-debug-simulator-watchos-fca25e9ee7719259debbbb218cc5e9d35f18fe83",
+      "artifactId": 9379269018,
+      "archiveDigest": "sha256:cb6bbd5d723f5338beb724c84618f3cdf77a04206ea7a7b814f1f0530e7bdc6e",
+      "archiveSizeInBytes": 112455,
+      "extractedSizeInBytes": 120848,
+      "fileCount": 9,
+      "contentManifestSha256": "105e9a1237f81b944d153a0ab2d1c5d5f6e3d640319ea321e1e9fc8995e28521",
+      "createdAtUtc": "2026-08-19T18:59:32Z",
+      "remoteExpiresAtUtc": "2026-08-26T18:59:30Z"
+    },
+    {
+      "platform": "visionos",
+      "directory": "UNAPPROVED-debug-simulator-visionos-fca25e9ee7719259debbbb218cc5e9d35f18fe83",
+      "artifactId": 9379441361,
+      "archiveDigest": "sha256:1bced6014a79855af3837b1eafdc801df86f79a0e0c9151001fd61967589208e",
+      "archiveSizeInBytes": 27181682,
+      "extractedSizeInBytes": 27211818,
+      "fileCount": 13,
+      "contentManifestSha256": "5ce3ff08a8c5619b5f84c62a237b20fce94701a71d70d9ba3c85b36d49f57065",
+      "createdAtUtc": "2026-08-19T19:04:31Z",
+      "remoteExpiresAtUtc": "2026-08-26T19:04:28Z"
+    }
+  ]
+}

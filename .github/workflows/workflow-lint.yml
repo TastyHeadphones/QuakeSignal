@@ -161,6 +161,8 @@ jobs:
           /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
+          /usr/bin/ruby -c .github/scripts/verify-native-apple-screenshot-candidates.rb
+          /usr/bin/ruby -c .github/scripts/verify-native-apple-screenshot-candidates.test.rb
           /usr/bin/ruby ios/ScreenshotAutomation/platform-screenshot-plan.test.rb
           /usr/bin/ruby ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb
           bash ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh

@@ -9,26 +9,40 @@ on:
       - "ios/AppStore/**"
       - "ios/QuakeSignal/**"
       - "ios/QuakeSignalShared/**"
+      - "ios/QuakeSignalTV/**"
+      - "ios/QuakeSignalVision/**"
+      - "ios/QuakeSignalWatch/**"
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal.xcodeproj/project.xcworkspace/contents.xcworkspacedata"
       - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignal.xcscheme"
+      - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
       - "desktop/AppStore/**"
       - ".github/scripts/verify-store-assets.rb"
       - ".github/scripts/verify-ios-screenshot-candidates.rb"
       - ".github/scripts/verify-ios-screenshot-candidates.test.rb"
+      - ".github/scripts/verify-native-apple-screenshot-candidates.rb"
+      - ".github/scripts/verify-native-apple-screenshot-candidates.test.rb"
       - ".github/workflows/listing-assets.yml"
   pull_request:
     paths:
       - "ios/AppStore/**"
       - "ios/QuakeSignal/**"
       - "ios/QuakeSignalShared/**"
+      - "ios/QuakeSignalTV/**"
+      - "ios/QuakeSignalVision/**"
+      - "ios/QuakeSignalWatch/**"
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal.xcodeproj/project.xcworkspace/contents.xcworkspacedata"
       - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignal.xcscheme"
+      - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
       - "desktop/AppStore/**"
       - ".github/scripts/verify-store-assets.rb"
       - ".github/scripts/verify-ios-screenshot-candidates.rb"
       - ".github/scripts/verify-ios-screenshot-candidates.test.rb"
+      - ".github/scripts/verify-native-apple-screenshot-candidates.rb"
+      - ".github/scripts/verify-native-apple-screenshot-candidates.test.rb"
       - ".github/workflows/listing-assets.yml"
   workflow_dispatch:
 
@@ -54,3 +68,9 @@ jobs:
 
       - name: Validate optional iOS screenshot candidates
         run: ruby .github/scripts/verify-ios-screenshot-candidates.rb
+
+      - name: Test native Apple screenshot candidate validator
+        run: ruby .github/scripts/verify-native-apple-screenshot-candidates.test.rb
+
+      - name: Validate native Apple screenshot candidates
+        run: ruby .github/scripts/verify-native-apple-screenshot-candidates.rb
