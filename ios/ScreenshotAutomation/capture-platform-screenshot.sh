@@ -367,15 +367,19 @@ candidate="$temporary_root/$platform-$locale.png"
 # Simulator's black device mask preserves native pixels while avoiding a
 # transparent corner channel on rounded Watch captures.
 if [ "$platform" = "watchos" ]; then
-  # CoreSimulator can take several minutes to service the first Watch
-  # screenshot request. Restart it deterministically every 45 seconds so
-  # watchOS cannot return to the clock after its two-minute foreground timeout,
-  # and stop all child work at a five-minute hard deadline.
-  if ! quakesignal_capture_watch_screenshot \
-      "$simulator_id" "$bundle_id" "$candidate" "$locale" "$apple_locale" \
-      "$frame_selector" 300 45; then
-    echo "error: Watch screenshot capture failed while maintaining foreground state" >&2
-    exit 70
+  # CoreSimulator can take several minutes to service the first Watch request.
+  # Keep the app foregrounded every 45 seconds, bound each request to five
+  # minutes, and allow one semantically validated retry after a transition.
+  watch_capture_status=0
+  quakesignal_capture_validated_watch_screenshot \
+    "$simulator_id" "$bundle_id" "$candidate" "$locale" "$apple_locale" \
+    "$frame_selector" 300 45 "$temporary_root" \
+    "$expected_width" "$expected_height" \
+    "$script_dir/validate-watch-foreground-badge.rb" 5 sips /usr/bin/ruby || \
+    watch_capture_status=$?
+  if [ "$watch_capture_status" -ne 0 ]; then
+    echo "error: Watch screenshot capture/validation failed with status $watch_capture_status" >&2
+    exit "$watch_capture_status"
   fi
 else
   xcrun simctl io "$simulator_id" screenshot --type=png --mask=black "$candidate"
@@ -393,17 +397,6 @@ fi
 if [ "$has_alpha" = "yes" ]; then
   echo "error: native capture contains an alpha channel, which App Store Connect rejects" >&2
   exit 65
-fi
-
-if [ "$platform" = "watchos" ]; then
-  # The deterministic Watch fixture always renders platform.foreground.badge
-  # in CautionColor (#ff9500) near the top of the app. Convert only a temporary
-  # validation copy to an uncompressed BMP so stock Ruby can inspect pixels;
-  # the native PNG remains untouched. Reject clock-face or other stale captures.
-  watch_validation_bmp="$temporary_root/watch-foreground-validation.bmp"
-  sips -s format bmp "$candidate" --out "$watch_validation_bmp" >/dev/null
-  /usr/bin/ruby "$script_dir/validate-watch-foreground-badge.rb" \
-    "$watch_validation_bmp" "$expected_width" "$expected_height" "$frame_selector"
 fi
 
 if [ -e "$output" ] || [ -L "$output" ]; then

@@ -1,5 +1,15 @@
 #!/usr/bin/ruby
 
+if ARGV.length == 6 && ARGV[0, 3] == ["-s", "format", "bmp"] && ARGV[4] == "--out"
+  File.binwrite(ARGV.fetch(5), File.binread(ARGV.fetch(3)))
+  exit 0
+end
+
+if ARGV.length == 4 && ARGV.fetch(0).end_with?(".bmp")
+  abort "unexpected Watch frame selector" unless ARGV.fetch(3) == ENV.fetch("QUAKESIGNAL_TEST_EXPECTED_FRAME")
+  exit(File.binread(ARGV.fetch(0)) == "valid" ? 0 : 1)
+end
+
 mode = ARGV.fetch(1)
 Signal.trap("TERM", "IGNORE") if ENV.fetch("QUAKESIGNAL_TEST_IGNORE_TERM", "0") == "1"
 
@@ -46,4 +56,12 @@ if ENV.fetch("QUAKESIGNAL_TEST_SIGNAL_PARENT_MODE", "") == mode
 end
 
 sleep delay
+if mode == "io" && status.zero? && !ENV.fetch("QUAKESIGNAL_TEST_CAPTURE_PAYLOADS", "").empty?
+  count_file = ENV.fetch("QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE")
+  capture_index = File.exist?(count_file) ? Integer(File.read(count_file), 10) : 0
+  payloads = ENV.fetch("QUAKESIGNAL_TEST_CAPTURE_PAYLOADS").split("|", -1)
+  payload = payloads.fetch([capture_index, payloads.length - 1].min)
+  File.binwrite(ARGV.fetch(-1), payload)
+  File.write(count_file, (capture_index + 1).to_s)
+end
 exit status

@@ -67,6 +67,16 @@ assert_recorded_process_stopped() {
   fi
 }
 
+assert_file_content() {
+  local file_path="$1"
+  local expected_content="$2"
+  local label="$3"
+  if [ ! -f "$file_path" ] || [ "$(<"$file_path")" != "$expected_content" ]; then
+    echo "error: $label did not contain the expected test payload" >&2
+    exit 1
+  fi
+}
+
 wait_for_nonempty_file() {
   local file="$1"
   local label="$2"
@@ -194,6 +204,206 @@ if [ -e "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" ]; then
   echo "error: quick Watch capture performed an unnecessary restart" >&2
   exit 1
 fi
+
+# Exercise the complete semantic retry orchestration with the same xcrun stub
+# used by the process-supervisor tests. The stub also acts as sips and as the
+# Ruby validator for these bounded text-payload fixtures.
+for invalid_settle in "" 00 01 -1 1x; do
+  expect_status 64 quakesignal_capture_validated_watch_screenshot \
+    fake-watch fake.bundle "$test_root/invalid-settle.png" en en_US \
+    watchos-headline 4 1 "$test_root" 410 502 \
+    "$QUAKESIGNAL_XCRUN_EXECUTABLE" "$invalid_settle" \
+    "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+done
+
+ln -s "$test_root" "$test_root/validation-root-symlink"
+expect_status 64 quakesignal_capture_validated_watch_screenshot \
+  fake-watch fake.bundle "$test_root/symlink-root.png" en en_US \
+  watchos-headline 4 1 "$test_root/validation-root-symlink" 410 502 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+
+mkdir "$test_root/other-validation-root"
+expect_status 64 quakesignal_capture_validated_watch_screenshot \
+  fake-watch fake.bundle "$test_root/outside-root.png" en en_US \
+  watchos-headline 4 1 "$test_root/other-validation-root" 410 502 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+
+ln -s "$QUAKESIGNAL_XCRUN_EXECUTABLE" "$test_root/validator-symlink.rb"
+expect_status 64 quakesignal_capture_validated_watch_screenshot \
+  fake-watch fake.bundle "$test_root/symlink-validator.png" en en_US \
+  watchos-headline 4 1 "$test_root" 410 502 \
+  "$test_root/validator-symlink.rb" 0 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+
+validated_pass_dir="$test_root/validated-pass-first"
+mkdir "$validated_pass_dir"
+export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="valid"
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_pass_dir/capture-count"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_pass_dir/reactivated"
+expect_status 0 quakesignal_capture_validated_watch_screenshot \
+  fake-watch fake.bundle "$validated_pass_dir/candidate.png" en en_US \
+  watchos-headline 4 1 "$validated_pass_dir" 410 502 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+assert_file_content "$QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE" 1 "pass-first capture count"
+assert_file_content "$validated_pass_dir/candidate.png" valid "pass-first candidate"
+if [ -e "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" ] || \
+    [ -e "$validated_pass_dir/rejected-watch-attempt-1.png" ]; then
+  echo "error: pass-first Watch validation retried or quarantined a valid raster" >&2
+  exit 1
+fi
+
+validated_retry_dir="$test_root/validated-reject-pass"
+mkdir "$validated_retry_dir"
+export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="invalid|valid"
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_retry_dir/capture-count"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_retry_dir/reactivated"
+expect_status 0 quakesignal_capture_validated_watch_screenshot \
+  fake-watch fake.bundle "$validated_retry_dir/candidate.png" en en_US \
+  watchos-headline 4 1 "$validated_retry_dir" 410 502 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+assert_file_content "$QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE" 2 "retry capture count"
+assert_file_content "$validated_retry_dir/rejected-watch-attempt-1.png" invalid \
+  "quarantined Watch raster"
+assert_file_content "$validated_retry_dir/candidate.png" valid "accepted retry raster"
+if [ ! -s "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" ]; then
+  echo "error: rejected Watch raster did not trigger an exact-frame relaunch" >&2
+  exit 1
+fi
+
+validated_reject_dir="$test_root/validated-reject-reject"
+mkdir "$validated_reject_dir"
+export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="invalid|invalid"
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_reject_dir/capture-count"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_reject_dir/reactivated"
+expect_status 65 quakesignal_capture_validated_watch_screenshot \
+  fake-watch fake.bundle "$validated_reject_dir/candidate.png" en en_US \
+  watchos-headline 4 1 "$validated_reject_dir" 410 502 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+assert_file_content "$QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE" 2 "reject-twice capture count"
+assert_file_content "$validated_reject_dir/rejected-watch-attempt-1.png" invalid \
+  "first rejected Watch raster"
+assert_file_content "$validated_reject_dir/candidate.png" invalid \
+  "second rejected Watch raster"
+if [ -e "$validated_reject_dir/final.png" ] || \
+    [ -e "$validated_reject_dir/capture-provenance.json" ]; then
+  echo "error: reject-twice Watch validation published an artifact" >&2
+  exit 1
+fi
+
+validated_sips_dir="$test_root/validated-sips-failure"
+mkdir "$validated_sips_dir"
+export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="valid"
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_sips_dir/capture-count"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_sips_dir/reactivated"
+expect_status 70 quakesignal_capture_validated_watch_screenshot \
+  fake-watch fake.bundle "$validated_sips_dir/candidate.png" en en_US \
+  watchos-headline 4 1 "$validated_sips_dir" 410 502 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 /usr/bin/false /usr/bin/ruby
+
+validated_quarantine_dir="$test_root/validated-quarantine-failure"
+mkdir "$validated_quarantine_dir"
+touch "$validated_quarantine_dir/rejected-watch-attempt-1.png"
+export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="invalid|valid"
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_quarantine_dir/capture-count"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_quarantine_dir/reactivated"
+expect_status 73 quakesignal_capture_validated_watch_screenshot \
+  fake-watch fake.bundle "$validated_quarantine_dir/candidate.png" en en_US \
+  watchos-headline 4 1 "$validated_quarantine_dir" 410 502 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+if [ -e "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" ]; then
+  echo "error: quarantine refusal still relaunched the Watch fixture" >&2
+  exit 1
+fi
+
+validated_relaunch_dir="$test_root/validated-relaunch-failure"
+mkdir "$validated_relaunch_dir"
+export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="invalid|valid"
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_relaunch_dir/capture-count"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_relaunch_dir/reactivated"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUS=29
+expect_status 70 quakesignal_capture_validated_watch_screenshot \
+  fake-watch fake.bundle "$validated_relaunch_dir/candidate.png" en en_US \
+  watchos-headline 4 1 "$validated_relaunch_dir" 410 502 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+export QUAKESIGNAL_TEST_REACTIVATION_STATUS=0
+assert_file_content "$QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE" 1 \
+  "relaunch-failure capture count"
+
+validated_capture_failure_dir="$test_root/validated-capture-failure"
+mkdir "$validated_capture_failure_dir"
+export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="valid"
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_capture_failure_dir/capture-count"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_capture_failure_dir/reactivated"
+export QUAKESIGNAL_TEST_CAPTURE_STATUS=23
+expect_status 70 quakesignal_capture_validated_watch_screenshot \
+  fake-watch fake.bundle "$validated_capture_failure_dir/candidate.png" en en_US \
+  watchos-headline 4 1 "$validated_capture_failure_dir" 410 502 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+export QUAKESIGNAL_TEST_CAPTURE_STATUS=0
+
+validated_retry_signal_dir="$test_root/validated-retry-signal"
+mkdir "$validated_retry_signal_dir"
+retry_signal_capture_pid_file="$validated_retry_signal_dir/capture.pid"
+retry_signal_reactivation_pid_file="$validated_retry_signal_dir/reactivation.pid"
+export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="invalid|valid"
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_retry_signal_dir/capture-count"
+export QUAKESIGNAL_TEST_CAPTURE_PID_FILE="$retry_signal_capture_pid_file"
+export QUAKESIGNAL_TEST_REACTIVATION_PID_FILE="$retry_signal_reactivation_pid_file"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_retry_signal_dir/reactivated"
+export QUAKESIGNAL_TEST_REACTIVATION_DELAY=30
+export QUAKESIGNAL_TEST_SIGNAL_PARENT_MODE=launch
+export QUAKESIGNAL_TEST_SIGNAL_PARENT=TERM
+export QUAKESIGNAL_TEST_HOLD_PID_ASSIGNMENT=1
+(
+  screenshot_pid=""
+  watch_reactivation_pid=""
+
+  retry_signal_cleanup() {
+    quakesignal_stop_processes "$screenshot_pid" "$watch_reactivation_pid"
+  }
+  trap retry_signal_cleanup EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  quakesignal_capture_validated_watch_screenshot \
+    fake-watch fake.bundle "$validated_retry_signal_dir/candidate.png" en en_US \
+    watchos-headline 20 5 "$validated_retry_signal_dir" 410 502 \
+    "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 \
+    "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+) &
+spawn_race_supervisor_pid=$!
+validated_retry_signal_status=0
+if wait "$spawn_race_supervisor_pid"; then
+  validated_retry_signal_status=0
+else
+  validated_retry_signal_status=$?
+fi
+spawn_race_supervisor_pid=""
+if [ "$validated_retry_signal_status" -ne 143 ]; then
+  echo "error: semantic-retry relaunch signal race expected 143, got $validated_retry_signal_status" >&2
+  exit 1
+fi
+assert_recorded_process_stopped "$retry_signal_capture_pid_file" \
+  "semantic-retry screenshot"
+assert_recorded_process_stopped "$retry_signal_reactivation_pid_file" \
+  "semantic-retry relaunch"
+
+export QUAKESIGNAL_TEST_CAPTURE_PID_FILE="$test_root/capture.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_PID_FILE="$test_root/reactivation.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_DELAY=0
+export QUAKESIGNAL_TEST_SIGNAL_PARENT_MODE=""
+export QUAKESIGNAL_TEST_SIGNAL_PARENT=""
+export QUAKESIGNAL_TEST_HOLD_PID_ASSIGNMENT=0
+unset QUAKESIGNAL_TEST_CAPTURE_PAYLOADS QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$test_root/reactivated"
 
 export QUAKESIGNAL_TEST_CAPTURE_DELAY=3
 expect_status 0 quakesignal_capture_watch_screenshot \
