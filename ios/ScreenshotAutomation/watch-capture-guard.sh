@@ -114,8 +114,8 @@ quakesignal_restore_tracked_spawn_signals() {
 # uses xcrun; the executable override exists solely for the credential-free
 # process-supervisor test.
 quakesignal_capture_watch_screenshot() {
-  if [ "$#" -ne 7 ]; then
-    echo "error: Watch capture guard expects simulator, bundle, output, locale, Apple locale, timeout, and interval" >&2
+  if [ "$#" -ne 8 ]; then
+    echo "error: Watch capture guard expects simulator, bundle, output, locale, Apple locale, frame, timeout, and interval" >&2
     return 64
   fi
 
@@ -124,9 +124,17 @@ quakesignal_capture_watch_screenshot() {
   local candidate="$3"
   local locale="$4"
   local apple_locale="$5"
-  local timeout_seconds="$6"
-  local reactivation_interval_seconds="$7"
+  local frame_selector="$6"
+  local timeout_seconds="$7"
+  local reactivation_interval_seconds="$8"
   local xcrun_executable="${QUAKESIGNAL_XCRUN_EXECUTABLE:-xcrun}"
+  case "$frame_selector" in
+    watchos-headline|watchos-recent-reports|watchos-event-detail) ;;
+    *)
+      echo "error: Watch capture guard received an unreviewed frame selector" >&2
+      return 64
+      ;;
+  esac
   case "$timeout_seconds" in
     ""|0|0*|*[!0-9]*)
       echo "error: Watch capture timeout must be one canonical positive integer" >&2
@@ -205,12 +213,14 @@ quakesignal_capture_watch_screenshot() {
       # here would make $! identify a wrapper and could orphan its xcrun child.
       quakesignal_defer_tracked_spawn_signals
       SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1 \
+      SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_FRAME="$frame_selector" \
       SIMCTL_CHILD_AppleLanguages="($locale)" \
       SIMCTL_CHILD_AppleLocale="$apple_locale" \
       SIMCTL_CHILD_TZ=UTC \
         "$xcrun_executable" simctl launch --terminate-running-process \
           "$simulator_id" "$bundle_id" \
-          --quakesignal-screenshot-automation >/dev/null &
+          --quakesignal-screenshot-automation \
+          "--quakesignal-screenshot-frame=$frame_selector" >/dev/null &
       spawned_pid=$!
       if [ "${QUAKESIGNAL_TEST_HOLD_PID_ASSIGNMENT:-0}" = "1" ]; then
         sleep 1 || true

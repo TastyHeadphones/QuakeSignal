@@ -4,32 +4,38 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: capture-platform-screenshot.sh <tvos|watchos|visionos> <absolute-output.png>
+Usage: capture-platform-screenshot.sh <tvos|watchos|visionos> <frame-selector> <absolute-output.png>
 
 Builds a Debug simulator app, launches it with QuakeSignal's deterministic
-screenshot fixture, and captures an unmodified native PNG. The requested
-platform runtime must already be installed. Captures inside the repository are
-rejected so review candidates remain CI/manual artifacts until approved.
+screenshot fixture at one exact reviewed frame, and captures an unmodified
+native PNG. The frame selector must belong to the checked-in platform plan.
+The requested platform runtime must already be installed. Captures inside the
+repository are rejected so review candidates remain CI/manual artifacts until
+approved.
 
 Optional environment:
   QUAKESIGNAL_SCREENSHOT_LOCALE=en|ja|zh-Hans  (default: en)
   QUAKESIGNAL_SCREENSHOT_KEEP_SIMULATOR=1      (preserve disposable simulator)
+  QUAKESIGNAL_SCREENSHOT_DERIVED_DATA=/absolute/cache/directory
+      Reuse an unsigned build cache across frames. It must be outside the repo.
   QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT=/absolute/path.json
       Write an explicitly unapproved capture sidecar containing the exact
       selected Simulator runtime identifier and device type/model.
 USAGE
 }
 
-if [ "$#" -ne 2 ]; then
+if [ "$#" -ne 3 ]; then
   usage >&2
   exit 64
 fi
 
 platform="$1"
-requested_output="$2"
+frame_selector="$2"
+requested_output="$3"
 locale="${QUAKESIGNAL_SCREENSHOT_LOCALE:-en}"
 keep_simulator="${QUAKESIGNAL_SCREENSHOT_KEEP_SIMULATOR:-0}"
 requested_provenance_output="${QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT:-}"
+requested_derived_data="${QUAKESIGNAL_SCREENSHOT_DERIVED_DATA:-}"
 
 case "$locale" in
   en) apple_locale="en_US" ;;
@@ -62,7 +68,7 @@ case "$output" in
     exit 64
     ;;
 esac
-if [ -e "$output" ]; then
+if [ -e "$output" ] || [ -L "$output" ]; then
   echo "error: refusing to overwrite existing artifact: $output" >&2
   exit 73
 fi
@@ -84,7 +90,7 @@ if [ -n "$requested_provenance_output" ]; then
       exit 64
       ;;
   esac
-  if [ -e "$provenance_output" ]; then
+  if [ -e "$provenance_output" ] || [ -L "$provenance_output" ]; then
     echo "error: refusing to overwrite existing provenance artifact: $provenance_output" >&2
     exit 73
   fi
@@ -119,21 +125,11 @@ case "$platform" in
     scheme="QuakeSignalWatch"
     destination_platform="watchOS Simulator"
     bundle_id="com.quakesignal.app.watchkitapp"
-    expected_width=0
-    expected_height=0
+    expected_width=410
+    expected_height=502
     device_types=(
       com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra-2-49mm
       com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra-49mm
-      com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra-3-49mm
-      com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-11-46mm
-      com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-10-46mm
-      com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-9-45mm
-      com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-8-45mm
-      com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-7-45mm
-      com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-3-44mm
-      com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-6-44mm
-      com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-44mm-2nd-generation
-      com.apple.CoreSimulator.SimDeviceType.Apple-Watch-SE-44mm
     )
     ;;
   *)
@@ -142,6 +138,35 @@ case "$platform" in
     exit 64
     ;;
 esac
+
+plan_entry="$(/usr/bin/ruby "$script_dir/platform-screenshot-plan.rb" "$platform" --tsv | \
+  awk -F '\t' -v selector="$frame_selector" '$1 == selector { print; matches += 1 } END { exit(matches == 1 ? 0 : 1) }')" || {
+  echo "error: frame selector '$frame_selector' is not the exact reviewed $platform plan" >&2
+  exit 64
+}
+IFS=$'\t' read -r planned_selector planned_file planned_width planned_height <<<"$plan_entry"
+if [ "$planned_selector" != "$frame_selector" ] || \
+   [ "$planned_width" != "$expected_width" ] || \
+   [ "$planned_height" != "$expected_height" ]; then
+  echo "error: frame selector '$frame_selector' disagrees with the platform capture contract" >&2
+  exit 65
+fi
+
+derived_data=""
+if [ -n "$requested_derived_data" ]; then
+  if [[ "$requested_derived_data" != /* ]]; then
+    echo "error: derived-data cache must be an absolute path" >&2
+    exit 64
+  fi
+  mkdir -p "$requested_derived_data"
+  derived_data="$(cd "$requested_derived_data" && pwd -P)"
+  case "$derived_data" in
+    "$repo_root"|"$repo_root"/*)
+      echo "error: derived-data cache must be outside the repository: $repo_root" >&2
+      exit 64
+      ;;
+  esac
+fi
 
 for required_command in xcodebuild xcrun ruby sips; do
   if ! command -v "$required_command" >/dev/null 2>&1; then
@@ -227,18 +252,6 @@ if [ -z "$simulator_id" ]; then
   exit 69
 fi
 
-if [ "$platform" = "watchos" ]; then
-  case "$selected_device_type" in
-    *Apple-Watch-Ultra-3-49mm) expected_width=422; expected_height=514 ;;
-    *Apple-Watch-Ultra-2-49mm|*Apple-Watch-Ultra-49mm) expected_width=410; expected_height=502 ;;
-    *Apple-Watch-Series-11-46mm|*Apple-Watch-Series-10-46mm) expected_width=416; expected_height=496 ;;
-    *Apple-Watch-Series-9-45mm|*Apple-Watch-Series-8-45mm|*Apple-Watch-Series-7-45mm)
-      expected_width=396; expected_height=484
-      ;;
-    *) expected_width=368; expected_height=448 ;;
-  esac
-fi
-
 echo "Using runtime: $runtime_identifier"
 echo "Using device:  $selected_device_type"
 echo "Device model:  $selected_device_model"
@@ -296,7 +309,9 @@ fi
 xcrun simctl boot "$simulator_id"
 xcrun simctl bootstatus "$simulator_id" -b
 
-derived_data="$temporary_root/DerivedData"
+if [ -z "$derived_data" ]; then
+  derived_data="$temporary_root/DerivedData"
+fi
 destination="platform=$destination_platform,id=$simulator_id"
 
 xcodebuild build \
@@ -327,18 +342,22 @@ fi
 xcrun simctl install "$simulator_id" "$app_path"
 
 launch_fixture_app() {
+  local selected_frame="$1"
+  shift
   /usr/bin/env \
     SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1 \
+    SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_FRAME="$selected_frame" \
     "SIMCTL_CHILD_AppleLanguages=($locale)" \
     "SIMCTL_CHILD_AppleLocale=$apple_locale" \
     SIMCTL_CHILD_TZ=UTC \
     xcrun simctl launch "$@" \
     "$simulator_id" \
     "$bundle_id" \
-    --quakesignal-screenshot-automation
+    --quakesignal-screenshot-automation \
+    "--quakesignal-screenshot-frame=$selected_frame"
 }
 
-launch_fixture_app --terminate-running-process
+launch_fixture_app "$frame_selector" --terminate-running-process
 
 # SwiftUI needs a short, bounded settling period after the process becomes
 # launchable. The fixture does not issue network or permission requests.
@@ -354,7 +373,7 @@ if [ "$platform" = "watchos" ]; then
   # and stop all child work at a five-minute hard deadline.
   if ! quakesignal_capture_watch_screenshot \
       "$simulator_id" "$bundle_id" "$candidate" "$locale" "$apple_locale" \
-      300 45; then
+      "$frame_selector" 300 45; then
     echo "error: Watch screenshot capture failed while maintaining foreground state" >&2
     exit 70
   fi
@@ -387,6 +406,10 @@ if [ "$platform" = "watchos" ]; then
     "$watch_validation_bmp" "$expected_width" "$expected_height"
 fi
 
+if [ -e "$output" ] || [ -L "$output" ]; then
+  echo "error: artifact output appeared during capture; refusing to overwrite: $output" >&2
+  exit 73
+fi
 mv "$candidate" "$output"
 screenshot_sha256="$(shasum -a 256 "$output" | awk '{ print $1 }')"
 echo "$screenshot_sha256  $output"
@@ -396,6 +419,8 @@ echo "This artifact still requires named visual review before any metadata uploa
 if [ -n "$provenance_output" ]; then
   export CAPTURE_PLATFORM="$platform"
   export CAPTURE_LOCALE="$locale"
+  export CAPTURE_FRAME_SELECTOR="$frame_selector"
+  export CAPTURE_PLANNED_FILE="$planned_file"
   export CAPTURE_SCREENSHOT_FILE="$(basename "$output")"
   export CAPTURE_SCREENSHOT_SHA256="$screenshot_sha256"
   export CAPTURE_PIXEL_WIDTH="$pixel_width"
@@ -411,6 +436,8 @@ if [ -n "$provenance_output" ]; then
       uploadApproved: false,
       platform: ENV.fetch("CAPTURE_PLATFORM"),
       locale: ENV.fetch("CAPTURE_LOCALE"),
+      captureSelector: ENV.fetch("CAPTURE_FRAME_SELECTOR"),
+      plannedFile: ENV.fetch("CAPTURE_PLANNED_FILE"),
       screenshotFile: ENV.fetch("CAPTURE_SCREENSHOT_FILE"),
       screenshotSha256: ENV.fetch("CAPTURE_SCREENSHOT_SHA256"),
       pixels: [
@@ -425,7 +452,7 @@ if [ -n "$provenance_output" ]; then
         udid: ENV.fetch("CAPTURE_SIMULATOR_UDID")
       }
     }
-    File.write(ARGV.fetch(0), JSON.pretty_generate(metadata) + "\n")
+    File.write(ARGV.fetch(0), JSON.pretty_generate(metadata) + "\n", mode: "wx")
   ' "$provenance_output"
   echo "Recorded unapproved capture provenance: $provenance_output"
 fi

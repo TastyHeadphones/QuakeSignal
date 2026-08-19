@@ -23,7 +23,10 @@ struct SettingsView: View {
         @Bindable var settings = settings
 
         NavigationStack {
-            Form {
+            if ScreenshotAutomation.selectedFrame == .visionAlertPreferences {
+                AlertSoundSelectionView(screenshotSelectedPreference: .japaneseVoice)
+            } else {
+                Form {
                 Section("settings.section.subscription") {
                     Button {
                         showingCityPicker = true
@@ -243,8 +246,9 @@ struct SettingsView: View {
             .onChange(of: settings.radiusKm) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.selectedCityId) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.useCurrentLocation) { _, _ in resyncPushPreferences() }
-            .sheet(isPresented: $showingCityPicker) {
-                CityPickerView()
+                .sheet(isPresented: $showingCityPicker) {
+                    CityPickerView()
+                }
             }
         }
     }
@@ -547,6 +551,11 @@ struct SettingsView: View {
 
 private struct AlertSoundSelectionView: View {
     @State private var settings = AppSettings.shared
+    let screenshotSelectedPreference: AlertSoundPreference?
+
+    init(screenshotSelectedPreference: AlertSoundPreference? = nil) {
+        self.screenshotSelectedPreference = screenshotSelectedPreference
+    }
 
     var body: some View {
         @Bindable var settings = settings
@@ -555,7 +564,9 @@ private struct AlertSoundSelectionView: View {
             Section {
                 ForEach(AlertSoundPreference.allCases, id: \.self) { preference in
                     Button {
-                        settings.alertSound = preference
+                        if screenshotSelectedPreference == nil {
+                            settings.alertSound = preference
+                        }
                     } label: {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: preference.systemImage)
@@ -572,7 +583,7 @@ private struct AlertSoundSelectionView: View {
                                     .multilineTextAlignment(.leading)
                             }
                             Spacer(minLength: 8)
-                            if settings.alertSound == preference {
+                            if selectedPreference == preference {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(Color("BrandColor"))
                                     .accessibilityHidden(true)
@@ -581,13 +592,13 @@ private struct AlertSoundSelectionView: View {
                         .padding(.vertical, 5)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityAddTraits(settings.alertSound == preference ? .isSelected : [])
+                    .accessibilityAddTraits(selectedPreference == preference ? .isSelected : [])
                 }
             }
 
             Section {
                 Button {
-                    EmergencyAlertAudio.shared.preview(settings.alertSound)
+                    EmergencyAlertAudio.shared.preview(selectedPreference)
                 } label: {
                     Label("settings.alertSound.preview", systemImage: "play.circle.fill")
                 }
@@ -601,6 +612,10 @@ private struct AlertSoundSelectionView: View {
         }
         .navigationTitle("settings.alertSound.title")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var selectedPreference: AlertSoundPreference {
+        screenshotSelectedPreference ?? settings.alertSound
     }
 }
 

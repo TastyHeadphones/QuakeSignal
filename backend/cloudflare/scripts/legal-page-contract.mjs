@@ -1,0 +1,41 @@
+export const LEGAL_PAGE_CONTRACTS = [
+  {
+    path: "/privacy",
+    title: "Privacy Policy",
+    effectiveDate: "19 August 2026",
+    requiredText: [
+      "Only the app when running on an iPhone or iPad can register",
+      "embedded Apple Watch companion and Apple TV app",
+      "Apple Vision Pro, Mac Catalyst, and Designed for iPad on Mac",
+      "separate native Windows/macOS desktop app and Chrome extension",
+      "optional family contact name and telephone number stay in local app storage",
+      "erase both Family Check-In fields and uncheck each selected preparedness-kit item",
+      "Apple Maps and system Location Services",
+      "opening this public page sends ordinary web-request metadata to Cloudflare",
+      "do not provide background emergency alerts",
+      "a public support issue cannot privately identify or delete that unreachable registration",
+      "after it has not been refreshed for 90 days",
+    ],
+  },
+  {
+    path: "/support",
+    title: "Support",
+    effectiveDate: "19 August 2026",
+    requiredText: [
+      "iPhone and iPad alerts",
+      "embedded Apple Watch companion and Apple TV app",
+      "Apple Vision Pro, Mac Catalyst, and Designed for iPad on Mac",
+      "separate native Windows/macOS desktop app and Chrome extension",
+      "do not independently use the QuakeSignal notification relay",
+      "Registration removal after a reset",
+      "support cannot identify the old registration from a public issue",
+      "Never include an APNs device token",
+    ],
+  },
+  {
+    path: "/terms",
+    title: "Terms of Use",
+    effectiveDate: "12 August 2026",
+    requiredText: [],
+  },
+];

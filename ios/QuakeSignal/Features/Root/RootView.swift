@@ -1,5 +1,13 @@
 import SwiftUI
 
+private enum RootTab: Hashable {
+    case home
+    case reports
+    case map
+    case guide
+    case settings
+}
+
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var store = QuakeStore.shared
@@ -9,23 +17,40 @@ struct RootView: View {
     @State private var needsPushRegistration = false
     @State private var showingUnavailableAlert = false
     @AppStorage("onboarding.completed") private var hasCompletedOnboarding = false
+    @State private var selectedTab: RootTab
+
+    init() {
+        let initialTab: RootTab = switch ScreenshotAutomation.selectedFrame {
+        case .visionReports: .reports
+        case .visionMap: .map
+        case .visionGuide: .guide
+        case .visionAlertPreferences: .settings
+        default: .home
+        }
+        _selectedTab = State(initialValue: initialTab)
+    }
 
     var body: some View {
         @Bindable var store = store
 
         Group {
             if hasCompletedOnboarding || ScreenshotAutomation.isEnabled {
-                TabView {
+                TabView(selection: $selectedTab) {
                     HomeView()
                         .tabItem { Label("tab.home", systemImage: "waveform.path.ecg") }
+                        .tag(RootTab.home)
                     QuakeListView()
                         .tabItem { Label("tab.list", systemImage: "list.bullet") }
+                        .tag(RootTab.reports)
                     EpicenterMapView()
                         .tabItem { Label("tab.map", systemImage: "map") }
+                        .tag(RootTab.map)
                     DisasterGuideView()
                         .tabItem { Label("tab.guide", systemImage: "cross.case") }
+                        .tag(RootTab.guide)
                     SettingsView()
                         .tabItem { Label("tab.settings", systemImage: "gearshape") }
+                        .tag(RootTab.settings)
                 }
                 .tint(Color("BrandColor"))
             } else {

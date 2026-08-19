@@ -7,6 +7,25 @@ import Foundation
 enum ScreenshotAutomation {
     static let launchArgument = "--quakesignal-screenshot-automation"
     static let environmentKey = "QUAKESIGNAL_SCREENSHOT_AUTOMATION"
+    static let frameArgumentPrefix = "--quakesignal-screenshot-frame="
+    static let frameEnvironmentKey = "QUAKESIGNAL_SCREENSHOT_FRAME"
+
+    /// Exact destinations in the reviewed tvOS, visionOS, and watchOS
+    /// screenshot plans. Public and physical-device builds cannot enter these
+    /// screenshot-only routes even when arbitrary process inputs are supplied.
+    enum Frame: String, CaseIterable, Sendable {
+        case tvDashboard = "tvos-dashboard"
+        case tvRecentReports = "tvos-recent-reports"
+        case tvEventDetail = "tvos-event-detail"
+        case visionHome = "visionos-home"
+        case visionReports = "visionos-reports"
+        case visionMap = "visionos-map"
+        case visionGuide = "visionos-guide"
+        case visionAlertPreferences = "visionos-alert-preferences"
+        case watchHeadline = "watchos-headline"
+        case watchRecentReports = "watchos-recent-reports"
+        case watchEventDetail = "watchos-event-detail"
+    }
 
     static func shouldActivate(
         buildAllowsAutomation: Bool,
@@ -30,6 +49,45 @@ enum ScreenshotAutomation {
         )
 #else
         false
+#endif
+    }
+
+    static func selectFrame(
+        buildAllowsAutomation: Bool,
+        isSimulator: Bool,
+        arguments: [String],
+        environment: [String: String]
+    ) -> Frame? {
+        guard shouldActivate(
+            buildAllowsAutomation: buildAllowsAutomation,
+            isSimulator: isSimulator,
+            arguments: arguments,
+            environment: environment
+        ), let environmentValue = environment[frameEnvironmentKey] else {
+            return nil
+        }
+
+        let argumentValues = arguments.compactMap { argument -> String? in
+            guard argument.hasPrefix(frameArgumentPrefix) else { return nil }
+            return String(argument.dropFirst(frameArgumentPrefix.count))
+        }
+        guard argumentValues.count == 1,
+              argumentValues[0] == environmentValue else {
+            return nil
+        }
+        return Frame(rawValue: environmentValue)
+    }
+
+    static var selectedFrame: Frame? {
+#if DEBUG && targetEnvironment(simulator)
+        selectFrame(
+            buildAllowsAutomation: true,
+            isSimulator: true,
+            arguments: ProcessInfo.processInfo.arguments,
+            environment: ProcessInfo.processInfo.environment
+        )
+#else
+        nil
 #endif
     }
 

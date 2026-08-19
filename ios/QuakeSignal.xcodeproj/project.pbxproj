@@ -41,7 +41,6 @@
 		3B9B81C77BE2B0DAE7FA1D6D /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16B1C64A6D002370B927BF7 /* NotificationManager.swift */; };
 		3DB9B6B8A47E1BE6F2AB4B42 /* GuideTopicDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FFEE58B247EFABCA2FBF98 /* GuideTopicDetailView.swift */; };
 		401D81C61074F8E0B821A0DC /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */; };
-		403065F07BF79FF2E24A006F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FB035B0C75FC4309B8A80D43 /* PrivacyInfo.xcprivacy */; };
 		40BA7730C3FA24F8ABAF1E85 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48820A9D89E7DA9CE7EEECA1 /* HomeView.swift */; };
 		41F5DDF967DC83F72A7D5CDF /* QuakeListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B58B74D54691C905E32B3BE /* QuakeListView.swift */; };
 		423F90193A49F30A63F386B8 /* EEWEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */; };
@@ -59,6 +58,7 @@
 		685AE05165088DCE6A7159A5 /* ATTRIBUTION.md in Resources */ = {isa = PBXBuildFile; fileRef = C2B4DD59D0DAE82284A0FC66 /* ATTRIBUTION.md */; };
 		6AA2343197F1352D29D92CDD /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57E54B5E816643F7401A58F /* RootView.swift */; };
 		6B6E89AB5EE885007554F98A /* DisasterGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0542F5FDBF2D0122F19F2A88 /* DisasterGuideView.swift */; };
+		6BC117EC3B283866A4078493 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0F3FB3C0BF26164CDBD79FC4 /* PrivacyInfo.xcprivacy */; };
 		6DDE22A65353BC33BF456D90 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = DA0B489340F90173C681EA84 /* InfoPlist.strings */; };
 		6EE7DAFE78B108C4941CEEEB /* City.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFBDB4E5BC222EB32F6ACEA /* City.swift */; };
 		6F2DBB8C795DBC1C32545FD0 /* ScreenshotAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94136FB707EA39D05E83A74D /* ScreenshotAutomation.swift */; };
@@ -172,6 +172,7 @@
 		0542F5FDBF2D0122F19F2A88 /* DisasterGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisasterGuideView.swift; sourceTree = "<group>"; };
 		0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		0B4C630D4060DEC1DA1AC5EB /* QuakeRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeRowView.swift; sourceTree = "<group>"; };
+		0F3FB3C0BF26164CDBD79FC4 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		12ABFE7475C9CB0B85A6C404 /* QuakeSignalTV.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = QuakeSignalTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		16717A3C1A8CD585C6BE1923 /* quakesignal_urgent.caf */ = {isa = PBXFileReference; path = quakesignal_urgent.caf; sourceTree = "<group>"; };
 		1BD11E3C4D40F7F456CAF5AA /* LiveSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSocketClient.swift; sourceTree = "<group>"; };
@@ -259,6 +260,7 @@
 			isa = PBXGroup;
 			children = (
 				68921860CD3DBD9ECC1C49F3 /* Assets.xcassets */,
+				CD2FCB8D3725168D5625229E /* Resources */,
 			);
 			path = QuakeSignalVision;
 			sourceTree = "<group>";
@@ -439,6 +441,14 @@
 				41E397F876EB72C79A9710C4 /* OnboardingView.swift */,
 			);
 			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		CD2FCB8D3725168D5625229E /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				0F3FB3C0BF26164CDBD79FC4 /* PrivacyInfo.xcprivacy */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		DD5697597B2CC2FA561F3400 /* Home */ = {
@@ -685,7 +695,7 @@
 				7B1CF70F3C72B6F019FDECC4 /* Assets.xcassets in Resources */,
 				366B308C5B296B4347A5FC12 /* InfoPlist.strings in Resources */,
 				940D1C06F9370AE4EA2F1040 /* Localizable.strings in Resources */,
-				403065F07BF79FF2E24A006F /* PrivacyInfo.xcprivacy in Resources */,
+				6BC117EC3B283866A4078493 /* PrivacyInfo.xcprivacy in Resources */,
 				C1A1A8478DD6F33434901D71 /* quakesignal_japanese_voice.caf in Resources */,
 				886B1D45E82EB94236AAC86C /* quakesignal_urgent.caf in Resources */,
 			);

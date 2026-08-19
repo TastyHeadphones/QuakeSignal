@@ -91,8 +91,11 @@ final class QuakeStore {
     private let pushRegistrationSerialiser = PushRegistrationSerialiser()
     private var revisionsByEvent: [String: [EventRevision]] = [:]
     private var isForegroundActive = true
+    private var hasStarted = false
     private var foregroundHTTPFallbackTask: Task<Void, Never>?
     private var expirationClockTask: Task<Void, Never>?
+    private var activeRefreshTask: Task<WolfxSnapshotFetchResult, Error>?
+    private var foregroundResumeTask: Task<Void, Never>?
     private var refreshGeneration = 0
     private var clockNow = Date()
     private var alertedRevisionKeys: Set<String> = []
@@ -117,31 +120,57 @@ final class QuakeStore {
 
     func start() async {
         guard !screenshotAutomationEnabled else { return }
-        liveSocket.start()
-        updateForegroundHTTPFallback()
-        updateExpirationClock()
-        await refresh()
+        let actions = DirectMonitoringLifecyclePolicy.actionsForStart(
+            hasStarted: hasStarted,
+            isForegroundActive: isForegroundActive
+        )
+        guard !actions.isEmpty else { return }
+        hasStarted = true
+
+        for action in actions where action != .refreshSnapshot {
+            performDirectMonitoringAction(action)
+        }
+        if actions.contains(.refreshSnapshot) {
+            await refresh()
+        }
     }
 
-    /// Keeps recovery polling strictly in the foreground. The normal socket
-    /// reconnection loop remains active; this merely lets the regular HTTPS
-    /// snapshot path keep the UI fresh during a prolonged upstream socket
-    /// outage. It never generates a local alert for fetched backfill.
+    /// Owns the complete direct-Wolfx lifecycle. All targets suspend sockets,
+    /// in-flight HTTP refreshes, and app-owned alert audio outside an active
+    /// scene. iPhone/iPad background warnings remain an APNs responsibility;
+    /// relay-disabled targets therefore have no hidden background data path.
     func setForegroundActive(_ isActive: Bool) {
+        let wasActive = isForegroundActive
         isForegroundActive = isActive
         guard !screenshotAutomationEnabled else {
-            foregroundHTTPFallbackTask?.cancel()
-            foregroundHTTPFallbackTask = nil
-            expirationClockTask?.cancel()
-            expirationClockTask = nil
+            for action in DirectMonitoringLifecyclePolicy.suspensionActions {
+                performDirectMonitoringAction(action)
+            }
             return
         }
-        updateForegroundHTTPFallback()
-        updateExpirationClock()
+
+        let actions = DirectMonitoringLifecyclePolicy.actionsForSceneTransition(
+            hasStarted: hasStarted,
+            wasForegroundActive: wasActive,
+            isForegroundActive: isForegroundActive
+        )
+        for action in actions {
+            if action == .refreshSnapshot {
+                foregroundResumeTask?.cancel()
+                foregroundResumeTask = Task { @MainActor [weak self] in
+                    await self?.refresh()
+                }
+            } else {
+                performDirectMonitoringAction(action)
+            }
+        }
     }
 
     func refresh() async {
-        guard !screenshotAutomationEnabled else { return }
+        guard !screenshotAutomationEnabled,
+              DirectMonitoringLifecyclePolicy.shouldAcceptDirectEvent(
+                  isForegroundActive: isForegroundActive
+              ) else { return }
         // The upstream feeds are independent. One malformed or temporarily
         // unavailable source must not hide validated reports from every
         // healthy source. The partial path still fails closed when all
@@ -150,30 +179,47 @@ final class QuakeStore {
     }
 
     private func refresh(allowingPartialResults: Bool) async {
+        guard DirectMonitoringLifecyclePolicy.shouldAcceptDirectEvent(
+            isForegroundActive: isForegroundActive
+        ) else { return }
+
         refreshGeneration += 1
         let generation = refreshGeneration
         isLoading = true
         loadError = nil
-        do {
+
+        activeRefreshTask?.cancel()
+        let refreshTask = Task { [wolfx] in
             if allowingPartialResults {
-                let snapshot = try await wolfx.fetchRecentQuakesAllowingPartialResults()
-                guard generation == refreshGeneration else { return }
-                guard snapshot.hasSuccessfulSources else {
-                    loadError = snapshot.statusDescription
-                    ?? "Wolfx snapshot unavailable."
-                    isLoading = false
-                    return
-                }
-                applyFetchedEvents(snapshot.events)
-                // A partial fallback is useful data, not a failed refresh. The
-                // existing banner exposes the concise source summary without
-                // removing the refreshed event list.
-                loadError = snapshot.statusDescription
-            } else {
-                let snapshot = try await wolfx.fetchRecentQuakes()
-                guard generation == refreshGeneration else { return }
-                applyFetchedEvents(snapshot)
+                return try await wolfx.fetchRecentQuakesAllowingPartialResults()
             }
+            let events = try await wolfx.fetchRecentQuakes()
+            return WolfxSnapshotFetchResult(
+                events: events,
+                failedSources: [],
+                successfulSourceCount: WolfxClient.sources.count
+            )
+        }
+        activeRefreshTask = refreshTask
+
+        do {
+            let snapshot = try await refreshTask.value
+            guard generation == refreshGeneration, isForegroundActive else { return }
+            guard snapshot.hasSuccessfulSources else {
+                loadError = snapshot.statusDescription
+                    ?? "Wolfx snapshot unavailable."
+                isLoading = false
+                activeRefreshTask = nil
+                return
+            }
+            applyFetchedEvents(snapshot.events)
+            // A partial fallback is useful data, not a failed refresh. The
+            // existing banner exposes the concise source summary without
+            // removing the refreshed event list.
+            loadError = snapshot.statusDescription
+        } catch is CancellationError {
+            // Scene deactivation and a newer refresh both cancel obsolete
+            // requests. Neither is a user-visible network failure.
         } catch {
             if generation == refreshGeneration {
                 loadError = error.localizedDescription
@@ -181,6 +227,7 @@ final class QuakeStore {
         }
         if generation == refreshGeneration {
             isLoading = false
+            activeRefreshTask = nil
         }
     }
 
@@ -307,6 +354,10 @@ final class QuakeStore {
     }
 
     private func ingestDirect(event: EEWEvent, isBackfill: Bool) {
+        guard DirectMonitoringLifecyclePolicy.shouldAcceptDirectEvent(
+            isForegroundActive: isForegroundActive
+        ) else { return }
+
         let previous = events.first(where: { $0.id == event.id })
         guard EventMergePolicy.shouldAccept(event, replacing: previous) else { return }
         let reason = ForegroundAlertPolicy.presentationReason(
@@ -328,10 +379,44 @@ final class QuakeStore {
         event: EEWEvent,
         reason: AlertPresentationReason
     ) {
+        guard DirectMonitoringLifecyclePolicy.shouldPresentForegroundEmergency(
+            isForegroundActive: isForegroundActive
+        ) else { return }
+
         let key = "\(event.id)#\(event.serial)#\(event.isWarn)#\(event.isFinal)#\(event.isCancel)#\(event.isTraining)"
         guard alertedRevisionKeys.insert(key).inserted else { return }
         presentedAlert = PresentedAlert(event: event, reason: reason)
         EmergencyAlertAudio.shared.playSelectedSound(for: event, reason: reason)
+    }
+
+    private func performDirectMonitoringAction(_ action: DirectMonitoringLifecycleAction) {
+        switch action {
+        case .startSocket:
+            liveSocket.start()
+        case .stopSocket:
+            liveSocket.stop()
+        case .cancelRefreshes:
+            refreshGeneration += 1
+            activeRefreshTask?.cancel()
+            activeRefreshTask = nil
+            foregroundResumeTask?.cancel()
+            foregroundResumeTask = nil
+            isLoading = false
+        case .refreshSnapshot:
+            // The async callers own this action so startup can await its first
+            // snapshot and a scene transition can retain a cancellable task.
+            assertionFailure("refreshSnapshot must be performed by the async caller")
+        case .startForegroundMaintenance:
+            updateForegroundHTTPFallback()
+            updateExpirationClock()
+        case .stopForegroundMaintenance:
+            foregroundHTTPFallbackTask?.cancel()
+            foregroundHTTPFallbackTask = nil
+            expirationClockTask?.cancel()
+            expirationClockTask = nil
+        case .stopAlertAudio:
+            EmergencyAlertAudio.shared.stop()
+        }
     }
 
     private func recordRevision(for event: EEWEvent) {

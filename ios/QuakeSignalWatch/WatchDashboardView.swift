@@ -6,6 +6,21 @@ struct WatchDashboardView: View {
 
     var body: some View {
         NavigationStack {
+            if ScreenshotAutomation.selectedFrame == .watchEventDetail,
+               let event = store.headlineEvent {
+                WatchEventDetailView(event: event)
+            } else {
+                dashboard
+            }
+        }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await store.monitorWhileActive(limit: 12)
+        }
+    }
+
+    private var dashboard: some View {
+        ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 8) {
@@ -46,6 +61,15 @@ struct WatchDashboardView: View {
                             .foregroundStyle(Color("CautionColor"))
                     }
 
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("platform.foreground.badge", systemImage: "eye")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color("CautionColor"))
+                        Text("platform.historical.reports")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .id("watch-recent-reports")
+
                     ForEach(store.events.prefix(8)) { event in
                         NavigationLink {
                             WatchEventDetailView(event: event)
@@ -56,10 +80,11 @@ struct WatchDashboardView: View {
                 }
             }
             .navigationTitle("app.name")
-        }
-        .task(id: scenePhase) {
-            guard scenePhase == .active else { return }
-            await store.monitorWhileActive(limit: 12)
+            .task {
+                guard ScreenshotAutomation.selectedFrame == .watchRecentReports else { return }
+                await Task.yield()
+                proxy.scrollTo("watch-recent-reports", anchor: .top)
+            }
         }
     }
 
@@ -128,6 +153,8 @@ private struct WatchEventDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
+                Label("platform.foreground.badge", systemImage: "eye")
+                    .foregroundStyle(Color("CautionColor"))
                 Text(event.magnitudeText)
                     .font(.system(size: 46, weight: .bold, design: .rounded))
                     .foregroundStyle(event.severity.color)

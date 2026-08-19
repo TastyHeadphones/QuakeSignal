@@ -10,6 +10,7 @@ export const repositoryRoot = resolve(scriptDirectory, "../..");
 const files = {
   desktop: ".github/workflows/desktop-release.yml",
   desktopConfig: "desktop/src-tauri/tauri.conf.json",
+  desktopRuntime: "desktop/src-tauri/src/lib.rs",
   homebrew: ".github/workflows/homebrew-tap.yml",
 };
 
@@ -696,9 +697,10 @@ function verifyHomebrewWorkflow(workflow) {
 
 /** Verify offline workflow contracts for the direct macOS and Homebrew lanes. */
 export async function verifyDesktopReleaseContract({ root = repositoryRoot } = {}) {
-  const [desktopSource, desktopConfigSource, homebrewSource] = await Promise.all([
+  const [desktopSource, desktopConfigSource, desktopRuntimeSource, homebrewSource] = await Promise.all([
     readFile(resolve(root, files.desktop), "utf8"),
     readFile(resolve(root, files.desktopConfig), "utf8"),
+    readFile(resolve(root, files.desktopRuntime), "utf8"),
     readFile(resolve(root, files.homebrew), "utf8"),
   ]);
   let desktopConfig;
@@ -712,6 +714,18 @@ export async function verifyDesktopReleaseContract({ root = repositoryRoot } = {
   }
   if (desktopConfig.identifier !== MACOS_APP_STORE_BUNDLE_IDENTIFIER) {
     fail(`desktop/src-tauri/tauri.conf.json identifier must be exactly ${MACOS_APP_STORE_BUNDLE_IDENTIFIER}.`);
+  }
+  const stdoutOnlyLogger = /tauri_plugin_log::Builder::new\(\)\s*\.targets\(\[tauri_plugin_log::Target::new\(\s*tauri_plugin_log::TargetKind::Stdout,?\s*\)\]\)\s*\.build\(\)/m;
+  if (!stdoutOnlyLogger.test(desktopRuntimeSource)) {
+    fail("desktop runtime must configure the Tauri logger with the reviewed stdout-only target.");
+  }
+  const loggerBuilders = desktopRuntimeSource.match(/tauri_plugin_log::Builder::new\s*\(/g) ?? [];
+  const loggerTargets = desktopRuntimeSource.match(/tauri_plugin_log::Target::new\s*\(/g) ?? [];
+  if (loggerBuilders.length !== 1 || loggerTargets.length !== 1 || /\buse\s+tauri_plugin_log\b/.test(desktopRuntimeSource)) {
+    fail("desktop runtime must contain exactly one fully qualified Tauri logger and one reviewed target.");
+  }
+  if (/TargetKind::(?:LogDir|Folder|Webview)|tauri_plugin_log::Builder::new\(\)\s*\.build\(\)/.test(desktopRuntimeSource)) {
+    fail("desktop runtime must not enable a persistent or implicit Tauri log target.");
   }
   return {
     ...verifyDesktopWorkflow(parseWorkflow(desktopSource, "desktop release workflow")),

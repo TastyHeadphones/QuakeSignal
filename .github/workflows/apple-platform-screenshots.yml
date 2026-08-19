@@ -37,13 +37,26 @@ jobs:
         run: |
           set -euo pipefail
           bash -n ios/ScreenshotAutomation/capture-platform-screenshot.sh
+          bash -n ios/ScreenshotAutomation/capture-platform-screenshot-set.sh
+          bash -n ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
           bash -n ios/ScreenshotAutomation/watch-capture-guard.sh
           bash -n ios/ScreenshotAutomation/watch-capture-guard.test.sh
+          /usr/bin/ruby -c ios/ScreenshotAutomation/platform-screenshot-plan.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/platform-screenshot-plan.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/platform-screenshot-plan.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb
+          bash ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
           bash ios/ScreenshotAutomation/watch-capture-guard.test.sh
           /usr/bin/ruby ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
           test -x ios/ScreenshotAutomation/capture-platform-screenshot.sh
+          test -x ios/ScreenshotAutomation/capture-platform-screenshot-set.sh
+          test -x ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
+          test -x ios/ScreenshotAutomation/platform-screenshot-plan.rb
+          test -x ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb
           if grep -En '\$\{\{[[:space:]]*secrets\.' .github/workflows/apple-platform-screenshots.yml; then
             echo "::error::Screenshot candidate workflow must not reference secrets"
             exit 1
@@ -66,18 +79,52 @@ jobs:
             exit 1
           fi
 
-      - name: Capture one native dashboard candidate
+      - name: Prove exact clean source immediately before capture
+        run: |
+          set -euo pipefail
+          debug_local_override="ios/QuakeSignal/Supporting/Debug.local.xcconfig"
+          if [ -e "$debug_local_override" ] || [ -L "$debug_local_override" ]; then
+            echo "::error::Ignored Debug.local.xcconfig must be absent for source-frozen capture"
+            exit 1
+          fi
+          pre_capture_sha="$(git rev-parse --verify HEAD)"
+          if [ "$pre_capture_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::Checked-out HEAD $pre_capture_sha does not match workflow source $GITHUB_SHA"
+            exit 1
+          fi
+          pre_capture_status="$(git status --porcelain=v1 --untracked-files=all)"
+          if [ -n "$pre_capture_status" ]; then
+            printf '%s\n' "$pre_capture_status"
+            echo "::error::Repository must have zero tracked or untracked changes before capture"
+            exit 1
+          fi
+
+      - name: Capture exact planned native frame set
         env:
           PLATFORM_KEY: ${{ matrix.key }}
         run: |
           set -euo pipefail
           artifact_dir="$RUNNER_TEMP/quakesignal-screenshot-candidates/$PLATFORM_KEY"
-          mkdir -p "$artifact_dir"
-          export QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT="$artifact_dir/capture-provenance.json"
-          ios/ScreenshotAutomation/capture-platform-screenshot.sh \
-            "$PLATFORM_KEY" \
-            "$artifact_dir/$PLATFORM_KEY-en-dashboard.png"
-          test -s "$QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT"
+          export QUAKESIGNAL_SCREENSHOT_DERIVED_DATA="$RUNNER_TEMP/quakesignal-screenshot-derived-data/$PLATFORM_KEY"
+          ios/ScreenshotAutomation/capture-platform-screenshot-set.sh \
+            "$PLATFORM_KEY" "$artifact_dir"
+          test -s "$artifact_dir/capture-provenance.json"
+          post_capture_sha="$(git rev-parse --verify HEAD)"
+          if [ "$post_capture_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::Checked-out HEAD $post_capture_sha changed from workflow source $GITHUB_SHA"
+            exit 1
+          fi
+          post_capture_status="$(git status --porcelain=v1 --untracked-files=all)"
+          if [ -n "$post_capture_status" ]; then
+            printf '%s\n' "$post_capture_status"
+            echo "::error::Repository must have zero tracked or untracked changes after capture"
+            exit 1
+          fi
+          debug_local_override="ios/QuakeSignal/Supporting/Debug.local.xcconfig"
+          if [ -e "$debug_local_override" ] || [ -L "$debug_local_override" ]; then
+            echo "::error::Ignored Debug.local.xcconfig appeared during source-frozen capture"
+            exit 1
+          fi
           xcrun simctl list runtimes available > "$artifact_dir/simulator-runtimes.txt"
           echo "CANDIDATE_DIR=$artifact_dir" >> "$GITHUB_ENV"
 
@@ -93,44 +140,81 @@ jobs:
           /usr/bin/ruby -rjson -rdigest -e '
             directory = ENV.fetch("CANDIDATE_DIR")
             platform = ENV.fetch("PLATFORM_KEY")
-            screenshot = File.join(directory, "#{platform}-en-dashboard.png")
             evidence_path = File.join(directory, "capture-provenance.json")
             evidence = JSON.parse(File.read(evidence_path))
-            unless evidence.fetch("schemaVersion") == 1 &&
-                evidence.fetch("status") == "unapproved-debug-simulator-capture-evidence" &&
-                evidence.fetch("uploadApproved") == false
-              abort "capture provenance is not explicitly unapproved schema version 1 evidence"
+            source_commit = ENV.fetch("SOURCE_COMMIT")
+            abort "source commit is not a full lowercase SHA-1" unless source_commit.match?(/\A[0-9a-f]{40}\z/)
+            unless evidence.fetch("schemaVersion") == 2 &&
+                evidence.fetch("status") == "unapproved-debug-simulator-capture-set-evidence" &&
+                evidence.fetch("uploadApproved") == false &&
+                evidence.fetch("releaseBinaryEvidence").nil? &&
+                evidence.fetch("reviewer").nil?
+              abort "capture-set provenance is not explicitly unapproved schema version 2 evidence"
             end
+            expected_counts = { "tvos" => 3, "visionos" => 5, "watchos" => 3 }
+            expected_selectors = {
+              "tvos" => %w[tvos-dashboard tvos-recent-reports tvos-event-detail],
+              "visionos" => %w[visionos-home visionos-reports visionos-map visionos-guide visionos-alert-preferences],
+              "watchos" => %w[watchos-headline watchos-recent-reports watchos-event-detail]
+            }
             unless evidence.fetch("platform") == platform &&
-                evidence.fetch("locale") == "en" &&
-                evidence.fetch("screenshotFile") == File.basename(screenshot) &&
-                evidence.fetch("screenshotSha256") == Digest::SHA256.file(screenshot).hexdigest
-              abort "capture provenance does not match the selected platform screenshot"
+                evidence.fetch("locale") == "en-US" &&
+                evidence.fetch("fixture") == "finalized-historical-reports"
+              abort "capture-set provenance does not match the selected platform and fixture"
             end
-            selected_simulator = evidence.fetch("selectedSimulator")
-            %w[runtimeIdentifier deviceTypeIdentifier deviceModel udid].each do |key|
-              value = selected_simulator.fetch(key)
-              abort "capture provenance selectedSimulator.#{key} is empty" unless value.is_a?(String) && !value.empty?
+            frames = evidence.fetch("frames")
+            unless frames.is_a?(Array) && frames.length == expected_counts.fetch(platform)
+              abort "capture-set provenance does not contain the exact planned frame count"
+            end
+            unless frames.map { |frame| frame.fetch("captureSelector") } == expected_selectors.fetch(platform)
+              abort "capture-set provenance selectors do not match the exact ordered plan"
+            end
+            normalized_frames = frames.map do |frame|
+              screenshot = File.join(directory, frame.fetch("file"))
+              abort "capture-set screenshot is missing" unless File.file?(screenshot)
+              screenshot_sha256 = Digest::SHA256.file(screenshot).hexdigest
+              abort "capture-set screenshot hash mismatch" unless frame.fetch("sha256") == screenshot_sha256
+              frame_evidence = File.join(directory, frame.fetch("captureEvidenceFile"))
+              abort "per-frame capture evidence is missing" unless File.file?(frame_evidence)
+              unless frame.fetch("captureEvidenceSha256") == Digest::SHA256.file(frame_evidence).hexdigest
+                abort "per-frame capture evidence hash mismatch"
+              end
+              selected_simulator = frame.fetch("selectedSimulator")
+              %w[runtimeIdentifier deviceTypeIdentifier deviceModel udid].each do |key|
+                value = selected_simulator.fetch(key)
+                abort "capture provenance selectedSimulator.#{key} is empty" unless value.is_a?(String) && !value.empty?
+              end
+              {
+                captureSelector: frame.fetch("captureSelector"),
+                file: frame.fetch("file"),
+                screen: frame.fetch("screen"),
+                screenshotSha256: screenshot_sha256,
+                pixels: frame.fetch("pixels"),
+                capturedAtUtc: frame.fetch("capturedAtUtc"),
+                selectedSimulator: {
+                  runtimeIdentifier: selected_simulator.fetch("runtimeIdentifier"),
+                  deviceTypeIdentifier: selected_simulator.fetch("deviceTypeIdentifier"),
+                  deviceModel: selected_simulator.fetch("deviceModel"),
+                  udid: selected_simulator.fetch("udid")
+                },
+                captureEvidenceFile: frame.fetch("captureEvidenceFile"),
+                captureEvidenceSha256: frame.fetch("captureEvidenceSha256")
+              }
             end
             metadata = {
-              schemaVersion: 2,
+              schemaVersion: 3,
               status: "unapproved-debug-simulator-candidate",
               uploadApproved: false,
               releaseBinaryEvidence: nil,
-              sourceCommit: ENV.fetch("SOURCE_COMMIT"),
+              reviewer: nil,
+              sourceCommit: source_commit,
+              debugLocalOverridePresent: false,
               platform: platform,
-              locale: "en",
+              locale: "en-US",
               fixture: "finalized-historical-reports",
-              screenshotFile: File.basename(screenshot),
-              screenshotSha256: Digest::SHA256.file(screenshot).hexdigest,
-              pixels: evidence.fetch("pixels"),
-              capturedAtUtc: evidence.fetch("capturedAtUtc"),
-              selectedSimulator: {
-                runtimeIdentifier: selected_simulator.fetch("runtimeIdentifier"),
-                deviceTypeIdentifier: selected_simulator.fetch("deviceTypeIdentifier"),
-                deviceModel: selected_simulator.fetch("deviceModel"),
-                udid: selected_simulator.fetch("udid")
-              },
+              planManifest: evidence.fetch("planManifest"),
+              captureWindowUtc: evidence.fetch("captureWindowUtc"),
+              frames: normalized_frames,
               captureEvidenceFile: File.basename(evidence_path),
               captureEvidenceSha256: Digest::SHA256.file(evidence_path).hexdigest,
               xcodeVersion: ENV.fetch("XCODE_VERSION"),

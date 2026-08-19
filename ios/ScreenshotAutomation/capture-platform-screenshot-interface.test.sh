@@ -1,0 +1,82 @@
+#!/bin/bash
+
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "$0")" && pwd -P)"
+test_root="$(mktemp -d "${TMPDIR:-/tmp}/quakesignal-platform-interface-test.XXXXXX")"
+
+cleanup() {
+  rm -rf "$test_root"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+expect_status() {
+  local expected_status="$1"
+  shift
+  local actual_status=0
+  if "$@" >/dev/null 2>&1; then
+    actual_status=0
+  else
+    actual_status=$?
+  fi
+  if [ "$actual_status" -ne "$expected_status" ]; then
+    echo "error: expected status $expected_status, got $actual_status from $*" >&2
+    exit 1
+  fi
+}
+
+expect_status 64 "$script_dir/capture-platform-screenshot.sh"
+expect_status 64 "$script_dir/capture-platform-screenshot.sh" \
+  tvos tvos-unreviewed "$test_root/unreviewed.png"
+expect_status 64 "$script_dir/capture-platform-screenshot.sh" \
+  tvos tvos-dashboard relative.png
+expect_status 64 env QUAKESIGNAL_SCREENSHOT_DERIVED_DATA=relative-cache \
+  "$script_dir/capture-platform-screenshot.sh" \
+  tvos tvos-dashboard "$test_root/relative-cache.png"
+
+expect_status 64 "$script_dir/capture-platform-screenshot-set.sh"
+expect_status 64 "$script_dir/capture-platform-screenshot-set.sh" \
+  unreviewed "$test_root/unreviewed-set"
+expect_status 64 env QUAKESIGNAL_SCREENSHOT_LOCALE=ja \
+  "$script_dir/capture-platform-screenshot-set.sh" \
+  tvos "$test_root/non-english-set"
+
+mkdir "$test_root/existing-set"
+expect_status 73 "$script_dir/capture-platform-screenshot-set.sh" \
+  tvos "$test_root/existing-set"
+
+ln -s "$test_root/missing-single-target.png" "$test_root/dangling-single.png"
+expect_status 73 "$script_dir/capture-platform-screenshot.sh" \
+  tvos tvos-dashboard "$test_root/dangling-single.png"
+
+ln -s "$test_root/missing-provenance-target.json" "$test_root/dangling-provenance.json"
+expect_status 73 env \
+  QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT="$test_root/dangling-provenance.json" \
+  "$script_dir/capture-platform-screenshot.sh" \
+  tvos tvos-dashboard "$test_root/provenance-guard.png"
+
+ln -s "$test_root/missing-set-target" "$test_root/dangling-set"
+expect_status 73 "$script_dir/capture-platform-screenshot-set.sh" \
+  tvos "$test_root/dangling-set"
+
+for forbidden_path in \
+  "$script_dir/forbidden-single.png" \
+  "$script_dir/forbidden-set"; do
+  if [ -e "$forbidden_path" ]; then
+    echo "error: interface test fixture unexpectedly exists: $forbidden_path" >&2
+    exit 1
+  fi
+done
+expect_status 64 "$script_dir/capture-platform-screenshot.sh" \
+  tvos tvos-dashboard "$script_dir/forbidden-single.png"
+expect_status 64 "$script_dir/capture-platform-screenshot-set.sh" \
+  tvos "$script_dir/forbidden-set"
+
+if find "$test_root" -type f -name '*.png' -print -quit | grep -q .; then
+  echo "error: rejected interface input emitted a screenshot" >&2
+  exit 1
+fi
+
+echo "Platform screenshot interface tests passed"

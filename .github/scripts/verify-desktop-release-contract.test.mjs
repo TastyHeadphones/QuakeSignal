@@ -12,18 +12,21 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
 async function fixture(t, {
   mutateDesktop = (source) => source,
   mutateDesktopConfig = (source) => source,
+  mutateDesktopRuntime = (source) => source,
   mutateHomebrew = (source) => source,
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), "quakesignal-desktop-release-contract-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const [desktop, desktopConfig, homebrew] = await Promise.all([
+  const [desktop, desktopConfig, desktopRuntime, homebrew] = await Promise.all([
     readFile(join(repositoryRoot, ".github/workflows/desktop-release.yml"), "utf8"),
     readFile(join(repositoryRoot, "desktop/src-tauri/tauri.conf.json"), "utf8"),
+    readFile(join(repositoryRoot, "desktop/src-tauri/src/lib.rs"), "utf8"),
     readFile(join(repositoryRoot, ".github/workflows/homebrew-tap.yml"), "utf8"),
   ]);
   for (const [path, source] of [
     [".github/workflows/desktop-release.yml", mutateDesktop(desktop)],
     ["desktop/src-tauri/tauri.conf.json", mutateDesktopConfig(desktopConfig)],
+    ["desktop/src-tauri/src/lib.rs", mutateDesktopRuntime(desktopRuntime)],
     [".github/workflows/homebrew-tap.yml", mutateHomebrew(homebrew)],
   ]) {
     const target = join(root, path);
@@ -65,6 +68,33 @@ test("the checked-in direct macOS and Homebrew release contracts are coherent", 
     releaseStepsFingerprint: "sha256:3dX8Og0fyNOioMHFK-Jt8FiTZTqwkc8dhXjbovwV2qI",
     homebrewStepsFingerprint: "sha256:NuwuAFiTLY6LC19V3jx8XcjFSwpafYQVpgHgnveCywY",
   });
+});
+
+test("fails closed if the desktop runtime restores persistent or implicit log files", async (t) => {
+  await expectFailure(t, {
+    mutateDesktopRuntime: (source) => replaceOnce(
+      source,
+      ".targets([tauri_plugin_log::Target::new(\n                    tauri_plugin_log::TargetKind::Stdout,\n                )])",
+      ".targets([tauri_plugin_log::Target::new(\n                    tauri_plugin_log::TargetKind::LogDir { file_name: None },\n                )])",
+      "stdout-only desktop logger",
+    ),
+  }, /stdout-only target|persistent or implicit/i);
+
+  await expectFailure(t, {
+    mutateDesktopRuntime: (source) => replaceOnce(
+      source,
+      "tauri_plugin_log::Builder::new()\n                .targets([tauri_plugin_log::Target::new(\n                    tauri_plugin_log::TargetKind::Stdout,\n                )])",
+      "tauri_plugin_log::Builder::new()",
+      "implicit desktop logger defaults",
+    ),
+  }, /stdout-only target|persistent or implicit/i);
+
+  await expectFailure(t, {
+    mutateDesktopRuntime: (source) => source.replace(
+      "        .setup(|app| {",
+      "        .plugin(tauri_plugin_log::Builder::new()\n            .build())\n        .setup(|app| {",
+    ),
+  }, /exactly one fully qualified Tauri logger|persistent or implicit/i);
 });
 
 test("fails closed if any desktop release build skips the frontend safety-policy tests", async (t) => {

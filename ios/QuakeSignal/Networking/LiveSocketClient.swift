@@ -70,6 +70,11 @@ final class LiveSocketClient {
     private var watchdogTasks: [WolfxRoute: Task<Void, Never>] = [:]
     private var lastActivityByRoute: [WolfxRoute: Date] = [:]
     private var shouldReconnect = true
+    private let session: URLSession
+
+    init(session: URLSession = WolfxURLSessionPolicy.makeSession()) {
+        self.session = session
+    }
 
     func start() {
         stop()
@@ -99,7 +104,7 @@ final class LiveSocketClient {
         guard shouldReconnect,
               let url = URL(string: "wss://ws-api.wolfx.jp/\(route.endpoint)") else { return }
 
-        let task = URLSession.shared.webSocketTask(with: url)
+        let task = session.webSocketTask(with: url)
         // Every connection begins with retained snapshots. Mark the first
         // frame for each route source as baseline again; QuakeStore's
         // monotonic comparison can still recognize a genuinely newer warning.

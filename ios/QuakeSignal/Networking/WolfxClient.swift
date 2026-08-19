@@ -68,6 +68,33 @@ enum WolfxHTTPFetchPacing {
     }
 }
 
+/// Direct Wolfx traffic must not create an on-disk HTTP cache, cookie jar, or
+/// credential store. The companion targets intentionally keep report state in
+/// memory only, and the full-interface Apple targets make the same guarantee
+/// for fetched report payloads.
+enum WolfxURLSessionPolicy {
+    static func configuration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.urlCredentialStorage = nil
+        return configuration
+    }
+
+    static func makeSession() -> URLSession {
+        URLSession(configuration: configuration())
+    }
+
+    static func request(for url: URL) -> URLRequest {
+        URLRequest(
+            url: url,
+            cachePolicy: .reloadIgnoringLocalCacheData
+        )
+    }
+}
+
 /// A process-wide reservation gate. Multiple refreshes can overlap (manual,
 /// startup, and socket recovery), so per-refresh index delays alone do not
 /// enforce Wolfx's aggregate two-requests-per-second ceiling.
@@ -97,8 +124,16 @@ final class WolfxClient: Sendable {
         "cenc_eqlist", "jma_eqlist",
     ]
 
-    private let session: URLSession = .shared
-    private let httpBaseURL = URL(string: "https://api.wolfx.jp")!
+    private let session: URLSession
+    private let httpBaseURL: URL
+
+    init(
+        session: URLSession = WolfxURLSessionPolicy.makeSession(),
+        httpBaseURL: URL = URL(string: "https://api.wolfx.jp")!
+    ) {
+        self.session = session
+        self.httpBaseURL = httpBaseURL
+    }
 
     /// The standard explicit-refresh behavior: any endpoint failure reports a
     /// refresh error rather than presenting a deliberately partial result.
@@ -191,7 +226,8 @@ final class WolfxClient: Sendable {
         source: String
     ) async throws -> [EEWEvent] {
         let url = httpBaseURL.appending(path: "\(source).json")
-        let (data, response) = try await session.data(from: url)
+        let request = WolfxURLSessionPolicy.request(for: url)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode) else {
             throw WolfxError.invalidResponse(source: source)

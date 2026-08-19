@@ -194,7 +194,8 @@ brew uninstall --cask quakesignal
 
 Otherwise drag **QuakeSignal** from your Applications folder to the Trash.
 
-To also remove stored settings and event history, delete:
+For a direct download or Homebrew installation, also remove stored settings and
+event history with:
 
 ```bash
 rm -rf ~/Library/Application\ Support/com.quakesignal.desktop
@@ -202,6 +203,18 @@ rm -rf ~/Library/Application\ Support/com.quakesignal.desktop
 
 `brew uninstall --cask --zap quakesignal` removes the app and that directory in
 one step.
+
+The Mac App Store build is sandboxed by macOS. Its corresponding data is inside
+the app container at:
+
+```text
+~/Library/Containers/com.quakesignal.desktop/Data/Library/Application Support/com.quakesignal.desktop/
+```
+
+After removing the Mac App Store app, delete
+`~/Library/Containers/com.quakesignal.desktop/` to remove its sandboxed settings
+and event history as well. These two paths belong to different distribution
+variants; remove only the path for the variant you installed.
 
 ## Quick start
 

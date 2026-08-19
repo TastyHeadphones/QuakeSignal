@@ -24,6 +24,7 @@ export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$test_root/reactivated"
 export QUAKESIGNAL_TEST_REACTIVATION_RELEASE_FILE=""
 export QUAKESIGNAL_TEST_RELEASE_TIMEOUT=20
 export QUAKESIGNAL_TEST_IGNORE_TERM=0
+export QUAKESIGNAL_TEST_EXPECTED_FRAME=watchos-headline
 
 cleanup() {
   quakesignal_stop_processes \
@@ -132,7 +133,8 @@ run_same_poll_completion_test() {
     trap 'exit 143' TERM
 
     quakesignal_capture_watch_screenshot \
-      fake-watch fake.bundle "$test_root/$label.png" en en_US 300 1
+      fake-watch fake.bundle "$test_root/$label.png" en en_US \
+      watchos-headline 300 1
   ) &
   gated_test_supervisor_pid=$!
 
@@ -170,19 +172,24 @@ run_same_poll_completion_test() {
 for invalid_timeout in "" 0 00 01 -1 1:2 12x; do
   expect_status 64 quakesignal_capture_watch_screenshot \
     fake-watch fake.bundle "$test_root/invalid-timeout.png" en en_US \
-    "$invalid_timeout" 1
+    watchos-headline "$invalid_timeout" 1
 done
 for invalid_interval in "" 0 00 01 -1 1:2 12x; do
   expect_status 64 quakesignal_capture_watch_screenshot \
     fake-watch fake.bundle "$test_root/invalid-interval.png" en en_US \
-    2 "$invalid_interval"
+    watchos-headline 2 "$invalid_interval"
 done
 expect_status 64 quakesignal_capture_watch_screenshot \
-  fake-watch fake.bundle "$test_root/invalid-order.png" en en_US 2 2
+  fake-watch fake.bundle "$test_root/invalid-order.png" en en_US \
+  watchos-headline 2 2
+expect_status 64 quakesignal_capture_watch_screenshot \
+  fake-watch fake.bundle "$test_root/invalid-frame.png" en en_US \
+  watchos-unreviewed 4 1
 
 export QUAKESIGNAL_TEST_CAPTURE_DELAY=0
 expect_status 0 quakesignal_capture_watch_screenshot \
-  fake-watch fake.bundle "$test_root/quick.png" en en_US 4 1
+  fake-watch fake.bundle "$test_root/quick.png" en en_US \
+  watchos-headline 4 1
 if [ -e "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" ]; then
   echo "error: quick Watch capture performed an unnecessary restart" >&2
   exit 1
@@ -190,7 +197,8 @@ fi
 
 export QUAKESIGNAL_TEST_CAPTURE_DELAY=3
 expect_status 0 quakesignal_capture_watch_screenshot \
-  fake-watch fake.bundle "$test_root/slow.png" en en_US 6 1
+  fake-watch fake.bundle "$test_root/slow.png" en en_US \
+  watchos-headline 6 1
 if [ ! -s "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" ]; then
   echo "error: Watch capture guard did not restart during a slow screenshot" >&2
   exit 1
@@ -199,14 +207,16 @@ fi
 export QUAKESIGNAL_TEST_CAPTURE_DELAY=0
 export QUAKESIGNAL_TEST_CAPTURE_STATUS=23
 expect_status 70 quakesignal_capture_watch_screenshot \
-  fake-watch fake.bundle "$test_root/capture-failure.png" en en_US 4 1
+  fake-watch fake.bundle "$test_root/capture-failure.png" en en_US \
+  watchos-headline 4 1
 export QUAKESIGNAL_TEST_CAPTURE_STATUS=0
 
 export QUAKESIGNAL_TEST_CAPTURE_DELAY=4
 export QUAKESIGNAL_TEST_REACTIVATION_STATUS=29
 rm -f "$QUAKESIGNAL_TEST_CAPTURE_PID_FILE"
 expect_status 70 quakesignal_capture_watch_screenshot \
-  fake-watch fake.bundle "$test_root/restart-failure.png" en en_US 6 1
+  fake-watch fake.bundle "$test_root/restart-failure.png" en en_US \
+  watchos-headline 6 1
 export QUAKESIGNAL_TEST_REACTIVATION_STATUS=0
 assert_recorded_process_stopped "$QUAKESIGNAL_TEST_CAPTURE_PID_FILE" "screenshot"
 
@@ -226,7 +236,8 @@ rm -f \
   "$timeout_capture_release_file" \
   "$timeout_reactivation_release_file"
 expect_status 124 quakesignal_capture_watch_screenshot \
-  fake-watch fake.bundle "$test_root/timeout.png" en en_US 2 1
+  fake-watch fake.bundle "$test_root/timeout.png" en en_US \
+  watchos-headline 2 1
 assert_recorded_process_stopped "$QUAKESIGNAL_TEST_CAPTURE_PID_FILE" "screenshot"
 # Timeout is checked before the reactivation deadline. A heavily scheduled
 # runner can legitimately cross both deadlines in one poll, so only assert on
@@ -309,7 +320,8 @@ signal_capture_pid_file="$test_root/signal-capture.pid"
   trap 'exit 143' TERM
 
   quakesignal_capture_watch_screenshot \
-    fake-watch fake.bundle "$test_root/signal.png" en en_US 20 5
+    fake-watch fake.bundle "$test_root/signal.png" en en_US \
+    watchos-headline 20 5
 ) &
 signal_supervisor_pid=$!
 
@@ -369,7 +381,8 @@ run_spawn_assignment_signal_test() {
     trap 'exit 143' TERM
 
     quakesignal_capture_watch_screenshot \
-      fake-watch fake.bundle "$test_root/$mode-$iteration.png" en en_US 20 1
+      fake-watch fake.bundle "$test_root/$mode-$iteration.png" en en_US \
+      watchos-headline 20 1
   ) &
   spawn_race_supervisor_pid=$!
   if wait "$spawn_race_supervisor_pid"; then

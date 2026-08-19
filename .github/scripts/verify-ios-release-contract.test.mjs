@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmod, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { tmpdir } from "node:os";
@@ -297,15 +297,24 @@ async function writeFixture(options = {}) {
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
     "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
     "ios/QuakeSignal/Features/Settings/SettingsView.swift",
+    "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
+    "ios/QuakeSignal/Networking/LiveSocketClient.swift",
+    "ios/QuakeSignal/Networking/WolfxClient.swift",
+    "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
+    "ios/QuakeSignal/State/QuakeStore.swift",
+    "ios/QuakeSignalShared/ScreenshotAutomation.swift",
+    "ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy",
     "ios/QuakeSignal/Resources/en.lproj/Localizable.strings",
     "ios/QuakeSignal/Resources/ja.lproj/Localizable.strings",
     "ios/QuakeSignal/Resources/zh-Hans.lproj/Localizable.strings",
+    "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy",
     "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignal.xcscheme",
     "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignalTV.xcscheme",
     "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignalVision.xcscheme",
     "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignalWatch.xcscheme",
     "backend/cloudflare/package.json",
     "backend/cloudflare/package-lock.json",
+    "backend/cloudflare/scripts/legal-page-contract.mjs",
     "backend/cloudflare/scripts/render-staging-config.mjs",
     "backend/cloudflare/scripts/smoke-test-policy.mjs",
     "backend/cloudflare/scripts/smoke-test.mjs",
@@ -434,6 +443,7 @@ test("fails closed when a release-critical Worker helper drifts", async (t) => {
     );
   });
   for (const relativePath of [
+    "backend/cloudflare/scripts/legal-page-contract.mjs",
     "backend/cloudflare/scripts/render-staging-config.mjs",
     "backend/cloudflare/staging/wrangler.staging.template.json",
   ]) {
@@ -446,6 +456,29 @@ test("fails closed when a release-critical Worker helper drifts", async (t) => {
       );
     });
   }
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "backend/cloudflare/scripts/smoke-test.mjs");
+    const source = await readFile(path, "utf8");
+    const mutated = source.replace(
+      'from "./legal-page-contract.mjs";',
+      'from "./unreviewed-legal-page-contract.mjs";',
+    );
+    assert.notEqual(mutated, source);
+    await writeFile(path, mutated, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /release-critical Worker helpers must match the reviewed fingerprint/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "backend/cloudflare/scripts/legal-page-contract.mjs");
+    await rm(path);
+    await symlink(join(repositoryRoot, "backend/cloudflare/scripts/legal-page-contract.mjs"), path);
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /legal-page-contract\.mjs must be a regular checked-in file/i,
+    );
+  });
 });
 
 test("fails closed when checked-in Release entitlements gain a capability", async (t) => {
@@ -500,6 +533,84 @@ test("fails closed when foreground-only Vision capability or localized disclosur
       /foreground-only Apple platform policy must match the reviewed fingerprint/i,
     );
   });
+  for (const [from, to] of [
+    ["<key>NSPrivacyTracking</key>\n\t<false/>", "<key>NSPrivacyTracking</key>\n\t<true/>"],
+    ["<key>NSPrivacyCollectedDataTypes</key>\n\t<array/>", "<key>NSPrivacyCollectedDataTypes</key>\n\t<array><dict/></array>"],
+    ["<string>CA92.1</string>", "<string>UNREVIEWED.1</string>"],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy");
+      const source = await readFile(path, "utf8");
+      const mutated = source.replace(from, to);
+      assert.notEqual(mutated, source);
+      await writeFile(path, mutated, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /must declare tracking false, no tracking domains or collected data, and only UserDefaults accessed for reason CA92\.1/i,
+      );
+    });
+  }
+});
+
+test("fails closed when foreground lifecycle or nonpersistent Wolfx transport policy drifts", async (t) => {
+  for (const [relativePath, from, to] of [
+    [
+      "ios/QuakeSignal/State/QuakeStore.swift",
+      "case .stopSocket:\n            liveSocket.stop()",
+      "case .stopSocket:\n            liveSocket.start()",
+    ],
+    [
+      "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
+      "static func shouldAcceptDirectEvent(isForegroundActive: Bool) -> Bool {\n        isForegroundActive\n    }",
+      "static func shouldAcceptDirectEvent(isForegroundActive: Bool) -> Bool {\n        true\n    }",
+    ],
+    [
+      "ios/QuakeSignal/Networking/WolfxClient.swift",
+      "configuration.requestCachePolicy = .reloadIgnoringLocalCacheData",
+      "configuration.requestCachePolicy = .returnCacheDataElseLoad",
+    ],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, relativePath);
+      const source = await readFile(path, "utf8");
+      const mutated = source.replace(from, to);
+      assert.notEqual(mutated, source);
+      await writeFile(path, mutated, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /foreground-only Apple platform policy must match the reviewed fingerprint/i,
+      );
+    });
+  }
+});
+
+test("fails closed when Debug Simulator screenshot fixture gates drift", async (t) => {
+  for (const [from, to] of [
+    [
+      "#if DEBUG && targetEnvironment(simulator)\n        shouldActivate(",
+      "#if DEBUG\n        shouldActivate(",
+    ],
+    [
+      "#if DEBUG && targetEnvironment(simulator)\n        selectFrame(",
+      "#if targetEnvironment(simulator)\n        selectFrame(",
+    ],
+    [
+      "#else\n        []\n#endif",
+      "#else\n        fixtureEventsForRelease\n#endif",
+    ],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, "ios/QuakeSignalShared/ScreenshotAutomation.swift");
+      const source = await readFile(path, "utf8");
+      const mutated = source.replace(from, to);
+      assert.notEqual(mutated, source);
+      await writeFile(path, mutated, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /foreground-only Apple platform policy must match the reviewed fingerprint/i,
+      );
+    });
+  }
 });
 
 test("fails closed on executable Xcode graph or shared-scheme injection", async (t) => {
@@ -1304,6 +1415,47 @@ test("fails closed when the credential-free screenshot harness checks drift", as
     [
       "          /usr/bin/ruby ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb\n",
       "          true # skipped Watch foreground badge validator test\n",
+    ],
+    [
+      "          /usr/bin/ruby ios/ScreenshotAutomation/platform-screenshot-plan.test.rb\n",
+      "          true # skipped exact platform frame-plan test\n",
+    ],
+    [
+      "          /usr/bin/ruby ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb\n",
+      "          true # skipped aggregate provenance test\n",
+    ],
+    [
+      "          bash ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh\n",
+      "          true # skipped screenshot interface fail-closed test\n",
+    ],
+    [
+      "          ios/ScreenshotAutomation/capture-platform-screenshot-set.sh \\\n" +
+        "            \"$PLATFORM_KEY\" \"$artifact_dir\"\n",
+      "          true # skipped exact planned screenshot set capture\n",
+    ],
+    [
+      '          pre_capture_sha="$(git rev-parse --verify HEAD)"\n',
+      '          pre_capture_sha="$GITHUB_SHA" # skipped source revision proof\n',
+    ],
+    [
+      '          pre_capture_status="$(git status --porcelain=v1 --untracked-files=all)"\n',
+      '          pre_capture_status="" # skipped clean-tree proof\n',
+    ],
+    [
+      '          post_capture_sha="$(git rev-parse --verify HEAD)"\n',
+      '          post_capture_sha="$GITHUB_SHA" # skipped post-capture revision proof\n',
+    ],
+    [
+      '          post_capture_status="$(git status --porcelain=v1 --untracked-files=all)"\n',
+      '          post_capture_status="" # skipped post-capture clean-tree proof\n',
+    ],
+    [
+      '          if [ -e "$debug_local_override" ] || [ -L "$debug_local_override" ]; then\n',
+      '          if [ -e "$debug_local_override" ]; then # dangling ignored override accepted\n',
+    ],
+    [
+      "              debugLocalOverridePresent: false,\n",
+      "              debugLocalOverridePresent: true,\n",
     ],
   ]) {
     await withFixture(t, {}, async (root) => {

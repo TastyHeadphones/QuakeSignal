@@ -53,8 +53,18 @@ pub fn run() {
         None,
     ));
 
+    // Keep diagnostics process-local. The plugin defaults to both stdout and
+    // a persistent file in the OS log directory; QuakeSignal intentionally
+    // opts out of that file target so earthquake IDs and failure details are
+    // not retained outside the documented app-data directory.
     let builder = builder
-        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::Stdout,
+                )])
+                .build(),
+        )
         .setup(|app| {
             let handle = app.handle().clone();
 

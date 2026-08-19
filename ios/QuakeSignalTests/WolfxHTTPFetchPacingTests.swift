@@ -2,6 +2,24 @@ import XCTest
 @testable import QuakeSignal
 
 final class WolfxHTTPFetchPacingTests: XCTestCase {
+    func testDirectWolfxSessionDisablesPersistentTransportState() {
+        let configuration = WolfxURLSessionPolicy.configuration()
+
+        XCTAssertEqual(configuration.requestCachePolicy, .reloadIgnoringLocalCacheData)
+        XCTAssertNil(configuration.urlCache)
+        XCTAssertNil(configuration.httpCookieStorage)
+        XCTAssertFalse(configuration.httpShouldSetCookies)
+        XCTAssertNil(configuration.urlCredentialStorage)
+    }
+
+    func testEveryWolfxHTTPRequestExplicitlyBypassesLocalCacheData() throws {
+        let url = try XCTUnwrap(URL(string: "https://api.wolfx.jp/jma_eew.json"))
+        let request = WolfxURLSessionPolicy.request(for: url)
+
+        XCTAssertEqual(request.url, url)
+        XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalCacheData)
+    }
+
     func testSnapshotRequestsAreSpacedWithinWolfxPublicLimit() {
         XCTAssertEqual(WolfxHTTPFetchPacing.delayNanoseconds(forSourceIndex: 0), 0)
         XCTAssertGreaterThanOrEqual(WolfxHTTPFetchPacing.requestIntervalNanoseconds, 500_000_000)

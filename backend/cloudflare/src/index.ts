@@ -1723,6 +1723,7 @@ function legalPage(
   title: string,
   summary: string,
   sections: Array<{ heading: string; body: string }>,
+  effectiveDate = "12 August 2026",
 ): Response {
   const content = sections
     .map(
@@ -1749,7 +1750,7 @@ function legalPage(
   </style>
 </head>
 <body><main>
-  <header><span class="mark">⌁</span><h1>${title}</h1><p>${summary}</p><p class="meta">QuakeSignal · Effective 12 August 2026</p></header>
+  <header><span class="mark">⌁</span><h1>${title}</h1><p>${summary}</p><p class="meta">QuakeSignal · Effective ${effectiveDate}</p></header>
   ${content}
   <section><h2>Contact</h2><p>For privacy, safety, or support questions, open an issue in the <a href="https://github.com/TastyHeadphones/QuakeSignal/issues">QuakeSignal GitHub repository</a>.</p></section>
 </main></body></html>`,
@@ -9392,29 +9393,38 @@ async function handleRequest(
   if (url.pathname === "/privacy" && request.method === "GET") {
     return legalPage(
       "Privacy Policy",
-      "QuakeSignal is designed to collect only the information required to provide location-aware earthquake notifications.",
+      "QuakeSignal clients fetch public earthquake information directly from Wolfx. Only opted-in alert registration on an iPhone or iPad sends app registration data to QuakeSignal-operated notification infrastructure; opening this public page sends ordinary web-request metadata to Cloudflare but no local app settings.",
       [
         {
+          heading: "Platform scope",
+          body: "Only the app when running on an iPhone or iPad can register with the QuakeSignal notification relay in this release. The embedded Apple Watch companion and Apple TV app request recent reports directly from Wolfx over HTTPS while open and keep current report state in memory. Apple Vision Pro, Mac Catalyst, and Designed for iPad on Mac use the full interface, contact Wolfx directly while open, and keep preferences and guide details in local app storage. Those foreground-only Apple experiences do not independently use the notification relay, App Attest, or APNs and do not provide background emergency alerts. A system-mirrored iPhone notification on a paired Watch remains part of the iPhone registration. The separate native Windows/macOS desktop app and Chrome extension also contact Wolfx directly and do not register with the relay.",
+        },
+        {
           heading: "Data we process",
-          body: "If you enable notifications, the service stores the APNs device token, app locale, selected earthquake sources, magnitude threshold, alert preferences (including the exact alert-sound identifier and a test-alert preference), alert radius, optional selected-city label, registration timestamps, and one approximate coordinate on a 0.1° grid. That coordinate is derived from either the selected city's coordinate or the current device location; neither an exact GPS fix nor an unrounded selected-city coordinate is sent. To prevent fraudulent subscription changes, the service also stores an opaque Apple App Attest key identifier, public verification key, attestation receipt, monotonic assertion counter, and integrity timestamps; newer Apple proofs may additionally carry the app build version and distribution category. The app does not require an account, name, email address, contacts, photos, or advertising identifier.",
+          body: "If you enable alert registration on an iPhone or iPad, the service stores the APNs device token, app locale, selected earthquake sources, magnitude threshold, alert preferences (including the exact alert-sound identifier and a test-alert preference), alert radius, optional selected-city label, registration timestamps, and one approximate coordinate on a 0.1° grid. That coordinate is derived from either the selected city's coordinate or the current device location; neither an exact GPS fix nor an unrounded selected-city coordinate is sent. To prevent fraudulent subscription changes, the service also stores an opaque Apple App Attest key identifier, public verification key, attestation receipt, monotonic assertion counter, and integrity timestamps; newer Apple proofs may additionally carry the app build version and distribution category. QuakeSignal does not require an account, name, email address, contacts, photos, or advertising identifier for this registration.",
+        },
+        {
+          heading: "Data kept on your device",
+          body: "In the full Apple interface, alert preferences, the chosen city, the preparedness-kit checklist, and any optional family contact name and telephone number stay in local app storage. Within QuakeSignal, current report and GPS state remain in app memory; Apple provides the map and system Location Services under its own policies. Direct Wolfx earthquake requests do not include the chosen city or device location, and QuakeSignal does not send the exact GPS fix, checklist, or family contact details to its notification service. To clear local guide values, erase both Family Check-In fields and uncheck each selected preparedness-kit item; this is separate from removing an iPhone/iPad alert registration. The Apple Watch and Apple TV apps keep current report state only in memory for the foreground session and do not persist guide details. The native desktop app and Chrome extension keep their event history and preferences in their own local storage.",
         },
         {
           heading: "How data is used",
-          body: "Subscription data is used only to decide whether an earthquake event matches your preferences and to send the requested Apple Push Notification. Location is not used for advertising, profiling, or sale.",
+          body: "The iPhone/iPad subscription data is used only to secure the notification service, decide whether an earthquake event matches your preferences, send the requested Apple Push Notification, and investigate bounded delivery failures. Location is not used for advertising, profiling, or sale.",
         },
         {
           heading: "Storage and deletion",
-          body: "Subscription settings and the associated App Attest integrity record are stored in Cloudflare D1. Removing notification registration from the app deletes the matching device registration, even when this launch has no APNs token, if an existing App Attest key can prove it owns that subscription. A new key cannot claim a legacy subscription with an empty request. After reinstall or device restore, a fresh Apple attestation plus the exact APNs token may safely rebind that one token and retire its old key record; assertions and tokenless requests cannot transfer another key's subscription. If it was the last registration using an App Attest key, that associated verifier, receipt, and assertion-counter record is deleted. A reviewed production training test creates a separate token-free claim containing only the opaque App Attest key ID and UTC timestamps; it is retained for at most 14 days to enforce one production training attempt per key per UTC day. Its optional fixed-delay check also creates one private scheduler record containing only that opaque App Attest key ID, a due time, and an at-most-once attempted state; it contains no APNs token, request body, proof, preferences, location, or earthquake payload. That temporary record is deleted after its one scheduled attempt or cancellation; an alarm more than 30 seconds late is deleted without delivery. Each App Attest challenge expires in no more than five minutes and expired records are removed by routine cleanup. A daily retention job purges registrations that are not refreshed for 90 days with their orphaned integrity records. Sanitized delivery-failure token hashes are retained for at most 14 days for reliability investigations. Disabling notifications or location access stops new collection but does not reliably send a deletion request, so use the in-app removal control when possible.",
+          body: "Subscription settings and the associated App Attest integrity record are stored in Cloudflare D1. Removing notification registration from the app deletes the matching device registration, even when this launch has no APNs token, if an existing App Attest key can prove it owns that subscription. A new key cannot claim a legacy subscription with an empty request. After reinstall or device restore, a fresh Apple attestation plus the exact APNs token may safely rebind that one token and retire its old key record; assertions and tokenless requests cannot transfer another key's subscription. If the old App Attest key and exact APNs token are both unavailable, a public support issue cannot privately identify or delete that unreachable registration; do not post either identifier or any proof there. Support can guide recovery, and the daily retention job automatically purges an old registration after it has not been refreshed for 90 days, together with its orphaned integrity record. If an in-app removal deletes the last registration using an App Attest key, the associated verifier, receipt, and assertion-counter record is deleted too. A reviewed production training test creates a separate token-free claim containing only the opaque App Attest key ID and UTC timestamps; it is retained for at most 14 days to enforce one production training attempt per key per UTC day. Its optional fixed-delay check also creates one private scheduler record containing only that opaque App Attest key ID, a due time, and an at-most-once attempted state; it contains no APNs token, request body, proof, preferences, location, or earthquake payload. That temporary record is deleted after its one scheduled attempt or cancellation; an alarm more than 30 seconds late is deleted without delivery. Each App Attest challenge expires in no more than five minutes and expired records are removed by routine cleanup. Sanitized delivery-failure token hashes are retained for at most 14 days for reliability investigations. Disabling notifications or location access stops new collection but does not reliably send a deletion request, so use the in-app removal control before a reset when possible.",
         },
         {
           heading: "Third-party services",
-          body: "The app fetches earthquake information directly from the Wolfx Open API. Cloudflare is used only to store notification subscriptions, verify Apple App Attest proofs, watch upstream alerts, and request delivery through Apple Push Notification service. Their handling of network metadata is governed by their own policies. The App Attest private key never leaves your device.",
+          body: "All clients fetch earthquake information directly from the Wolfx Open API, which receives ordinary connection metadata such as an IP address under its own policies. Full-interface Apple clients also use Apple Maps and system Location Services when those features are used; Apple handles associated service data under its own policies, while QuakeSignal does not include the exact location in Wolfx requests or its relay. Cloudflare hosts these public pages and may process ordinary web-request and security metadata. Cloudflare D1, Apple Push Notification service, and Apple App Attest are used for app data only on opted-in iPhone/iPad alerts: Cloudflare stores subscriptions, verifies proofs, watches upstream alerts, and requests delivery through APNs. The App Attest private key never leaves the iPhone or iPad. Following the public GitHub support link is subject to GitHub's policies.",
         },
         {
           heading: "Safety notice",
           body: "QuakeSignal is not an official government warning platform. Data and notifications can be delayed, incomplete, or inaccurate. Follow official announcements and local emergency instructions.",
         },
       ],
+      "19 August 2026",
     );
   }
   if (url.pathname === "/terms" && request.method === "GET") {
@@ -9444,17 +9454,30 @@ async function handleRequest(
   if (url.pathname === "/support" && request.method === "GET") {
     return legalPage(
       "Support",
-      "Get help with notifications, data sources, localization, or earthquake subscription settings.",
+      "Get help with QuakeSignal on iPhone, iPad, Apple Watch, Apple TV, Apple Vision Pro, Mac Catalyst, Designed for iPad on Mac, native Windows/macOS desktop, or Chrome.",
       [
         {
-          heading: "Before reporting a problem",
-          body: "Confirm that notifications and location access are enabled in iOS Settings, your selected source and magnitude threshold match the event, and the device has a working network connection.",
+          heading: "iPhone and iPad alerts",
+          body: "For opted-in background alerts, confirm that alert registration is enabled in QuakeSignal, notifications are allowed in system Settings, the selected source, magnitude, and radius match the event, and the device has a working network connection. If you use Current Location for matching, also confirm location access. Focus modes, system settings, and device state can delay or suppress delivery; Time Sensitive notifications remain under user and system control and are not Critical Alerts.",
+        },
+        {
+          heading: "Foreground-only Apple experiences",
+          body: "The embedded Apple Watch companion and Apple TV app refresh recent Wolfx reports while open and do not independently register for APNs, App Attest, alert audio, or background emergency alerts. A notification mirrored to a paired Watch is still an iPhone feature. Apple Vision Pro, Mac Catalyst, and Designed for iPad on Mac use the full interface and direct Wolfx data while open, but do not independently use the QuakeSignal notification relay or provide background emergency alerts.",
+        },
+        {
+          heading: "Registration removal after a reset",
+          body: "Use Settings → Remove Alert Registration before deleting the iPhone/iPad app or resetting its integrity key when possible. A newly attested app that receives the exact same APNs token can safely rebind and retire that token's old key record. If both the old integrity key and token are unavailable, support cannot identify the old registration from a public issue; it is automatically removed after it has not been refreshed for 90 days. Never post an APNs token, App Attest key identifier or proof, or location in an issue.",
+        },
+        {
+          heading: "Native desktop and Chrome",
+          body: "The separate native Windows/macOS desktop app and Chrome extension connect directly to Wolfx and keep preferences and recent event state locally. They do not register with the QuakeSignal iPhone/iPad notification service. Check the app or extension connection status, selected sources and thresholds, local notification permission, and network access when troubleshooting.",
         },
         {
           heading: "Report an issue",
-          body: "Open a GitHub issue with your app version, iOS version, language, selected data source, and a description of what happened. Never include an APNs device token or precise home address.",
+          body: "Open a GitHub issue with the app version and build, exact platform and operating-system version, language, selected data source, expected result, and what happened. Redact screenshots before posting. Never include an APNs device token, App Attest proof, exact address or GPS coordinate, family contact details, or other private information.",
         },
       ],
+      "19 August 2026",
     );
   }
   if (url.pathname === "/healthz" && request.method === "GET") {

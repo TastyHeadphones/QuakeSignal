@@ -3,32 +3,47 @@ import SwiftUI
 struct TVDashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var store = ForegroundQuakeStore()
+    @FocusState private var focusedEventID: EEWEvent.ID?
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                LinearGradient(
-                    colors: [Color("GroupedBGColor"), Color("TintBGColor")],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 34) {
-                        header
-                        headline
-                        recentEvents
-                    }
-                    .frame(maxWidth: 1_420, alignment: .leading)
-                    .padding(.horizontal, 72)
-                    .padding(.vertical, 54)
-                }
+            if ScreenshotAutomation.selectedFrame == .tvEventDetail,
+               let event = store.headlineEvent {
+                TVEventDetailView(event: event)
+            } else {
+                dashboard
             }
         }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             await store.monitorWhileActive()
+        }
+        .task {
+            guard ScreenshotAutomation.selectedFrame == .tvRecentReports else { return }
+            try? await Task.sleep(for: .milliseconds(500))
+            focusedEventID = store.events.first?.id
+        }
+    }
+
+    private var dashboard: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color("GroupedBGColor"), Color("TintBGColor")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 34) {
+                    header
+                    headline
+                    recentEvents
+                }
+                .frame(maxWidth: 1_420, alignment: .leading)
+                .padding(.horizontal, 72)
+                .padding(.vertical, 54)
+            }
         }
     }
 
@@ -173,6 +188,7 @@ struct TVDashboardView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.primary)
+                    .focused($focusedEventID, equals: event.id)
                 }
             }
         }

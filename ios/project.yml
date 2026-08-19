@@ -108,8 +108,11 @@ targets:
       - path: QuakeSignal/State
       - path: QuakeSignal/Features
       - path: QuakeSignal/Resources
+        excludes:
+          - PrivacyInfo.xcprivacy
       - path: QuakeSignal/Assets.xcassets
       - path: QuakeSignalVision/Assets.xcassets
+      - path: QuakeSignalVision/Resources
       - path: QuakeSignalShared/ScreenshotAutomation.swift
     settings:
       base:

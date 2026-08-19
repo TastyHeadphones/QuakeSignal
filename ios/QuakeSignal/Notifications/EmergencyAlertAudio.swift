@@ -26,6 +26,18 @@ final class EmergencyAlertAudio {
         play(AppSettings.shared.alertSound, deduplicationKey: key)
     }
 
+    /// Scene deactivation ends any app-owned playback immediately. APNs owns
+    /// notification sounds delivered while an eligible iPhone/iPad app is in
+    /// the background; a foreground player must never bridge that boundary.
+    func stop() {
+        player?.stop()
+        player = nil
+        try? AVAudioSession.sharedInstance().setActive(
+            false,
+            options: .notifyOthersOnDeactivation
+        )
+    }
+
     private func play(
         _ preference: AlertSoundPreference,
         deduplicationKey: String?

@@ -46,6 +46,105 @@ final class ScreenshotAutomationTests: XCTestCase {
 
     func testOrdinaryUnitTestLaunchDoesNotEnableScreenshotAutomation() {
         XCTAssertFalse(ScreenshotAutomation.isEnabled)
+        XCTAssertNil(ScreenshotAutomation.selectedFrame)
+    }
+
+    func testFrameSelectionRequiresMatchingArgumentAndEnvironmentPlusActivationGate() {
+        let arguments = [
+            "QuakeSignal",
+            ScreenshotAutomation.launchArgument,
+            "\(ScreenshotAutomation.frameArgumentPrefix)visionos-map"
+        ]
+        let environment = [
+            ScreenshotAutomation.environmentKey: "1",
+            ScreenshotAutomation.frameEnvironmentKey: "visionos-map"
+        ]
+
+        XCTAssertEqual(
+            ScreenshotAutomation.selectFrame(
+                buildAllowsAutomation: true,
+                isSimulator: true,
+                arguments: arguments,
+                environment: environment
+            ),
+            .visionMap
+        )
+        XCTAssertNil(ScreenshotAutomation.selectFrame(
+            buildAllowsAutomation: false,
+            isSimulator: true,
+            arguments: arguments,
+            environment: environment
+        ))
+        XCTAssertNil(ScreenshotAutomation.selectFrame(
+            buildAllowsAutomation: true,
+            isSimulator: false,
+            arguments: arguments,
+            environment: environment
+        ))
+        XCTAssertNil(ScreenshotAutomation.selectFrame(
+            buildAllowsAutomation: true,
+            isSimulator: true,
+            arguments: arguments.filter { $0 != ScreenshotAutomation.launchArgument },
+            environment: environment
+        ))
+    }
+
+    func testReviewedFrameSelectorInventoryIsExact() {
+        XCTAssertEqual(
+            ScreenshotAutomation.Frame.allCases.map(\.rawValue),
+            [
+                "tvos-dashboard",
+                "tvos-recent-reports",
+                "tvos-event-detail",
+                "visionos-home",
+                "visionos-reports",
+                "visionos-map",
+                "visionos-guide",
+                "visionos-alert-preferences",
+                "watchos-headline",
+                "watchos-recent-reports",
+                "watchos-event-detail"
+            ]
+        )
+    }
+
+    func testFrameSelectionFailsClosedForMissingMismatchedDuplicateOrUnknownSelectors() {
+        let gateArguments = ["QuakeSignal", ScreenshotAutomation.launchArgument]
+        let gateEnvironment = [ScreenshotAutomation.environmentKey: "1"]
+
+        XCTAssertNil(ScreenshotAutomation.selectFrame(
+            buildAllowsAutomation: true,
+            isSimulator: true,
+            arguments: gateArguments,
+            environment: gateEnvironment
+        ))
+        XCTAssertNil(ScreenshotAutomation.selectFrame(
+            buildAllowsAutomation: true,
+            isSimulator: true,
+            arguments: gateArguments + ["\(ScreenshotAutomation.frameArgumentPrefix)tvos-dashboard"],
+            environment: gateEnvironment.merging([
+                ScreenshotAutomation.frameEnvironmentKey: "watchos-headline"
+            ]) { _, new in new }
+        ))
+        XCTAssertNil(ScreenshotAutomation.selectFrame(
+            buildAllowsAutomation: true,
+            isSimulator: true,
+            arguments: gateArguments + [
+                "\(ScreenshotAutomation.frameArgumentPrefix)tvos-dashboard",
+                "\(ScreenshotAutomation.frameArgumentPrefix)tvos-dashboard"
+            ],
+            environment: gateEnvironment.merging([
+                ScreenshotAutomation.frameEnvironmentKey: "tvos-dashboard"
+            ]) { _, new in new }
+        ))
+        XCTAssertNil(ScreenshotAutomation.selectFrame(
+            buildAllowsAutomation: true,
+            isSimulator: true,
+            arguments: gateArguments + ["\(ScreenshotAutomation.frameArgumentPrefix)tvos-unreviewed"],
+            environment: gateEnvironment.merging([
+                ScreenshotAutomation.frameEnvironmentKey: "tvos-unreviewed"
+            ]) { _, new in new }
+        ))
     }
 
     func testMapTimelineUsesFixtureClockOnlyForScreenshotAutomation() {

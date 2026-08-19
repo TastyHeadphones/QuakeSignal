@@ -1,117 +1,148 @@
 # Native platform screenshot harness
 
-This harness captures real simulator output for the tvOS, watchOS, and
+This harness captures real Simulator output for the tvOS, watchOS, and
 visionOS targets. It does not generate, resize, decorate, commit, upload, or
-approve screenshots.
+approve screenshots. The checked-in plans require these exact English (U.S.)
+inventories:
 
-The app-side fixture is available only in a Debug Simulator build and requires
-both `--quakesignal-screenshot-automation` and
-`QUAKESIGNAL_SCREENSHOT_AUTOMATION=1`. It supplies fixed finalized historical
-reports, bypasses onboarding, and prevents startup network, notification, APNs,
-and location activity. Ordinary Debug launches, physical devices, InternalQA,
-and Release builds remain on production behavior.
+| Platform | Planned frames | Native pixels |
+| --- | ---: | --- |
+| Apple TV | 3: dashboard, recent reports, event detail | `1920x1080` |
+| Apple Vision Pro | 5: home, reports, map, guide, alert sound | `3840x2160` |
+| Apple Watch | 3: headline, recent reports, event detail | `410x502` |
+
+`platform-screenshot-plan.rb` validates those 3/5/3 inventories directly
+against the platform manifests. A removed, reordered, renamed, pre-approved,
+pre-hashed, wrong-size, or unknown frame fails before Simulator launch.
+
+## Fail-closed app routing
+
+The app-side fixture and frame routes are available only in a Debug Simulator
+build. Activation requires all of the following to agree:
+
+- `--quakesignal-screenshot-automation`
+- `QUAKESIGNAL_SCREENSHOT_AUTOMATION=1`
+- `--quakesignal-screenshot-frame=<reviewed-selector>`
+- `QUAKESIGNAL_SCREENSHOT_FRAME=<the-same-reviewed-selector>`
+
+The fixture supplies fixed finalized historical reports, bypasses onboarding,
+and prevents startup earthquake-feed, notification, APNs, App Attest, and
+location activity. Ordinary Debug launches, physical devices, InternalQA, and
+Release builds remain on production behavior. The visionOS selectors choose
+the real Home, Reports, Map, Guide, and Alert Sound destinations. TV and Watch
+use their real report rows and event-detail views; the recent-report selectors
+move genuine focus/scroll state instead of drawing a marketing composite.
+
+## Native dimensions
 
 Apple's current screenshot specification accepts:
 
-- Apple TV: 1920x1080 or 3840x2160. This harness selects the 1080p simulator
-  and requires exactly 1920x1080.
-- Apple Vision Pro: exactly 3840x2160. This harness selects the 4K simulator.
-- Apple Watch: 422x514 (Ultra 3), 410x502 (Ultra 2/Ultra), 416x496 (Series
-  11/10), 396x484 (Series 9/8/7), 368x448 (Series 6/5/4 and SE), or 312x390
-  (Series 3). The build-8 plan uses 410x502, so the harness prefers an Ultra 2
-  or Ultra simulator, then falls back to another accepted large device and
-  validates that device's matching native size. If fallback occurs, update the
-  plan before review and use one Watch size consistently across every
-  localization.
+- Apple TV: `1920x1080` or `3840x2160`; this plan selects `1920x1080`.
+- Apple Vision Pro: exactly `3840x2160`.
+- Apple Watch: several device classes, but this plan selects exactly `410x502`
+  from Apple Watch Ultra 2 / Ultra. The harness no longer falls back to a
+  different Watch class because that would contradict every planned frame.
 
 Source: [Apple screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/).
 
-## Local commands
+## Local capture
 
-From the repository root, first install only the runtime needed for a capture:
+Use an already-installed runtime whenever possible. If a required runtime is
+absent, the harness exits before building and names the missing platform; it
+never downloads a runtime, changes resolution, or fabricates an image. An
+operator who deliberately chooses to install a missing component can use
+Xcode Settings or Apple's `xcodebuild -downloadPlatform` command separately.
+
+Start from a clean, source-frozen checkout and use the checked-in generated
+project. If the project graph intentionally changed, regenerate and review it
+before freezing the capture commit; do not regenerate as part of capture.
+Capture into a new directory outside the repository, with temporary data and
+the reusable unsigned build cache on a disk with adequate space:
 
 ```sh
-xcodebuild -downloadPlatform tvOS -architectureVariant arm64
-xcodebuild -downloadPlatform watchOS -architectureVariant arm64
-xcodebuild -downloadPlatform visionOS -architectureVariant arm64
+TMPDIR=/Volumes/RC20 \
+QUAKESIGNAL_SCREENSHOT_DERIVED_DATA=/Volumes/RC20/QuakeSignalScreenshotDerived/tvos \
+  ios/ScreenshotAutomation/capture-platform-screenshot-set.sh \
+    tvos /Volumes/RC20/QuakeSignalScreenshotCandidates/tvos
 ```
 
-Regenerate the project, then capture into a temporary/artifact directory
-outside the repository:
+Run the same set command with `visionos` or `watchos` and a distinct, new
+output directory. The command refuses to overwrite an artifact directory and
+publishes it atomically only after every planned frame validates. Its layout is:
 
-```sh
-cd ios
-xcodegen generate --spec project.yml
-cd ..
-
-ios/ScreenshotAutomation/capture-platform-screenshot.sh \
-  tvos /tmp/quakesignal-screenshots/tvos-en.png
-ios/ScreenshotAutomation/capture-platform-screenshot.sh \
-  watchos /tmp/quakesignal-screenshots/watchos-en.png
-ios/ScreenshotAutomation/capture-platform-screenshot.sh \
-  visionos /tmp/quakesignal-screenshots/visionos-en.png
+```text
+en-US/<all planned native PNGs>
+frame-capture-evidence/<one schema-1 sidecar per frame>.json
+capture-provenance.json
 ```
 
-Set `QUAKESIGNAL_SCREENSHOT_LOCALE=ja` or `zh-Hans` to capture another
-localization. Every invocation creates a disposable simulator, builds and
-installs the native target without signing credentials, launches the gated
-fixture, captures an untouched PNG, checks pixel size and alpha, prints its
-SHA-256, and deletes the simulator. Set
-`QUAKESIGNAL_SCREENSHOT_KEEP_SIMULATOR=1` only for manual visual debugging.
-For watchOS, it also creates and boots a disposable paired iPhone Simulator;
-no existing personal simulator pair is reused. CoreSimulator may take longer
-than watchOS's two-minute return-to-clock interval to service its first Watch
-screenshot. While that request is pending, the harness deterministically
-restarts QuakeSignal in the foreground every 45 seconds without changing
-private Simulator preferences. The screenshot and restart children share a
-five-minute hard deadline and are both stopped with bounded TERM-to-KILL
-cleanup on timeout or interruption.
-The harness then converts a temporary validation copy to BMP and fails closed
-unless the upper portion contains the orange `platform.foreground.badge`
-pixels. The native PNG is never converted or modified, and a clock-face capture
-is not emitted.
+The aggregate builder rejects extra files, symlinks, unknown evidence fields,
+and any non-empty preexisting approval/evidence field in the checked-in plan.
 
-The bounded Watch foreground supervisor has a credential-free shell test:
+Every frame capture creates a disposable simulator, builds and installs the
+native target without signing credentials, launches the gated fixture,
+captures an untouched PNG, checks native dimensions and opacity, hashes it,
+and deletes the simulator. `QUAKESIGNAL_SCREENSHOT_DERIVED_DATA` may point to
+an absolute directory outside the repository so later frames reuse unsigned
+build products. `QUAKESIGNAL_SCREENSHOT_KEEP_SIMULATOR=1` is only for manual
+visual debugging.
+
+For a diagnostic single frame, call the lower-level command with an exact
+selector and absolute PNG path:
 
 ```sh
+ios/ScreenshotAutomation/capture-platform-screenshot.sh \
+  tvos tvos-event-detail /Volumes/RC20/QuakeSignalScreenshotDebug/tv-detail.png
+```
+
+The lower-level command writes a sidecar only when
+`QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT` names a new absolute JSON path
+outside the repository.
+
+## Watch foreground protection
+
+For watchOS the harness also creates and boots a disposable paired iPhone
+Simulator; no existing personal pair is reused. CoreSimulator may take longer
+than watchOS's two-minute return-to-clock interval to service its first
+screenshot. While that request is pending, the harness restarts QuakeSignal in
+the foreground every 45 seconds with the same dual-gated frame selector. The
+screenshot and restart children share a five-minute hard deadline and are both
+stopped with bounded TERM-to-KILL cleanup on timeout or interruption.
+
+Each Watch frame contains the orange foreground-only badge. A temporary BMP
+validation copy is inspected for those pixels; the native PNG is never
+converted or modified. A clock-face or stale-route capture is rejected.
+
+Credential-free tests cover the exact plan, aggregate provenance, Watch
+process supervision, selector preservation, and badge validation:
+
+```sh
+/usr/bin/ruby ios/ScreenshotAutomation/platform-screenshot-plan.test.rb
+/usr/bin/ruby ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb
+bash ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
 bash ios/ScreenshotAutomation/watch-capture-guard.test.sh
 /usr/bin/ruby ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
 ```
 
-The tests exercise fast and slow captures, periodic
-`--terminate-running-process` reactivation, command failures, the wall-clock
-hard-timeout return path, TERM status preservation, actual child-PID cleanup,
-forced cleanup when TERM is ignored, and badge-pixel acceptance and rejection
-without booting a Simulator.
+## Provenance and CI artifacts
 
-Set `QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT` to an absolute `.json` path
-outside the repository when the capture needs machine-readable evidence. The
-harness writes the screenshot hash, native dimensions, capture time, exact
-selected runtime identifier, device-type identifier, human-readable device
-model, and disposable Simulator UDID. The sidecar is always marked
-`unapproved-debug-simulator-capture-evidence` with `uploadApproved: false`; it
-does not grant review or upload approval.
+`capture-provenance.json` is schema-2 aggregate evidence. It binds the exact
+plan-manifest hash and every planned filename to the untouched PNG hash,
+dimensions, capture time, exact runtime, device type/model, disposable UDID,
+and per-frame evidence hash. It is always marked
+`unapproved-debug-simulator-capture-set-evidence`, with
+`uploadApproved: false`, `reviewer: null`, and no signed Release evidence.
 
-## CI artifact use
+`.github/workflows/apple-platform-screenshots.yml` runs one credential-free
+matrix job per platform, captures all 3/5/3 frames, verifies the aggregate,
+and adds schema-3 `candidate-metadata.json` plus a runtime inventory. It proves
+that checked-out `HEAD` equals `GITHUB_SHA` and that the repository has zero
+tracked or untracked changes immediately before and after the complete set
+capture. The short-lived artifact name remains explicitly `UNAPPROVED`. No
+workflow step has signing or App Store Connect credentials.
 
-The same commands are credential-free on a macOS runner. Point the output at
-`$RUNNER_TEMP`, then use the CI provider's ordinary artifact-upload step. Keep
-the artifact separate from signing and App Store Connect upload jobs. A named
-reviewer must compare the candidate to the source-frozen UI and approve it;
-where the release runbook requires binary parity evidence, compare it with the
-signed Release artifact before metadata upload. The Debug-only fixture must
-never be described as having run in a signed Release binary.
-
-`.github/workflows/apple-platform-screenshots.yml` requests the capture
-sidecar, validates that its platform, locale, filename, and SHA-256 match the
-PNG, and embeds its `selectedSimulator` object in `candidate-metadata.json`.
-`simulator-runtimes.txt` remains a diagnostic inventory; it is not used as a
-substitute for recording the runtime and device that actually produced the
-candidate. Both JSON files and the artifact name remain explicitly
-unapproved.
-
-If the required runtime is unavailable, the script exits before building and
-prints the exact `xcodebuild -downloadPlatform` command. It never substitutes a
-different resolution or fabricates a capture. A Watch foreground-reactivation,
-screenshot, five-minute timeout, dimension, opacity, or badge-content failure
-also exits before the requested output or provenance sidecar is written.
+A named reviewer must compare every candidate to the source-frozen UI and
+approve it. Where the release runbook requires binary parity evidence, compare
+the reviewed candidate with the signed Release artifact before metadata
+upload. A Debug-only fixture must never be described as a signed Release or
+build-8 binary capture.

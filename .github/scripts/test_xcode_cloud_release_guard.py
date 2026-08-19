@@ -336,14 +336,102 @@ class GuardContextTests(unittest.TestCase):
             guard.verify_platform_capabilities_sources(wrong_symbol)
 
         mac_specific_copy = dict(sources)
-        english_path = guard.PLATFORM_CAPABILITY_POLICY_PATHS[3]
+        english_path = "ios/QuakeSignal/Resources/en.lproj/Localizable.strings"
+        self.assertIn(english_path, guard.PLATFORM_CAPABILITY_POLICY_PATHS)
         mac_specific_copy[english_path] = mac_specific_copy[english_path].replace(
             '"platform.alertRegistration.foregroundOnly" = "Foreground monitoring only";',
             '"platform.alertRegistration.foregroundOnly" = "Foreground monitoring on Mac";',
             1,
         )
+        self.assertNotEqual(mac_specific_copy[english_path], sources[english_path])
         with self.assertRaisesRegex(guard.ReleaseGuardError, "platform capability policy fingerprint"):
             guard.verify_platform_capabilities_sources(mac_specific_copy)
+
+    def test_platform_capability_policy_rejects_vision_privacy_mutations(self):
+        sources = {
+            relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+            for relative in guard.PLATFORM_CAPABILITY_POLICY_PATHS
+        }
+        path = guard.VISION_PRIVACY_MANIFEST_PATH
+        for old, new in (
+            ("<key>NSPrivacyTracking</key>\n\t<false/>", "<key>NSPrivacyTracking</key>\n\t<true/>"),
+            ("<key>NSPrivacyCollectedDataTypes</key>\n\t<array/>", "<key>NSPrivacyCollectedDataTypes</key>\n\t<array><dict/></array>"),
+            ("<string>CA92.1</string>", "<string>UNREVIEWED.1</string>"),
+        ):
+            with self.subTest(replacement=new):
+                mutated = dict(sources)
+                mutated[path] = mutated[path].replace(old, new, 1)
+                self.assertNotEqual(mutated[path], sources[path])
+                with self.assertRaisesRegex(
+                    guard.ReleaseGuardError,
+                    "must declare tracking false, no tracking domains or collected data",
+                ):
+                    guard.verify_platform_capabilities_sources(mutated)
+
+    def test_platform_capability_policy_rejects_lifecycle_and_cache_mutations(self):
+        sources = {
+            relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+            for relative in guard.PLATFORM_CAPABILITY_POLICY_PATHS
+        }
+        mutations = (
+            (
+                "ios/QuakeSignal/State/QuakeStore.swift",
+                "case .stopSocket:\n            liveSocket.stop()",
+                "case .stopSocket:\n            liveSocket.start()",
+            ),
+            (
+                "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
+                "static func shouldAcceptDirectEvent(isForegroundActive: Bool) -> Bool {\n        isForegroundActive\n    }",
+                "static func shouldAcceptDirectEvent(isForegroundActive: Bool) -> Bool {\n        true\n    }",
+            ),
+            (
+                "ios/QuakeSignal/Networking/WolfxClient.swift",
+                "configuration.requestCachePolicy = .reloadIgnoringLocalCacheData",
+                "configuration.requestCachePolicy = .returnCacheDataElseLoad",
+            ),
+        )
+        for path, old, new in mutations:
+            with self.subTest(path=path):
+                mutated = dict(sources)
+                mutated[path] = mutated[path].replace(old, new, 1)
+                self.assertNotEqual(mutated[path], sources[path])
+                with self.assertRaisesRegex(
+                    guard.ReleaseGuardError,
+                    "platform capability policy fingerprint",
+                ):
+                    guard.verify_platform_capabilities_sources(mutated)
+
+    def test_platform_capability_policy_rejects_screenshot_fixture_gate_mutations(self):
+        sources = {
+            relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+            for relative in guard.PLATFORM_CAPABILITY_POLICY_PATHS
+        }
+        path = "ios/QuakeSignalShared/ScreenshotAutomation.swift"
+        self.assertIn(path, guard.PLATFORM_CAPABILITY_POLICY_PATHS)
+        mutations = (
+            (
+                "#if DEBUG && targetEnvironment(simulator)\n        shouldActivate(",
+                "#if DEBUG\n        shouldActivate(",
+            ),
+            (
+                "#if DEBUG && targetEnvironment(simulator)\n        selectFrame(",
+                "#if targetEnvironment(simulator)\n        selectFrame(",
+            ),
+            (
+                "#else\n        []\n#endif",
+                "#else\n        fixtureEventsForRelease\n#endif",
+            ),
+        )
+        for old, new in mutations:
+            with self.subTest(replacement=new):
+                mutated = dict(sources)
+                mutated[path] = mutated[path].replace(old, new, 1)
+                self.assertNotEqual(mutated[path], sources[path])
+                with self.assertRaisesRegex(
+                    guard.ReleaseGuardError,
+                    "platform capability policy fingerprint",
+                ):
+                    guard.verify_platform_capabilities_sources(mutated)
 
     def test_python_source_gate_rejects_executable_xcode_graph_drift(self):
         project = (REPOSITORY_ROOT / guard.XCODE_SOURCE_GRAPH_PATHS[0]).read_text(encoding="utf-8")

@@ -31,9 +31,9 @@ WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev"
 VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open."
 MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
 APP_ATTEST_FINGERPRINT = "sha256:wQ7bfMyEJST5ySIwLM1Q6HwT4DtbRPR3vanIG-kXCkQ"
-XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:Y8MkOenSTIDEnnIB0yZQ65iqpb_eW5ZJniv1oK-ewCc"
+XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:7JH35wpygm1JEPS5L-YOolp_32i0h5-em-tDG4c05vU"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
-PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:6CCOh2NPluk6-XWUrOULM2auKQ3F2URWCYqJCv1bxrE"
+PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:YGkg2DD4-kFzNt_hiwXLoEFN8dCTvnoaWjEfVYWtS_E"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
 MAX_RESPONSE_BYTES = 1024 * 1024
 READINESS_TIMEOUT_SECONDS = 180.0
@@ -74,10 +74,19 @@ PLATFORM_CAPABILITY_POLICY_PATHS = (
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
     "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
     "ios/QuakeSignal/Features/Settings/SettingsView.swift",
+    "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
+    "ios/QuakeSignal/Networking/LiveSocketClient.swift",
+    "ios/QuakeSignal/Networking/WolfxClient.swift",
+    "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
+    "ios/QuakeSignal/State/QuakeStore.swift",
+    "ios/QuakeSignalShared/ScreenshotAutomation.swift",
+    "ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy",
     "ios/QuakeSignal/Resources/en.lproj/Localizable.strings",
     "ios/QuakeSignal/Resources/ja.lproj/Localizable.strings",
     "ios/QuakeSignal/Resources/zh-Hans.lproj/Localizable.strings",
+    "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy",
 )
+VISION_PRIVACY_MANIFEST_PATH = "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy"
 RELEASE_ENTITLEMENT_PATHS = (
     "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements",
     "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements",
@@ -693,6 +702,10 @@ def verify_release_entitlements(entitlements: Any, label: str) -> None:
 def verify_platform_capabilities_sources(sources: Mapping[str, str]) -> None:
     if sorted(sources) != sorted(PLATFORM_CAPABILITY_POLICY_PATHS):
         fail("foreground-only platform capability source inventory is incomplete or expanded.")
+    verify_vision_privacy_manifest(
+        sources[VISION_PRIVACY_MANIFEST_PATH],
+        VISION_PRIVACY_MANIFEST_PATH,
+    )
     fingerprint = reviewed_content_fingerprint([
         {"path": relative_path, "source": sources[relative_path]}
         for relative_path in PLATFORM_CAPABILITY_POLICY_PATHS
@@ -701,6 +714,36 @@ def verify_platform_capabilities_sources(sources: Mapping[str, str]) -> None:
         fail(
             f"platform capability policy fingerprint {fingerprint} does not match "
             f"{PLATFORM_CAPABILITIES_FINGERPRINT}."
+        )
+
+
+def verify_vision_privacy_manifest(source: str, label: str) -> None:
+    expected = {
+        "NSPrivacyTracking": False,
+        "NSPrivacyTrackingDomains": [],
+        "NSPrivacyCollectedDataTypes": [],
+        "NSPrivacyAccessedAPITypes": [
+            {
+                "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+                "NSPrivacyAccessedAPITypeReasons": ["CA92.1"],
+            }
+        ],
+    }
+    manifest = plistlib.loads(source.encode("utf-8"))
+    effective = re.sub(r"<!--[\s\S]*?-->", "", source)
+    key_sequence = re.findall(r"<key>\s*([^<]+?)\s*</key>", effective)
+    expected_key_sequence = [
+        "NSPrivacyTracking",
+        "NSPrivacyTrackingDomains",
+        "NSPrivacyCollectedDataTypes",
+        "NSPrivacyAccessedAPITypes",
+        "NSPrivacyAccessedAPIType",
+        "NSPrivacyAccessedAPITypeReasons",
+    ]
+    if manifest != expected or key_sequence != expected_key_sequence:
+        fail(
+            f"{label} must declare tracking false, no tracking domains or collected data, "
+            "and only UserDefaults accessed for reason CA92.1."
         )
 
 

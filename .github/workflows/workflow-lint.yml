@@ -9,6 +9,7 @@ on:
       - ".github/workflows/**"
       - ".github/scripts/**"
       - "packaging/homebrew-tap/**"
+      - "desktop/src-tauri/src/lib.rs"
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
       - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
@@ -20,8 +21,15 @@ on:
       - "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements"
       - "ios/QuakeSignal/App/PlatformCapabilities.swift"
       - "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift"
+      - "ios/QuakeSignal/Features/Root/RootView.swift"
       - "ios/QuakeSignal/Features/Settings/SettingsView.swift"
+      - "ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy"
       - "ios/QuakeSignal/Resources/**/Localizable.strings"
+      - "ios/QuakeSignalShared/ScreenshotAutomation.swift"
+      - "ios/QuakeSignalTV/TVDashboardView.swift"
+      - "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy"
+      - "ios/QuakeSignalWatch/WatchDashboardView.swift"
+      - "ios/AppStore/platforms/**/screenshot-manifest-*.json"
       - "ios/AppStore/ExportOptions.plist"
       - "ios/ci_scripts/**"
       - "ios/ScreenshotAutomation/**"
@@ -29,6 +37,7 @@ on:
       - "backend/cloudflare/package.json"
       - "backend/cloudflare/package-lock.json"
       - "backend/cloudflare/staging/wrangler.staging.template.json"
+      - "backend/cloudflare/scripts/legal-page-contract.mjs"
       - "backend/cloudflare/scripts/render-staging-config.mjs"
       - "backend/cloudflare/scripts/smoke-test.mjs"
       - "backend/cloudflare/scripts/smoke-test-policy.mjs"
@@ -44,6 +53,7 @@ on:
       - ".github/workflows/**"
       - ".github/scripts/**"
       - "packaging/homebrew-tap/**"
+      - "desktop/src-tauri/src/lib.rs"
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
       - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
@@ -55,8 +65,15 @@ on:
       - "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements"
       - "ios/QuakeSignal/App/PlatformCapabilities.swift"
       - "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift"
+      - "ios/QuakeSignal/Features/Root/RootView.swift"
       - "ios/QuakeSignal/Features/Settings/SettingsView.swift"
+      - "ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy"
       - "ios/QuakeSignal/Resources/**/Localizable.strings"
+      - "ios/QuakeSignalShared/ScreenshotAutomation.swift"
+      - "ios/QuakeSignalTV/TVDashboardView.swift"
+      - "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy"
+      - "ios/QuakeSignalWatch/WatchDashboardView.swift"
+      - "ios/AppStore/platforms/**/screenshot-manifest-*.json"
       - "ios/AppStore/ExportOptions.plist"
       - "ios/ci_scripts/**"
       - "ios/ScreenshotAutomation/**"
@@ -64,6 +81,7 @@ on:
       - "backend/cloudflare/package.json"
       - "backend/cloudflare/package-lock.json"
       - "backend/cloudflare/staging/wrangler.staging.template.json"
+      - "backend/cloudflare/scripts/legal-page-contract.mjs"
       - "backend/cloudflare/scripts/render-staging-config.mjs"
       - "backend/cloudflare/scripts/smoke-test.mjs"
       - "backend/cloudflare/scripts/smoke-test-policy.mjs"
@@ -133,10 +151,19 @@ jobs:
         run: |
           set -euo pipefail
           bash -n ios/ScreenshotAutomation/capture-platform-screenshot.sh
+          bash -n ios/ScreenshotAutomation/capture-platform-screenshot-set.sh
+          bash -n ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
           bash -n ios/ScreenshotAutomation/watch-capture-guard.sh
           bash -n ios/ScreenshotAutomation/watch-capture-guard.test.sh
+          /usr/bin/ruby -c ios/ScreenshotAutomation/platform-screenshot-plan.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/platform-screenshot-plan.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/platform-screenshot-plan.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb
+          bash ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
           bash ios/ScreenshotAutomation/watch-capture-guard.test.sh
           /usr/bin/ruby ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
 

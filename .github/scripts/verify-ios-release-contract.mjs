@@ -24,9 +24,17 @@ const contractFiles = {
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
     "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
     "ios/QuakeSignal/Features/Settings/SettingsView.swift",
+    "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
+    "ios/QuakeSignal/Networking/LiveSocketClient.swift",
+    "ios/QuakeSignal/Networking/WolfxClient.swift",
+    "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
+    "ios/QuakeSignal/State/QuakeStore.swift",
+    "ios/QuakeSignalShared/ScreenshotAutomation.swift",
+    "ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy",
     "ios/QuakeSignal/Resources/en.lproj/Localizable.strings",
     "ios/QuakeSignal/Resources/ja.lproj/Localizable.strings",
     "ios/QuakeSignal/Resources/zh-Hans.lproj/Localizable.strings",
+    "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy",
   ],
   schemes: [
     "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignal.xcscheme",
@@ -50,6 +58,7 @@ const contractFiles = {
     "ios/ci_scripts/xcode-cloud-release-guard.py",
   ],
   releaseCriticalHelpers: [
+    "backend/cloudflare/scripts/legal-page-contract.mjs",
     "backend/cloudflare/scripts/render-staging-config.mjs",
     "backend/cloudflare/scripts/smoke-test-policy.mjs",
     "backend/cloudflare/scripts/smoke-test.mjs",
@@ -84,6 +93,17 @@ const REVIEWED_WORKFLOW_FILES = [
 
 const APPROVED_WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev";
 const VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open.";
+const VISION_PRIVACY_MANIFEST_PATH = "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy";
+const VISION_PRIVACY_MANIFEST_XML = [
+  '<plist version="1.0"><dict>',
+  "<key>NSPrivacyTracking</key><false/>",
+  "<key>NSPrivacyTrackingDomains</key><array/>",
+  "<key>NSPrivacyCollectedDataTypes</key><array/>",
+  "<key>NSPrivacyAccessedAPITypes</key><array><dict>",
+  "<key>NSPrivacyAccessedAPIType</key><string>NSPrivacyAccessedAPICategoryUserDefaults</string>",
+  "<key>NSPrivacyAccessedAPITypeReasons</key><array><string>CA92.1</string></array>",
+  "</dict></array></dict></plist>",
+].join("");
 const APP_STORE_EXPORT_OPTIONS = {
   method: "app-store-connect",
   destination: "export",
@@ -227,17 +247,17 @@ const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:lZgHa3Y9qXK8lfLTbhAal
 const WORKFLOW_JOBS_FINGERPRINT = "sha256:w1wk-Rdn5g5H5Thg7DTzf8v4fiPKh8FcXavfOJTK4Vg";
 const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:gIdap293hpqUJ9U_gKOGiTsYupuumhNhDR3BileJEVI";
 const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:pyFXJBB9gZ7oyUQR5FTk2qRZe4TlhnJmc0HjteIYnLI";
-const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:KqK_JYFbg7zm-IgdGk2ZW2HBJ0mdkgZUxIQUXI_Jwnk";
+const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:HdP5PsAe4vXSh0x6N2lFipMQ5Z7ubvxbOMJOcX1kmEQ";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
-const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:z-UOlQtW9WgygPtO1UPX49kWjibbkWMAmwgU27dHrvo";
+const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:cfc1XFYH5uur53XuPS-lt-mj3_hy172yy3txy7PSeKo";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
-const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:6CCOh2NPluk6-XWUrOULM2auKQ3F2URWCYqJCv1bxrE";
-const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:jJ9gpTadeEHe8JppDG2YZ6Vo-Cw7mP-jrmeHM6x84_E";
+const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:YGkg2DD4-kFzNt_hiwXLoEFN8dCTvnoaWjEfVYWtS_E";
+const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:ahwdsrqf-iMo_HiGEWdL0ZYZva7tWf-l37OnPyqbsdw";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:vtAIx8JZ4s9UUN07yItVzVx-po5bFVrgWPH5FV_zhXA";
 const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:gMGewYdsLKAr0RhPjPt_wb_voe9GfjH_-P7BCt8RsOU";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:EyTkfA64xSQO7CB7SNS-rFJOdA9krnJRkLC8czp78zc";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:0pySyDReV_ILGXVjnwzXMBreQHXEluFwopBqftELTM8";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:r31-DdbNheSNt3wTviTfm-mpBd4SgsQsLPp6kokW33I";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:gHJF9crgAe6aoNz-fSYDu2uDfysOVBkCKhYtMAtrCUw";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
 const REMOTE_SMOKE_COMMAND = [
@@ -605,6 +625,25 @@ function verifyInfoPlist(infoPlist, label, requiresWorkerConfiguration) {
     if (description.length !== 1 || description[0][1].trim() !== VISION_LOCATION_USAGE_DESCRIPTION) {
       fail(`${label} must disclose foreground-only location use exactly.`);
     }
+  }
+}
+
+function verifyVisionPrivacyManifest(source, label) {
+  if (typeof source !== "string") {
+    fail(`${label} is missing from the foreground-only platform policy inventory.`);
+  }
+  const effective = source
+    .replace(/^\uFEFF/, "")
+    .replace(/<\?xml[\s\S]*?\?>/g, "")
+    .replace(/<!DOCTYPE[\s\S]*?>/g, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .trim()
+    .replace(/>\s+</g, "><");
+  if (effective !== VISION_PRIVACY_MANIFEST_XML) {
+    fail(
+      `${label} must declare tracking false, no tracking domains or collected data, ` +
+      "and only UserDefaults accessed for reason CA92.1.",
+    );
   }
 }
 
@@ -1594,8 +1633,9 @@ function verifyScreenshotCandidateWorkflow(workflowSource) {
   if (!sameValue(Object.keys(jobs), ["capture"])) {
     fail("native screenshot candidate workflow must expose only its reviewed capture job.");
   }
-  if (workflowSequenceFingerprint(jobs) !== SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT) {
-    fail("native screenshot candidate workflow jobs must match the reviewed capture graph fingerprint.");
+  const jobsFingerprint = workflowSequenceFingerprint(jobs);
+  if (jobsFingerprint !== SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT) {
+    fail(`native screenshot candidate workflow jobs must match the reviewed capture graph fingerprint (received ${jobsFingerprint}).`);
   }
 }
 
@@ -1652,7 +1692,7 @@ export async function verifyIOSReleaseContract({
     readReviewedCiScriptInventory(root),
     Promise.all(contractFiles.releaseCriticalHelpers.map(async (relativePath) => ({
       path: relativePath,
-      source: await readFile(path(relativePath), "utf8"),
+      source: await readReviewedRegularFile(root, relativePath),
     }))),
     readReviewedWorkflowInventory(root),
   ]);
@@ -1678,6 +1718,13 @@ export async function verifyIOSReleaseContract({
     contractFiles.schemes,
     XCODE_SCHEMES_FINGERPRINT,
     "shared archive schemes",
+  );
+  const platformCapabilitySources = Object.fromEntries(
+    platformCapabilityPolicy.map(({ path, source }) => [path, source]),
+  );
+  verifyVisionPrivacyManifest(
+    platformCapabilitySources[VISION_PRIVACY_MANIFEST_PATH],
+    VISION_PRIVACY_MANIFEST_PATH,
   );
   const platformCapabilitiesFingerprint = verifyReviewedFileFingerprint(
     platformCapabilityPolicy,

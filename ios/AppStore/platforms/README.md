@@ -86,9 +86,14 @@ owner approves each exact display name, availability, and trademark review.
   required source permission.
 - [ ] Complete current Age Rating, App Privacy, Export Compliance, Content
   Rights, availability, and accountable App Review contact fields.
-- [ ] Update the public privacy policy to name Apple TV, Apple Watch, and Apple
-  Vision Pro accurately. Apple requires a separate Apple TV Privacy Policy text
-  field for tvOS; review the draft in
+- [ ] Obtain legal/release-owner approval for the expanded privacy source and
+  publish it through the separately approved Worker deployment. The checked-in
+  policy and Worker copy now distinguish iPhone/iPad alert registration from
+  the foreground-only Apple TV, Apple Watch, Apple Vision Pro, Mac Catalyst,
+  and Designed-for-iPad-on-Mac experiences, as well as the separate native
+  desktop and Chrome clients; a source change is not a publication or legal
+  approval. Apple also requires a separate Apple TV Privacy Policy text field
+  for tvOS; review the draft in
   `tvos/en-US/apple-tv-privacy-policy-draft.txt`, remove its draft marker only
   after legal/release-owner approval, and keep it consistent with the published
   policy. See Apple's
