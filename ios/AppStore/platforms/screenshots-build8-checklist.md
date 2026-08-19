@@ -56,6 +56,9 @@ This checklist creates no approval by itself.
   identifiers, or precise location are visible.
 - [ ] Complete Apple Vision Pro QA and approve the required App Motion answer;
   a screenshot does not prove notification or motion behavior.
+- [ ] Ensure the visible copy is truthful about foreground-only monitoring and
+  does not imply APNs, App Attest, Time Sensitive, Critical Alerts, or
+  background emergency delivery on visionOS.
 - [ ] Update `visionos/screenshot-manifest-v1.1-build8.json` with evidence and
   SHA-256 values.
 

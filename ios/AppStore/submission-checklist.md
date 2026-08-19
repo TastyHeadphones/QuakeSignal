@@ -45,7 +45,8 @@ value.
   named visual approval and signed public-Release parity before any upload.
 - [ ] Complete the Apple Watch, tvOS, and visionOS metadata, screenshot, icon,
   profile, and platform-QA gates in `platforms/` before submitting those
-  experiences. tvOS and Watch must remain foreground-only in every claim.
+  experiences. tvOS, visionOS, and Watch must remain foreground-only in every
+  claim.
 - [ ] Complete the required visionOS App Motion answer from final-platform QA;
   do not infer the portal selection from source inspection alone.
 
@@ -58,10 +59,17 @@ value.
   and product-page content.
 - [ ] Complete Export Compliance for the final signed archive with the
   responsible legal/release owner.
-- [ ] **Content Rights — PENDING:** obtain and retain written Wolfx permission
-  for the intended App Store territories using
-  `docs/WOLFX_PERMISSION_REQUEST.md`. Do not certify rights to Wolfx-supplied
-  earthquake data before that written evidence exists.
+- [ ] **Content Rights — PENDING / SUBMISSION BLOCKER:** send the ready-to-send
+  request in `docs/WOLFX_PERMISSION_REQUEST.md`, obtain and retain an
+  affirmative written Wolfx reply covering the exact Apple platforms,
+  persistent normalized-event/client-local storage, developer-operated relay,
+  App Store territories, attribution, restrictions, duration, and termination.
+  Confirm that Wolfx has authority over every underlying feed, or obtain and
+  review every separately required source permission. Record the complete
+  evidence in `content-rights-evidence.md`. The request draft, published terms,
+  a source-permission referral without the permission itself, or a prior portal
+  selection is not permission. Do not complete Apple's rights certification or
+  submit any platform before the complete written evidence exists.
 
 ## Final submission decision
 

@@ -7,7 +7,10 @@ private enum OnboardingStep: Int, CaseIterable {
         switch self {
         case .welcome: return "onboarding.title1"
         case .sources: return "onboarding.title2"
-        case .notifications: return "onboarding.title3"
+        case .notifications:
+            return PlatformCapabilities.supportsAttestedAlertRegistration
+                ? "onboarding.title3"
+                : "platform.alertRegistration.foregroundOnly"
         case .location: return "onboarding.title4"
         }
     }
@@ -16,7 +19,10 @@ private enum OnboardingStep: Int, CaseIterable {
         switch self {
         case .welcome: return "onboarding.body1"
         case .sources: return "onboarding.body2"
-        case .notifications: return "onboarding.body3"
+        case .notifications:
+            return PlatformCapabilities.supportsAttestedAlertRegistration
+                ? "onboarding.body3"
+                : "platform.alertRegistration.foregroundOnly.detail"
         case .location: return "onboarding.body4"
         }
     }
@@ -25,7 +31,10 @@ private enum OnboardingStep: Int, CaseIterable {
         switch self {
         case .welcome: return "bolt.fill"
         case .sources: return "globe.asia.australia.fill"
-        case .notifications: return "bell.badge.fill"
+        case .notifications:
+            return PlatformCapabilities.supportsAttestedAlertRegistration
+                ? "bell.badge.fill"
+                : "eye"
         case .location: return "location.circle.fill"
         }
     }
@@ -53,15 +62,6 @@ struct OnboardingView: View {
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 32)
-
-                        if step == .notifications,
-                           !PlatformCapabilities.supportsAttestedAlertRegistration {
-                            Label("platform.alertRegistration.foregroundOnly", systemImage: "macbook")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 32)
-                        }
 
                         if step == .sources {
                             Text("onboarding.disclaimer")

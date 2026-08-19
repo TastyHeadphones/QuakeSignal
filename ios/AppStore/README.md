@@ -239,10 +239,13 @@ allow one to ten screenshots and list the accepted display-size resolutions.
 
 1. Sign in to an Apple Developer Program account in Xcode.
 2. Select its Team for the QuakeSignal target and confirm the bundle ID.
-3. Enable Push Notifications and App Attest for the App ID, then refresh the
-   App Store provisioning profile so the signed archive contains production
-   App Attest support. Do not add Critical Alerts unless Apple has granted
-   that restricted entitlement.
+3. Enable Push Notifications and App Attest for the shared App ID as required
+   by the iPhone/iPad product, then refresh the iOS App Store provisioning
+   profile so that signed archive contains production App Attest support.
+   visionOS remains foreground-only and its signed target must not contain
+   APNs, App Attest, Time Sensitive, or Critical Alerts entitlements. Do not add
+   Critical Alerts anywhere unless Apple has granted that restricted
+   entitlement.
 4. Verify the user-approved production Worker
    `https://quakesignal-api.hopeso.workers.dev` and its public Cloudflare TLS,
    then make the protected TestFlight-bootstrap deployment
@@ -270,9 +273,11 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    App Store version.
 7. Complete age rating, content rights, privacy, export compliance, localized
    metadata, and screenshot fields.
-   Before certifying content rights for Wolfx-supplied earthquake data, obtain
-   and preserve written upstream permission using
-   [`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md).
+   Before certifying content rights for Wolfx-supplied earthquake data, send the
+   request in
+   [`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md)
+   and complete [`content-rights-evidence.md`](./content-rights-evidence.md),
+   including every separately required underlying-source permission.
 8. After protected upload and processing, test release candidate `1.1 (8)` on
    physical hardware
    for the normal production registration, refresh, unsubscribe, re-enrollment,

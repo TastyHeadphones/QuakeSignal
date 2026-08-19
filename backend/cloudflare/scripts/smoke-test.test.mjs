@@ -3,12 +3,23 @@ import test from "node:test";
 
 import {
   APP_ATTEST_POLICY_FORMAT,
+  REQUIRED_WOLFX_SOURCES,
+  SMOKE_MAX_RESPONSE_BYTES,
   assertAppAttestPolicyHealth,
+  assertReadyDeliveryHealth,
+  assertReadyWolfxSourceHealth,
   fetchWithoutRedirect,
   parseSmokeTestArguments,
 } from "./smoke-test-policy.mjs";
 
 const fingerprint = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+function readySources(overrides = {}) {
+  return Object.fromEntries(REQUIRED_WOLFX_SOURCES.map((source) => [
+    source,
+    { stale: false, transport: "websocket", ...(overrides[source] ?? {}) },
+  ]));
+}
 
 function policyHealth(overrides = {}) {
   return {
@@ -56,6 +67,30 @@ test("release smoke refuses redirects from the configured Worker origin", async 
     "https://quakesignal-api.hopeso.workers.dev/healthz",
   );
   assert.equal(response.status, 200);
+});
+
+test("release smoke aborts a request that exceeds its deadline", async () => {
+  await assert.rejects(
+    fetchWithoutRedirect(
+      async (_input, init) => new Promise((_resolve, reject) => {
+        init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true });
+      }),
+      "https://quakesignal-api.hopeso.workers.dev/healthz",
+      {},
+      { timeoutMs: 5 },
+    ),
+    /exceeded 5ms/i,
+  );
+});
+
+test("release smoke rejects an oversized response body", async () => {
+  await assert.rejects(
+    fetchWithoutRedirect(
+      async () => new Response(new Uint8Array(SMOKE_MAX_RESPONSE_BYTES + 1)),
+      "https://quakesignal-api.hopeso.workers.dev/healthz",
+    ),
+    /response exceeded 1048576 bytes/i,
+  );
 });
 
 test("rejects incomplete or malformed App Attest policy assertions", () => {
@@ -119,4 +154,33 @@ test("rejects a malformed effective health allow-list", () => {
     () => assertAppAttestPolicyHealth(policyHealth({ allowedBundleVersions: [] })),
     /non-empty/i,
   );
+});
+
+test("requires the exact fresh seven-source Wolfx health inventory", () => {
+  assert.doesNotThrow(() => assertReadyWolfxSourceHealth({ sources: readySources() }));
+  const missing = readySources();
+  delete missing.jma_eew;
+  for (const sources of [
+    {},
+    missing,
+    readySources({ jma_eew: { stale: true } }),
+    readySources({ jma_eew: { transport: "unavailable" } }),
+  ]) {
+    assert.throws(
+      () => assertReadyWolfxSourceHealth({ sources }),
+      /all seven fresh Wolfx sources/i,
+    );
+  }
+});
+
+test("requires explicit Boolean APNs readiness", () => {
+  assert.doesNotThrow(() => assertReadyDeliveryHealth({ status: "ready", apnsConfigured: true }));
+  for (const delivery of [
+    { status: "ready" },
+    { status: "ready", apnsConfigured: null },
+    { status: "ready", apnsConfigured: "true" },
+    { status: "degraded", apnsConfigured: true },
+  ]) {
+    assert.throws(() => assertReadyDeliveryHealth(delivery), /APNs readiness|APNs signing/i);
+  }
 });

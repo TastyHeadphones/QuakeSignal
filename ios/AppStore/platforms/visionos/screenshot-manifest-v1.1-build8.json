@@ -73,7 +73,7 @@
     {
       "file": "en-US/05-alert-preferences.png",
       "screen": "Alert Sound",
-      "purpose": "Selectable sounds, Japanese voice attribution, and optional notification controls",
+      "purpose": "Selectable foreground warning sounds and Japanese voice attribution",
       "setup": "Japanese safety voice selected; visible non-official and CC BY 3.0 disclosure; no notification permission prompt.",
       "pixels": [3840, 2160],
       "captureStatus": "pending",

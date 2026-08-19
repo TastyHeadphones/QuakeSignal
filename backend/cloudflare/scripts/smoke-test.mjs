@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import {
   assertAppAttestPolicyHealth,
+  assertReadyDeliveryHealth,
+  assertReadyWolfxSourceHealth,
   fetchWithoutRedirect,
   parseSmokeTestArguments,
 } from "./smoke-test-policy.mjs";
@@ -47,11 +49,7 @@ assert.notEqual(
   "degraded",
   "delivery health must not be degraded",
 );
-assert.equal(
-  healthBody.delivery?.status,
-  "ready",
-  "production health must not pass without APNs readiness",
-);
+assertReadyDeliveryHealth(healthBody.delivery);
 assert.equal(
   healthBody.upstream?.status,
   "ready",
@@ -62,6 +60,11 @@ assert.deepEqual(
   [],
   "production health must not have stale required sources",
 );
+assert.ok(
+  ["websocket", "http-polling", "mixed"].includes(healthBody.upstream?.transport),
+  "production health must report an allowed aggregate Wolfx transport",
+);
+assertReadyWolfxSourceHealth(healthBody.upstream);
 
 const root = await fetchWithoutRedirect(fetch, baseURL);
 assert.equal(root.status, 200, "service metadata must return 200");

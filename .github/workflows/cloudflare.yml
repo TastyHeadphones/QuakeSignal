@@ -12,9 +12,18 @@ on:
       - ".github/workflows/apple-platforms.yml"
       - ".github/scripts/verify-ios-release-contract.mjs"
       - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - ".github/scripts/test_xcode_cloud_release_guard.py"
+      - "ios/ci_scripts/**"
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
       - "ios/QuakeSignal/Supporting/Info.plist"
+      - "ios/QuakeSignalTV/Supporting/Info.plist"
+      - "ios/QuakeSignalVision/Supporting/Info.plist"
+      - "ios/QuakeSignalWatch/Supporting/Info.plist"
+      - "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements"
+      - "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements"
+      - "ios/AppStore/ExportOptions.plist"
   pull_request:
     paths:
       - "backend/cloudflare/**"
@@ -23,9 +32,18 @@ on:
       - ".github/workflows/apple-platforms.yml"
       - ".github/scripts/verify-ios-release-contract.mjs"
       - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - ".github/scripts/test_xcode_cloud_release_guard.py"
+      - "ios/ci_scripts/**"
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
       - "ios/QuakeSignal/Supporting/Info.plist"
+      - "ios/QuakeSignalTV/Supporting/Info.plist"
+      - "ios/QuakeSignalVision/Supporting/Info.plist"
+      - "ios/QuakeSignalWatch/Supporting/Info.plist"
+      - "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements"
+      - "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements"
+      - "ios/AppStore/ExportOptions.plist"
   workflow_dispatch:
     inputs:
       deploy_production:
@@ -100,6 +118,10 @@ jobs:
       - name: Test production-gate invariant
         working-directory: backend/cloudflare
         run: npm run test:production-gates
+
+      - name: Test APNs secret verifier command boundary
+        working-directory: backend/cloudflare
+        run: npm run test:verify-apns-secret-config
 
       - name: Test historical APNs incident disposition guard
         working-directory: backend/cloudflare
@@ -177,7 +199,14 @@ jobs:
 
       - name: Install Worker dependencies
         working-directory: backend/cloudflare
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Reverify immutable release source after dependency install
+        id: release-contract
+        run: |
+          set -euo pipefail
+          node .github/scripts/verify-ios-release-contract.mjs
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
 
       - name: Validate protected Cloudflare configuration
         env:
@@ -202,7 +231,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npm run verify:apns-secrets
+        run: node scripts/verify-apns-worker-secrets.mjs
 
       - name: Select App Attest deployment phase
         env:
@@ -224,21 +253,21 @@ jobs:
           CLOUDFLARE_WORKER_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
           APP_ATTEST_PRODUCTION_ENFORCED: ${{ vars.APP_ATTEST_PRODUCTION_ENFORCED }}
           APP_ATTEST_DEPLOYMENT_PHASE: ${{ env.APP_ATTEST_DEPLOYMENT_PHASE }}
-        run: npm run verify:production-gates
+        run: node scripts/verify-production-gates.mjs
 
       - name: Apply D1 migrations
         working-directory: backend/cloudflare
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler d1 migrations apply quakesignal-production --remote
+        run: ./node_modules/.bin/wrangler d1 migrations apply quakesignal-production --remote
 
       - name: Deploy Worker
         working-directory: backend/cloudflare
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy
+        run: ./node_modules/.bin/wrangler deploy
 
       - name: Run post-deployment smoke test
         working-directory: backend/cloudflare
@@ -249,5 +278,7 @@ jobs:
           # A sustained Wolfx WebSocket rejection can take up to 90 seconds
           # to promote the bounded HTTP alternate transport. This script still
           # fails closed for missing APNs or any stale source.
-          npm run wait:worker-readiness -- "$WORKER_URL"
-          npm run test:remote -- "$WORKER_URL"
+          node scripts/wait-for-worker-readiness.mjs "$WORKER_URL"
+          node scripts/smoke-test.mjs "$WORKER_URL" \
+            --expected-app-attest-policy-fingerprint "${{ steps.release-contract.outputs.app_attest_policy_fingerprint }}" \
+            --required-app-attest-bundle-version "${{ steps.release-contract.outputs.build_number }}"

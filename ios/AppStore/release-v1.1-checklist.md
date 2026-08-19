@@ -30,7 +30,15 @@ recorded in the existing submission documents.
 - Complete physical-device App Attest, APNs foreground/background/terminated,
   notification-sound, Silent Mode/Focus, location, and iPad QA before public
   submission.
-- Confirm current content-rights evidence and the App Review contact fields.
+- Obtain and review an affirmative written Wolfx permission reply for the
+  intended Apple platforms, persistent normalized-event/client-local storage,
+  developer-operated notification relay, App Store territories, attribution,
+  restrictions, duration, and termination. The reply must also confirm Wolfx's
+  authority over every underlying feed, or every separately required source
+  permission must be obtained and reviewed. The ready-to-send request draft is
+  not permission. Keep Content Rights certification and every platform
+  submission blocked until `content-rights-evidence.md` records the complete
+  evidence. Separately confirm the App Review contact fields.
 - Follow `apple-platform-release.md` for the iOS+embedded-Watch, tvOS, and
   visionOS protected archive lanes. Do not upload a native platform until its
   store-complete icon set, screenshots, profile, metadata, and platform QA are

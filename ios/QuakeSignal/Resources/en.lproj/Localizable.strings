@@ -328,8 +328,8 @@
 "guide.familyCheckIn.phone" = "Phone Number";
 
 /* Apple platform experiences */
-"platform.alertRegistration.foregroundOnly" = "Foreground monitoring only on Mac";
-"platform.alertRegistration.foregroundOnly.detail" = "Secure background alert registration uses Apple App Attest, which is unavailable on Mac. Live earthquake data and the selected alert sound still work while QuakeSignal is open.";
+"platform.alertRegistration.foregroundOnly" = "Foreground monitoring only";
+"platform.alertRegistration.foregroundOnly.detail" = "Background earthquake notifications are unavailable on this Apple platform. Live earthquake data and the selected alert sound still work while QuakeSignal is open.";
 "platform.alertRegistration.unavailable.error" = "Secure background alert registration is unavailable on this platform.";
 "platform.foreground.badge" = "Foreground only";
 "platform.foreground.refreshUnavailable" = "Live earthquake data is temporarily unavailable.";

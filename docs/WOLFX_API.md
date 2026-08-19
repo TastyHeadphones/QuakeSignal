@@ -11,9 +11,12 @@ and TOS (linked at the bottom of https://wolfx.jp) before shipping an app that
 depends on it.
 
 For App Store distribution, use the release-owner permission request in
-[`WOLFX_PERMISSION_REQUEST.md`](WOLFX_PERMISSION_REQUEST.md) and preserve the
-written answer before certifying third-party-content rights in App Store
-Connect. The app must never expose a public secondary API for Wolfx data.
+[`WOLFX_PERMISSION_REQUEST.md`](WOLFX_PERMISSION_REQUEST.md) and complete the
+[`content-rights-evidence.md`](../ios/AppStore/content-rights-evidence.md)
+register before certifying third-party-content rights in App Store Connect. A
+Wolfx reply is not sufficient for an underlying feed that Wolfx cannot
+authorize; obtain and review the separately required source permission too. The
+app must never expose a public secondary API for Wolfx data.
 
 Every endpoint is available two ways:
 - **HTTP GET**, returns the current/latest snapshot as JSON — good for polling

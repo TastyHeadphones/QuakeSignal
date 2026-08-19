@@ -51,9 +51,11 @@ signed package is frozen; if it does not, stop and contact App Store Connect
 Support rather than create or delete a record. Attach only the package built
 from the frozen 1.1.0 source. Then complete the age rating, content rights,
 export-compliance and App Privacy answers.
-Before certifying content rights for Wolfx-supplied data, obtain and preserve
-written upstream permission using
-[`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md).
+Before certifying content rights for Wolfx-supplied data, send the request in
+[`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md) and
+complete the shared
+[`content-rights-evidence.md`](../../ios/AppStore/content-rights-evidence.md),
+including every separately required underlying-source permission.
 Upload the signed Mac App Store build, the icon, this directory's approved
 screenshots, and the localized metadata. For a later upload, first increase the
 checked-in desktop version and use a higher App Store build. Confirm the Mac

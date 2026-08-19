@@ -71,9 +71,9 @@ rights, and release-owner gate is complete.
 2. Freeze the build-8 native source and 1.1.0 Mac source. Complete unsigned CI,
    signed archive verification, target profiles, platform icons, new
    screenshots/provenance, and required physical/platform QA.
-3. Deploy and verify the matching production Worker migration/policy before any
-   iOS or visionOS build that relies on protected App Attest registration is
-   uploaded.
+3. Deploy and verify the matching production Worker migration/policy before the
+   iOS/iPadOS build that relies on protected App Attest registration is
+   uploaded. visionOS is foreground-only and has no relay registration path.
 4. Upload the iOS host with embedded Watch, tvOS, and visionOS build-8 archives
    through their protected lanes. Upload the signed Mac 1.1.0 package only to
    Apple ID `6800642853`. Processing/TestFlight readiness is not release proof.
@@ -100,12 +100,15 @@ rights, and release-owner gate is complete.
 - QuakeSignal is independent and non-official. Wolfx-aggregated information can
   be delayed, incomplete, revised, or inaccurate. Customers must follow
   official local emergency guidance.
-- iOS/iPadOS and visionOS use protected optional notifications. Time Sensitive
-  is not Critical, is user-controlled, and does not guarantee delivery.
-- tvOS and Watch are foreground-only dashboards with no independent background
-  emergency alerts.
+- iOS/iPadOS use protected optional notifications. Time Sensitive is not
+  Critical, is user-controlled, and does not guarantee delivery.
+- tvOS, visionOS, and Watch are foreground-only experiences with no independent
+  background emergency alerts. A qualifying Vision warning can appear in-app
+  with the selected local sound only while the app is open.
 - The Mac app evaluates feed updates and plays local foreground alarms while it
   is running. It does not use App Attest or APNs and is not a background
   emergency-alert service.
-- Do not certify Wolfx content rights until written permission for the intended
-  territories is preserved with the release evidence.
+- Do not certify Wolfx content rights until `content-rights-evidence.md` records
+  the exact platform, storage, relay, territory, condition, duration, and
+  termination permission, plus either Wolfx authority over every underlying
+  feed or every separately required source permission.

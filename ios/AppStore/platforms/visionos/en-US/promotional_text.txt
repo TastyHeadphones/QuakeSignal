@@ -1,1 +1,1 @@
-Review earthquake reports, map nearby context, keep preparedness guidance close, and opt into protected nearby notifications on Apple Vision Pro.
+Review earthquake reports, map nearby context, and keep preparedness guidance and foreground warning context close on Apple Vision Pro.

@@ -6,6 +6,7 @@ import {
   missingRequiredSecretNames,
   parseConfigArgument,
   requiredSecretNames,
+  verifyAPNSSecretNames,
 } from "./verify-apns-worker-secrets.mjs";
 
 test("accepts only an explicit, nonempty staging config argument", () => {
@@ -23,4 +24,34 @@ test("checks secret names without reading any secret values", () => {
     ["APNS_PRIVATE_KEY", "APNS_TEAM_ID", "APNS_BUNDLE_ID"],
   );
   assert.throws(() => listedSecretNames("{}"), /unexpected Worker secret-list format/);
+});
+
+test("missing local Wrangler fails before any registry-capable process can run", () => {
+  let spawnCalled = false;
+  assert.throws(
+    () => verifyAPNSSecretNames([], {
+      spawn: () => {
+        spawnCalled = true;
+        throw new Error("must not spawn");
+      },
+      wranglerEntrypoint: "/definitely/missing/wrangler.js",
+    }),
+    /local Wrangler entrypoint is missing.*refusing any registry fallback/i,
+  );
+  assert.equal(spawnCalled, false);
+});
+
+test("secret inspection invokes only the reviewed local Wrangler through this Node executable", () => {
+  const result = verifyAPNSSecretNames([], {
+    spawn: (command, arguments_) => {
+      assert.equal(command, process.execPath);
+      assert.match(arguments_[0], /node_modules\/wrangler\/bin\/wrangler\.js$/);
+      assert.deepEqual(arguments_.slice(1), ["secret", "list", "--format", "json"]);
+      return {
+        status: 0,
+        stdout: JSON.stringify(requiredSecretNames.map((name) => ({ name }))),
+      };
+    },
+  });
+  assert.equal(result, 0);
 });

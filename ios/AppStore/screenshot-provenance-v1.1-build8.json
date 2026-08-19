@@ -14,11 +14,11 @@
     "signing": "disabled"
   },
   "capture": {
-    "sourceBaselineCommit": "e9106ff6db83e1f808046d71b2ac62318816eca2",
+    "sourceBaselineCommit": "9833b0a7ecd457439326b9f4190cda5dae8c5e20",
     "sourceTreeState": "clean",
     "capturedAtUtcRange": [
-      "2026-08-19T00:11:27Z",
-      "2026-08-19T00:17:55Z"
+      "2026-08-19T08:00:41Z",
+      "2026-08-19T08:39:39Z"
     ],
     "xcode": "26.6 (17F113)",
     "hostMacOS": "26.6.2 (25G83)",
@@ -66,7 +66,7 @@
     "training": false
   },
   "buildEvidence": {
-    "mainExecutableSha256": "2e20fc634946a300ce27d4a700a91ff7f5247e843f0d794f4a98ef676ee18762",
+    "mainExecutableSha256": "b103617d61db61cbc68e13515d4aca6b90c1d9c8f68ecf13489ac6c2547b7246",
     "debugLocalOverridePresent": false,
     "buildInvocation": {
       "file": "screenshot-evidence-v1.1-build8/build-invocation.txt",
@@ -74,31 +74,31 @@
     },
     "normalizedBuildSettings": {
       "file": "screenshot-evidence-v1.1-build8/normalized-build-settings.txt",
-      "sha256": "7baf0e86bf4bd1185f80c4a063da09b5cac67b596ad45062361d2d45c9002029"
+      "sha256": "77e2e58e8c9bff25575592ba9dce7a898f1a3581f26e2bcf190dab35e883bb3b"
     },
     "normalizedBuildLog": {
       "file": "screenshot-evidence-v1.1-build8/normalized-build.log",
-      "sha256": "bb707ad566c93cb3f3ebdc9c1cf294583ca249c5944e3afab299c7405c296c12",
-      "sourceLogSha256": "1b16b9d87aa9d1a9aff9ca29c03646d9781be2e18ab7594ba351152eba02dc42"
+      "sha256": "f5453d45220579529a6ff315cc5ea9338b67df05e955a8cf11a0de5d8941c54f",
+      "sourceLogSha256": "c1b3e598ab6f66153ab85ae125e66ab8e752b72ea85f11eb852e6313792da61a"
     },
-    "targetBuildLogSha256": "1b16b9d87aa9d1a9aff9ca29c03646d9781be2e18ab7594ba351152eba02dc42",
+    "targetBuildLogSha256": "c1b3e598ab6f66153ab85ae125e66ab8e752b72ea85f11eb852e6313792da61a",
     "simulatorInstallTransformation": {
       "embeddedWatchRemovalOnly": true,
       "nonWatchDiffEmpty": true,
       "mainExecutableUnchanged": true,
-      "sourceExecutableSha256": "2e20fc634946a300ce27d4a700a91ff7f5247e843f0d794f4a98ef676ee18762",
-      "installedExecutableSha256": "2e20fc634946a300ce27d4a700a91ff7f5247e843f0d794f4a98ef676ee18762",
+      "sourceExecutableSha256": "b103617d61db61cbc68e13515d4aca6b90c1d9c8f68ecf13489ac6c2547b7246",
+      "installedExecutableSha256": "b103617d61db61cbc68e13515d4aca6b90c1d9c8f68ecf13489ac6c2547b7246",
       "transformationRecord": {
         "file": "screenshot-evidence-v1.1-build8/simulator-install-transformation.txt",
-        "sha256": "070b37bd0025c236c98247a07d42a939a5071bc61793d282cf0b86461c35c8bf"
+        "sha256": "2c3ee0d225d564940e9f34f4e9f4a3a9c8ee292612603067bad2f1277c9e2212"
       },
       "sourceNonWatchInventory": {
         "file": "screenshot-evidence-v1.1-build8/source-non-watch-inventory.txt",
-        "sha256": "bfa0c84857cc45d8496aab0a77b4ae7af56b43e49579832a4843948831cadd55"
+        "sha256": "e7613a60aaf924b6aed4a2de5a6a3339175e03d7cbf8005a3488ae4c0a0178b2"
       },
       "installCopyNonWatchInventory": {
         "file": "screenshot-evidence-v1.1-build8/install-copy-non-watch-inventory.txt",
-        "sha256": "bfa0c84857cc45d8496aab0a77b4ae7af56b43e49579832a4843948831cadd55"
+        "sha256": "e7613a60aaf924b6aed4a2de5a6a3339175e03d7cbf8005a3488ae4c0a0178b2"
       },
       "nonWatchDiff": {
         "file": "screenshot-evidence-v1.1-build8/non-watch.diff",
@@ -110,7 +110,7 @@
     {
       "file": "en-US/ipad-13/01-home.jpg",
       "captureStatus": "unapproved-debug-simulator-candidate",
-      "sha256": "c01df3f450e3219d154e6f6515294c96d3eac9d666a28dba76a993e8e5dce9cc",
+      "sha256": "f7b61f486cfd423baa11438a33e1ea006455416daf76d4e6f0a2b588d5eb0439",
       "pixels": [2064, 2752],
       "format": "jpeg",
       "hasAlpha": false
@@ -118,7 +118,7 @@
     {
       "file": "en-US/ipad-13/02-reports.jpg",
       "captureStatus": "unapproved-debug-simulator-candidate",
-      "sha256": "e2131850ae89e42650966e5e5f335e43326df0374caa8c1bfca420640f4075dc",
+      "sha256": "4935ddf17dc5873dc1947b2d2bada9f9fec00d06c55308113a8bf3d5355f9c5e",
       "pixels": [2064, 2752],
       "format": "jpeg",
       "hasAlpha": false
@@ -126,7 +126,7 @@
     {
       "file": "en-US/ipad-13/03-map.jpg",
       "captureStatus": "unapproved-debug-simulator-candidate",
-      "sha256": "12e29e5673b8c73cc272d24f1a65fc28f307cb91fe7a4239ac5c463e1fc7b2b1",
+      "sha256": "08eb91d72626ec2d9b6a16adc998b7040ce0d5d1fb70f42801f1b92375c133ec",
       "pixels": [2064, 2752],
       "format": "jpeg",
       "hasAlpha": false
@@ -134,7 +134,7 @@
     {
       "file": "en-US/ipad-13/04-guide.jpg",
       "captureStatus": "unapproved-debug-simulator-candidate",
-      "sha256": "a680baec39f2331e17bf1b94a85b2d794258871a38edb79a4aa54118103f476b",
+      "sha256": "dcaab556f8b560a43f285b105230d39e6ad300084e129d46dd9fc9f53d7d7f47",
       "pixels": [2064, 2752],
       "format": "jpeg",
       "hasAlpha": false
@@ -142,7 +142,7 @@
     {
       "file": "en-US/ipad-13/05-alert-preferences.jpg",
       "captureStatus": "unapproved-debug-simulator-candidate",
-      "sha256": "d4c8b96af0f14e14df8b5f9e36a205c620847028ed9a146a453adcf58b81f814",
+      "sha256": "2da40cdad2602176941e49317c5d3c97e5e3928a0a1a6013429f66a66cc323aa",
       "pixels": [2064, 2752],
       "format": "jpeg",
       "hasAlpha": false
@@ -150,7 +150,7 @@
     {
       "file": "en-US/iphone-6.5/01-home.jpg",
       "captureStatus": "unapproved-debug-simulator-candidate",
-      "sha256": "dbe7d85b0c8e5dc098e8caf553439638795b8d3fc32e4d8915141a27f758532e",
+      "sha256": "2167808be0d8cf1388dda4e66c55eb97bc0d8be01380aff5fc66c096c74b8076",
       "pixels": [1242, 2688],
       "format": "jpeg",
       "hasAlpha": false
@@ -158,7 +158,7 @@
     {
       "file": "en-US/iphone-6.5/02-reports.jpg",
       "captureStatus": "unapproved-debug-simulator-candidate",
-      "sha256": "427c483ae0f2af06c414d617f30712ec4d60dfd83f92c918c66cf07e23133dce",
+      "sha256": "cc582643ecbd68529967087788ea7fde462aa5688f7328c33b156a970d33919d",
       "pixels": [1242, 2688],
       "format": "jpeg",
       "hasAlpha": false
@@ -166,7 +166,7 @@
     {
       "file": "en-US/iphone-6.5/03-map.jpg",
       "captureStatus": "unapproved-debug-simulator-candidate",
-      "sha256": "881d488166edb33f1f966d93c11bd856741b44acc6e258a0eb87c2853cb306f7",
+      "sha256": "f3d2fe1b15b3c4868fabb436fc7e83fd0a12faaa4022c73c316a4713ba89dd02",
       "pixels": [1242, 2688],
       "format": "jpeg",
       "hasAlpha": false
@@ -174,7 +174,7 @@
     {
       "file": "en-US/iphone-6.5/04-guide.jpg",
       "captureStatus": "unapproved-debug-simulator-candidate",
-      "sha256": "646c2a53b012749ca521b9db4f488127514f6f5e2c8b64ad19bc133ab7fbe879",
+      "sha256": "226194573c9fe6edd31fe53a83a69bacf1216d9db6e1ebfe09d17098a49e998b",
       "pixels": [1242, 2688],
       "format": "jpeg",
       "hasAlpha": false
@@ -182,7 +182,7 @@
     {
       "file": "en-US/iphone-6.5/05-alert-preferences.jpg",
       "captureStatus": "unapproved-debug-simulator-candidate",
-      "sha256": "c7099c5e2be8f0a015d5ebc19356dee9054b8dbe69580046105ef1a4718133d8",
+      "sha256": "85f6ba9328642b96b669da812dc73fbab91b22c60c8a5d21328d509787b1616b",
       "pixels": [1242, 2688],
       "format": "jpeg",
       "hasAlpha": false

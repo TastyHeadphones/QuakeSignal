@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { waitForWorkerReadiness } from "./wait-for-worker-readiness.mjs";
+import { REQUIRED_WOLFX_SOURCES, SMOKE_MAX_RESPONSE_BYTES } from "./smoke-test-policy.mjs";
+
+function readySources(overrides = {}) {
+  return Object.fromEntries(REQUIRED_WOLFX_SOURCES.map((source) => [
+    source,
+    { stale: false, transport: "http-polling", ...(overrides[source] ?? {}) },
+  ]));
+}
 
 function health({
   status = 503,
@@ -11,11 +19,12 @@ function health({
   upstreamStatus = "degraded",
   transport = "degraded",
   staleSources = ["jma_eew"],
+  sources = readySources(),
 } = {}) {
   return new Response(JSON.stringify({
     ok,
     delivery: { apnsConfigured, status: deliveryStatus },
-    upstream: { status: upstreamStatus, transport, staleSources },
+    upstream: { status: upstreamStatus, transport, staleSources, sources },
   }), {
     status,
     headers: { "content-type": "application/json" },
@@ -65,6 +74,60 @@ test("fails immediately when APNs configuration is missing", async () => {
   );
 });
 
+test("does not accept missing or non-Boolean APNs readiness", async () => {
+  for (const apnsConfigured of [null, "true", 1]) {
+    let clock = 0;
+    await assert.rejects(
+      waitForWorkerReadiness("https://example.workers.dev", {
+        timeoutMs: 10,
+        intervalMs: 10,
+        now: () => clock,
+        sleep: async (milliseconds) => { clock += milliseconds; },
+        fetchImpl: async () => health({
+          status: 200,
+          ok: true,
+          apnsConfigured,
+          upstreamStatus: "ready",
+          transport: "websocket",
+          staleSources: [],
+        }),
+      }),
+      /did not converge/,
+    );
+  }
+});
+
+test("requires the exact fresh seven-source Wolfx inventory", async () => {
+  const missingSource = readySources();
+  delete missingSource.jma_eew;
+  const mutations = [
+    {},
+    missingSource,
+    readySources({ jma_eew: { stale: true } }),
+    readySources({ jma_eew: { transport: "unavailable" } }),
+  ];
+  for (const sources of mutations) {
+    let clock = 0;
+    await assert.rejects(
+      waitForWorkerReadiness("https://example.workers.dev", {
+        timeoutMs: 10,
+        intervalMs: 10,
+        now: () => clock,
+        sleep: async (milliseconds) => { clock += milliseconds; },
+        fetchImpl: async () => health({
+          status: 200,
+          ok: true,
+          upstreamStatus: "ready",
+          transport: "mixed",
+          staleSources: [],
+          sources,
+        }),
+      }),
+      /did not converge/,
+    );
+  }
+});
+
 test("rejects an incomplete or superficial 200 readiness response", async () => {
   let clock = 0;
   await assert.rejects(
@@ -112,4 +175,22 @@ test("hard-bounds a health fetch that never settles at the overall deadline", as
   }
 
   assert.equal(signal?.aborted, true);
+});
+
+test("rejects an oversized readiness response before parsing it", async () => {
+  let clock = 0;
+  const oversized = `${" ".repeat(SMOKE_MAX_RESPONSE_BYTES)}${JSON.stringify({
+    ok: true,
+    delivery: { status: "not_configured", apnsConfigured: false },
+  })}`;
+  await assert.rejects(
+    waitForWorkerReadiness("https://example.workers.dev", {
+      timeoutMs: 10,
+      intervalMs: 10,
+      now: () => clock,
+      sleep: async (milliseconds) => { clock += milliseconds; },
+      fetchImpl: async () => new Response(oversized, { status: 200 }),
+    }),
+    /did not converge/i,
+  );
 });

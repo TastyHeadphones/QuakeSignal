@@ -5,7 +5,7 @@ QuakeSignal has four shared Xcode schemes generated from `project.yml`:
 | Scheme | Experience | Background alert registration |
 | --- | --- | --- |
 | `QuakeSignal` | Full iPhone/iPad app; the same target also supports Mac Catalyst | iPhone/iPad only. Catalyst and an iOS app running on Mac are foreground-only because App Attest is unavailable on Mac. |
-| `QuakeSignalVision` | Full native visionOS app | Yes, using the same protected App Attest + APNs flow as iOS. |
+| `QuakeSignalVision` | Full native visionOS app | No. Apple does not list Push Notifications or Time Sensitive Notifications as supported visionOS provisioning capabilities, so Vision is foreground-only. |
 | `QuakeSignalTV` | Focus-friendly foreground earthquake dashboard | No APNs, App Attest, or background work. |
 | `QuakeSignalWatch` | Compact foreground companion embedded in the iOS app | No independent APNs until the backend has a watch profile, ownership, and deduplication contract. |
 
@@ -62,9 +62,10 @@ profile cannot accidentally sign the embedded Watch app:
 - `QUAKESIGNAL_TV_PROFILE_NAME`
 - `QUAKESIGNAL_WATCH_PROFILE_NAME`
 
-TV and Watch intentionally have no entitlements file. Catalyst uses the empty
-`QuakeSignal-Catalyst.entitlements`; Vision uses its own development and
-production alert entitlements.
+TV, Watch, and Vision intentionally carry no alert entitlements. Catalyst uses
+the empty `QuakeSignal-Catalyst.entitlements`; Vision's referenced entitlement
+files are likewise empty. Only the iPhone/iPad target uses the protected App
+Attest + APNs registration path.
 
 ## Distribution assets
 
