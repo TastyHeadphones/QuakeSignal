@@ -633,7 +633,7 @@ class LiveWorkerContractTests(unittest.TestCase):
                 return False
 
             def read(self, _maximum):
-                time.sleep(0.2)
+                time.sleep(1.0)
                 return b"{}"
 
         class SlowOpener:
@@ -646,7 +646,12 @@ class LiveWorkerContractTests(unittest.TestCase):
         with patch.object(guard, "build_opener", return_value=opener):
             with self.assertRaisesRegex(guard.ReleaseGuardError, "overall deadline"):
                 guard._request(f"{guard.WORKER_ORIGIN}/healthz", timeout=0.05)
-        self.assertLess(time.monotonic() - started, 0.15)
+        elapsed = time.monotonic() - started
+        self.assertLess(
+            elapsed,
+            0.5,
+            f"overall deadline did not interrupt the 1-second response drip: {elapsed:.3f}s",
+        )
         self.assertEqual(opener.timeout, 0.05)
 
     def test_json_parser_rejects_duplicate_keys(self):
