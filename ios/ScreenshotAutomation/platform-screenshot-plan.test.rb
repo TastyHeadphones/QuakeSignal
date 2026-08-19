@@ -103,7 +103,7 @@ class PlatformScreenshotPlanTest < Minitest::Test
       error = assert_raises(QuakeSignalPlatformScreenshotPlan::Error) do
         load_plan("tvos", root: root)
       end
-      assert_match(/duplicate JSON object key/, error.message)
+      assert_match(/duplicate(?: JSON object)? key/, error.message)
     end
   end
 
