@@ -112,8 +112,10 @@ stopped with bounded TERM-to-KILL cleanup on timeout or interruption.
 Each Watch frame contains the orange foreground-only badge. A temporary BMP
 validation copy is inspected in the reviewed frame-specific upper content
 band; dashboard/list use a text-sized marker while detail uses a filled banner
-with a disjoint density contract. The native PNG is never converted or
-modified. A clock-face, wrong-density, or stale-route capture is rejected.
+with a disjoint density contract. The detail scan includes the full upper 45%
+so navigation safe-area changes cannot hide that fixed banner; rejection logs
+also report the full-frame orange count for diagnosis. The native PNG is never
+converted or modified. A clock-face, wrong-density, or stale-route capture is rejected.
 Because a foreground restart can race an
 already-pending CoreSimulator request, one rejected raster is quarantined in
 the temporary capture directory and the exact route receives one bounded

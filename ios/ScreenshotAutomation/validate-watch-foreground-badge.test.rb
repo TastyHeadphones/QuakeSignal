@@ -47,7 +47,7 @@ Dir.mktmpdir("quakesignal-watch-badge-test.") do |directory|
   assert(status.success?, "100 in-region badge pixels should pass: #{stderr}")
   assert(stdout.include?("100 orange pixels"), "validator should report the accepted pixel count")
   _stdout, _stderr, status = run_validator(good_path, frame: "watchos-event-detail")
-  assert(!status.success?, "dashboard-only badge pixels must not pass the detail route band")
+  assert(!status.success?, "dashboard marker density must not pass the detail route")
 
   detail_pixels = {}
   (20...30).each do |y|
@@ -61,6 +61,21 @@ Dir.mktmpdir("quakesignal-watch-badge-test.") do |directory|
   _stdout, stderr, status = run_validator(detail_path, frame: "watchos-headline")
   assert(!status.success?, "detail-only upper pixels must not widen the dashboard badge band")
   assert(stderr.include?("found 150, maximum 120"), "detail marker should exceed the dashboard density cap")
+  assert(stderr.include?("full-frame qualifying orange pixels: 150"), "density rejection should expose full-frame evidence")
+
+  top_detail_pixels = {}
+  (1...11).each do |y|
+    (5...20).each { |x| top_detail_pixels[[x, y]] = [255, 149, 0] }
+  end
+  top_detail_path = File.join(directory, "top-detail.bmp")
+  build_bitmap(top_detail_path, top_detail_pixels)
+  stdout, stderr, status = run_validator(top_detail_path, frame: "watchos-event-detail")
+  assert(status.success?, "detail banner pixels above a safe-area assumption should pass: #{stderr}")
+  assert(stdout.include?("150 orange pixels"), "top detail validation should report its pixel count")
+  _stdout, stderr, status = run_validator(top_detail_path, frame: "watchos-headline")
+  assert(!status.success?, "top detail banner must not be accepted as a dashboard marker")
+  assert(stderr.include?("found 0, need 100"), "dashboard rejection should remain band-specific")
+  assert(stderr.include?("full-frame qualifying orange pixels: 150"), "failure telemetry should expose out-of-band orange")
 
   clock_pixels = {}
   (25...35).each do |y|
@@ -75,6 +90,7 @@ Dir.mktmpdir("quakesignal-watch-badge-test.") do |directory|
   _stdout, stderr, status = run_validator(clock_path, frame: "watchos-event-detail")
   assert(!status.success?, "clock-face colors must also fail the detail route band")
   assert(stderr.include?("found 0, need 150"), "detail clock rejection should report zero qualifying pixels")
+  assert(stderr.include?("full-frame qualifying orange pixels: 0"), "clock rejection should report full-frame evidence")
 
   outside_pixels = {}
   (50...60).each do |y|
@@ -84,6 +100,10 @@ Dir.mktmpdir("quakesignal-watch-badge-test.") do |directory|
   build_bitmap(outside_path, outside_pixels)
   _stdout, _stderr, status = run_validator(outside_path)
   assert(!status.success?, "orange pixels outside the upper content band must fail")
+  _stdout, stderr, status = run_validator(outside_path, frame: "watchos-event-detail")
+  assert(!status.success?, "orange pixels below the detail upper content band must fail")
+  assert(stderr.include?("found 0, need 150"), "detail below-band rejection should report zero reviewed pixels")
+  assert(stderr.include?("full-frame qualifying orange pixels: 100"), "detail below-band rejection should report full-frame evidence")
 
   below_threshold_pixels = good_pixels.dup
   below_threshold_pixels.delete([14, 34])

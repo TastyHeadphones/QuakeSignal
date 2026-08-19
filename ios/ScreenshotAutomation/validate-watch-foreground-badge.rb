@@ -29,8 +29,10 @@ first_badge_percent, last_badge_percent, minimum_orange_pixels, maximum_orange_p
     [20, 45, 100, dashboard_maximum]
   when "watchos-event-detail"
     # The detail route pins a filled caution banner above its ScrollView. Its
-    # density distinguishes it from the text-sized dashboard/list badges.
-    [15, 40, detail_minimum, nil]
+    # density distinguishes it from the text-sized dashboard/list badges. The
+    # banner begins directly below the navigation title, so include the whole
+    # upper content area instead of assuming one safe-area offset.
+    [0, 45, detail_minimum, nil]
   else
     fail_validation "unreviewed Watch frame selector"
   end
@@ -67,19 +69,25 @@ fail_validation "truncated Watch validation bitmap" if data.bytesize < required_
 # This tolerance includes antialiasing around CautionColor (#ff9500) without
 # admitting the chartreuse/peach numerals on the default clock face.
 orange_pixels = 0
+full_frame_orange_pixels = 0
 first_badge_row = (height * first_badge_percent) / 100
 last_badge_row = (height * last_badge_percent) / 100
 badge_columns = (width * 4) / 5
 
-(first_badge_row...last_badge_row).each do |display_y|
+(0...height).each do |display_y|
   storage_y = signed_height.negative? ? display_y : height - 1 - display_y
   row_offset = pixel_offset + storage_y * row_stride
-  badge_columns.times do |x|
+  width.times do |x|
     offset = row_offset + x * 3
     blue = data.getbyte(offset)
     green = data.getbyte(offset + 1)
     red = data.getbyte(offset + 2)
-    orange_pixels += 1 if red >= 220 && green.between?(90, 190) && blue <= 60
+    next unless red >= 220 && green.between?(90, 190) && blue <= 60
+
+    full_frame_orange_pixels += 1
+    if x < badge_columns && display_y >= first_badge_row && display_y < last_badge_row
+      orange_pixels += 1
+    end
   end
 end
 
@@ -87,6 +95,7 @@ if orange_pixels < minimum_orange_pixels
   fail_validation(
     "Watch screenshot lacks the orange foreground-only badge " \
     "(found #{orange_pixels}, need #{minimum_orange_pixels} pixels); " \
+    "full-frame qualifying orange pixels: #{full_frame_orange_pixels}; " \
     "refusing stale or clock-face capture",
   )
 end
@@ -94,6 +103,7 @@ if maximum_orange_pixels && orange_pixels > maximum_orange_pixels
   fail_validation(
     "Watch screenshot has an unexpected orange marker density " \
     "(found #{orange_pixels}, maximum #{maximum_orange_pixels} pixels); " \
+    "full-frame qualifying orange pixels: #{full_frame_orange_pixels}; " \
     "refusing a mismatched Watch route",
   )
 end
