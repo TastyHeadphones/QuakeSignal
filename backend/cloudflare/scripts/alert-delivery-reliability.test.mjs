@@ -1386,7 +1386,7 @@ test("rejected and failed Upgrade handshakes cancel, log safely, and retry", asy
   }
 });
 
-test("activates paced HTTP fallback only after every websocket route has sustained outage", async () => {
+test("activates paced HTTP fallback for one sustained websocket route outage", async () => {
   const {
     QuakeRelay,
     isHttpFallbackSourceStale,
@@ -1395,9 +1395,8 @@ test("activates paced HTTP fallback only after every websocket route has sustain
   } = await workerModule();
   const now = Date.now();
   const values = new Map([
-    ["upstream-degraded-since-ms:all_eew", now - 100_000],
-    ["upstream-degraded-since-ms:cenc_eqlist", now - 80_000],
-    ["upstream-degraded-since-ms:jma_eqlist", now - 100_000],
+    ["initial-http-seed-complete", true],
+    ["upstream-degraded-since-ms:jma_eqlist", now - 80_000],
   ]);
   const state = {
     storage: {
@@ -1424,17 +1423,39 @@ test("activates paced HTTP fallback only after every websocket route has sustain
     waitUntil() {},
   };
   const relay = new QuakeRelay(state, {});
+  for (const source of [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ]) {
+    relay.statuses.set(source, source === "jma_eqlist" ? "error" : "open");
+    relay.lastSuccessfulUpstreamMs.set(source, now);
+  }
 
   assert.equal(
     await relay.shouldRunHttpRecoverySeed(),
     false,
-    "one route inside its 90-second grace window keeps HTTP fallback off",
+    "a failed route inside its 90-second grace window keeps HTTP fallback off",
   );
-  values.set("upstream-degraded-since-ms:cenc_eqlist", now - 100_000);
+  assert.equal(
+    await relay.nextHttpFallbackAlarmAt(now),
+    now + 10_000,
+    "the fallback alarm targets the failed route's exact grace boundary",
+  );
+  values.set("upstream-degraded-since-ms:jma_eqlist", now - 100_000);
+  assert.equal(
+    await relay.nextHttpFallbackAlarmAt(now),
+    now + 1,
+    "a route already beyond grace receives an immediate bounded wake",
+  );
   assert.equal(
     await relay.shouldRunHttpRecoverySeed(),
     true,
-    "all three routes past the grace window activate alternate transport",
+    "one route past the grace window activates alternate transport while the others stay healthy",
   );
   assert.equal(values.get("http-fallback-active"), true);
   values.set("http-fallback-next-sweep-at-ms", Date.now() + 60_000);
@@ -1853,6 +1874,236 @@ test("an early alarm between recovery sweeps does not fall through to normal D1 
     ["upstreams"],
     "a replacement relay honors the durable next-sweep time and avoids normal maintenance",
   );
+});
+
+test("partial fallback drains healthy-route live work between exclusive HTTP turns", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalNow = Date.now;
+  const now = Date.parse("2026-08-19T00:00:00.000Z");
+  const sources = [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ];
+
+  try {
+    Date.now = () => now;
+    const values = new Map([
+      ["http-fallback-active", true],
+      ["http-fallback-next-sweep-at-ms", now + 60_000],
+    ]);
+    let alarmAt = null;
+    const state = {
+      storage: {
+        async get(key) { return values.get(key); },
+        async put(key, value) { values.set(key, value); },
+        async delete(key) { values.delete(key); },
+        async list() { return new Map(); },
+        async getAlarm() { return alarmAt; },
+        async setAlarm(value) { alarmAt = value; },
+      },
+      waitUntil() {},
+    };
+    const relay = new QuakeRelay(state, {});
+    for (const source of sources) {
+      relay.statuses.set(source, source === "jma_eqlist" ? "error" : "open");
+      relay.lastSuccessfulUpstreamMs.set(source, now);
+    }
+
+    const calls = [];
+    let liveWorkPending = true;
+    relay.ensureUpstreams = async () => calls.push("upstreams");
+    relay.seedFromHttp = async () => calls.push("http");
+    relay.repairPendingLiveSnapshotSlots = async () => calls.push("repair");
+    relay.hasAnyActiveLiveSnapshotWork = async () => liveWorkPending;
+    relay.pendingLiveSnapshotWorks = async () =>
+      liveWorkPending ? [["pending-live-snapshot:cenc_eqlist", { retryAtMs: now }]] : [];
+    relay.drainPendingLiveSnapshotWorks = async () => {
+      calls.push("live");
+      liveWorkPending = false;
+      return true;
+    };
+
+    await relay.alarm();
+
+    assert.deepEqual(
+      calls,
+      ["upstreams", "repair", "live"],
+      "healthy live work gets a separate bounded turn between HTTP sweeps",
+    );
+    assert.equal(
+      alarmAt,
+      now + 60_000,
+      "completed live work leaves the next HTTP deadline instead of an immediate alarm spin",
+    );
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test("partial fallback preserves HTTP failure and rolling-deploy fences", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalNow = Date.now;
+  const now = Date.parse("2026-08-19T00:00:00.000Z");
+  const sources = [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ];
+  const scenarios = [
+    ["http-fallback-retry-not-before-ms", now + 60_000],
+    ["http-seed-lease-until-ms", { ownerId: "preceding-release", untilMs: now + 60_000 }],
+  ];
+
+  try {
+    Date.now = () => now;
+    for (const [fenceKey, fenceValue] of scenarios) {
+      const values = new Map([
+        ["http-fallback-active", true],
+        ["http-fallback-next-sweep-at-ms", now + 60_000],
+        [fenceKey, fenceValue],
+      ]);
+      let alarmAt = null;
+      const state = {
+        storage: {
+          async get(key) { return values.get(key); },
+          async put(key, value) { values.set(key, value); },
+          async delete(key) { values.delete(key); },
+          async list() { return new Map(); },
+          async getAlarm() { return alarmAt; },
+          async setAlarm(value) { alarmAt = value; },
+        },
+        waitUntil() {},
+      };
+      const relay = new QuakeRelay(state, {});
+      for (const source of sources) {
+        relay.statuses.set(source, source === "jma_eqlist" ? "error" : "open");
+        relay.lastSuccessfulUpstreamMs.set(source, now);
+      }
+      const calls = [];
+      relay.ensureUpstreams = async () => calls.push("upstreams");
+      relay.seedFromHttp = async () => calls.push("http");
+      relay.repairPendingLiveSnapshotSlots = async () => calls.push("repair");
+      relay.pendingLiveSnapshotWorks = async () =>
+        [["pending-live-snapshot:cenc_eqlist", { retryAtMs: now }]];
+
+      await relay.alarm();
+
+      assert.deepEqual(
+        calls,
+        ["upstreams"],
+        `${fenceKey} keeps ordinary D1 work outside the protected turn`,
+      );
+      assert.equal(
+        alarmAt,
+        now + 60_000,
+        "blocked live work aligns with the protected deadline instead of spinning at now + 1",
+      );
+    }
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test("full-outage fallback aligns blocked live work with the next HTTP sweep", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalNow = Date.now;
+  const now = Date.parse("2026-08-19T00:00:00.000Z");
+  const values = new Map([
+    ["http-fallback-active", true],
+    ["http-fallback-next-sweep-at-ms", now + 60_000],
+  ]);
+  let alarmAt = null;
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async delete(key) { values.delete(key); },
+      async list() { return new Map(); },
+      async getAlarm() { return alarmAt; },
+      async setAlarm(value) { alarmAt = value; },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  for (const source of [
+    "jma_eew",
+    "sc_eew",
+    "cenc_eew",
+    "fj_eew",
+    "cq_eew",
+    "cenc_eqlist",
+    "jma_eqlist",
+  ]) relay.statuses.set(source, "error");
+  const calls = [];
+  relay.ensureUpstreams = async () => calls.push("upstreams");
+  relay.pendingLiveSnapshotWorks = async () =>
+    [["pending-live-snapshot:cenc_eqlist", { retryAtMs: now }]];
+  relay.drainPendingLiveSnapshotWorks = async () => calls.push("live");
+
+  try {
+    Date.now = () => now;
+    await relay.alarm();
+    assert.deepEqual(calls, ["upstreams"]);
+    assert.equal(
+      alarmAt,
+      now + 60_000,
+      "a live cursor that cannot run during total outage does not force an immediate alarm loop",
+    );
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test("pending HTTP cursor aligns blocked live work with its continuation", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalNow = Date.now;
+  const now = Date.parse("2026-08-19T00:00:00.000Z");
+  let alarmAt = null;
+  const state = {
+    storage: {
+      async get() { return undefined; },
+      async put() {},
+      async delete() {},
+      async list() { return new Map(); },
+      async getAlarm() { return alarmAt; },
+      async setAlarm(value) { alarmAt = value; },
+    },
+    waitUntil() {},
+  };
+  const relay = new QuakeRelay(state, {});
+  relay.lastHttpSnapshotResumeStartedMs = now;
+  relay.refreshHttpFallbackActive = async () => false;
+  relay.pendingHttpSnapshotWorks = async () => [[
+    "pending-http-snapshot:jma_eqlist",
+    { mode: "recovery" },
+  ]];
+  relay.pendingLiveSnapshotWorks = async () =>
+    [["pending-live-snapshot:cenc_eqlist", { retryAtMs: now }]];
+  const calls = [];
+  relay.ensureUpstreams = async () => calls.push("upstreams");
+  relay.drainPendingLiveSnapshotWorks = async () => calls.push("live");
+
+  try {
+    Date.now = () => now;
+    await relay.alarm();
+    assert.deepEqual(calls, ["upstreams"]);
+    assert.equal(
+      alarmAt,
+      now + 5_000,
+      "the protected HTTP cursor deadline replaces an unserviceable immediate live wake",
+    );
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test("an alarm repairs a malformed HTTP snapshot cursor without making status readers write", async () => {
