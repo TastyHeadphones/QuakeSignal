@@ -45,5 +45,5 @@ recorded in the existing submission documents.
   approved. The separate Tauri macOS client retains its own App Store record.
 - Use `platforms/` for the platform-specific copy, review notes, planned
   screenshot manifests, and capture checklist. Use
-  `app-store-connect-portal-audit-2026-08-19.md` to resolve the observed empty
-  platform drafts without deleting or creating duplicate records.
+  `app-store-connect-portal-audit-2026-08-19.md` for the prepared `1.1` draft
+  state and remaining gates; do not delete or create duplicate records.
