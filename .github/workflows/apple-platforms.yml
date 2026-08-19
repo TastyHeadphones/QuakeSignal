@@ -22,7 +22,7 @@ on:
         default: false
         type: boolean
       build_number:
-        description: Exact coordinated CFBundleVersion from ios/project.yml and the Worker App Attest allow-list
+        description: Exact coordinated CFBundleVersion from ios/project.yml
         required: false
         default: "8"
         type: string
@@ -65,37 +65,20 @@ jobs:
             profile_secret: ${{ inputs.platform == 'tvos' && 'TVOS_APP_STORE_PROVISIONING_PROFILE' || 'VISIONOS_APP_STORE_PROVISIONING_PROFILE' }}
             profile_variable: ${{ inputs.platform == 'tvos' && 'TVOS_APP_STORE_PROFILE_NAME' || 'VISIONOS_APP_STORE_PROFILE_NAME' }}
             profile_platform: ${{ inputs.platform == 'tvos' && 'tvOS' || 'visionOS' }}
-            requires_alert_entitlements: ${{ inputs.platform == 'visionos' && 'true' || 'false' }}
+            requires_alert_entitlements: "false"
 
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      # Keep both checks ahead of any step that receives signing or upload
-      # credentials. The shared concurrency lock prevents a Worker policy
-      # deployment from racing the proof and subsequent archive/upload.
-      - name: Verify Apple platform and Worker release contract
+      # Keep the frozen source/project/artifact contract ahead of every step
+      # that receives signing or upload credentials. tvOS and visionOS are
+      # foreground-only, so their archives have no live Worker dependency.
+      - name: Verify frozen Apple platform release contract
         id: release-contract
         env:
           BUILD_NUMBER: ${{ inputs.build_number }}
         run: node .github/scripts/verify-ios-release-contract.mjs --build-number "$BUILD_NUMBER"
-
-      - name: Verify production notification origin readiness and contract
-        working-directory: backend/cloudflare
-        env:
-          IOS_RELEASE_API_BASE_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
-          BUILD_NUMBER: ${{ inputs.build_number }}
-          APP_ATTEST_POLICY_FINGERPRINT: ${{ steps.release-contract.outputs.app_attest_policy_fingerprint }}
-        run: |
-          set -euo pipefail
-          if [ "$IOS_RELEASE_API_BASE_URL" != "https://quakesignal-api.hopeso.workers.dev" ]; then
-            echo "::error::IOS_RELEASE_API_BASE_URL must be https://quakesignal-api.hopeso.workers.dev"
-            exit 1
-          fi
-          node scripts/wait-for-worker-readiness.mjs "$IOS_RELEASE_API_BASE_URL"
-          node scripts/smoke-test.mjs "$IOS_RELEASE_API_BASE_URL" \
-            --expected-app-attest-policy-fingerprint "$APP_ATTEST_POLICY_FINGERPRINT" \
-            --required-app-attest-bundle-version "$BUILD_NUMBER"
 
       - name: Install checksum-pinned XcodeGen
         run: |
@@ -131,7 +114,6 @@ jobs:
           PLATFORM_PROFILE_NAME: ${{ vars[matrix.profile_variable] }}
           IOS_CERTIFICATE: ${{ secrets.IOS_APP_STORE_CERTIFICATE }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_APP_STORE_CERTIFICATE_PASSWORD }}
-          IOS_RELEASE_API_BASE_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
           ARCHIVE_ONLY: ${{ inputs.archive_only }}
           UPLOAD_TO_TESTFLIGHT: ${{ inputs.upload_to_testflight }}
         run: |
@@ -155,7 +137,6 @@ jobs:
             PLATFORM_PROFILE_NAME
             IOS_CERTIFICATE
             IOS_CERTIFICATE_PASSWORD
-            IOS_RELEASE_API_BASE_URL
           )
           missing=()
           for name in "${required[@]}"; do
@@ -163,10 +144,6 @@ jobs:
           done
           if [ "${#missing[@]}" -gt 0 ]; then
             echo "::error::ios-app-store-release is missing selected $PLATFORM_KEY configuration: $(IFS=,; echo "${missing[*]}")"
-            exit 1
-          fi
-          if [ "$IOS_RELEASE_API_BASE_URL" != "https://quakesignal-api.hopeso.workers.dev" ]; then
-            echo "::error::IOS_RELEASE_API_BASE_URL must be https://quakesignal-api.hopeso.workers.dev"
             exit 1
           fi
           case "$PLATFORM_KEY" in
@@ -180,7 +157,7 @@ jobs:
               test "$PLATFORM_SCHEME" = QuakeSignalVision
               test "$PLATFORM_DESTINATION" = generic/platform=visionOS
               test "$PLATFORM_PROFILE_PLATFORM" = visionOS
-              test "$PLATFORM_REQUIRES_ALERT_ENTITLEMENTS" = true
+              test "$PLATFORM_REQUIRES_ALERT_ENTITLEMENTS" = false
               ;;
             *)
               echo "::error::Unsupported native platform $PLATFORM_KEY"
@@ -242,7 +219,6 @@ jobs:
           PLATFORM_SCHEME: ${{ matrix.scheme }}
           PLATFORM_DESTINATION: ${{ matrix.destination }}
           PLATFORM_PROFILE_NAME: ${{ vars[matrix.profile_variable] }}
-          IOS_RELEASE_API_BASE_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
         run: >-
           xcodebuild archive
           -project "$XCODE_PROJECT"
@@ -256,7 +232,6 @@ jobs:
           QUAKESIGNAL_TV_PROFILE_NAME="$PLATFORM_PROFILE_NAME"
           QUAKESIGNAL_VISION_PROFILE_NAME="$PLATFORM_PROFILE_NAME"
           CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
-          QUAKESIGNAL_API_BASE_URL="$IOS_RELEASE_API_BASE_URL"
 
       - name: Export selected App Store Connect IPA
         env:
@@ -286,130 +261,18 @@ jobs:
         env:
           BUILD_NUMBER: ${{ inputs.build_number }}
           PLATFORM_KEY: ${{ matrix.key }}
-          PLATFORM_BUNDLE_IDENTIFIER: ${{ matrix.bundle_identifier }}
           PLATFORM_PROFILE_NAME: ${{ vars[matrix.profile_variable] }}
-          PLATFORM_PROFILE_PLATFORM: ${{ matrix.profile_platform }}
-          PLATFORM_REQUIRES_ALERT_ENTITLEMENTS: ${{ matrix.requires_alert_entitlements }}
         run: |
           set -euo pipefail
-          expected_team="5TT564H883"
-          expected_application_identifier="$expected_team.$PLATFORM_BUNDLE_IDENTIFIER"
-          archive="$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY.xcarchive"
-          verification_dir="$(mktemp -d "$RUNNER_TEMP/quakesignal-$PLATFORM_KEY-signing.XXXXXX")"
-          trap 'rm -rf "$verification_dir"' EXIT
-
-          assert_plist_value() {
-            local plist="$1"
-            local key="$2"
-            local expected="$3"
-            local label="$4"
-            local actual
-            if ! actual="$(/usr/libexec/PlistBuddy -c "Print :$key" "$plist" 2>/dev/null)"; then
-              echo "::error::$label is missing required key $key"
-              return 1
-            fi
-            if [ "$actual" != "$expected" ]; then
-              echo "::error::$label has unexpected $key value $actual"
-              return 1
-            fi
-          }
-
-          assert_plist_array_contains() {
-            local plist="$1"
-            local key="$2"
-            local expected="$3"
-            local label="$4"
-            local index=0
-            local actual
-            while actual="$(/usr/libexec/PlistBuddy -c "Print :$key:$index" "$plist" 2>/dev/null)"; do
-              if [ "$actual" = "$expected" ]; then return 0; fi
-              index=$((index + 1))
-            done
-            echo "::error::$label does not include $expected in $key"
-            return 1
-          }
-
-          assert_capability_absent() {
-            local plist="$1"
-            local key="$2"
-            local label="$3"
-            if /usr/libexec/PlistBuddy -c "Print :$key" "$plist" >/dev/null 2>&1; then
-              echo "::error::$label unexpectedly contains foreground-only capability $key"
-              return 1
-            fi
-          }
-
-          verify_platform_app() {
-            local label="$1"
-            local app="$2"
-            local entitlements="$verification_dir/$label-entitlements.plist"
-            local profile="$app/embedded.mobileprovision"
-            local profile_plist="$verification_dir/$label-profile.plist"
-
-            test -d "$app" || { echo "::error::$label app bundle is missing"; return 1; }
-            test -f "$app/Info.plist" || { echo "::error::$label Info.plist is missing"; return 1; }
-            test -f "$profile" || { echo "::error::$label embedded profile is missing"; return 1; }
-            codesign --verify --deep --strict --verbose=2 "$app"
-            codesign -dvv "$app" 2>&1 | grep -Fqx "TeamIdentifier=$expected_team"
-            codesign -dvv "$app" 2>&1 | grep -Fq 'Authority=Apple Distribution'
-            assert_plist_value "$app/Info.plist" CFBundleIdentifier "$PLATFORM_BUNDLE_IDENTIFIER" "$label Info.plist"
-            assert_plist_value "$app/Info.plist" CFBundleVersion "$BUILD_NUMBER" "$label Info.plist"
-
-            codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
-            plutil -lint "$entitlements" >/dev/null
-            assert_plist_value "$entitlements" application-identifier "$expected_application_identifier" "$label signed entitlements"
-            assert_plist_value "$entitlements" com.apple.developer.team-identifier "$expected_team" "$label signed entitlements"
-
-            security cms -D -i "$profile" > "$profile_plist"
-            plutil -lint "$profile_plist" >/dev/null
-            assert_plist_value "$profile_plist" Name "$PLATFORM_PROFILE_NAME" "$label provisioning profile"
-            assert_plist_value "$profile_plist" ApplicationIdentifierPrefix:0 "$expected_team" "$label provisioning profile"
-            assert_plist_value "$profile_plist" TeamIdentifier:0 "$expected_team" "$label provisioning profile"
-            assert_plist_value "$profile_plist" Entitlements:application-identifier "$expected_application_identifier" "$label provisioning profile"
-            assert_plist_value "$profile_plist" Entitlements:com.apple.developer.team-identifier "$expected_team" "$label provisioning profile"
-            if [ "$PLATFORM_KEY" = visionos ]; then
-              if ! assert_plist_array_contains "$profile_plist" Platform visionOS "$label provisioning profile" 2>/dev/null &&
-                 ! assert_plist_array_contains "$profile_plist" Platform xrOS "$label provisioning profile"; then
-                echo "::error::$label provisioning profile is not authorized for visionOS"
-                return 1
-              fi
-            else
-              assert_plist_array_contains "$profile_plist" Platform "$PLATFORM_PROFILE_PLATFORM" "$label provisioning profile"
-            fi
-
-            if [ "$PLATFORM_REQUIRES_ALERT_ENTITLEMENTS" = true ]; then
-              assert_plist_value "$entitlements" aps-environment production "$label signed entitlements"
-              assert_plist_value "$entitlements" com.apple.developer.devicecheck.appattest-environment production "$label signed entitlements"
-              assert_plist_value "$entitlements" com.apple.developer.usernotifications.time-sensitive true "$label signed entitlements"
-              assert_plist_value "$profile_plist" Entitlements:aps-environment production "$label provisioning profile"
-              assert_plist_array_contains "$profile_plist" Entitlements:com.apple.developer.devicecheck.appattest-environment production "$label provisioning profile"
-              assert_plist_value "$profile_plist" Entitlements:com.apple.developer.usernotifications.time-sensitive true "$label provisioning profile"
-            else
-              for capability in aps-environment com.apple.developer.devicecheck.appattest-environment com.apple.developer.usernotifications.time-sensitive; do
-                assert_capability_absent "$entitlements" "$capability" "$label signed entitlements"
-                assert_capability_absent "$profile_plist" "Entitlements:$capability" "$label provisioning profile"
-              done
-            fi
-          }
-
-          shopt -s nullglob
-          archive_apps=("$archive"/Products/Applications/*.app)
-          if [ "${#archive_apps[@]}" -ne 1 ]; then
-            echo "::error::Expected exactly one app in the $PLATFORM_KEY archive"
-            exit 1
-          fi
-          ipa_path="${IPA_PATH:?IPA_PATH is not set after export}"
-          test -f "$ipa_path" || { echo "::error::Exported IPA is missing"; exit 1; }
-          ipa_root="$verification_dir/ipa"
-          mkdir -p "$ipa_root"
-          ditto -x -k "$ipa_path" "$ipa_root"
-          ipa_apps=("$ipa_root"/Payload/*.app)
-          if [ "${#ipa_apps[@]}" -ne 1 ]; then
-            echo "::error::Expected exactly one app in the exported $PLATFORM_KEY IPA"
-            exit 1
-          fi
-          verify_platform_app archive "${archive_apps[0]}"
-          verify_platform_app ipa "${ipa_apps[0]}"
+          ios/ci_scripts/verify-signed-apple-artifacts.sh \
+            --platform "$PLATFORM_KEY" \
+            --archive "$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY.xcarchive" \
+            --exported "${IPA_PATH:?IPA_PATH is not set after export}" \
+            --build-number "$BUILD_NUMBER" \
+            --marketing-version 1.1 \
+            --team-id 5TT564H883 \
+            --archive-signing strict-distribution \
+            --host-profile-name "$PLATFORM_PROFILE_NAME"
 
       - name: Upload selected build to TestFlight
         if: ${{ inputs.upload_to_testflight && !inputs.archive_only }}

@@ -4,16 +4,18 @@ import Foundation
 /// run on several Apple platforms. Keep the decision at the edge of the app so
 /// the protected registration path itself never grows a platform bypass.
 enum PlatformCapabilities {
-    /// QuakeSignal's background alert service requires App Attest. Apple does
-    /// not support App Attest on Mac, including Mac Catalyst and an iOS app
-    /// running on Apple silicon, so those experiences stay foreground-only.
+    /// QuakeSignal's background alert service requires both App Attest and
+    /// APNs. Mac does not support App Attest, and Apple's visionOS provisioning
+    /// capability table does not support Push or Time Sensitive Notifications.
+    /// Those experiences therefore stay foreground/local-only even though
+    /// visionOS itself supports App Attest.
     static var supportsAttestedAlertRegistration: Bool {
 #if targetEnvironment(macCatalyst)
         false
 #elseif os(iOS)
         !ProcessInfo.processInfo.isiOSAppOnMac
 #elseif os(visionOS)
-        true
+        false
 #else
         false
 #endif

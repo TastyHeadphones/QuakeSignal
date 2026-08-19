@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { lstat, readFile, readdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,14 +16,98 @@ const contractFiles = {
     "ios/QuakeSignalVision/Supporting/Info.plist",
     "ios/QuakeSignalWatch/Supporting/Info.plist",
   ],
+  releaseEntitlements: [
+    "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements",
+    "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements",
+  ],
+  platformCapabilityPolicy: [
+    "ios/QuakeSignal/App/PlatformCapabilities.swift",
+    "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
+    "ios/QuakeSignal/Features/Settings/SettingsView.swift",
+    "ios/QuakeSignal/Resources/en.lproj/Localizable.strings",
+    "ios/QuakeSignal/Resources/ja.lproj/Localizable.strings",
+    "ios/QuakeSignal/Resources/zh-Hans.lproj/Localizable.strings",
+  ],
+  schemes: [
+    "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignal.xcscheme",
+    "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignalTV.xcscheme",
+    "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignalVision.xcscheme",
+    "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignalWatch.xcscheme",
+  ],
   workerConfig: "backend/cloudflare/wrangler.jsonc",
+  workerPackage: "backend/cloudflare/package.json",
+  workerPackageLock: "backend/cloudflare/package-lock.json",
+  exportOptions: "ios/AppStore/ExportOptions.plist",
   iosWorkflow: ".github/workflows/ios.yml",
   platformWorkflow: ".github/workflows/apple-platforms.yml",
   screenshotWorkflow: ".github/workflows/apple-platform-screenshots.yml",
   cloudflareWorkflow: ".github/workflows/cloudflare.yml",
+  signedArtifactVerifier: "ios/ci_scripts/verify-signed-apple-artifacts.sh",
+  xcodeCloudHooks: [
+    "ios/ci_scripts/ci_post_clone.sh",
+    "ios/ci_scripts/ci_pre_xcodebuild.sh",
+    "ios/ci_scripts/ci_post_xcodebuild.sh",
+    "ios/ci_scripts/xcode-cloud-release-guard.py",
+  ],
+  releaseCriticalHelpers: [
+    "backend/cloudflare/scripts/render-staging-config.mjs",
+    "backend/cloudflare/scripts/smoke-test-policy.mjs",
+    "backend/cloudflare/scripts/smoke-test.mjs",
+    "backend/cloudflare/scripts/verify-apns-worker-secrets.mjs",
+    "backend/cloudflare/scripts/verify-production-gates.mjs",
+    "backend/cloudflare/scripts/wait-for-worker-readiness.mjs",
+    "backend/cloudflare/staging/wrangler.staging.template.json",
+  ],
 };
 
+const REVIEWED_CI_SCRIPT_FILES = [
+  ...contractFiles.xcodeCloudHooks,
+  contractFiles.signedArtifactVerifier,
+];
+
+const REVIEWED_WORKFLOW_FILES = [
+  ".github/workflows/apns-incident-disposition.yml",
+  ".github/workflows/apple-platform-screenshots.yml",
+  ".github/workflows/apple-platforms.yml",
+  ".github/workflows/cloudflare-staging.yml",
+  ".github/workflows/cloudflare.yml",
+  ".github/workflows/desktop-build.yml",
+  ".github/workflows/desktop-release.yml",
+  ".github/workflows/extension-build.yml",
+  ".github/workflows/homebrew-tap.yml",
+  ".github/workflows/ios.yml",
+  ".github/workflows/listing-assets.yml",
+  ".github/workflows/terminal-dlq-fallback-monitor.yml",
+  ".github/workflows/terminal-dlq-monitor.yml",
+  ".github/workflows/workflow-lint.yml",
+];
+
 const APPROVED_WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev";
+const VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open.";
+const APP_STORE_EXPORT_OPTIONS = {
+  method: "app-store-connect",
+  destination: "export",
+  signingStyle: "manual",
+  teamID: "5TT564H883",
+};
+const RELEASE_ALERT_ENTITLEMENTS = {
+  "aps-environment": "production",
+  "com.apple.developer.devicecheck.appattest-environment": "production",
+  "com.apple.developer.usernotifications.time-sensitive": true,
+};
+const RELEASE_TARGET_NAMES = [
+  "QuakeSignal",
+  "QuakeSignalTV",
+  "QuakeSignalTests",
+  "QuakeSignalVision",
+  "QuakeSignalWatch",
+];
+const ARCHIVE_SCHEME_NAMES = [
+  "QuakeSignal",
+  "QuakeSignalTV",
+  "QuakeSignalVision",
+  "QuakeSignalWatch",
+];
 const REVIEWED_APP_ATTEST_APNS_ROUTES = [
   {
     appIdentity: "5TT564H883.com.quakesignal.app",
@@ -109,7 +193,7 @@ const PLATFORM_RELEASE_MATRIX = {
       profile_secret: "${{ inputs.platform == 'tvos' && 'TVOS_APP_STORE_PROVISIONING_PROFILE' || 'VISIONOS_APP_STORE_PROVISIONING_PROFILE' }}",
       profile_variable: "${{ inputs.platform == 'tvos' && 'TVOS_APP_STORE_PROFILE_NAME' || 'VISIONOS_APP_STORE_PROFILE_NAME' }}",
       profile_platform: "${{ inputs.platform == 'tvos' && 'tvOS' || 'visionOS' }}",
-      requires_alert_entitlements: "${{ inputs.platform == 'visionos' && 'true' || 'false' }}",
+      requires_alert_entitlements: "false",
     },
   ],
 };
@@ -139,12 +223,21 @@ const CLOUDFLARE_DEPLOY_PRODUCTION_HEADER = {
 // alongside its tests; an unreviewed sibling job, extra post-smoke step, or
 // edited signing/upload action fails before release automation can use
 // credentials.
-const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:xM030AZh5xMVT6_k67kP87iiOa-QkUvi5Gn0_0gaTPU";
-const WORKFLOW_JOBS_FINGERPRINT = "sha256:GFimuJ4Csf-1zDTLellUSizy0YmbN4o8bIFRFolQNHc";
-const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:9zTH6eFLeuD9DBkjY5u6xQCKlM0R8iq41uNxhG7Jdhc";
-const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:emUFxjkPtvbXsmvC8IJvc8SbQdyQvypmE-MV3PDzynw";
+const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:lZgHa3Y9qXK8lfLTbhAalD25fVRHZ8EXHg-vsOvNSTs";
+const WORKFLOW_JOBS_FINGERPRINT = "sha256:w1wk-Rdn5g5H5Thg7DTzf8v4fiPKh8FcXavfOJTK4Vg";
+const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:gIdap293hpqUJ9U_gKOGiTsYupuumhNhDR3BileJEVI";
+const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:pyFXJBB9gZ7oyUQR5FTk2qRZe4TlhnJmc0HjteIYnLI";
 const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:KqK_JYFbg7zm-IgdGk2ZW2HBJ0mdkgZUxIQUXI_Jwnk";
-const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:MVyNUXvoZoqo5wXo0qmLaZow6cqQA8aUpc_YWLVvvjI";
+const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
+const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:z-UOlQtW9WgygPtO1UPX49kWjibbkWMAmwgU27dHrvo";
+const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
+const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:6CCOh2NPluk6-XWUrOULM2auKQ3F2URWCYqJCv1bxrE";
+const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:jJ9gpTadeEHe8JppDG2YZ6Vo-Cw7mP-jrmeHM6x84_E";
+const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
+const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:vtAIx8JZ4s9UUN07yItVzVx-po5bFVrgWPH5FV_zhXA";
+const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:gMGewYdsLKAr0RhPjPt_wb_voe9GfjH_-P7BCt8RsOU";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:EyTkfA64xSQO7CB7SNS-rFJOdA9krnJRkLC8czp78zc";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:0pySyDReV_ILGXVjnwzXMBreQHXEluFwopBqftELTM8";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
 const REMOTE_SMOKE_COMMAND = [
@@ -186,8 +279,34 @@ const PLATFORM_ARCHIVE_COMMAND = [
   "QUAKESIGNAL_TV_PROFILE_NAME=\"$PLATFORM_PROFILE_NAME\"",
   "QUAKESIGNAL_VISION_PROFILE_NAME=\"$PLATFORM_PROFILE_NAME\"",
   "CURRENT_PROJECT_VERSION=\"$BUILD_NUMBER\"",
-  "QUAKESIGNAL_API_BASE_URL=\"$IOS_RELEASE_API_BASE_URL\"",
 ].join(" ");
+const IOS_SIGNED_ARTIFACT_COMMAND = [
+  "set -euo pipefail",
+  "ios/ci_scripts/verify-signed-apple-artifacts.sh \\",
+  "  --platform ios \\",
+  "  --archive \"$RUNNER_TEMP/QuakeSignal.xcarchive\" \\",
+  "  --exported \"${IPA_PATH:?IPA_PATH is not set after export}\" \\",
+  "  --build-number \"$BUILD_NUMBER\" \\",
+  "  --marketing-version 1.1 \\",
+  "  --team-id 5TT564H883 \\",
+  "  --archive-signing strict-distribution \\",
+  "  --host-profile-name \"$IOS_PROFILE_NAME\" \\",
+  "  --watch-profile-name \"$WATCH_PROFILE_NAME\"",
+  "",
+].join("\n");
+const PLATFORM_SIGNED_ARTIFACT_COMMAND = [
+  "set -euo pipefail",
+  "ios/ci_scripts/verify-signed-apple-artifacts.sh \\",
+  "  --platform \"$PLATFORM_KEY\" \\",
+  "  --archive \"$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY.xcarchive\" \\",
+  "  --exported \"${IPA_PATH:?IPA_PATH is not set after export}\" \\",
+  "  --build-number \"$BUILD_NUMBER\" \\",
+  "  --marketing-version 1.1 \\",
+  "  --team-id 5TT564H883 \\",
+  "  --archive-signing strict-distribution \\",
+  "  --host-profile-name \"$PLATFORM_PROFILE_NAME\"",
+  "",
+].join("\n");
 
 function fail(message) {
   throw new Error(`iOS release contract: ${message}`);
@@ -226,8 +345,40 @@ function captureProjectBuildNumber(project) {
   );
 }
 
+const FORBIDDEN_XCODEGEN_EXECUTION_KEYS = new Set([
+  "buildRules",
+  "buildToolPlugins",
+  "include",
+  "package",
+  "packages",
+  "postActions",
+  "postBuildScripts",
+  "postCompileScripts",
+  "preActions",
+  "preBuildScripts",
+  "projectReferences",
+  "schemeTemplates",
+  "targetTemplates",
+  "templates",
+]);
+
+function rejectForbiddenProjectKeys(value, location = "ios/project.yml") {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => rejectForbiddenProjectKeys(item, `${location}[${index}]`));
+    return;
+  }
+  if (!isRecord(value)) return;
+  for (const [key, child] of Object.entries(value)) {
+    if (FORBIDDEN_XCODEGEN_EXECUTION_KEYS.has(key)) {
+      fail(`${location}.${key} is an unreviewed executable script, plugin, package, template, or project-reference surface.`);
+    }
+    rejectForbiddenProjectKeys(child, `${location}.${key}`);
+  }
+}
+
 function verifyAppleProject(projectSource) {
   const project = parseEffectiveYAML(projectSource, "XcodeGen project", "ios/project.yml");
+  rejectForbiddenProjectKeys(project);
   const projectSettings = record(record(project.settings, "XcodeGen project settings").base, "XcodeGen project base settings");
   if (String(projectSettings.MARKETING_VERSION) !== "1.1") {
     fail("ios/project.yml MARKETING_VERSION must be exactly 1.1 for this coordinated release.");
@@ -245,6 +396,9 @@ function verifyAppleProject(projectSource) {
   }
 
   const targets = record(project.targets, "XcodeGen targets");
+  if (!sameValue(Object.keys(targets).sort(), RELEASE_TARGET_NAMES)) {
+    fail(`ios/project.yml targets must be exactly ${RELEASE_TARGET_NAMES.join(", ")}.`);
+  }
   const expectedTargets = {
     QuakeSignal: {
       platform: "iOS",
@@ -253,6 +407,7 @@ function verifyAppleProject(projectSource) {
       family: "1,2",
       profileVariable: "$(QUAKESIGNAL_IOS_PROFILE_NAME)",
       entitlements: "QuakeSignal/Supporting/QuakeSignal-Release.entitlements",
+      attestedAlerts: true,
     },
     QuakeSignalTV: {
       platform: "tvOS",
@@ -268,6 +423,7 @@ function verifyAppleProject(projectSource) {
       family: "7",
       profileVariable: "$(QUAKESIGNAL_VISION_PROFILE_NAME)",
       entitlements: "QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements",
+      attestedAlerts: false,
     },
     QuakeSignalWatch: {
       platform: "watchOS",
@@ -285,6 +441,10 @@ function verifyAppleProject(projectSource) {
     const settings = record(target.settings, `${name} settings`);
     const base = record(settings.base, `${name} base settings`);
     const release = record(record(settings.configs, `${name} config settings`).Release, `${name} Release settings`);
+    const configFiles = target.configFiles;
+    if (isRecord(configFiles) && (Object.hasOwn(configFiles, "Release") || Object.hasOwn(configFiles, "InternalQA"))) {
+      fail(`${name} must not load an unreviewed Release/InternalQA xcconfig.`);
+    }
     if (base.PRODUCT_BUNDLE_IDENTIFIER !== expected.bundleIdentifier) {
       fail(`${name} PRODUCT_BUNDLE_IDENTIFIER must be ${expected.bundleIdentifier}.`);
     }
@@ -301,6 +461,28 @@ function verifyAppleProject(projectSource) {
     } else if (Object.hasOwn(release, "CODE_SIGN_ENTITLEMENTS")) {
       fail(`${name} is foreground-only and must not acquire release alert entitlements implicitly.`);
     }
+    const configurations = record(settings.configs, `${name} config settings`);
+    if (expected.attestedAlerts) {
+      const internalQA = record(configurations.InternalQA, `${name} InternalQA settings`);
+      const debug = record(configurations.Debug, `${name} Debug settings`);
+      for (const [configuration, values] of [["InternalQA", internalQA], ["Release", release]]) {
+        if (values.QUAKESIGNAL_API_BASE_URL !== APPROVED_WORKER_ORIGIN ||
+            values.QUAKESIGNAL_APP_ATTEST_MODE !== "production") {
+          fail(`${name} ${configuration} must use the reviewed production Worker and App Attest policy.`);
+        }
+      }
+      if (debug.QUAKESIGNAL_APP_ATTEST_MODE !== "development") {
+        fail(`${name} Debug must use the reviewed App Attest development policy.`);
+      }
+    } else {
+      for (const [configuration, values] of Object.entries(configurations)) {
+        if (isRecord(values) &&
+            (Object.hasOwn(values, "QUAKESIGNAL_API_BASE_URL") ||
+             Object.hasOwn(values, "QUAKESIGNAL_APP_ATTEST_MODE"))) {
+          fail(`${name} ${configuration} is foreground-only and must not configure the notification relay or App Attest.`);
+        }
+      }
+    }
   }
 
   const iosDependencies = targets.QuakeSignal.dependencies;
@@ -314,17 +496,74 @@ function verifyAppleProject(projectSource) {
     embed: true,
     platformFilter: "iOS",
   }, "QuakeSignal embedded Watch dependency");
+  if (iosDependencies.length !== 1) {
+    fail("QuakeSignal must have only the reviewed embedded Watch target dependency.");
+  }
+  for (const name of ["QuakeSignalTV", "QuakeSignalVision", "QuakeSignalWatch"]) {
+    if (Object.hasOwn(targets[name], "dependencies") &&
+        (!Array.isArray(targets[name].dependencies) || targets[name].dependencies.length !== 0)) {
+      fail(`${name} must not acquire an archive-time target, package, framework, or plugin dependency.`);
+    }
+  }
+  const testTarget = record(targets.QuakeSignalTests, "XcodeGen QuakeSignalTests target");
+  if (testTarget.platform !== "iOS" || testTarget.type !== "bundle.unit-test") {
+    fail("QuakeSignalTests must remain the reviewed iOS unit-test target.");
+  }
+  if (!sameValue(testTarget.dependencies, [{ target: "QuakeSignal" }])) {
+    fail("QuakeSignalTests must depend only on QuakeSignal.");
+  }
 
   const schemes = record(project.schemes, "XcodeGen schemes");
+  if (!sameValue(Object.keys(schemes).sort(), ARCHIVE_SCHEME_NAMES)) {
+    fail(`ios/project.yml schemes must be exactly ${ARCHIVE_SCHEME_NAMES.join(", ")}.`);
+  }
   for (const name of Object.keys(expectedTargets)) {
     const scheme = record(schemes[name], `XcodeGen ${name} scheme`);
-    if (record(scheme.archive, `${name} archive action`).config !== "Release") {
-      fail(`${name} archive action must use Release.`);
+    const expectedKeys = name === "QuakeSignal"
+      ? ["archive", "build", "test"]
+      : ["archive", "build", "run"];
+    if (!sameValue(Object.keys(scheme).sort(), expectedKeys)) {
+      fail(`${name} scheme must contain only its reviewed build/archive actions.`);
     }
+    exactRecord(scheme.build, { targets: { [name]: "all" } }, `${name} scheme build action`);
+    exactRecord(scheme.archive, { config: "Release" }, `${name} archive action`);
   }
 }
 
 function verifyGeneratedProject(projectFile, buildNumber) {
+  for (const forbidden of [
+    "PBXAggregateTarget",
+    "PBXBuildRule",
+    "PBXLegacyTarget",
+    "PBXShellScriptBuildPhase",
+    "XCRemoteSwiftPackageReference",
+    "XCSwiftPackageProductDependency",
+    "shellScript =",
+  ]) {
+    if (projectFile.includes(forbidden)) {
+      fail(`generated Xcode project contains forbidden executable surface ${forbidden}.`);
+    }
+  }
+  const targetNames = [...projectFile.matchAll(
+    /^\s*[A-F0-9]+ \/\* ([^*]+) \*\/ = \{\s*\n\s*isa = PBXNativeTarget;/gm,
+  )].map((match) => match[1]).sort();
+  if (!sameValue(targetNames, RELEASE_TARGET_NAMES)) {
+    fail(`generated Xcode project native targets must be exactly ${RELEASE_TARGET_NAMES.join(", ")}.`);
+  }
+  const buildPhaseTypes = [...projectFile.matchAll(/isa = (PBX[A-Za-z0-9]+BuildPhase);/g)]
+    .map((match) => match[1]);
+  if (buildPhaseTypes.length !== 10 ||
+      buildPhaseTypes.filter((type) => type === "PBXSourcesBuildPhase").length !== 5 ||
+      buildPhaseTypes.filter((type) => type === "PBXResourcesBuildPhase").length !== 4 ||
+      buildPhaseTypes.filter((type) => type === "PBXCopyFilesBuildPhase").length !== 1) {
+    fail("generated Xcode project build phases must remain exactly five Sources, four Resources, and one embedded-Watch CopyFiles phase.");
+  }
+  const dependencyTargets = [...projectFile.matchAll(
+    /\/\* PBXTargetDependency \*\/ = \{[\s\S]*?\n\s*target = [A-F0-9]+ \/\* ([^*]+) \*\/;/g,
+  )].map((match) => match[1]).sort();
+  if (!sameValue(dependencyTargets, ["QuakeSignal", "QuakeSignalWatch"])) {
+    fail("generated Xcode project dependencies must remain only Tests→QuakeSignal and iOS→Watch.");
+  }
   const versions = [...projectFile.matchAll(
     /^\s*CURRENT_PROJECT_VERSION\s*=\s*([^;]+);\s*$/gm,
   )].map((match) => match[1].trim().replace(/^"|"$/g, ""));
@@ -339,12 +578,135 @@ function verifyGeneratedProject(projectFile, buildNumber) {
   return versions.length;
 }
 
-function verifyInfoPlist(infoPlist, label) {
-  exactlyOne([...infoPlist.matchAll(/<key>\s*CFBundleVersion\s*<\/key>/g)], `${label} CFBundleVersion`);
+function verifyInfoPlist(infoPlist, label, requiresWorkerConfiguration) {
+  const effective = infoPlist.replace(/<!--[\s\S]*?-->/g, "");
+  exactlyOne([...effective.matchAll(/<key>\s*CFBundleVersion\s*<\/key>/g)], `${label} CFBundleVersion`);
   exactlyOne(
-    [...infoPlist.matchAll(/<key>\s*CFBundleVersion\s*<\/key>\s*<string>\s*\$\(CURRENT_PROJECT_VERSION\)\s*<\/string>/g)],
+    [...effective.matchAll(/<key>\s*CFBundleVersion\s*<\/key>\s*<string>\s*\$\(CURRENT_PROJECT_VERSION\)\s*<\/string>/g)],
     `${label} CFBundleVersion interpolation`,
   );
+  const workerOrigin = [...effective.matchAll(
+    /<key>\s*QUAKESIGNAL_API_BASE_URL\s*<\/key>\s*<string>\s*\$\(QUAKESIGNAL_API_BASE_URL\)\s*<\/string>/g,
+  )];
+  const appAttestMode = [...effective.matchAll(
+    /<key>\s*QUAKESIGNAL_APP_ATTEST_MODE\s*<\/key>\s*<string>\s*\$\(QUAKESIGNAL_APP_ATTEST_MODE\)\s*<\/string>/g,
+  )];
+  if (requiresWorkerConfiguration) {
+    exactlyOne(workerOrigin, `${label} Worker origin interpolation`);
+    exactlyOne(appAttestMode, `${label} App Attest mode interpolation`);
+  } else if (workerOrigin.length > 0 || appAttestMode.length > 0 ||
+             /<key>\s*QUAKESIGNAL_(?:API_BASE_URL|APP_ATTEST_MODE)\s*<\/key>/.test(effective)) {
+    fail(`${label} is foreground-only and must not embed Worker or App Attest configuration.`);
+  }
+  if (label === "ios/QuakeSignalVision/Supporting/Info.plist") {
+    const description = [...effective.matchAll(
+      /<key>\s*NSLocationWhenInUseUsageDescription\s*<\/key>\s*<string>\s*([^<]*)\s*<\/string>/g,
+    )];
+    if (description.length !== 1 || description[0][1].trim() !== VISION_LOCATION_USAGE_DESCRIPTION) {
+      fail(`${label} must disclose foreground-only location use exactly.`);
+    }
+  }
+}
+
+function parseSimplePlistDictionary(source, label) {
+  const document = source
+    .replace(/^\uFEFF/, "")
+    .replace(/<\?xml[\s\S]*?\?>/g, "")
+    .replace(/<!DOCTYPE[\s\S]*?>/g, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .trim();
+  if (/^<plist\s+version="1\.0">\s*<dict\s*\/>\s*<\/plist>$/.test(document)) {
+    return {};
+  }
+  const outer = document.match(/^<plist\s+version="1\.0">\s*<dict>([\s\S]*)<\/dict>\s*<\/plist>$/);
+  if (!outer) fail(`${label} must be a simple XML property-list dictionary.`);
+  let remainder = outer[1];
+  const values = {};
+  const pair = /^\s*<key>([^<>&]+)<\/key>\s*(?:<string>([^<>&]*)<\/string>|<(true|false)\s*\/>)/;
+  while (remainder.trim()) {
+    const match = remainder.match(pair);
+    if (!match) fail(`${label} may contain only reviewed string and Boolean entries.`);
+    const key = match[1];
+    if (Object.hasOwn(values, key)) fail(`${label} contains duplicate key ${key}.`);
+    values[key] = match[3] ? match[3] === "true" : match[2];
+    remainder = remainder.slice(match[0].length);
+  }
+  return values;
+}
+
+function verifyReleaseEntitlements(sources) {
+  if (!Array.isArray(sources) || sources.length !== contractFiles.releaseEntitlements.length) {
+    fail("checked-in Release entitlement inventory is incomplete.");
+  }
+  const expectedEntitlements = [RELEASE_ALERT_ENTITLEMENTS, {}];
+  sources.forEach((source, index) => {
+    const label = contractFiles.releaseEntitlements[index];
+    exactRecord(
+      parseSimplePlistDictionary(source, label),
+      expectedEntitlements[index],
+      `${label} effective entitlements`,
+    );
+  });
+}
+
+function verifyReviewedFileFingerprint(files, expectedPaths, expectedFingerprint, label) {
+  if (!Array.isArray(files) || files.length !== expectedPaths.length) {
+    fail(`${label} inventory is incomplete.`);
+  }
+  const normalized = files.map(({ path, source }, index) => {
+    if (path !== expectedPaths[index]) fail(`${label} file ${index} must be ${expectedPaths[index]}.`);
+    return { path, source };
+  });
+  const fingerprint = workflowSequenceFingerprint(normalized);
+  if (fingerprint !== expectedFingerprint) {
+    fail(`${label} must match the reviewed fingerprint (received ${fingerprint}).`);
+  }
+  return fingerprint;
+}
+
+function verifyWorkerReleaseScripts(packageSource) {
+  let manifest;
+  try {
+    manifest = JSON.parse(packageSource);
+  } catch {
+    fail("backend/cloudflare/package.json must be valid JSON.");
+  }
+  const scripts = record(manifest.scripts, "Worker package scripts");
+  if (Object.hasOwn(manifest, "workspaces")) {
+    fail("backend/cloudflare/package.json must not define npm workspaces for a credential-bearing deploy.");
+  }
+  if (Object.hasOwn(manifest, "overrides")) {
+    fail("backend/cloudflare/package.json must not define unreviewed npm dependency overrides.");
+  }
+  const expected = {
+    "render:staging-config": "node scripts/render-staging-config.mjs",
+    "verify:apns-secrets": "node scripts/verify-apns-worker-secrets.mjs",
+    "verify:production-gates": "node scripts/verify-production-gates.mjs",
+    "wait:worker-readiness": "node scripts/wait-for-worker-readiness.mjs",
+    "test:remote": "node scripts/smoke-test.mjs",
+  };
+  for (const forbidden of [
+    "install",
+    "dependencies",
+    "postinstall",
+    "postprepare",
+    "preinstall",
+    "preprepare",
+    "prepublish",
+    "prepare",
+    ...Object.keys(expected).flatMap((name) => [`pre${name}`, `post${name}`]),
+  ]) {
+    if (Object.hasOwn(scripts, forbidden)) {
+      fail(`backend/cloudflare/package.json must not define release-capable npm lifecycle hook ${forbidden}.`);
+    }
+  }
+  for (const [name, command] of Object.entries(expected)) {
+    const definitions = [...packageSource.matchAll(new RegExp(`"${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\s*:`, "g"))];
+    exactlyOne(definitions, `backend/cloudflare/package.json script ${name}`);
+    if (scripts[name] !== command) {
+      fail(`backend/cloudflare/package.json ${name} must invoke exactly ${command}.`);
+    }
+  }
 }
 
 function parseWorkerConfig(workerConfig) {
@@ -545,6 +907,74 @@ function workflowSequenceFingerprint(value) {
   return `sha256:${createHash("sha256").update(JSON.stringify(canonicalJSON(value)), "utf8").digest("base64url")}`;
 }
 
+function verifyExportOptions(source) {
+  const document = source
+    .replace(/^\uFEFF/, "")
+    .replace(/<\?xml[\s\S]*?\?>/g, "")
+    .replace(/<!DOCTYPE[\s\S]*?>/g, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .trim();
+  const outer = document.match(/^<plist\s+version="1\.0">\s*<dict>([\s\S]*)<\/dict>\s*<\/plist>$/);
+  if (!outer) fail("ios/AppStore/ExportOptions.plist must be a simple XML property-list dictionary.");
+  let remainder = outer[1];
+  const values = {};
+  const pair = /^\s*<key>([A-Za-z][A-Za-z0-9]*)<\/key>\s*<string>([^<>&]*)<\/string>/;
+  while (remainder.trim()) {
+    const match = remainder.match(pair);
+    if (!match) fail("ios/AppStore/ExportOptions.plist may contain only reviewed string entries.");
+    if (Object.hasOwn(values, match[1])) {
+      fail(`ios/AppStore/ExportOptions.plist contains duplicate key ${match[1]}.`);
+    }
+    values[match[1]] = match[2];
+    remainder = remainder.slice(match[0].length);
+  }
+  exactRecord(values, APP_STORE_EXPORT_OPTIONS, "App Store export options");
+}
+
+function pythonStringConstant(source, name) {
+  const matches = [...source.matchAll(new RegExp(`^${name} = "([^"\\r\\n]*)"\\s*$`, "gm"))];
+  return exactlyOne(matches, `Xcode Cloud guard ${name}`)[1];
+}
+
+function verifyXcodeCloudGuardConstants(files, expected) {
+  const guard = exactlyOne(
+    files.filter(({ path }) => path === "ios/ci_scripts/xcode-cloud-release-guard.py"),
+    "Xcode Cloud Python release guard",
+  );
+  for (const [name, value] of Object.entries(expected)) {
+    const actual = pythonStringConstant(guard.source, name);
+    if (actual !== value) {
+      fail(`Xcode Cloud guard ${name} must match ${value} (received ${actual}).`);
+    }
+  }
+}
+
+function verifyXcodeCloudReleaseHooks(files) {
+  const expectedPaths = [
+    ...contractFiles.xcodeCloudHooks,
+    contractFiles.signedArtifactVerifier,
+  ];
+  if (!Array.isArray(files) || files.length !== expectedPaths.length) {
+    fail("Xcode Cloud release hook inventory is incomplete.");
+  }
+  const normalized = files.map(({ path, source, mode }, index) => {
+    if (path !== expectedPaths[index]) {
+      fail(`Xcode Cloud release hook ${index} must be ${expectedPaths[index]}.`);
+    }
+    const mustBeExecutable = path.endsWith(".sh") || path.endsWith(".py");
+    const executable = (mode & 0o111) !== 0;
+    if (mustBeExecutable && !executable) {
+      fail(`${path} must be executable for Xcode Cloud and GitHub-hosted macOS runners.`);
+    }
+    return { executable, path, source };
+  });
+  const fingerprint = workflowSequenceFingerprint(normalized);
+  if (fingerprint !== XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT) {
+    fail(`Xcode Cloud release hooks must match the reviewed fingerprint (received ${fingerprint}).`);
+  }
+  return fingerprint;
+}
+
 // Parse the effective YAML rather than matching source lines. Ruby/Psych is
 // present on the macOS and Ubuntu GitHub runners already used by this project.
 // Safe loading resolves quoted/escaped keys and aliases while rejecting custom
@@ -597,6 +1027,243 @@ function parseEffectiveYAML(source, label, path) {
 
 function parseEffectiveWorkflow(workflow, label = "iOS workflow", path = ".github/workflows/ios.yml") {
   return parseEffectiveYAML(workflow, label, path);
+}
+
+function collectWorkflowStrings(value, output = []) {
+  if (typeof value === "string") {
+    output.push(value);
+  } else if (Array.isArray(value)) {
+    value.forEach((item) => collectWorkflowStrings(item, output));
+  } else if (isRecord(value)) {
+    Object.values(value).forEach((item) => collectWorkflowStrings(item, output));
+  }
+  return output;
+}
+
+function collectLocalActionReferences(value, output = []) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectLocalActionReferences(item, output));
+  } else if (isRecord(value)) {
+    for (const [key, child] of Object.entries(value)) {
+      if (key === "uses" && typeof child === "string" && child.trim().startsWith("./")) {
+        output.push(child);
+      }
+      collectLocalActionReferences(child, output);
+    }
+  }
+  return output;
+}
+
+function collectWritePermissions(value, workflowPath, output = []) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectWritePermissions(item, workflowPath, output));
+  } else if (isRecord(value)) {
+    for (const [key, child] of Object.entries(value)) {
+      if (key === "permissions") {
+        if (!isRecord(child)) {
+          fail(`${workflowPath} must use an explicit permission mapping; scalar write-all/read-all permissions are forbidden.`);
+        }
+        for (const [permission, access] of Object.entries(child)) {
+          if (!new Set(["read", "write", "none"]).has(access)) {
+            fail(`${workflowPath} has unsupported ${permission} permission ${JSON.stringify(access)}.`);
+          }
+          if (access === "write") output.push(`${workflowPath}:${permission}`);
+        }
+      }
+      collectWritePermissions(child, workflowPath, output);
+    }
+  }
+  return output;
+}
+
+async function readReviewedWorkflowInventory(root) {
+  const directory = resolve(root, ".github/workflows");
+  const entries = await readdir(directory, { withFileTypes: true });
+  const workflowEntries = entries
+    .filter((entry) => /\.ya?ml$/i.test(entry.name))
+    .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+  if (workflowEntries.some((entry) => !entry.isFile())) {
+    fail(".github/workflows must not contain symlinked or non-regular YAML workflow entries.");
+  }
+  const paths = workflowEntries.map((entry) => `.github/workflows/${entry.name}`);
+  if (!sameValue(paths, REVIEWED_WORKFLOW_FILES)) {
+    fail(`workflow inventory must be exactly the reviewed set (received ${paths.join(", ")}).`);
+  }
+  return Promise.all(paths.map(async (workflowPath) => ({
+    path: workflowPath,
+    source: await readFile(resolve(root, workflowPath), "utf8"),
+  })));
+}
+
+async function verifyAbsentNpmControlFiles(root) {
+  for (const relativePath of [
+    ".npmrc",
+    "backend/cloudflare/.npmrc",
+    "backend/cloudflare/npm-shrinkwrap.json",
+  ]) {
+    try {
+      await lstat(resolve(root, relativePath));
+      if (relativePath.endsWith("npm-shrinkwrap.json")) {
+        fail(`${relativePath} is forbidden because it overrides the reviewed package-lock.json dependency graph.`);
+      }
+      fail(`${relativePath} is forbidden because npm script-shell/node-options can bypass reviewed release commands.`);
+    } catch (error) {
+      if (error && typeof error === "object" && error.code === "ENOENT") continue;
+      throw error;
+    }
+  }
+}
+
+async function readReviewedRegularFile(root, relativePath) {
+  let file;
+  try {
+    file = await lstat(resolve(root, relativePath));
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "ENOENT") {
+      fail(`${relativePath} must exist as a regular checked-in file.`);
+    }
+    throw error;
+  }
+  if (!file.isFile()) {
+    fail(`${relativePath} must be a regular checked-in file.`);
+  }
+  return readFile(resolve(root, relativePath), "utf8");
+}
+
+async function readReviewedCiScriptInventory(root) {
+  const directory = resolve(root, "ios/ci_scripts");
+  const entries = (await readdir(directory, { withFileTypes: true }))
+    .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+  if (entries.some((entry) => !entry.isFile())) {
+    fail("ios/ci_scripts must contain only the exact reviewed regular files; directories and symlinks are forbidden.");
+  }
+  const expectedNames = REVIEWED_CI_SCRIPT_FILES
+    .map((relativePath) => relativePath.slice(relativePath.lastIndexOf("/") + 1))
+    .sort();
+  const actualNames = entries.map((entry) => entry.name);
+  if (!sameValue(actualNames, expectedNames)) {
+    fail(`ios/ci_scripts inventory must be exactly the reviewed set (received ${actualNames.join(", ")}).`);
+  }
+  return Promise.all(REVIEWED_CI_SCRIPT_FILES.map(async (relativePath) => {
+    const file = await lstat(resolve(root, relativePath));
+    if (!file.isFile()) fail(`${relativePath} must be a regular checked-in file.`);
+    return {
+      path: relativePath,
+      source: await readFile(resolve(root, relativePath), "utf8"),
+      mode: file.mode,
+    };
+  }));
+}
+
+function verifyWorkflowDirectoryPolicy(workflowFiles) {
+  const mobileReleaseFiles = new Set([
+    contractFiles.iosWorkflow,
+    contractFiles.platformWorkflow,
+  ]);
+  const appleUploadFiles = new Set([
+    ...mobileReleaseFiles,
+    ".github/workflows/desktop-release.yml",
+  ]);
+  const cloudflareCredentialFiles = new Set([
+    ".github/workflows/apns-incident-disposition.yml",
+    ".github/workflows/cloudflare-staging.yml",
+    contractFiles.cloudflareWorkflow,
+    ".github/workflows/terminal-dlq-fallback-monitor.yml",
+    ".github/workflows/terminal-dlq-monitor.yml",
+  ]);
+  const configuredWorkerDeployFiles = new Set([
+    ".github/workflows/cloudflare-staging.yml",
+    ".github/workflows/terminal-dlq-monitor.yml",
+  ]);
+  const observedWritePermissions = [];
+  const credentialWorkflows = [];
+  const parsedWorkflows = [];
+
+  for (const { path: workflowPath, source } of workflowFiles) {
+    const workflow = parseEffectiveWorkflow(source, `workflow ${workflowPath}`, workflowPath);
+    parsedWorkflows.push({ path: workflowPath, workflow });
+    const trigger = workflow.on ?? workflow.true;
+    if (
+      trigger === "workflow_call" ||
+      (Array.isArray(trigger) && trigger.includes("workflow_call")) ||
+      (isRecord(trigger) && Object.hasOwn(trigger, "workflow_call"))
+    ) {
+      fail(`${workflowPath} must not expose a reusable workflow_call release bypass.`);
+    }
+    const localActions = collectLocalActionReferences(workflow);
+    if (localActions.length > 0) {
+      fail(`${workflowPath} invokes unbound local action ${localActions[0]}; release-critical local code must be fingerprinted directly.`);
+    }
+    collectWritePermissions(workflow, workflowPath, observedWritePermissions);
+    const workflowStrings = collectWorkflowStrings(workflow);
+    if (workflowStrings.some((value) => /\$\{\{\s*secrets(?:\.|\[)/.test(value))) {
+      credentialWorkflows.push({ path: workflowPath, workflow });
+    }
+
+    for (const value of workflowStrings) {
+      const mobileSurface =
+        value === "ios-app-store-release" ||
+        /(?:^|[^A-Z0-9_])(?:IOS|WATCHOS|TVOS|VISIONOS)_APP_STORE_[A-Z0-9_]+/.test(value) ||
+        /(?:^|[^A-Z0-9_])APP_STORE_CONNECT_API_(?:KEY|KEY_ID|ISSUER)\b/.test(value) ||
+        /generic\/platform=(?:iOS|tvOS|visionOS|watchOS)/.test(value) ||
+        /\bxcodebuild\s+(?:archive|-exportArchive)\b/.test(value);
+      if (mobileSurface && !mobileReleaseFiles.has(workflowPath)) {
+        fail(`${workflowPath} contains a protected mobile Apple signing/archive surface outside the reviewed release lanes.`);
+      }
+      if (/\bxcrun\s+altool\s+--upload-package\b/.test(value) && !appleUploadFiles.has(workflowPath)) {
+        fail(`${workflowPath} contains an App Store upload command outside a reviewed Apple release lane.`);
+      }
+      if (value === "cloudflare-production" && workflowPath !== contractFiles.cloudflareWorkflow) {
+        fail(`${workflowPath} names the protected production Worker environment outside the reviewed deploy lane.`);
+      }
+      if (/\$\{\{\s*secrets\.CLOUDFLARE_(?:API_TOKEN|ACCOUNT_ID)\s*\}\}/.test(value) &&
+          !cloudflareCredentialFiles.has(workflowPath)) {
+        fail(`${workflowPath} reads production-capable Cloudflare credentials outside the reviewed Cloudflare lanes.`);
+      }
+      for (const line of value.split(/\r?\n/)) {
+        if (!/\bwrangler\s+deploy\b/.test(line) || /--dry-run\b/.test(line)) continue;
+        if (workflowPath === contractFiles.cloudflareWorkflow) continue;
+        if (!configuredWorkerDeployFiles.has(workflowPath) || !/--config(?:=|\s)/.test(line)) {
+          fail(`${workflowPath} contains an unreviewed production-capable Worker deploy command.`);
+        }
+      }
+    }
+  }
+
+  const expectedWritePermissions = [
+    ".github/workflows/desktop-release.yml:contents",
+    ".github/workflows/terminal-dlq-fallback-monitor.yml:issues",
+  ];
+  if (!sameValue(observedWritePermissions.sort(), expectedWritePermissions)) {
+    fail(`workflow write permissions must remain exactly ${expectedWritePermissions.join(", ")}.`);
+  }
+  const expectedCredentialWorkflowPaths = [
+    ".github/workflows/apns-incident-disposition.yml",
+    ".github/workflows/apple-platforms.yml",
+    ".github/workflows/cloudflare-staging.yml",
+    ".github/workflows/cloudflare.yml",
+    ".github/workflows/desktop-release.yml",
+    ".github/workflows/homebrew-tap.yml",
+    ".github/workflows/ios.yml",
+    ".github/workflows/terminal-dlq-fallback-monitor.yml",
+    ".github/workflows/terminal-dlq-monitor.yml",
+  ];
+  const observedCredentialWorkflowPaths = credentialWorkflows.map(({ path }) => path);
+  if (!sameValue(observedCredentialWorkflowPaths, expectedCredentialWorkflowPaths)) {
+    fail(`credential-bearing workflow inventory must be exactly ${expectedCredentialWorkflowPaths.join(", ")}.`);
+  }
+  const credentialFingerprint = workflowSequenceFingerprint(credentialWorkflows);
+  if (credentialFingerprint !== CREDENTIAL_WORKFLOWS_FINGERPRINT) {
+    fail(`credential-bearing workflows must match the reviewed fingerprint (received ${credentialFingerprint}).`);
+  }
+  const directoryFingerprint = workflowSequenceFingerprint(parsedWorkflows);
+  if (directoryFingerprint !== WORKFLOW_DIRECTORY_FINGERPRINT) {
+    fail(`the complete workflow directory must match the reviewed parsed-content fingerprint (received ${directoryFingerprint}).`);
+  }
+  const directorySourceFingerprint = workflowSequenceFingerprint(workflowFiles);
+  if (directorySourceFingerprint !== WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT) {
+    fail(`the complete workflow directory must match the reviewed raw path-and-source fingerprint (received ${directorySourceFingerprint}).`);
+  }
 }
 
 function workflowDispatch(workflow, label = "iOS workflow") {
@@ -737,12 +1404,28 @@ function verifyArchiveWorkflow(workflowSource, buildNumber) {
     },
     run: ARCHIVE_COMMAND,
   }, "signed archive step");
+  const signedArtifacts = stepByName(
+    steps,
+    "Verify signed iOS archive and exported IPA",
+    "iOS workflow signed artifact verifier step",
+  );
+  exactRecord(signedArtifacts, {
+    name: "Verify signed iOS archive and exported IPA",
+    shell: "bash",
+    env: {
+      BUILD_NUMBER: "${{ inputs.build_number }}",
+      IOS_PROFILE_NAME: "${{ vars.IOS_APP_STORE_PROFILE_NAME }}",
+      WATCH_PROFILE_NAME: "${{ vars.WATCHOS_APP_STORE_PROFILE_NAME }}",
+    },
+    run: IOS_SIGNED_ARTIFACT_COMMAND,
+  }, "iOS signed artifact verifier step");
   const postSmokeFingerprint = workflowSequenceFingerprint(steps.slice(expectedPrelude.length));
   if (postSmokeFingerprint !== TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT) {
-    fail("testflight post-remote signing sequence must match the reviewed fingerprint.");
+    fail(`testflight post-remote signing sequence must match the reviewed fingerprint (received ${postSmokeFingerprint}).`);
   }
-  if (workflowSequenceFingerprint(jobs) !== WORKFLOW_JOBS_FINGERPRINT) {
-    fail("iOS workflow jobs must match the reviewed release-job graph fingerprint.");
+  const jobsFingerprint = workflowSequenceFingerprint(jobs);
+  if (jobsFingerprint !== WORKFLOW_JOBS_FINGERPRINT) {
+    fail(`iOS workflow jobs must match the reviewed release-job graph fingerprint (received ${jobsFingerprint}).`);
   }
 }
 
@@ -790,7 +1473,7 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
     fail(`native platform workflow build_number default ${defaultBuildNumber} does not match ios/project.yml ${buildNumber}.`);
   }
   exactRecord(buildInput, {
-    description: "Exact coordinated CFBundleVersion from ios/project.yml and the Worker App Attest allow-list",
+    description: "Exact coordinated CFBundleVersion from ios/project.yml",
     required: false,
     default: buildNumber,
     type: "string",
@@ -812,33 +1495,22 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
   const steps = release.steps;
   const expectedPrelude = [
     "Check out repository",
-    "Verify Apple platform and Worker release contract",
-    "Verify production notification origin readiness and contract",
+    "Verify frozen Apple platform release contract",
   ];
   if (steps.length < expectedPrelude.length ||
       steps.slice(0, expectedPrelude.length).some((step, index) => step?.name !== expectedPrelude[index])) {
-    fail("native platform release must run checkout, static release contract, and remote policy smoke consecutively before all credential-bearing steps.");
+    fail("native platform release must run checkout and its frozen static release contract consecutively before all credential-bearing steps.");
   }
   exactRecord(steps[0], {
     name: "Check out repository",
     uses: CHECKOUT_ACTION,
   }, "native platform checkout step");
   exactRecord(steps[1], {
-    name: "Verify Apple platform and Worker release contract",
+    name: "Verify frozen Apple platform release contract",
     id: "release-contract",
     env: { BUILD_NUMBER: "${{ inputs.build_number }}" },
     run: PRE_SIGNING_COMMAND,
   }, "native platform pre-signing release-contract step");
-  exactRecord(steps[2], {
-    name: "Verify production notification origin readiness and contract",
-    "working-directory": "backend/cloudflare",
-    env: {
-      IOS_RELEASE_API_BASE_URL: "${{ vars.CLOUDFLARE_WORKER_URL }}",
-      BUILD_NUMBER: "${{ inputs.build_number }}",
-      APP_ATTEST_POLICY_FINGERPRINT: "${{ steps.release-contract.outputs.app_attest_policy_fingerprint }}",
-    },
-    run: REMOTE_SMOKE_COMMAND,
-  }, "native platform remote App Attest policy contract step");
 
   const archive = stepByName(steps, "Archive selected signed App Store build", "native platform signed archive step");
   exactRecord(archive, {
@@ -849,17 +1521,32 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
       PLATFORM_SCHEME: "${{ matrix.scheme }}",
       PLATFORM_DESTINATION: "${{ matrix.destination }}",
       PLATFORM_PROFILE_NAME: "${{ vars[matrix.profile_variable] }}",
-      IOS_RELEASE_API_BASE_URL: "${{ vars.CLOUDFLARE_WORKER_URL }}",
     },
     run: PLATFORM_ARCHIVE_COMMAND,
   }, "native platform signed archive step");
+  const signedArtifacts = stepByName(
+    steps,
+    "Verify selected signed archive and exported IPA",
+    "native platform signed artifact verifier step",
+  );
+  exactRecord(signedArtifacts, {
+    name: "Verify selected signed archive and exported IPA",
+    shell: "bash",
+    env: {
+      BUILD_NUMBER: "${{ inputs.build_number }}",
+      PLATFORM_KEY: "${{ matrix.key }}",
+      PLATFORM_PROFILE_NAME: "${{ vars[matrix.profile_variable] }}",
+    },
+    run: PLATFORM_SIGNED_ARTIFACT_COMMAND,
+  }, "native platform signed artifact verifier step");
 
-  const postSmokeFingerprint = workflowSequenceFingerprint(steps.slice(expectedPrelude.length));
-  if (postSmokeFingerprint !== PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT) {
-    fail("native platform post-remote signing sequence must match the reviewed fingerprint.");
+  const postContractFingerprint = workflowSequenceFingerprint(steps.slice(expectedPrelude.length));
+  if (postContractFingerprint !== PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT) {
+    fail(`native platform post-contract signing sequence must match the reviewed fingerprint (received ${postContractFingerprint}).`);
   }
-  if (workflowSequenceFingerprint(jobs) !== PLATFORM_WORKFLOW_JOBS_FINGERPRINT) {
-    fail("native platform workflow jobs must match the reviewed protected-release graph fingerprint.");
+  const jobsFingerprint = workflowSequenceFingerprint(jobs);
+  if (jobsFingerprint !== PLATFORM_WORKFLOW_JOBS_FINGERPRINT) {
+    fail(`native platform workflow jobs must match the reviewed protected-release graph fingerprint (received ${jobsFingerprint}).`);
   }
 }
 
@@ -876,8 +1563,9 @@ function verifyProductionDeploymentSerialization(workflowSource) {
     ["steps"],
     "Cloudflare deploy-production job header",
   );
-  if (workflowSequenceFingerprint(jobs) !== CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT) {
-    fail("Cloudflare workflow jobs must match the reviewed production-release graph fingerprint.");
+  const jobsFingerprint = workflowSequenceFingerprint(jobs);
+  if (jobsFingerprint !== CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT) {
+    fail(`Cloudflare workflow jobs must match the reviewed production-release graph fingerprint (received ${jobsFingerprint}).`);
   }
 }
 
@@ -921,15 +1609,52 @@ export async function verifyIOSReleaseContract({
   expectedBuildNumber,
 } = {}) {
   const path = (relativePath) => resolve(root, relativePath);
-  const [project, projectFile, infoPlists, workerConfig, iosWorkflow, platformWorkflow, screenshotWorkflow, cloudflareWorkflow] = await Promise.all([
+  await verifyAbsentNpmControlFiles(root);
+  const [
+    project,
+    projectFile,
+    infoPlists,
+    releaseEntitlements,
+    schemes,
+    platformCapabilityPolicy,
+    workerConfig,
+    workerPackage,
+    workerPackageLock,
+    exportOptions,
+    iosWorkflow,
+    platformWorkflow,
+    screenshotWorkflow,
+    cloudflareWorkflow,
+    releaseHooks,
+    releaseCriticalHelpers,
+    workflowFiles,
+  ] = await Promise.all([
     readFile(path(contractFiles.project), "utf8"),
     readFile(path(contractFiles.projectFile), "utf8"),
     Promise.all(contractFiles.infoPlists.map((relativePath) => readFile(path(relativePath), "utf8"))),
+    Promise.all(contractFiles.releaseEntitlements.map((relativePath) => readFile(path(relativePath), "utf8"))),
+    Promise.all(contractFiles.schemes.map(async (relativePath) => ({
+      path: relativePath,
+      source: await readFile(path(relativePath), "utf8"),
+    }))),
+    Promise.all(contractFiles.platformCapabilityPolicy.map(async (relativePath) => ({
+      path: relativePath,
+      source: await readFile(path(relativePath), "utf8"),
+    }))),
     readFile(path(contractFiles.workerConfig), "utf8"),
+    readReviewedRegularFile(root, contractFiles.workerPackage),
+    readReviewedRegularFile(root, contractFiles.workerPackageLock),
+    readFile(path(contractFiles.exportOptions), "utf8"),
     readFile(path(contractFiles.iosWorkflow), "utf8"),
     readFile(path(contractFiles.platformWorkflow), "utf8"),
     readFile(path(contractFiles.screenshotWorkflow), "utf8"),
     readFile(path(contractFiles.cloudflareWorkflow), "utf8"),
+    readReviewedCiScriptInventory(root),
+    Promise.all(contractFiles.releaseCriticalHelpers.map(async (relativePath) => ({
+      path: relativePath,
+      source: await readFile(path(relativePath), "utf8"),
+    }))),
+    readReviewedWorkflowInventory(root),
   ]);
   const buildNumber = captureProjectBuildNumber(project);
   if (expectedBuildNumber !== undefined) {
@@ -940,9 +1665,43 @@ export async function verifyIOSReleaseContract({
   }
   verifyAppleProject(project);
   const generatedProjectEntries = verifyGeneratedProject(projectFile, buildNumber);
+  const xcodeSourceGraphFingerprint = workflowSequenceFingerprint([
+    { path: contractFiles.project, source: project },
+    { path: contractFiles.projectFile, source: projectFile },
+  ]);
   for (const [index, infoPlist] of infoPlists.entries()) {
-    verifyInfoPlist(infoPlist, contractFiles.infoPlists[index]);
+    verifyInfoPlist(infoPlist, contractFiles.infoPlists[index], index === 0);
   }
+  verifyReleaseEntitlements(releaseEntitlements);
+  const xcodeSchemesFingerprint = verifyReviewedFileFingerprint(
+    schemes,
+    contractFiles.schemes,
+    XCODE_SCHEMES_FINGERPRINT,
+    "shared archive schemes",
+  );
+  const platformCapabilitiesFingerprint = verifyReviewedFileFingerprint(
+    platformCapabilityPolicy,
+    contractFiles.platformCapabilityPolicy,
+    PLATFORM_CAPABILITIES_FINGERPRINT,
+    "foreground-only Apple platform policy",
+  );
+  verifyWorkerReleaseScripts(workerPackage);
+  const workerDependencyGraphFingerprint = verifyReviewedFileFingerprint(
+    [
+      { path: contractFiles.workerPackage, source: workerPackage },
+      { path: contractFiles.workerPackageLock, source: workerPackageLock },
+    ],
+    [contractFiles.workerPackage, contractFiles.workerPackageLock],
+    WORKER_DEPENDENCY_GRAPH_FINGERPRINT,
+    "Worker npm dependency graph",
+  );
+  const releaseCriticalHelpersFingerprint = verifyReviewedFileFingerprint(
+    releaseCriticalHelpers,
+    contractFiles.releaseCriticalHelpers,
+    RELEASE_CRITICAL_HELPERS_FINGERPRINT,
+    "release-critical Worker helpers",
+  );
+  verifyExportOptions(exportOptions);
   const workerVars = parseWorkerConfig(workerConfig);
   requiredWorkerValue(workerVars, "APP_ATTEST_ENFORCEMENT", "required");
   requiredWorkerValue(workerVars, "APP_ATTEST_APP_ID", "5TT564H883.com.quakesignal.app");
@@ -958,20 +1717,49 @@ export async function verifyIOSReleaseContract({
   if (!sameValue(appIdentityRoutes, REVIEWED_APP_ATTEST_APNS_ROUTES)) {
     fail(`wrangler APP_ATTEST_APNS_ROUTES must normalize to exactly ${JSON.stringify(REVIEWED_APP_ATTEST_APNS_ROUTES)} for the reviewed public release contract.`);
   }
+  const policyFingerprint = appAttestPolicyFingerprint(
+    workerVars,
+    allowedBundleVersions,
+    appIdentityRoutes,
+  );
+  const xcodeCloudReleaseHooksFingerprint = verifyXcodeCloudReleaseHooks(releaseHooks);
+  verifyXcodeCloudGuardConstants(releaseHooks, {
+    BUILD_NUMBER: buildNumber,
+    MARKETING_VERSION: "1.1",
+    TEAM_ID: "5TT564H883",
+    RELEASE_REF: "refs/heads/main",
+    RELEASE_WORKFLOW: `QuakeSignal 1.1 (${buildNumber}) Native Release`,
+    PRODUCT_NAME: "QuakeSignal",
+    WORKER_ORIGIN: APPROVED_WORKER_ORIGIN,
+    APP_ATTEST_FINGERPRINT: policyFingerprint,
+    XCODE_SOURCE_GRAPH_FINGERPRINT: xcodeSourceGraphFingerprint,
+    XCODE_SCHEMES_FINGERPRINT: xcodeSchemesFingerprint,
+    PLATFORM_CAPABILITIES_FINGERPRINT: platformCapabilitiesFingerprint,
+  });
+  const workerDeploymentConfigFingerprint = verifyReviewedFileFingerprint(
+    [{ path: contractFiles.workerConfig, source: workerConfig }],
+    [contractFiles.workerConfig],
+    WORKER_DEPLOYMENT_CONFIG_FINGERPRINT,
+    "production Worker deployment configuration",
+  );
   verifyArchiveWorkflow(iosWorkflow, buildNumber);
   verifyPlatformArchiveWorkflow(platformWorkflow, buildNumber);
   verifyScreenshotCandidateWorkflow(screenshotWorkflow);
   verifyProductionDeploymentSerialization(cloudflareWorkflow);
+  verifyWorkflowDirectoryPolicy(workflowFiles);
   return {
     buildNumber,
     allowedBundleVersions,
     appIdentityRoutes,
     generatedProjectEntries,
-    appAttestPolicyFingerprint: appAttestPolicyFingerprint(
-      workerVars,
-      allowedBundleVersions,
-      appIdentityRoutes,
-    ),
+    xcodeSourceGraphFingerprint,
+    xcodeSchemesFingerprint,
+    platformCapabilitiesFingerprint,
+    releaseCriticalHelpersFingerprint,
+    workerDependencyGraphFingerprint,
+    workerDeploymentConfigFingerprint,
+    xcodeCloudReleaseHooksFingerprint,
+    appAttestPolicyFingerprint: policyFingerprint,
   };
 }
 
@@ -984,7 +1772,7 @@ async function main() {
     if (process.env.GITHUB_OUTPUT) {
       await (await import("node:fs/promises")).appendFile(
         process.env.GITHUB_OUTPUT,
-        `app_attest_policy_fingerprint=${verified.appAttestPolicyFingerprint}\n`,
+        `app_attest_policy_fingerprint=${verified.appAttestPolicyFingerprint}\nbuild_number=${verified.buildNumber}\n`,
         "utf8",
       );
     }

@@ -327,8 +327,8 @@
 "guide.familyCheckIn.phone" = "电话号码";
 
 /* Apple 平台体验 */
-"platform.alertRegistration.foregroundOnly" = "Mac 仅支持前台监测";
-"platform.alertRegistration.foregroundOnly.detail" = "安全的后台提醒注册依赖 Apple App Attest，而 Mac 不支持该功能。打开 QuakeSignal 时仍可查看实时地震信息并使用所选提醒声音。";
+"platform.alertRegistration.foregroundOnly" = "仅支持前台监测";
+"platform.alertRegistration.foregroundOnly.detail" = "此 Apple 平台不支持后台地震通知。打开震息时，仍可查看实时地震信息并使用所选提醒声音。";
 "platform.alertRegistration.unavailable.error" = "此平台不支持安全的后台提醒注册。";
 "platform.foreground.badge" = "仅限前台";
 "platform.foreground.refreshUnavailable" = "暂时无法获取实时地震信息。";

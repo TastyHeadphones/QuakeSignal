@@ -1,16 +1,17 @@
 QuakeSignal for Apple Vision Pro is the full native, windowed experience. It
 requires no account, sign-in, payment, demo account, or reviewer credential.
 
-For a permission-free route, skip notification and location access during
-onboarding and choose a listed city. Home, Reports, Map, Guide, and Settings
-remain reviewable. Location and notifications are optional.
+For a permission-free route, skip location access during onboarding and choose
+a listed city. Home, Reports, Map, Guide, and Settings remain reviewable.
+Location is optional. This target does not request notification permission.
 
-When a customer opts into nearby notifications, the Release target uses App
-Attest before APNs registration. Qualifying fresh warnings may be marked Time
-Sensitive, subject to system and user settings. This target has no Critical
-Alerts entitlement and does not claim guaranteed delivery or Silent/Focus
-bypass. Physical/TestFlight notification behavior is a release gate, not
-something inferred from a simulator or generic build.
+Apple's current visionOS provisioning-capability table does not include Push
+Notifications or Time Sensitive Notifications. The Release target therefore
+has no APNs, App Attest, Time Sensitive, Critical Alerts, or background
+emergency-alert path. While the app is open, live feed updates can present a
+qualifying warning in the app and play the selected local alert sound. Closing
+or backgrounding the app stops that foreground monitoring. Simulator
+screenshots do not prove this runtime behavior.
 
 The alert-sound picker includes system sound, an original urgent tone, and an
 original synthesized Japanese safety voice. The voice is not a J-Alert or JMA

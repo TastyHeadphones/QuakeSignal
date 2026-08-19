@@ -63,10 +63,15 @@ or external permission.
   product-page content.
 - [ ] Complete Export Compliance for the final signed package with the
   responsible legal/release owner.
-- [ ] **Content Rights — PENDING:** obtain and retain written Wolfx permission
-  for the intended App Store territories using
-  `docs/WOLFX_PERMISSION_REQUEST.md`. Do not certify rights to Wolfx-supplied
-  earthquake data before that written evidence exists.
+- [ ] **Content Rights — PENDING / SUBMISSION BLOCKER:** send the request in
+  `docs/WOLFX_PERMISSION_REQUEST.md`, then obtain and retain affirmative written
+  Wolfx permission covering native macOS, persistent client-local event/revision
+  history, intended App Store territories, attribution, restrictions, duration,
+  and termination. Confirm that Wolfx has authority over every underlying feed,
+  or obtain and review every separately required source permission. Record the
+  complete evidence in `ios/AppStore/content-rights-evidence.md`. The request
+  draft, published terms, or a source-permission referral without the permission
+  itself is not permission. Do not certify or submit before that evidence exists.
 
 ## Final submission decision
 

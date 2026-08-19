@@ -81,7 +81,7 @@ struct SettingsView: View {
 
                         pushSubscriptionControl
                     } else {
-                        Label("platform.alertRegistration.foregroundOnly", systemImage: "macbook")
+                        Label("platform.alertRegistration.foregroundOnly", systemImage: "eye")
                             .font(.subheadline.weight(.semibold))
                         Text("platform.alertRegistration.foregroundOnly.detail")
                             .font(.footnote)

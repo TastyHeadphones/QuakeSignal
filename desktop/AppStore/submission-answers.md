@@ -66,7 +66,7 @@ is selected.
 
 | App Store Connect area | Required decision/evidence | Current status |
 | --- | --- | --- |
-| Content Rights | Written Wolfx distribution permission for intended App Store territories | **PENDING** — use `docs/WOLFX_PERMISSION_REQUEST.md` |
+| Content Rights | Affirmative written Wolfx permission covering native macOS, persistent client-local event/revision history, intended App Store territories, attribution, restrictions, duration, and termination, plus either Wolfx authority over every underlying feed or each separately required source permission | **PENDING / SUBMISSION BLOCKER** — `docs/WOLFX_PERMISSION_REQUEST.md` is a request draft only. No affirmative Wolfx reply or separately required source permission is retained. Use `ios/AppStore/content-rights-evidence.md`; do not certify or submit before the complete evidence is obtained and reviewed. |
 | Age Rating | Complete Apple's current questionnaire from the final build/content | **PENDING** release-owner review |
 | Export Compliance | Answer Apple's current encryption/export questions for final signed package | **PENDING** legal/release-owner confirmation |
 | Availability / pricing | Select approved territories and timing | **PENDING** release-owner decision |

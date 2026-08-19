@@ -1,15 +1,13 @@
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import {
+  SMOKE_MAX_RESPONSE_BYTES,
+  fetchWithoutRedirect,
+  hasReadyWolfxSourceHealth,
+} from "./smoke-test-policy.mjs";
 
 const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_INTERVAL_MS = 5_000;
-
-class WorkerReadinessProbeTimeoutError extends Error {
-  constructor(timeoutMs) {
-    super(`Worker readiness health probe exceeded its ${timeoutMs}ms deadline`);
-    this.name = "WorkerReadinessProbeTimeoutError";
-  }
-}
 
 function healthUrl(baseUrl) {
   const url = new URL(baseUrl);
@@ -39,6 +37,9 @@ function readinessSummary(response, body) {
     staleSources: Array.isArray(body?.upstream?.staleSources)
       ? body.upstream.staleSources
       : null,
+    readySourceCount: body?.upstream?.sources && typeof body.upstream.sources === "object"
+      ? Object.keys(body.upstream.sources).length
+      : null,
   };
 }
 
@@ -47,43 +48,35 @@ function isReady(response, body) {
     response.status === 200 &&
     body?.ok === true &&
     body?.delivery?.status === "ready" &&
+    body?.delivery?.apnsConfigured === true &&
     body?.upstream?.status === "ready" &&
     Array.isArray(body?.upstream?.staleSources) &&
     body.upstream.staleSources.length === 0 &&
-    ["websocket", "http-polling", "mixed"].includes(body?.upstream?.transport)
+    ["websocket", "http-polling", "mixed"].includes(body?.upstream?.transport) &&
+    hasReadyWolfxSourceHealth(body?.upstream)
   );
 }
 
 async function probeHealthWithinDeadline(fetchImpl, url, timeoutMs) {
-  const controller = new AbortController();
-  let timeoutId;
-  const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => {
-      controller.abort();
-      reject(new WorkerReadinessProbeTimeoutError(timeoutMs));
-    }, timeoutMs);
-  });
-  const probe = (async () => {
-    const response = await fetchImpl(url, {
+  const response = await fetchWithoutRedirect(
+    fetchImpl,
+    url,
+    {
       cache: "no-store",
-      redirect: "error",
-      signal: controller.signal,
-    });
-    let body = null;
-    try {
-      body = await response.json();
-    } catch {
-      // Keep polling through a rolling deployment / legacy response, but
-      // include the HTTP status in the final failure summary.
-    }
-    return { response, body };
-  })();
-
+    },
+    {
+      timeoutMs,
+      maximumResponseBytes: SMOKE_MAX_RESPONSE_BYTES,
+    },
+  );
+  let body = null;
   try {
-    return await Promise.race([probe, timeout]);
-  } finally {
-    clearTimeout(timeoutId);
+    body = await response.json();
+  } catch {
+    // Keep polling through a rolling deployment / legacy response, but
+    // include the HTTP status in the final failure summary.
   }
+  return { response, body };
 }
 
 /**

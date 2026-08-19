@@ -1,17 +1,144 @@
 import assert from "node:assert/strict";
 
 export const APP_ATTEST_POLICY_FORMAT = "quakesignal-app-attest-policy/v2";
+export const REQUIRED_WOLFX_SOURCES = [
+  "cenc_eew",
+  "cenc_eqlist",
+  "cq_eew",
+  "fj_eew",
+  "jma_eew",
+  "jma_eqlist",
+  "sc_eew",
+];
 
 const APP_ATTEST_POLICY_FINGERPRINT_PATTERN = /^sha256:[A-Za-z0-9_-]{43}$/;
 const BUNDLE_VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/;
+export const SMOKE_REQUEST_TIMEOUT_MS = 15_000;
+export const SMOKE_MAX_RESPONSE_BYTES = 1024 * 1024;
+
+async function readBoundedResponseBody(response, maximumBytes, abort) {
+  if (response.body === null) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks = [];
+  let length = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > maximumBytes) {
+        abort();
+        throw new Error(`smoke response exceeded ${maximumBytes} bytes`);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
 
 /**
  * A release smoke must validate the configured Worker origin itself. Following
  * a redirect could otherwise validate a different host after the protected
  * environment variable was approved.
  */
-export function fetchWithoutRedirect(fetchImpl, input, init = {}) {
-  return fetchImpl(input, { ...init, redirect: "error" });
+export async function fetchWithoutRedirect(
+  fetchImpl,
+  input,
+  init = {},
+  {
+    timeoutMs = SMOKE_REQUEST_TIMEOUT_MS,
+    maximumResponseBytes = SMOKE_MAX_RESPONSE_BYTES,
+  } = {},
+) {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("smoke request timeout must be a positive integer");
+  }
+  if (!Number.isSafeInteger(maximumResponseBytes) || maximumResponseBytes <= 0) {
+    throw new Error("smoke response limit must be a positive integer");
+  }
+  const controller = new AbortController();
+  const callerSignal = init.signal;
+  const forwardAbort = () => controller.abort(callerSignal.reason);
+  if (callerSignal?.aborted) forwardAbort();
+  else callerSignal?.addEventListener("abort", forwardAbort, { once: true });
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(`smoke request exceeded ${timeoutMs}ms`);
+      controller.abort(error);
+      reject(error);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetchImpl(input, {
+          ...init,
+          redirect: "error",
+          signal: controller.signal,
+        });
+        const body = await readBoundedResponseBody(
+          response,
+          maximumResponseBytes,
+          () => controller.abort(new Error(`smoke response exceeded ${maximumResponseBytes} bytes`)),
+        );
+        return new Response(body.length > 0 ? body : null, {
+          headers: response.headers,
+          status: response.status,
+          statusText: response.statusText,
+        });
+      })(),
+      timeout,
+    ]);
+  } finally {
+    clearTimeout(timer);
+    callerSignal?.removeEventListener("abort", forwardAbort);
+  }
+}
+
+export function hasReadyWolfxSourceHealth(upstream) {
+  const sources = upstream?.sources;
+  if (sources === null || typeof sources !== "object" || Array.isArray(sources)) return false;
+  const keys = Object.keys(sources).sort();
+  if (keys.length !== REQUIRED_WOLFX_SOURCES.length ||
+      keys.some((key, index) => key !== REQUIRED_WOLFX_SOURCES[index])) {
+    return false;
+  }
+  return REQUIRED_WOLFX_SOURCES.every((source) => {
+    const health = sources[source];
+    return health !== null && typeof health === "object" && !Array.isArray(health) &&
+      health.stale === false &&
+      ["websocket", "http-polling"].includes(health.transport);
+  });
+}
+
+export function assertReadyWolfxSourceHealth(upstream) {
+  assert.equal(
+    hasReadyWolfxSourceHealth(upstream),
+    true,
+    "production health must expose all seven fresh Wolfx sources on an allowed transport",
+  );
+}
+
+export function assertReadyDeliveryHealth(delivery) {
+  assert.equal(
+    delivery?.status,
+    "ready",
+    "production health must not pass without APNs readiness",
+  );
+  assert.equal(
+    delivery?.apnsConfigured,
+    true,
+    "production health must explicitly confirm APNs signing configuration",
+  );
 }
 
 /**

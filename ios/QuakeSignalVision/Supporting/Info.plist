@@ -29,10 +29,6 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>QuakeSignal uses your location to tell you how far away an earthquake is and to alert you about activity near you.</string>
-	<key>QUAKESIGNAL_API_BASE_URL</key>
-	<string>$(QUAKESIGNAL_API_BASE_URL)</string>
-	<key>QUAKESIGNAL_APP_ATTEST_MODE</key>
-	<string>$(QUAKESIGNAL_APP_ATTEST_MODE)</string>
+	<string>QuakeSignal uses your location to show distance and nearby earthquake context while the app is open.</string>
 </dict>
 </plist>

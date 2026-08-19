@@ -32,13 +32,16 @@ claim a Universal Purchase for the separate Mac app.
 | Platform | Customer-visible behavior | Notification capability in this release |
 | --- | --- | --- |
 | iPhone / iPad | Full reports, map, preparedness guide, settings, and optional nearby notifications | Protected App Attest + APNs registration. Qualifying fresh warnings may use **Time Sensitive**, subject to system/user settings. There is no Critical Alerts entitlement. |
-| Apple Vision Pro | Full native windowed app with reports, map, guide, settings, and optional nearby notifications | Protected App Attest + APNs registration and the same Time Sensitive policy. There is no Critical Alerts entitlement. |
+| Apple Vision Pro | Full native windowed app with reports, map, guide, settings, and local foreground warning presentation while open | Foreground only. Apple does not list Push Notifications or Time Sensitive Notifications as supported visionOS provisioning capabilities, so this target has no APNs, App Attest, Time Sensitive, Critical Alerts, or background emergency-alert path. |
 | Apple TV | Large-screen headline, recent-report list, event details, and manual/active refresh | Foreground only. No APNs, App Attest, alert audio, or background emergency alerts. |
 | Apple Watch | Compact headline, recent-report list, event details, and refresh when opened | Foreground only. The Watch app does not independently register for APNs, App Attest, alert audio, or background emergency alerts. Paired-iPhone alerts remain an iPhone feature. |
 
-Time Sensitive notifications are not Critical Alerts and remain under user and
-system control. Apple states that users can disable Time Sensitive
-interruptions, while Critical alerts require a separately approved entitlement.
+On iPhone and iPad, Time Sensitive notifications are not Critical Alerts and
+remain under user and system control. Apple states that users can disable Time
+Sensitive interruptions, while Critical alerts require a separately approved
+entitlement. Apple Vision Pro remains foreground-only in this release; see
+Apple's current
+[visionOS capability table](https://developer.apple.com/help/account/reference/supported-capabilities-visionos/).
 See Apple's documentation for
 [Time Sensitive notifications](https://developer.apple.com/documentation/usernotifications/unnotificationinterruptionlevel/timesensitive)
 and
@@ -73,9 +76,14 @@ owner approves each exact display name, availability, and trademark review.
   binary at the dimensions in the platform manifest; record hashes and visual
   approval.
 - [ ] Complete platform QA. Generic compilation and source inspection are not
-  simulator, Apple TV, Apple Vision Pro, Apple Watch, App Attest, APNs, Focus,
-  Silent Mode, remote-focus, or background-delivery evidence.
-- [ ] Obtain written Wolfx content permission for the intended territories.
+  simulator, Apple TV, Apple Vision Pro, Apple Watch, or signed-device evidence.
+  App Attest, APNs, Focus, Silent Mode, remote-focus, and background-delivery
+  checks apply to the iPhone/iPad notification path only.
+- [ ] Complete the Wolfx rights gate in
+  `../content-rights-evidence.md`: obtain the exact platform, storage, relay,
+  territory, attribution, restriction, duration, and termination permission,
+  plus either Wolfx authority over every underlying feed or every separately
+  required source permission.
 - [ ] Complete current Age Rating, App Privacy, Export Compliance, Content
   Rights, availability, and accountable App Review contact fields.
 - [ ] Update the public privacy policy to name Apple TV, Apple Watch, and Apple

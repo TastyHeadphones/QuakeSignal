@@ -62,7 +62,7 @@ Collected” merely because the app has no account.
 | --- | --- | --- |
 | Apple Watch companion | Foreground-only compact dashboard embedded in the iOS upload; no independent APNs, App Attest, alert audio, or background emergency alerts | **PENDING** signed host + Watch profile, paired-device QA, Watch screenshots, and shared iOS description/review approval |
 | tvOS | Foreground-only large-screen dashboard; no APNs, App Attest, alert audio, or background emergency alerts | Portal has an empty `1.0` draft; **PENDING** edit to 1.1 where permitted, build 8, profile, platform QA, metadata, and 1920 × 1080 screenshots |
-| visionOS | Full native windowed app with protected App Attest/APNs registration; qualifying fresh warnings may be Time Sensitive, never Critical | Portal has an empty `1.0` draft; **PENDING** edit to 1.1 where permitted, build 8, profile, platform QA, App Motion answer, metadata, and 3840 × 2160 screenshots |
+| visionOS | Full native windowed foreground app; no APNs, App Attest, Time Sensitive, Critical Alerts, or background emergency delivery. Qualifying live warnings may appear in-app and play the selected local sound only while the app is open. | Portal has an empty `1.0` draft; **PENDING** edit to 1.1 where permitted, build 8, profile, platform QA, App Motion answer, metadata, and 3840 × 2160 screenshots |
 
 Use `platforms/` for exact copy, review notes, and pending screenshot manifests.
 Use `app-store-connect-portal-audit-2026-08-19.md` for the read-only portal
@@ -73,7 +73,7 @@ draft from this worksheet.
 
 | App Store Connect area | Required decision/evidence | Current status |
 | --- | --- | --- |
-| Content Rights | Written Wolfx distribution permission for the intended App Store territories | **PENDING** — use `docs/WOLFX_PERMISSION_REQUEST.md` |
+| Content Rights | Affirmative written Wolfx permission covering the exact Apple platforms, persistent normalized-event/client-local storage, developer-operated relay, territories, attribution, restrictions, duration, and termination, plus either Wolfx authority over every underlying feed or each separately required source permission | **PENDING / SUBMISSION BLOCKER** — `docs/WOLFX_PERMISSION_REQUEST.md` is a ready-to-send request draft only. No affirmative Wolfx reply or separately required source permission is retained in the release record. See `content-rights-evidence.md`; do not complete Apple's rights certification or submit any platform until the complete evidence is obtained and reviewed. |
 | Age Rating | Answer Apple's current questionnaire from the final public build/content | **PENDING** release-owner review |
 | Export Compliance | Answer Apple's current encryption/export questions for the final signed archive | **PENDING** legal/release-owner confirmation |
 | Availability / pricing schedule | Select approved territories and distribution timing | **PENDING** release-owner decision |

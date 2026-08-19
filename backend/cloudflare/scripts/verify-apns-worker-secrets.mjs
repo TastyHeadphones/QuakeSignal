@@ -1,6 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { lstatSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const scriptDirectory = dirname(fileURLToPath(import.meta.url));
+const localWranglerEntrypoint = resolve(scriptDirectory, "../node_modules/wrangler/bin/wrangler.js");
 
 const requiredSecretNames = [
   "APNS_PRIVATE_KEY",
@@ -46,14 +50,29 @@ export function missingRequiredSecretNames(availableNames) {
   return requiredSecretNames.filter((name) => !availableNames.has(name));
 }
 
-export function verifyAPNSSecretNames(argv = process.argv.slice(2)) {
+export function verifyAPNSSecretNames(
+  argv = process.argv.slice(2),
+  {
+    spawn = spawnSync,
+    wranglerEntrypoint = localWranglerEntrypoint,
+  } = {},
+) {
   const configPath = parseConfigArgument(argv);
-  const wranglerArgs = ["wrangler", "secret", "list", "--format", "json"];
+  let wranglerFile;
+  try {
+    wranglerFile = lstatSync(wranglerEntrypoint);
+  } catch {
+    throw new Error("The reviewed local Wrangler entrypoint is missing; refusing any registry fallback.");
+  }
+  if (!wranglerFile.isFile()) {
+    throw new Error("The reviewed local Wrangler entrypoint must be a regular file.");
+  }
+  const wranglerArgs = [wranglerEntrypoint, "secret", "list", "--format", "json"];
   if (configPath) wranglerArgs.push("--config", configPath);
 
   // `wrangler secret list` returns names and metadata only, never secret values.
-  const result = spawnSync(
-    "npx",
+  const result = spawn(
+    process.execPath,
     wranglerArgs,
     { encoding: "utf8" },
   );

@@ -11,12 +11,30 @@ on:
       - "packaging/homebrew-tap/**"
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
       - "ios/QuakeSignal/Supporting/Info.plist"
+      - "ios/QuakeSignalTV/Supporting/Info.plist"
+      - "ios/QuakeSignalVision/Supporting/Info.plist"
+      - "ios/QuakeSignalWatch/Supporting/Info.plist"
+      - "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements"
+      - "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements"
+      - "ios/QuakeSignal/App/PlatformCapabilities.swift"
+      - "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift"
+      - "ios/QuakeSignal/Features/Settings/SettingsView.swift"
+      - "ios/QuakeSignal/Resources/**/Localizable.strings"
+      - "ios/AppStore/ExportOptions.plist"
+      - "ios/ci_scripts/**"
       - "ios/ScreenshotAutomation/**"
       - "backend/cloudflare/wrangler.jsonc"
+      - "backend/cloudflare/package.json"
+      - "backend/cloudflare/package-lock.json"
+      - "backend/cloudflare/staging/wrangler.staging.template.json"
+      - "backend/cloudflare/scripts/render-staging-config.mjs"
       - "backend/cloudflare/scripts/smoke-test.mjs"
       - "backend/cloudflare/scripts/smoke-test-policy.mjs"
       - "backend/cloudflare/scripts/smoke-test.test.mjs"
+      - "backend/cloudflare/scripts/verify-apns-worker-secrets.mjs"
+      - "backend/cloudflare/scripts/verify-production-gates.mjs"
       - "backend/cloudflare/scripts/wait-for-worker-readiness.mjs"
       - "backend/cloudflare/scripts/wait-for-worker-readiness.test.mjs"
       - "backend/cloudflare/scripts/dispose-historical-apns-environment-incidents.mjs"
@@ -28,12 +46,30 @@ on:
       - "packaging/homebrew-tap/**"
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
       - "ios/QuakeSignal/Supporting/Info.plist"
+      - "ios/QuakeSignalTV/Supporting/Info.plist"
+      - "ios/QuakeSignalVision/Supporting/Info.plist"
+      - "ios/QuakeSignalWatch/Supporting/Info.plist"
+      - "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements"
+      - "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements"
+      - "ios/QuakeSignal/App/PlatformCapabilities.swift"
+      - "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift"
+      - "ios/QuakeSignal/Features/Settings/SettingsView.swift"
+      - "ios/QuakeSignal/Resources/**/Localizable.strings"
+      - "ios/AppStore/ExportOptions.plist"
+      - "ios/ci_scripts/**"
       - "ios/ScreenshotAutomation/**"
       - "backend/cloudflare/wrangler.jsonc"
+      - "backend/cloudflare/package.json"
+      - "backend/cloudflare/package-lock.json"
+      - "backend/cloudflare/staging/wrangler.staging.template.json"
+      - "backend/cloudflare/scripts/render-staging-config.mjs"
       - "backend/cloudflare/scripts/smoke-test.mjs"
       - "backend/cloudflare/scripts/smoke-test-policy.mjs"
       - "backend/cloudflare/scripts/smoke-test.test.mjs"
+      - "backend/cloudflare/scripts/verify-apns-worker-secrets.mjs"
+      - "backend/cloudflare/scripts/verify-production-gates.mjs"
       - "backend/cloudflare/scripts/wait-for-worker-readiness.mjs"
       - "backend/cloudflare/scripts/wait-for-worker-readiness.test.mjs"
       - "backend/cloudflare/scripts/dispose-historical-apns-environment-incidents.mjs"
@@ -107,9 +143,17 @@ jobs:
       - name: Test iOS release contract
         run: |
           set -euo pipefail
+          bash -n ios/ci_scripts/ci_post_clone.sh \
+            ios/ci_scripts/ci_pre_xcodebuild.sh \
+            ios/ci_scripts/ci_post_xcodebuild.sh \
+            ios/ci_scripts/verify-signed-apple-artifacts.sh \
+            .github/scripts/verify-signed-apple-artifacts.test.sh
           node --test .github/scripts/verify-ios-release-contract.test.mjs
+          PYTHONDONTWRITEBYTECODE=1 python3 .github/scripts/test_xcode_cloud_release_guard.py
           node .github/scripts/verify-ios-release-contract.mjs
-          node --test backend/cloudflare/scripts/smoke-test.test.mjs
+          .github/scripts/verify-signed-apple-artifacts.test.sh
+          node --test backend/cloudflare/scripts/smoke-test.test.mjs \
+            backend/cloudflare/scripts/wait-for-worker-readiness.test.mjs
           node --test backend/cloudflare/scripts/dispose-historical-apns-environment-incidents.test.mjs
 
       - name: Test desktop and Homebrew release contract

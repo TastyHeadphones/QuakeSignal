@@ -248,14 +248,13 @@ Production currently enables only:
 [{"appIdentity":"5TT564H883.com.quakesignal.app","apnsTopic":"com.quakesignal.app","platform":"ios"}]
 ```
 
-That single authenticated identity/topic is shared by the native
-iOS/iPadOS and visionOS products in their Universal Purchase record. App
-Attest authenticates the App ID and APNs authorizes the topic; neither proof
-cryptographically distinguishes iOS from visionOS when both values are
-identical. The `platform: "ios"` value is therefore the historical canonical
-server routing/audit label for this shared mobile/vision route, not a claim
-that visionOS uses a second credential or topic. Watch has a distinct identity
-and topic and remains disabled as described below.
+That single authenticated identity/topic serves the native iOS/iPadOS product.
+visionOS is deliberately excluded because Apple does not list Push
+Notifications or Time Sensitive Notifications as supported visionOS
+provisioning capabilities; the Vision app is foreground-only. The
+`platform: "ios"` value is therefore both the canonical routing/audit label and
+the complete enabled public platform scope. Watch has a distinct identity and
+topic and remains disabled as described below.
 
 The public `quakesignal-app-attest-policy/v2` health fingerprint includes this
 validated route array after rebuilding every entry in fixed key order and

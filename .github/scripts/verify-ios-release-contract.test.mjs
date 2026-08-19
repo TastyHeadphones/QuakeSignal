@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { chmod, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { tmpdir } from "node:os";
@@ -17,6 +18,16 @@ const reviewedAppIdentityRoutes = [
   },
 ];
 const reviewedAppIdentityRoutesJSON = JSON.stringify(reviewedAppIdentityRoutes);
+const xcodeCloudReleaseFiles = [
+  "ios/ci_scripts/ci_post_clone.sh",
+  "ios/ci_scripts/ci_pre_xcodebuild.sh",
+  "ios/ci_scripts/ci_post_xcodebuild.sh",
+  "ios/ci_scripts/xcode-cloud-release-guard.py",
+  "ios/ci_scripts/verify-signed-apple-artifacts.sh",
+];
+const executableReleaseFiles = new Set(
+  xcodeCloudReleaseFiles.filter((path) => path.endsWith(".sh") || path.endsWith(".py")),
+);
 
 function fixtureFiles({
   buildNumber = "8",
@@ -226,8 +237,42 @@ async function fixturePlatformWorkflow({ workflowDefault = "8" } = {}) {
 }
 
 async function writeFixture(options = {}) {
-  const root = await mkdtemp(join(tmpdir(), "quakesignal-ios-release-contract-"));
+  const tempRoot = process.env.QUAKESIGNAL_TEST_TEMP_ROOT || tmpdir();
+  const root = await mkdtemp(join(tempRoot, "quakesignal-ios-release-contract-"));
   const files = fixtureFiles(options);
+  const buildNumber = options.buildNumber ?? "8";
+  let project = await readFile(join(repositoryRoot, "ios/project.yml"), "utf8");
+  if (buildNumber !== "8") {
+    project = project.replace(
+      '    CURRENT_PROJECT_VERSION: "8"\n',
+      `    CURRENT_PROJECT_VERSION: "${buildNumber}"\n`,
+    );
+  }
+  files["ios/project.yml"] = project;
+  const allowedVersions = options.allowedVersions ?? "1,2,3,4,5,6,7,8";
+  const workerConfigSuffix = options.workerConfigSuffix ?? "";
+  const workerConfig = await readFile(join(repositoryRoot, "backend/cloudflare/wrangler.jsonc"), "utf8");
+  files["backend/cloudflare/wrangler.jsonc"] = workerConfig.replace(
+    '"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8"',
+    `"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "${allowedVersions}"`,
+  ) + workerConfigSuffix;
+  const projectFileVersions = options.projectFileVersions ?? [buildNumber, buildNumber, buildNumber];
+  let projectFileIndex = 0;
+  files["ios/QuakeSignal.xcodeproj/project.pbxproj"] = (
+    await readFile(join(repositoryRoot, "ios/QuakeSignal.xcodeproj/project.pbxproj"), "utf8")
+  ).replace(/CURRENT_PROJECT_VERSION = 8;/g, () => {
+    const version = projectFileVersions[projectFileIndex++];
+    if (version === undefined) throw new Error("fixture projectFileVersions must contain three entries");
+    return `CURRENT_PROJECT_VERSION = ${version};`;
+  });
+  if (projectFileIndex !== 3) throw new Error("fixture generated project must contain three build versions");
+
+  const workflowDirectory = join(repositoryRoot, ".github/workflows");
+  for (const entry of await readdir(workflowDirectory, { withFileTypes: true })) {
+    if (entry.isFile() && /\.ya?ml$/i.test(entry.name)) {
+      files[`.github/workflows/${entry.name}`] = await readFile(join(workflowDirectory, entry.name), "utf8");
+    }
+  }
   files[".github/workflows/ios.yml"] = await fixtureWorkflow(options);
   files[".github/workflows/apple-platforms.yml"] = await fixturePlatformWorkflow(options);
   files[".github/workflows/apple-platform-screenshots.yml"] = await readFile(
@@ -238,10 +283,47 @@ async function writeFixture(options = {}) {
     join(repositoryRoot, ".github/workflows/cloudflare.yml"),
     "utf8",
   );
+  files["ios/AppStore/ExportOptions.plist"] = await readFile(
+    join(repositoryRoot, "ios/AppStore/ExportOptions.plist"),
+    "utf8",
+  );
+  for (const relativePath of [
+    "ios/QuakeSignal/Supporting/Info.plist",
+    "ios/QuakeSignalTV/Supporting/Info.plist",
+    "ios/QuakeSignalVision/Supporting/Info.plist",
+    "ios/QuakeSignalWatch/Supporting/Info.plist",
+    "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements",
+    "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements",
+    "ios/QuakeSignal/App/PlatformCapabilities.swift",
+    "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
+    "ios/QuakeSignal/Features/Settings/SettingsView.swift",
+    "ios/QuakeSignal/Resources/en.lproj/Localizable.strings",
+    "ios/QuakeSignal/Resources/ja.lproj/Localizable.strings",
+    "ios/QuakeSignal/Resources/zh-Hans.lproj/Localizable.strings",
+    "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignal.xcscheme",
+    "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignalTV.xcscheme",
+    "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignalVision.xcscheme",
+    "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignalWatch.xcscheme",
+    "backend/cloudflare/package.json",
+    "backend/cloudflare/package-lock.json",
+    "backend/cloudflare/scripts/render-staging-config.mjs",
+    "backend/cloudflare/scripts/smoke-test-policy.mjs",
+    "backend/cloudflare/scripts/smoke-test.mjs",
+    "backend/cloudflare/scripts/verify-apns-worker-secrets.mjs",
+    "backend/cloudflare/scripts/verify-production-gates.mjs",
+    "backend/cloudflare/scripts/wait-for-worker-readiness.mjs",
+    "backend/cloudflare/staging/wrangler.staging.template.json",
+  ]) {
+    files[relativePath] = await readFile(join(repositoryRoot, relativePath), "utf8");
+  }
+  for (const relativePath of xcodeCloudReleaseFiles) {
+    files[relativePath] = await readFile(join(repositoryRoot, relativePath), "utf8");
+  }
   for (const [relativePath, contents] of Object.entries(files)) {
     const path = join(root, relativePath);
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, contents, "utf8");
+    if (executableReleaseFiles.has(relativePath)) await chmod(path, 0o755);
   }
   return root;
 }
@@ -269,17 +351,356 @@ test("the checked-in public Release contract is coherent", async () => {
   );
 });
 
-test("a coordinated future build 9 contract passes without hardcoding its version", async (t) => {
+test("fails closed on modified or non-executable Xcode Cloud release hooks", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/ci_scripts/ci_pre_xcodebuild.sh");
+    await writeFile(path, `${await readFile(path, "utf8")}\n# unreviewed bypass\n`, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /Xcode Cloud release hooks must match the reviewed fingerprint/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/ci_scripts/ci_post_xcodebuild.sh");
+    await chmod(path, 0o644);
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /ci_post_xcodebuild\.sh must be executable/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/ci_scripts/xcode-cloud-release-guard.py");
+    await chmod(path, 0o644);
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /xcode-cloud-release-guard\.py must be executable/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/ci_scripts/verify-signed-apple-artifacts.sh");
+    const contents = await readFile(path, "utf8");
+    await writeFile(path, contents.replace('"$codesign_tool" --verify --deep --strict', "true # codesign bypass"), "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /Xcode Cloud release hooks must match the reviewed fingerprint/i,
+    );
+  });
+});
+
+test("Xcode Cloud hooks isolate inherited shell, PATH, and Python imports and reject extra resources", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const ciScripts = join(root, "ios/ci_scripts");
+    await writeFile(join(ciScripts, "json.py"), "import os\nos._exit(73)\n", "utf8");
+    const bashEnvironment = join(root, "untrusted-bash-env.sh");
+    await writeFile(bashEnvironment, "exit 74\n", "utf8");
+    const untrustedBin = join(root, "untrusted-bin");
+    await mkdir(untrustedBin);
+    for (const name of ["dirname", "python3", "git"]) {
+      const tool = join(untrustedBin, name);
+      await writeFile(tool, "#!/bin/sh\nexit 75\n", "utf8");
+      await chmod(tool, 0o755);
+    }
+
+    const output = execFileSync(join(ciScripts, "ci_pre_xcodebuild.sh"), [], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        BASH_ENV: bashEnvironment,
+        CI_XCODEBUILD_ACTION: "test",
+        CI_WORKFLOW: "Ordinary CI",
+        DEVELOPER_DIR: join(root, "untrusted-developer-dir"),
+        PATH: untrustedBin,
+        PYTHONPATH: ciScripts,
+        SDKROOT: join(root, "untrusted-sdk"),
+        TOOLCHAINS: "untrusted-toolchain",
+      },
+    });
+    assert.match(output, /No protected release gate is required for test actions\./);
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /ios\/ci_scripts inventory must be exactly the reviewed set/i,
+    );
+  });
+});
+
+test("fails closed when a release-critical Worker helper drifts", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "backend/cloudflare/scripts/wait-for-worker-readiness.mjs");
+    await writeFile(path, `${await readFile(path, "utf8")}\n// unreviewed readiness bypass\n`, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /release-critical Worker helpers must match the reviewed fingerprint/i,
+    );
+  });
+  for (const relativePath of [
+    "backend/cloudflare/scripts/render-staging-config.mjs",
+    "backend/cloudflare/staging/wrangler.staging.template.json",
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, relativePath);
+      await writeFile(path, `${await readFile(path, "utf8")}\n`, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /release-critical Worker helpers must match the reviewed fingerprint/i,
+      );
+    });
+  }
+});
+
+test("fails closed when checked-in Release entitlements gain a capability", async (t) => {
+  for (const relativePath of [
+    "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements",
+    "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements",
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, relativePath);
+      const source = await readFile(path, "utf8");
+      const injected = source.includes("</dict>")
+        ? source.replace("</dict>", "\t<key>com.apple.developer.associated-domains</key>\n\t<string>applinks:attacker.invalid</string>\n</dict>")
+        : source.replace("<dict/>", "<dict>\n\t<key>com.apple.developer.associated-domains</key>\n\t<string>applinks:attacker.invalid</string>\n</dict>");
+      assert.notEqual(injected, source);
+      await writeFile(
+        path,
+        injected,
+        "utf8",
+      );
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /effective entitlements must contain exactly/i,
+      );
+    });
+  }
+});
+
+test("fails closed when foreground-only Vision capability or localized disclosure drifts", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignal/App/PlatformCapabilities.swift");
+    const source = await readFile(path, "utf8");
+    await writeFile(
+      path,
+      source.replace("#elseif os(visionOS)\n        false", "#elseif os(visionOS)\n        true"),
+      "utf8",
+    );
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /foreground-only Apple platform policy must match the reviewed fingerprint/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignal/Resources/en.lproj/Localizable.strings");
+    const source = await readFile(path, "utf8");
+    await writeFile(
+      path,
+      source.replace('"platform.alertRegistration.foregroundOnly" = "Foreground monitoring only";', '"platform.alertRegistration.foregroundOnly" = "Foreground monitoring on Mac";'),
+      "utf8",
+    );
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /foreground-only Apple platform policy must match the reviewed fingerprint/i,
+    );
+  });
+});
+
+test("fails closed on executable Xcode graph or shared-scheme injection", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/project.yml");
+    const source = await readFile(path, "utf8");
+    await writeFile(
+      path,
+      source.replace(
+        "        Release:\n          CODE_SIGN_IDENTITY: Apple Distribution\n",
+        "        Release:\n          SWIFT_EXEC: /tmp/unreviewed-compiler-wrapper\n          CODE_SIGN_IDENTITY: Apple Distribution\n",
+      ),
+      "utf8",
+    );
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /Xcode Cloud guard XCODE_SOURCE_GRAPH_FINGERPRINT/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignal.xcodeproj/project.pbxproj");
+    await writeFile(path, `${await readFile(path, "utf8")}\n/* PBXShellScriptBuildPhase */\n`, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /forbidden executable surface PBXShellScriptBuildPhase/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignal.xcscheme");
+    await writeFile(path, `${await readFile(path, "utf8")}\n<!-- unreviewed scheme action -->\n`, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /shared archive schemes must match the reviewed fingerprint/i,
+    );
+  });
+});
+
+test("XML comments cannot impersonate the required bundle-version key", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignal/Supporting/Info.plist");
+    const source = await readFile(path, "utf8");
+    const commented = source.replace(
+      "<key>CFBundleVersion</key>\n\t<string>$(CURRENT_PROJECT_VERSION)</string>",
+      "<!-- <key>CFBundleVersion</key>\n\t<string>$(CURRENT_PROJECT_VERSION)</string> -->",
+    );
+    assert.notEqual(commented, source);
+    await writeFile(
+      path,
+      commented,
+      "utf8",
+    );
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /Info\.plist CFBundleVersion must appear exactly once \(found 0\)/i,
+    );
+  });
+});
+
+test("foreground-only platform plists cannot acquire notification relay configuration", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignalVision/Supporting/Info.plist");
+    const source = await readFile(path, "utf8");
+    await writeFile(
+      path,
+      source.replace(
+        "</dict>",
+        "\t<key>QUAKESIGNAL_API_BASE_URL</key>\n\t<string>$(QUAKESIGNAL_API_BASE_URL)</string>\n</dict>",
+      ),
+      "utf8",
+    );
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /foreground-only and must not embed Worker or App Attest configuration/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignalVision/Supporting/Info.plist");
+    const source = await readFile(path, "utf8");
+    await writeFile(
+      path,
+      source.replace(
+        "show distance and nearby earthquake context while the app is open",
+        "alert you about activity near you",
+      ),
+      "utf8",
+    );
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /must disclose foreground-only location use exactly/i,
+    );
+  });
+});
+
+test("fails closed on npm release hooks or repository npm control files", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "backend/cloudflare/package.json");
+    const manifest = JSON.parse(await readFile(path, "utf8"));
+    manifest.scripts["preverify:production-gates"] = "./node_modules/.bin/wrangler deploy --config attacker.jsonc";
+    await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /npm lifecycle hook preverify:production-gates/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "backend/cloudflare/package.json");
+    const manifest = JSON.parse(await readFile(path, "utf8"));
+    manifest.scripts.postprepare = "./node_modules/.bin/wrangler deploy --config attacker.jsonc";
+    await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /npm lifecycle hook postprepare/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    await writeFile(join(root, "backend/cloudflare/.npmrc"), "script-shell=./attacker.sh\n", "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /backend\/cloudflare\/\.npmrc is forbidden/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    await writeFile(join(root, "backend/cloudflare/npm-shrinkwrap.json"), "{}\n", "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /npm-shrinkwrap\.json is forbidden/i,
+    );
+  });
+});
+
+test("fails closed on Worker dependency graph deletion, drift, or substitution", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    await rm(join(root, "backend/cloudflare/package-lock.json"));
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /package-lock\.json must exist as a regular checked-in file/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "backend/cloudflare/package-lock.json");
+    await writeFile(path, `${await readFile(path, "utf8")}\n`, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /Worker npm dependency graph must match the reviewed fingerprint/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "backend/cloudflare/package.json");
+    const manifest = JSON.parse(await readFile(path, "utf8"));
+    manifest.devDependencies.wrangler = "4.120.0";
+    await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /Worker npm dependency graph must match the reviewed fingerprint/i,
+    );
+  });
+  for (const key of ["workspaces", "overrides"]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, "backend/cloudflare/package.json");
+      const manifest = JSON.parse(await readFile(path, "utf8"));
+      manifest[key] = key === "workspaces" ? ["packages/*"] : { wrangler: "4.120.0" };
+      await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        new RegExp(key, "i"),
+      );
+    });
+  }
+});
+
+test("a future build is rejected until the Xcode Cloud guard is coordinated", async (t) => {
   await withFixture(t, {
     buildNumber: "9",
     allowedVersions: "1,2,3,4,5,6,7,8,9",
     workflowDefault: "9",
   }, async (root) => {
-    const verified = await verifyIOSReleaseContract({ root });
-    assert.equal(verified.buildNumber, "9");
-    assert.deepEqual(verified.allowedBundleVersions, ["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
-    assert.equal(verified.generatedProjectEntries, 3);
-    assert.match(verified.appAttestPolicyFingerprint, /^sha256:[A-Za-z0-9_-]{43}$/);
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /Xcode Cloud guard BUILD_NUMBER must match 9 \(received 8\)/i,
+    );
+  });
+});
+
+test("fails closed when App Store export options drift", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/AppStore/ExportOptions.plist");
+    const source = await readFile(path, "utf8");
+    await writeFile(path, source.replace("app-store-connect", "ad-hoc"), "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /App Store export options\.method/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/AppStore/ExportOptions.plist");
+    const source = await readFile(path, "utf8");
+    await writeFile(path, source.replace("</dict>", "<key>uploadSymbols</key><string>true</string></dict>"), "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /App Store export options must contain exactly/i,
+    );
   });
 });
 
@@ -305,17 +726,24 @@ test("fails closed on source/version drift", async (t) => {
     allowedVersions: "1,2,3,4,5",
     workflowDefault: "6",
   }, /must include ios\/project\.yml build 6/i);
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignal/Supporting/Info.plist");
+    const source = await readFile(path, "utf8");
+    await writeFile(
+      path,
+      source.replace("$(CURRENT_PROJECT_VERSION)", "6"),
+      "utf8",
+    );
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /Info\.plist CFBundleVersion interpolation/i,
+    );
+  });
   await expectFailure(t, {
-    buildNumber: "6",
-    allowedVersions: "1,2,3,4,5,6",
-    workflowDefault: "6",
-    infoBundleVersion: "6",
-  }, /Info\.plist CFBundleVersion interpolation/i);
-  await expectFailure(t, {
-    buildNumber: "6",
-    allowedVersions: "1,2,3,4,5,6",
-    workflowDefault: "5",
-  }, /build_number default 5 does not match ios\/project\.yml 6/i);
+    buildNumber: "8",
+    allowedVersions: "1,2,3,4,5,6,7,8",
+    workflowDefault: "7",
+  }, /build_number default 7 does not match ios\/project\.yml 8/i);
 });
 
 test("fails closed when the remote smoke changes origin or executable command", async (t) => {
@@ -472,6 +900,112 @@ test("fails closed when a sibling job can bypass the protected release lane", as
   });
 });
 
+test("fails closed on new or modified sibling workflow release surfaces", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, ".github/workflows/unreviewed-release.yml");
+    await writeFile(path, `name: Unreviewed release
+on: workflow_dispatch
+jobs:
+  upload:
+    runs-on: macos-latest
+    environment: ios-app-store-release
+    steps:
+      - run: xcrun altool --upload-package /tmp/unreviewed.ipa
+`, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /workflow inventory must be exactly the reviewed set/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, ".github/workflows/desktop-build.yml");
+    const source = await readFile(path, "utf8");
+    await writeFile(
+      path,
+      `${source}
+  constructed-release-bypass:
+    runs-on: ubuntu-latest
+    environment: \${{ format('{0}-{1}', 'ios-app-store', 'release') }}
+    env:
+      ALL_SECRETS: \${{ toJSON(secrets) }}
+    steps:
+      - run: true
+`,
+      "utf8",
+    );
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /complete workflow directory must match the reviewed parsed-content fingerprint/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, ".github/workflows/desktop-build.yml");
+    const source = await readFile(path, "utf8");
+    await writeFile(path, source.replace("permissions:\n  contents: read\n", "permissions: write-all\n"), "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /scalar write-all\/read-all permissions are forbidden/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, ".github/workflows/cloudflare-staging.yml");
+    const source = await readFile(path, "utf8");
+    const from = "          CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}\n";
+    assert.ok(source.includes(from));
+    await writeFile(path, source.replace(from, "          CLOUDFLARE_STAGING_WORKER_NAME: quakesignal-api\n"), "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /credential-bearing workflows must match the reviewed fingerprint|complete workflow directory/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, ".github/workflows/cloudflare-staging.yml");
+    const source = await readFile(path, "utf8");
+    assert.ok(source.includes("        run: npm ci --ignore-scripts\n"));
+    await writeFile(path, source.replace("        run: npm ci --ignore-scripts\n", "        run: npm ci\n"), "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /credential-bearing workflows must match the reviewed fingerprint|complete workflow directory/i,
+    );
+  });
+});
+
+test("fails closed on workflow_call scalars and YAML on/true trigger collisions", async (t) => {
+  const dispatchBlock = `on:
+  workflow_dispatch:
+    inputs:
+      apply_incident_disposition:
+        description: Resolve only the reviewed, expired APNs-environment incident records
+        required: false
+        default: false
+        type: boolean
+`;
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, ".github/workflows/apns-incident-disposition.yml");
+    const source = await readFile(path, "utf8");
+    assert.ok(source.includes(dispatchBlock));
+    await writeFile(path, source.replace(dispatchBlock, "on: workflow_call\n"), "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /workflow_call release bypass/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, ".github/workflows/apns-incident-disposition.yml");
+    const source = await readFile(path, "utf8");
+    assert.ok(source.includes(dispatchBlock));
+    const collision = `on:
+  push:
+    branches: [main]
+${dispatchBlock.replace(/^on:/, "true:")}`;
+    await writeFile(path, source.replace(dispatchBlock, collision), "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /raw path-and-source fingerprint/i,
+    );
+  });
+});
+
 test("fails closed when a production deploy can race the TestFlight policy proof", async (t) => {
   await withFixture(t, {}, async (root) => {
     const path = join(root, ".github/workflows/cloudflare.yml");
@@ -486,6 +1020,28 @@ test("fails closed when a production deploy can race the TestFlight policy proof
     await assert.rejects(
       verifyIOSReleaseContract({ root }),
       /Cloudflare deploy-production job header\.concurrency/i,
+    );
+  });
+});
+
+test("fails closed when production post-deploy smoke omits the exact reviewed App Attest policy", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, ".github/workflows/cloudflare.yml");
+    const source = await readFile(path, "utf8");
+    const exactSmoke = [
+      "          node scripts/smoke-test.mjs \"$WORKER_URL\" \\",
+      "            --expected-app-attest-policy-fingerprint \"${{ steps.release-contract.outputs.app_attest_policy_fingerprint }}\" \\",
+      "            --required-app-attest-bundle-version \"${{ steps.release-contract.outputs.build_number }}\"",
+    ].join("\n");
+    assert.ok(source.includes(exactSmoke));
+    await writeFile(
+      path,
+      source.replace(exactSmoke, "          node scripts/smoke-test.mjs \"$WORKER_URL\""),
+      "utf8",
+    );
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /Cloudflare workflow jobs must match the reviewed production-release graph fingerprint/i,
     );
   });
 });
@@ -543,6 +1099,24 @@ test("fails closed when a JSONC comment impersonates the Worker allow-list", asy
   });
 });
 
+test("fails closed when the frozen production Worker deployment topology drifts", async (t) => {
+  for (const [from, to] of [
+    ['"main": "src/index.ts"', '"main": "src/unreviewed.ts"'],
+    ['"ALERT_DELIVERY_QUEUE_NAME": "quakesignal-alert-delivery"', '"ALERT_DELIVERY_QUEUE_NAME": "unreviewed-alert-delivery"'],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, "backend/cloudflare/wrangler.jsonc");
+      const source = await readFile(path, "utf8");
+      assert.ok(source.includes(from));
+      await writeFile(path, source.replace(from, to), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /production Worker deployment configuration must match the reviewed fingerprint/i,
+      );
+    });
+  }
+});
+
 test("fails closed when the reviewed App Attest APNs route is missing, changed, expanded, or wrong", async (t) => {
   const watchRoute = {
     appIdentity: "5TT564H883.com.quakesignal.app.watchkitapp",
@@ -571,9 +1145,15 @@ test("fails closed when the reviewed App Attest APNs route is missing, changed, 
   for (const mutate of mutations) {
     await withFixture(t, {}, async (root) => {
       const path = join(root, "backend/cloudflare/wrangler.jsonc");
-      const config = JSON.parse(await readFile(path, "utf8"));
-      mutate(config.vars);
-      await writeFile(path, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+      const source = await readFile(path, "utf8");
+      const routeLine = '    "APP_ATTEST_APNS_ROUTES": "[{\\"appIdentity\\":\\"5TT564H883.com.quakesignal.app\\",\\"apnsTopic\\":\\"com.quakesignal.app\\",\\"platform\\":\\"ios\\"}]",\n';
+      assert.ok(source.includes(routeLine));
+      const variables = { APP_ATTEST_APNS_ROUTES: reviewedAppIdentityRoutesJSON };
+      mutate(variables);
+      const replacement = variables.APP_ATTEST_APNS_ROUTES === undefined
+        ? ""
+        : `    "APP_ATTEST_APNS_ROUTES": ${JSON.stringify(variables.APP_ATTEST_APNS_ROUTES)},\n`;
+      await writeFile(path, source.replace(routeLine, replacement), "utf8");
       await assert.rejects(
         verifyIOSReleaseContract({ root }),
         /APP_ATTEST_APNS_ROUTES/i,

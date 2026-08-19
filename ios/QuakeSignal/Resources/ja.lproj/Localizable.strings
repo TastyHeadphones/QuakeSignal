@@ -327,8 +327,8 @@
 "guide.familyCheckIn.phone" = "電話番号";
 
 /* Apple プラットフォーム */
-"platform.alertRegistration.foregroundOnly" = "Macではフォアグラウンド監視のみ";
-"platform.alertRegistration.foregroundOnly.detail" = "安全なバックグラウンド通知登録にはApple App Attestが必要ですが、Macでは利用できません。震息を開いている間は、地震情報と選択した警報音を利用できます。";
+"platform.alertRegistration.foregroundOnly" = "フォアグラウンド監視のみ";
+"platform.alertRegistration.foregroundOnly.detail" = "このAppleプラットフォームではバックグラウンドの地震通知を利用できません。震息を開いている間は、リアルタイムの地震情報と選択した警報音を利用できます。";
 "platform.alertRegistration.unavailable.error" = "このプラットフォームでは安全なバックグラウンド通知登録を利用できません。";
 "platform.foreground.badge" = "フォアグラウンドのみ";
 "platform.foreground.refreshUnavailable" = "地震情報を一時的に取得できません。";

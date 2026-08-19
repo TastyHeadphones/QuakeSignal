@@ -13,6 +13,8 @@ on:
       - ".github/scripts/verify-ios-build-split.sh"
       - ".github/scripts/verify-ios-release-contract.mjs"
       - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - ".github/scripts/test_xcode_cloud_release_guard.py"
+      - ".github/scripts/verify-signed-apple-artifacts.test.sh"
       - "backend/cloudflare/wrangler.jsonc"
       - "backend/cloudflare/scripts/smoke-test.mjs"
       - "backend/cloudflare/scripts/smoke-test-policy.mjs"
@@ -27,6 +29,8 @@ on:
       - ".github/scripts/verify-ios-build-split.sh"
       - ".github/scripts/verify-ios-release-contract.mjs"
       - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - ".github/scripts/test_xcode_cloud_release_guard.py"
+      - ".github/scripts/verify-signed-apple-artifacts.test.sh"
       - "backend/cloudflare/wrangler.jsonc"
       - "backend/cloudflare/scripts/smoke-test.mjs"
       - "backend/cloudflare/scripts/smoke-test-policy.mjs"
@@ -77,6 +81,17 @@ jobs:
 
       - name: Verify iOS and Worker release contract
         run: node .github/scripts/verify-ios-release-contract.mjs
+
+      - name: Test Xcode Cloud release guards and signed artifact verifier
+        run: |
+          set -euo pipefail
+          bash -n ios/ci_scripts/ci_post_clone.sh \
+            ios/ci_scripts/ci_pre_xcodebuild.sh \
+            ios/ci_scripts/ci_post_xcodebuild.sh \
+            ios/ci_scripts/verify-signed-apple-artifacts.sh \
+            .github/scripts/verify-signed-apple-artifacts.test.sh
+          PYTHONDONTWRITEBYTECODE=1 python3 .github/scripts/test_xcode_cloud_release_guard.py
+          .github/scripts/verify-signed-apple-artifacts.test.sh
 
       - name: Install checksum-pinned XcodeGen
         run: |
@@ -529,186 +544,16 @@ jobs:
           WATCH_PROFILE_NAME: ${{ vars.WATCHOS_APP_STORE_PROFILE_NAME }}
         run: |
           set -euo pipefail
-          expected_team="5TT564H883"
-          expected_bundle_identifier="com.quakesignal.app"
-          expected_application_identifier="$expected_team.$expected_bundle_identifier"
-          archive="$RUNNER_TEMP/QuakeSignal.xcarchive"
-          verification_dir="$(mktemp -d "$RUNNER_TEMP/quakesignal-ios-signing.XXXXXX")"
-          trap 'rm -rf "$verification_dir"' EXIT
-
-          assert_plist_value() {
-            local plist="$1"
-            local key="$2"
-            local expected="$3"
-            local label="$4"
-            local actual
-
-            if ! actual="$(/usr/libexec/PlistBuddy -c "Print :$key" "$plist" 2>/dev/null)"; then
-              echo "::error::$label is missing required key $key"
-              return 1
-            fi
-            if [ "$actual" != "$expected" ]; then
-              echo "::error::$label has an unexpected value for $key"
-              return 1
-            fi
-          }
-
-          assert_plist_array_contains() {
-            local plist="$1"
-            local key="$2"
-            local expected="$3"
-            local label="$4"
-            local index=0
-            local actual
-
-            while actual="$(/usr/libexec/PlistBuddy -c "Print :$key:$index" "$plist" 2>/dev/null)"; do
-              if [ "$actual" = "$expected" ]; then
-                return 0
-              fi
-              index=$((index + 1))
-            done
-
-            echo "::error::$label does not include required value $expected for $key"
-            return 1
-          }
-
-          verify_ios_app() {
-            local label="$1"
-            local app="$2"
-            local entitlements="$verification_dir/$label-entitlements.plist"
-            local profile="$app/embedded.mobileprovision"
-            local profile_plist="$verification_dir/$label-profile.plist"
-
-            if [ ! -d "$app" ]; then
-              echo "::error::$label app bundle is missing"
-              return 1
-            fi
-            if [ ! -f "$app/Info.plist" ] || [ ! -f "$profile" ]; then
-              echo "::error::$label is missing Info.plist or embedded.mobileprovision"
-              return 1
-            fi
-
-            codesign --verify --deep --strict --verbose=2 "$app"
-            if ! codesign -dvv "$app" 2>&1 | grep -Fqx "TeamIdentifier=$expected_team"; then
-              echo "::error::$label is not signed for the expected Apple team"
-              return 1
-            fi
-            if ! codesign -dvv "$app" 2>&1 | grep -Fq 'Authority=Apple Distribution'; then
-              echo "::error::$label is not signed with an Apple Distribution identity"
-              return 1
-            fi
-
-            plutil -lint "$app/Info.plist" >/dev/null
-            assert_plist_value "$app/Info.plist" "CFBundleIdentifier" "$expected_bundle_identifier" "$label Info.plist"
-            assert_plist_value "$app/Info.plist" "CFBundleVersion" "$BUILD_NUMBER" "$label Info.plist"
-
-            codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
-            plutil -lint "$entitlements" >/dev/null
-            assert_plist_value "$entitlements" "application-identifier" "$expected_application_identifier" "$label signed entitlements"
-            assert_plist_value "$entitlements" "com.apple.developer.team-identifier" "$expected_team" "$label signed entitlements"
-            assert_plist_value "$entitlements" "aps-environment" "production" "$label signed entitlements"
-            assert_plist_value "$entitlements" "com.apple.developer.devicecheck.appattest-environment" "production" "$label signed entitlements"
-            assert_plist_value "$entitlements" "com.apple.developer.usernotifications.time-sensitive" "true" "$label signed entitlements"
-
-            security cms -D -i "$profile" > "$profile_plist"
-            plutil -lint "$profile_plist" >/dev/null
-            assert_plist_value "$profile_plist" "Name" "$IOS_PROFILE_NAME" "$label provisioning profile"
-            assert_plist_value "$profile_plist" "ApplicationIdentifierPrefix:0" "$expected_team" "$label provisioning profile"
-            assert_plist_value "$profile_plist" "TeamIdentifier:0" "$expected_team" "$label provisioning profile"
-            assert_plist_value "$profile_plist" "Entitlements:application-identifier" "$expected_application_identifier" "$label provisioning profile"
-            assert_plist_value "$profile_plist" "Entitlements:com.apple.developer.team-identifier" "$expected_team" "$label provisioning profile"
-            assert_plist_value "$profile_plist" "Entitlements:aps-environment" "production" "$label provisioning profile"
-            # Apple profiles authorize both App Attest environments as an array;
-            # the signed application entitlement above is still required to be production.
-            assert_plist_array_contains "$profile_plist" "Entitlements:com.apple.developer.devicecheck.appattest-environment" "production" "$label provisioning profile"
-            assert_plist_value "$profile_plist" "Entitlements:com.apple.developer.usernotifications.time-sensitive" "true" "$label provisioning profile"
-          }
-
-          verify_watch_app() {
-            local label="$1"
-            local app="$2"
-            local entitlements="$verification_dir/$label-entitlements.plist"
-            local profile="$app/embedded.mobileprovision"
-            local profile_plist="$verification_dir/$label-profile.plist"
-            local watch_bundle_identifier="com.quakesignal.app.watchkitapp"
-            local watch_application_identifier="$expected_team.$watch_bundle_identifier"
-
-            if [ ! -d "$app" ]; then
-              echo "::error::$label Watch app bundle is missing"
-              return 1
-            fi
-            if [ ! -f "$app/Info.plist" ] || [ ! -f "$profile" ]; then
-              echo "::error::$label is missing Info.plist or embedded.mobileprovision"
-              return 1
-            fi
-
-            codesign --verify --deep --strict --verbose=2 "$app"
-            if ! codesign -dvv "$app" 2>&1 | grep -Fqx "TeamIdentifier=$expected_team"; then
-              echo "::error::$label is not signed for the expected Apple team"
-              return 1
-            fi
-            if ! codesign -dvv "$app" 2>&1 | grep -Fq 'Authority=Apple Distribution'; then
-              echo "::error::$label is not signed with an Apple Distribution identity"
-              return 1
-            fi
-
-            plutil -lint "$app/Info.plist" >/dev/null
-            assert_plist_value "$app/Info.plist" "CFBundleIdentifier" "$watch_bundle_identifier" "$label Info.plist"
-            assert_plist_value "$app/Info.plist" "CFBundleVersion" "$BUILD_NUMBER" "$label Info.plist"
-            assert_plist_value "$app/Info.plist" "WKCompanionAppBundleIdentifier" "$expected_bundle_identifier" "$label Info.plist"
-
-            codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
-            plutil -lint "$entitlements" >/dev/null
-            assert_plist_value "$entitlements" "application-identifier" "$watch_application_identifier" "$label signed entitlements"
-            assert_plist_value "$entitlements" "com.apple.developer.team-identifier" "$expected_team" "$label signed entitlements"
-            for forbidden in aps-environment com.apple.developer.devicecheck.appattest-environment com.apple.developer.usernotifications.time-sensitive; do
-              if /usr/libexec/PlistBuddy -c "Print :$forbidden" "$entitlements" >/dev/null 2>&1; then
-                echo "::error::$label unexpectedly contains foreground-only capability $forbidden"
-                return 1
-              fi
-            done
-
-            security cms -D -i "$profile" > "$profile_plist"
-            plutil -lint "$profile_plist" >/dev/null
-            assert_plist_value "$profile_plist" "Name" "$WATCH_PROFILE_NAME" "$label provisioning profile"
-            assert_plist_value "$profile_plist" "ApplicationIdentifierPrefix:0" "$expected_team" "$label provisioning profile"
-            assert_plist_value "$profile_plist" "TeamIdentifier:0" "$expected_team" "$label provisioning profile"
-            assert_plist_value "$profile_plist" "Entitlements:application-identifier" "$watch_application_identifier" "$label provisioning profile"
-            assert_plist_value "$profile_plist" "Entitlements:com.apple.developer.team-identifier" "$expected_team" "$label provisioning profile"
-            assert_plist_array_contains "$profile_plist" "Platform" "watchOS" "$label provisioning profile"
-          }
-
-          shopt -s nullglob
-          archive_apps=("$archive"/Products/Applications/*.app)
-          if [ "${#archive_apps[@]}" -ne 1 ]; then
-            echo "::error::Expected exactly one app in the signed archive"
-            exit 1
-          fi
-
-          ipa_path="${IPA_PATH:?IPA_PATH is not set after export}"
-          if [ ! -f "$ipa_path" ]; then
-            echo "::error::Exported IPA is missing"
-            exit 1
-          fi
-          ipa_root="$verification_dir/ipa"
-          mkdir -p "$ipa_root"
-          ditto -x -k "$ipa_path" "$ipa_root"
-          ipa_apps=("$ipa_root"/Payload/*.app)
-          if [ "${#ipa_apps[@]}" -ne 1 ]; then
-            echo "::error::Expected exactly one app in the exported IPA"
-            exit 1
-          fi
-
-          verify_ios_app "archive" "${archive_apps[0]}"
-          verify_ios_app "ipa" "${ipa_apps[0]}"
-          archive_watch_apps=("${archive_apps[0]}"/Watch/*.app)
-          ipa_watch_apps=("${ipa_apps[0]}"/Watch/*.app)
-          if [ "${#archive_watch_apps[@]}" -ne 1 ] || [ "${#ipa_watch_apps[@]}" -ne 1 ]; then
-            echo "::error::Expected exactly one embedded Watch app in both archive and IPA"
-            exit 1
-          fi
-          verify_watch_app "archive-watch" "${archive_watch_apps[0]}"
-          verify_watch_app "ipa-watch" "${ipa_watch_apps[0]}"
+          ios/ci_scripts/verify-signed-apple-artifacts.sh \
+            --platform ios \
+            --archive "$RUNNER_TEMP/QuakeSignal.xcarchive" \
+            --exported "${IPA_PATH:?IPA_PATH is not set after export}" \
+            --build-number "$BUILD_NUMBER" \
+            --marketing-version 1.1 \
+            --team-id 5TT564H883 \
+            --archive-signing strict-distribution \
+            --host-profile-name "$IOS_PROFILE_NAME" \
+            --watch-profile-name "$WATCH_PROFILE_NAME"
 
       - name: Upload build to TestFlight
         if: ${{ inputs.upload_to_testflight && !inputs.archive_only }}

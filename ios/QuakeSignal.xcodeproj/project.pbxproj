@@ -914,8 +914,6 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
 				PROVISIONING_PROFILE_SPECIFIER = "$(QUAKESIGNAL_VISION_PROFILE_NAME)";
-				QUAKESIGNAL_API_BASE_URL = "https://quakesignal-api.hopeso.workers.dev";
-				QUAKESIGNAL_APP_ATTEST_MODE = production;
 				SDKROOT = xros;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) QUAKESIGNAL_INTERNAL_QA";
 				TARGETED_DEVICE_FAMILY = 7;
@@ -1227,8 +1225,6 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
 				PROVISIONING_PROFILE_SPECIFIER = "$(QUAKESIGNAL_VISION_PROFILE_NAME)";
-				QUAKESIGNAL_API_BASE_URL = "https://quakesignal-api.hopeso.workers.dev";
-				QUAKESIGNAL_APP_ATTEST_MODE = production;
 				SDKROOT = xros;
 				TARGETED_DEVICE_FAMILY = 7;
 				XROS_DEPLOYMENT_TARGET = 1.0;
@@ -1327,7 +1323,6 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.quakesignal.app;
-				QUAKESIGNAL_APP_ATTEST_MODE = development;
 				SDKROOT = xros;
 				TARGETED_DEVICE_FAMILY = 7;
 				XROS_DEPLOYMENT_TARGET = 1.0;

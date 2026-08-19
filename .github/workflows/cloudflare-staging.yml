@@ -12,9 +12,18 @@ on:
       - ".github/workflows/ios.yml"
       - ".github/scripts/verify-ios-release-contract.mjs"
       - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - ".github/scripts/test_xcode_cloud_release_guard.py"
+      - "ios/ci_scripts/**"
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
       - "ios/QuakeSignal/Supporting/Info.plist"
+      - "ios/QuakeSignalTV/Supporting/Info.plist"
+      - "ios/QuakeSignalVision/Supporting/Info.plist"
+      - "ios/QuakeSignalWatch/Supporting/Info.plist"
+      - "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements"
+      - "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements"
+      - "ios/AppStore/ExportOptions.plist"
   pull_request:
     paths:
       - "backend/cloudflare/**"
@@ -23,9 +32,18 @@ on:
       - ".github/workflows/ios.yml"
       - ".github/scripts/verify-ios-release-contract.mjs"
       - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - ".github/scripts/test_xcode_cloud_release_guard.py"
+      - "ios/ci_scripts/**"
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
       - "ios/QuakeSignal/Supporting/Info.plist"
+      - "ios/QuakeSignalTV/Supporting/Info.plist"
+      - "ios/QuakeSignalVision/Supporting/Info.plist"
+      - "ios/QuakeSignalWatch/Supporting/Info.plist"
+      - "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements"
+      - "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements"
+      - "ios/AppStore/ExportOptions.plist"
   workflow_dispatch:
     inputs:
       deploy_staging:
@@ -110,11 +128,17 @@ jobs:
           cache: npm
           cache-dependency-path: backend/cloudflare/package-lock.json
 
-      # Do not expose the Cloudflare deployment token while third-party npm
-      # lifecycle scripts run. The immutable lockfile is installed first.
+      # Install only the raw, reviewed dependency graph. No package lifecycle
+      # hook may run before the protected Cloudflare credentials are exposed.
       - name: Install Worker dependencies
         working-directory: backend/cloudflare
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Reverify immutable release source after dependency install
+        run: |
+          set -euo pipefail
+          node .github/scripts/verify-ios-release-contract.mjs
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
 
       - name: Render isolated staging Worker configuration
         working-directory: backend/cloudflare
@@ -129,7 +153,7 @@ jobs:
         run: |
           set -euo pipefail
           config="$RUNNER_TEMP/quakesignal-staging-wrangler.json"
-          npm run render:staging-config -- --output "$config"
+          node scripts/render-staging-config.mjs --output "$config"
           chmod 600 "$config"
           echo "STAGING_WRANGLER_CONFIG=$config" >> "$GITHUB_ENV"
 
@@ -137,9 +161,7 @@ jobs:
         working-directory: backend/cloudflare
         run: |
           set -euo pipefail
-          # `npx wrangler` preserves --dry-run; do not replace this with the
-          # ambiguous `npm exec wrangler --dry-run` form.
-          npx wrangler deploy --dry-run --config "$STAGING_WRANGLER_CONFIG"
+          ./node_modules/.bin/wrangler deploy --dry-run --config "$STAGING_WRANGLER_CONFIG"
 
       - name: Apply generated staging migrations locally first
         working-directory: backend/cloudflare
@@ -148,7 +170,7 @@ jobs:
         run: |
           set -euo pipefail
           state_dir="$RUNNER_TEMP/quakesignal-staging-d1-state"
-          npx wrangler d1 migrations apply "$CLOUDFLARE_STAGING_D1_DATABASE_NAME" --local --persist-to "$state_dir" --config "$STAGING_WRANGLER_CONFIG"
+          ./node_modules/.bin/wrangler d1 migrations apply "$CLOUDFLARE_STAGING_D1_DATABASE_NAME" --local --persist-to "$state_dir" --config "$STAGING_WRANGLER_CONFIG"
 
       - name: Apply isolated staging D1 migrations
         working-directory: backend/cloudflare
@@ -160,7 +182,7 @@ jobs:
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
-          npx wrangler d1 migrations apply "$CLOUDFLARE_STAGING_D1_DATABASE_NAME" --remote --config "$STAGING_WRANGLER_CONFIG"
+          ./node_modules/.bin/wrangler d1 migrations apply "$CLOUDFLARE_STAGING_D1_DATABASE_NAME" --remote --config "$STAGING_WRANGLER_CONFIG"
 
       - name: Deploy isolated staging Worker
         working-directory: backend/cloudflare
@@ -171,7 +193,7 @@ jobs:
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
-          npx wrangler deploy --config "$STAGING_WRANGLER_CONFIG" | tee "$RUNNER_TEMP/quakesignal-staging-deploy.log"
+          ./node_modules/.bin/wrangler deploy --config "$STAGING_WRANGLER_CONFIG" | tee "$RUNNER_TEMP/quakesignal-staging-deploy.log"
 
       - name: Record the discovered staging endpoint
         shell: bash
@@ -226,9 +248,9 @@ jobs:
             throw new Error("CLOUDFLARE_STAGING_WORKER_URL must be the bare https://<CLOUDFLARE_STAGING_WORKER_NAME>.<account-subdomain>.workers.dev URL.");
           }
           NODE
-          npm run verify:apns-secrets -- --config "$STAGING_WRANGLER_CONFIG"
+          node scripts/verify-apns-worker-secrets.mjs --config "$STAGING_WRANGLER_CONFIG"
           # Wolfx may reject Worker-origin WebSocket Upgrades. Allow the
           # reviewed 90-second bounded HTTP alternate transport to warm, but
           # require full APNs/upstream readiness before remote smoke tests.
-          npm run wait:worker-readiness -- "$STAGING_WORKER_URL"
-          npm run test:remote -- "$STAGING_WORKER_URL"
+          node scripts/wait-for-worker-readiness.mjs "$STAGING_WORKER_URL"
+          node scripts/smoke-test.mjs "$STAGING_WORKER_URL"
