@@ -5,13 +5,14 @@ struct TVDashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var store = ForegroundQuakeStore()
     @State private var manualRefreshLifecycle = ForegroundManualRefreshLifecycle()
-    @FocusState private var focusedEventID: EEWEvent.ID?
 
     var body: some View {
         NavigationStack {
             if ScreenshotAutomation.selectedFrame == .tvEventDetail,
                let event = store.headlineEvent {
                 TVEventDetailView(event: event)
+            } else if ScreenshotAutomation.selectedFrame == .tvRecentReports {
+                recentReportsDestination
             } else {
                 dashboard
             }
@@ -31,11 +32,6 @@ struct TVDashboardView: View {
         .onDisappear {
             manualRefreshLifecycle.cancelPendingRefresh()
         }
-        .task {
-            guard ScreenshotAutomation.selectedFrame == .tvRecentReports else { return }
-            try? await Task.sleep(for: .milliseconds(500))
-            focusedEventID = store.events.first?.id
-        }
     }
 
     private var dashboard: some View {
@@ -48,16 +44,33 @@ struct TVDashboardView: View {
             .ignoresSafeArea()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 34) {
-                    header
-                    headline
-                    recentEvents
-                }
-                .frame(maxWidth: 1_420, alignment: .leading)
-                .padding(.horizontal, 72)
-                .padding(.vertical, 54)
+                dashboardContent
+                    .padding(.horizontal, 72)
+                    .padding(.vertical, 54)
             }
         }
+    }
+
+    private var dashboardContent: some View {
+        VStack(alignment: .leading, spacing: 34) {
+            header
+            headline
+            recentEvents
+        }
+        .frame(maxWidth: 1_420, alignment: .leading)
+    }
+
+    private var recentReportsDestination: some View {
+        TVRecentReportsView(
+            events: Array(store.events.prefix(12)),
+            isLoading: store.isLoading,
+            statusMessage: store.statusMessage,
+            lastUpdated: store.lastUpdated,
+            isShowingHistoricalFixture: store.isShowingHistoricalFixture,
+            onRefresh: {
+                manualRefreshLifecycle.requestRefresh(isSceneActive: scenePhase == .active)
+            }
+        )
     }
 
     private var header: some View {
@@ -165,13 +178,23 @@ struct TVDashboardView: View {
     private var recentEvents: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                if store.isShowingHistoricalFixture {
-                    Label("platform.historical.reports", systemImage: "clock.arrow.circlepath")
-                        .font(.title2.bold())
-                } else {
-                    Text("home.section.recent")
-                        .font(.title2.bold())
+                NavigationLink {
+                    recentReportsDestination
+                } label: {
+                    HStack(spacing: 12) {
+                        if store.isShowingHistoricalFixture {
+                            Label("platform.historical.reports", systemImage: "clock.arrow.circlepath")
+                        } else {
+                            Label("home.section.recent", systemImage: "list.bullet")
+                        }
+                        Image(systemName: "chevron.right.circle.fill")
+                            .foregroundStyle(Color("CautionColor"))
+                    }
+                    .font(.title2.bold())
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(.primary)
+
                 Spacer()
                 if let lastUpdated = store.lastUpdated {
                     if store.isShowingHistoricalFixture {
@@ -201,10 +224,195 @@ struct TVDashboardView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.primary)
-                    .focused($focusedEventID, equals: event.id)
                 }
             }
         }
+    }
+}
+
+private struct TVRecentReportsView: View {
+    let events: [EEWEvent]
+    let isLoading: Bool
+    let statusMessage: String?
+    let lastUpdated: Date?
+    let isShowingHistoricalFixture: Bool
+    let onRefresh: () -> Void
+
+    @FocusState private var focusedEventID: EEWEvent.ID?
+    @State private var didAssignInitialFocus = false
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color("GroupedBGColor"), Color("TintBGColor")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 26) {
+                reportsHeader
+
+                if let statusMessage {
+                    Label(statusMessage, systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                        .foregroundStyle(Color("CautionColor"))
+                }
+
+                if events.isEmpty {
+                    emptyState
+                } else {
+                    LazyVGrid(columns: reportColumns, spacing: 20) {
+                        ForEach(events) { event in
+                            NavigationLink {
+                                TVEventDetailView(event: event)
+                            } label: {
+                                TVReportCard(
+                                    event: event,
+                                    isFocused: focusedEventID == event.id
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.primary)
+                            .focused($focusedEventID, equals: event.id)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: 1_420, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.horizontal, 72)
+            .padding(.vertical, 42)
+        }
+        .task(id: events.first?.id) {
+            guard !didAssignInitialFocus,
+                  let firstEventID = events.first?.id else { return }
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            didAssignInitialFocus = true
+            focusedEventID = firstEventID
+        }
+    }
+
+    private var reportColumns: [GridItem] {
+        let columnCount = events.count <= 4 ? 2 : 3
+        return Array(
+            repeating: GridItem(.flexible(), spacing: 20, alignment: .top),
+            count: columnCount
+        )
+    }
+
+    private var reportsHeader: some View {
+        HStack(alignment: .top, spacing: 28) {
+            VStack(alignment: .leading, spacing: 10) {
+                if isShowingHistoricalFixture {
+                    Label("platform.historical.reports", systemImage: "clock.arrow.circlepath")
+                } else {
+                    Label("home.section.recent", systemImage: "list.bullet")
+                }
+                Text("platform.tv.foregroundOnly.detail")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 760, alignment: .leading)
+            }
+            .font(.largeTitle.bold())
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 12) {
+                if let lastUpdated {
+                    if isShowingHistoricalFixture {
+                        Text(lastUpdated.formatted(date: .abbreviated, time: .omitted))
+                    } else {
+                        Text(L(
+                            "home.status.lastUpdated",
+                            lastUpdated.formatted(date: .omitted, time: .shortened)
+                        ))
+                    }
+                }
+
+                Button(action: onRefresh) {
+                    if isLoading {
+                        ProgressView()
+                            .frame(minWidth: 160)
+                    } else {
+                        Label("platform.refresh", systemImage: "arrow.clockwise")
+                            .frame(minWidth: 160)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color("CautionColor"))
+                .disabled(isLoading)
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "waveform.path.ecg")
+                .font(.system(size: 54))
+                .foregroundStyle(.secondary)
+            Text("home.empty.title")
+                .font(.title2.bold())
+            Text("home.empty.body")
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 300)
+        .background(RoundedRectangle(cornerRadius: 30).fill(Color("CardColor")))
+    }
+}
+
+private struct TVReportCard: View {
+    let event: EEWEvent
+    let isFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(event.magnitudeText)
+                    .font(.title.bold().monospacedDigit())
+                    .foregroundStyle(event.severity.color)
+                Spacer()
+                if let maxIntensity = event.maxIntensity {
+                    Text(L("quake.intensity.label", maxIntensity))
+                        .font(.headline)
+                }
+            }
+
+            Text(event.hypocenter)
+                .font(.title3.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            HStack(spacing: 10) {
+                Text(event.reportStatus.labelKey)
+                Text(event.sourceLabelKey)
+                Spacer(minLength: 8)
+                if let date = event.reportDate ?? event.originDate {
+                    Text(date.formatted(date: .omitted, time: .shortened))
+                }
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.78)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color("CardSecondaryColor"))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(
+                    isFocused ? Color("CautionColor") : .clear,
+                    lineWidth: 6
+                )
+        }
+        .animation(.easeOut(duration: 0.15), value: isFocused)
     }
 }
 

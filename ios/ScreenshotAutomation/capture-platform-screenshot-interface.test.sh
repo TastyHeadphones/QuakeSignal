@@ -114,15 +114,132 @@ checks = {
   "use a ScrollView as its first body container" =>
     /var body: some View \{\s*ScrollView \{/m,
   "place the foreground banner before the first metric row" =>
-    /ScrollView \{\s*VStack\(alignment: \.leading, spacing: 10\) \{\s*foregroundBadge\s*HStack/m,
+    /ScrollView \{\s*VStack\(alignment: \.leading, spacing: \d+\) \{\s*foregroundBadge\s*HStack/m,
   "show localized depth beside magnitude in the first-baseline row" =>
-    /HStack\(alignment: \.firstTextBaseline, spacing: 8\) \{\s*Text\(event\.magnitudeText\).*?Label\(localizedDepthLabel\(depth\), systemImage: "arrow\.down"\)/m,
+    /HStack\(alignment: \.firstTextBaseline, spacing: \d+\) \{\s*Text\(event\.magnitudeText\).*?Label\(localizedDepthLabel\(depth\), systemImage: "arrow\.down"\)/m,
   "reserve inline navigation-title space above its foreground banner" =>
     /\.navigationTitle\("detail\.title"\)\s*\.navigationBarTitleDisplayMode\(\.inline\)/m
 }
 
 checks.each do |requirement, pattern|
   abort "error: Watch detail must #{requirement}" unless detail.match?(pattern)
+end
+
+body_spacing = detail[/VStack\(alignment: \.leading, spacing: (\d+)\)/, 1]&.to_i
+metric_spacing = detail[/HStack\(alignment: \.firstTextBaseline, spacing: (\d+)\)/, 1]&.to_i
+unless body_spacing && body_spacing <= 7 && metric_spacing && metric_spacing <= 7
+  abort "error: Watch detail top spacing must remain compact enough for the 205x251-point viewport"
+end
+RUBY
+
+ruby - \
+  "$script_dir/../QuakeSignalWatch/WatchDashboardView.swift" \
+  "$script_dir/../QuakeSignalTV/TVDashboardView.swift" <<'RUBY'
+watch_source = File.read(ARGV.fetch(0))
+tv_source = File.read(ARGV.fetch(1))
+
+extract_view = lambda do |source, name|
+  block = source[/private struct #{Regexp.escape(name)}: View \{.*?(?=\nprivate struct|\nprivate func)/m]
+  abort "error: #{name} block is missing" unless block
+  block
+end
+
+routes = watch_source[/switch ScreenshotAutomation\.selectedFrame \{.*?\n            default:/m]
+abort "error: Watch screenshot routing switch is missing" unless routes
+
+capture_only_views = [watch_source, tv_source].flat_map do |source|
+  source.scan(/\b(?:struct|class)\s+([A-Za-z0-9_]*ScreenshotView)\b/).flatten
+end
+unless capture_only_views.empty?
+  abort "error: screenshot selectors must not render capture-only views: #{capture_only_views.join(', ')}"
+end
+
+unless routes.match?(/case \.watchHeadline:\s*dashboard/) &&
+       routes.match?(/case \.watchRecentReports:\s*reports/) &&
+       routes.match?(/case \.watchEventDetail:.*?WatchEventDetailView\(event: event\)/m)
+  abort "error: Watch selectors must route to ordinary production dashboard, reports, and detail views"
+end
+
+if watch_source.include?('proxy.scrollTo("watch-recent-reports"') ||
+   watch_source.include?('.id("watch-recent-reports")')
+  abort "error: Watch recent-reports capture must not depend on a ScrollViewReader anchor"
+end
+
+badges = extract_view.call(watch_source, "WatchContextBadges")
+unless badges.match?(/\.lineLimit\(1\).*?\.minimumScaleFactor\(0\.78\)/m)
+  abort "error: Watch context badges must stay single-line with a reviewed scale floor"
+end
+
+dashboard = watch_source[/private var dashboard: some View \{.*?(?=\n    private var reports:)/m]
+abort "error: ordinary Watch dashboard is missing" unless dashboard
+unless dashboard.include?("WatchContextBadges") &&
+       dashboard.include?("headline") &&
+       dashboard.match?(/NavigationLink\s*\{\s*reports\s*\}/m)
+  abort "error: ordinary Watch dashboard must show the compact headline and expose the shared reports destination"
+end
+
+reports_builder = watch_source[/private var reports: some View \{.*?(?=\n    @ViewBuilder)/m]
+unless reports_builder&.include?("WatchReportsView(")
+  abort "error: Watch reports selector and NavigationLink must share one production destination builder"
+end
+
+headline_card = extract_view.call(watch_source, "WatchHeadlineCard")
+unless headline_card.match?(/Text\(event\.hypocenter\).*?\.lineLimit\(2\)/m) &&
+       headline_card.include?('date.formatted(date: .numeric, time: .shortened)') &&
+       headline_card.match?(/NavigationLink\s*\{\s*WatchEventDetailView\(event: event\)/m) &&
+       headline_card.include?('.buttonStyle(.plain)')
+  abort "error: shared Watch headline card must retain location/date and open the production detail view"
+end
+
+recent = extract_view.call(watch_source, "WatchReportsView")
+unless recent.include?("Button(action: onRefresh)") &&
+       recent.include?('Label("platform.historical.reports"') &&
+       recent.include?("ForEach(events.prefix(8))") &&
+       recent.match?(/NavigationLink\s*\{\s*WatchEventDetailView\(event: event\)/m) &&
+       recent.include?("ScrollView") &&
+       recent.include?('.navigationTitle("app.name")')
+  abort "error: shared production Watch reports view must retain refresh, history, navigation, and accessibility scrolling"
+end
+
+detail_declarations = watch_source.scan(/private struct WatchEventDetailView: View/).length
+abort "error: Watch must have exactly one production event-detail view" unless detail_declarations == 1
+detail = extract_view.call(watch_source, "WatchEventDetailView")
+unless detail.match?(/foregroundBadge.*?Text\(event\.magnitudeText\).*?Label\(localizedDepthLabel\(depth\).*?Text\(event\.hypocenter\).*?event\.reportStatus\.labelKey.*?date\.formatted\(date: \.numeric, time: \.shortened\)/m) &&
+       detail.include?("ScrollView") &&
+       detail.include?('L("quake.intensity.label", maxIntensity)') &&
+       detail.include?('Text("platform.watch.foregroundOnly.detail")') &&
+       detail.match?(/\.navigationTitle\("detail\.title"\)\s*\.navigationBarTitleDisplayMode\(\.inline\)/m)
+  abort "error: production Watch detail must retain disclosure and all reviewed event fields"
+end
+
+if tv_source.include?("isRecentReportsScreenshot") || tv_source.include?("recentEventLimit")
+  abort "error: TV reports must not use capture-only layout or row-limit branches"
+end
+
+unless tv_source.match?(/ScreenshotAutomation\.selectedFrame == \.tvRecentReports \{\s*recentReportsDestination/m) &&
+       tv_source.match?(/NavigationLink\s*\{\s*recentReportsDestination\s*\}/m)
+  abort "error: TV selector and ordinary dashboard navigation must share the production reports destination"
+end
+
+tv_reports_builder = tv_source[/private var recentReportsDestination: some View \{.*?(?=\n    private var header:)/m]
+unless tv_reports_builder&.include?("TVRecentReportsView(") &&
+       tv_reports_builder.include?("Array(store.events.prefix(12))")
+  abort "error: TV reports destination must use the normal reviewed report inventory"
+end
+
+tv_reports = extract_view.call(tv_source, "TVRecentReportsView")
+if tv_reports.include?("ScreenshotAutomation") ||
+   tv_reports.include?(".clipped(") ||
+   tv_reports.include?(".mask(") ||
+   tv_reports.include?(".offset(") ||
+   tv_reports.include?("ScrollView")
+  abort "error: shared TV reports view must remain selector-independent, fixed, and unclipped"
+end
+unless tv_reports.include?("LazyVGrid") &&
+       tv_reports.include?("ForEach(events)") &&
+       tv_reports.include?("maxHeight: .infinity, alignment: .topLeading") &&
+       tv_reports.include?("focusedEventID = firstEventID")
+  abort "error: shared TV reports view must top-anchor the full grid and visibly focus its first report"
 end
 RUBY
 
