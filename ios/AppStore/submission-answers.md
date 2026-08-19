@@ -61,13 +61,13 @@ Collected” merely because the app has no account.
 | Platform | Intended 1.1 (8) behavior | Portal / evidence status |
 | --- | --- | --- |
 | Apple Watch companion | Foreground-only compact dashboard embedded in the iOS upload; no independent APNs, App Attest, alert audio, or background emergency alerts | **PENDING** signed host + Watch profile, paired-device QA, Watch screenshots, and shared iOS description/review approval |
-| tvOS | Foreground-only large-screen dashboard; no APNs, App Attest, alert audio, or background emergency alerts | Portal has an empty `1.0` draft; **PENDING** edit to 1.1 where permitted, build 8, profile, platform QA, metadata, and 1920 × 1080 screenshots |
-| visionOS | Full native windowed foreground app; no APNs, App Attest, Time Sensitive, Critical Alerts, or background emergency delivery. Qualifying live warnings may appear in-app and play the selected local sound only while the app is open. | Portal has an empty `1.0` draft; **PENDING** edit to 1.1 where permitted, build 8, profile, platform QA, App Motion answer, metadata, and 3840 × 2160 screenshots |
+| tvOS | Foreground-only large-screen dashboard; no APNs, App Attest, alert audio, or background emergency alerts | Portal `1.1` draft has reviewed English metadata and manual release; **PENDING** build 8, profile, platform QA, approved 1920 × 1080 screenshots, rights, and remaining portal answers |
+| visionOS | Full native windowed foreground app; no APNs, App Attest, Time Sensitive, Critical Alerts, or background emergency delivery. Qualifying live warnings may appear in-app and play the selected local sound only while the app is open. | Portal `1.1` draft has reviewed English metadata and manual release; **PENDING** build 8, profile, platform QA, App Motion answer, approved 3840 × 2160 screenshots, rights, and remaining portal answers |
 
 Use `platforms/` for exact copy, review notes, and pending screenshot manifests.
-Use `app-store-connect-portal-audit-2026-08-19.md` for the read-only portal
-contradictions and safe action order. Do not delete or repurpose an existing
-draft from this worksheet.
+Use `app-store-connect-portal-audit-2026-08-19.md` for the recorded portal
+state, completed draft preparation, and safe action order. Do not delete or
+repurpose an existing draft from this worksheet.
 
 ## Required human/legal decisions — do not infer these answers
 

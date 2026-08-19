@@ -16,7 +16,8 @@ The native TV and Vision uploads use the existing iOS App Store Connect record
 belong to that iOS record; there is no separate Watch IPA. The Tauri Mac app
 uses its existing separate record and `.github/workflows/desktop-release.yml`.
 Use [`platforms/`](./platforms/) for reviewed copy and screenshot plans. The
-read-only portal contradictions and non-destructive action order are recorded in
+portal state, completed draft preparation, and non-destructive action order are
+recorded in
 [`app-store-connect-portal-audit-2026-08-19.md`](./app-store-connect-portal-audit-2026-08-19.md).
 
 ## Version contract
@@ -58,7 +59,7 @@ protected workflow variables described below. Every gated run requires both
 system IDs to equal their pins and requires the exact Xcode Cloud product name
 `QuakeSignal` and workflow name.
 
-As of the read-only App Store Connect audit on 2026-08-19, Xcode Cloud is not
+At the latest App Store Connect verification on 2026-08-19, Xcode Cloud is not
 yet onboarded for Apple ID `6800642443`: the portal shows **Create a workflow
 in Xcode to get started** and no workflow or build history. That is consistent
 with the bootstrap sequence above; it is not evidence that build 8 can be
@@ -263,13 +264,13 @@ pass, repeat each run with `archive_only=false` and
 - Complete content-rights, privacy, export, age-rating, review-contact, and
   platform-metadata approvals before submission.
 
-The current App Store Connect audit found empty tvOS `1.0` and visionOS `1.0`
-drafts in Apple ID `6800642443`. Reuse those drafts and change their editable
-version number to `1.1` only after the corresponding build-8 release evidence
-is frozen. Do not delete the drafts or create duplicate platforms. The same
-record also contains a macOS draft that must not receive the separate Tauri
-Mac app (`com.quakesignal.desktop`); leave it untouched and use Apple ID
-`6800642853` for Mac 1.1.0.
+The existing tvOS and visionOS drafts in Apple ID `6800642443` now use version
+`1.1`, reviewed English metadata, platform-specific review notes, and manual
+release. They still have no selected build or screenshots. Do not delete the
+drafts, create duplicate platforms, or add either version for review until its
+remaining gates pass. The same record also contains a macOS draft that must not
+receive the separate Tauri Mac app (`com.quakesignal.desktop`); leave it
+untouched and use Apple ID `6800642853` for Mac 1.1.0.
 
 The existing 30-image iPhone/iPad provenance records build 7 and remains
 historical evidence. A separate ten-image English iPhone/iPad build-8 Debug
