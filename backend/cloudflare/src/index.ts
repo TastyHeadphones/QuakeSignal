@@ -3829,8 +3829,8 @@ export class QuakeRelay {
         !await this.httpFallbackTurnIsDue(Date.now())
       ) {
         // Keep reconnect maintenance alive while a failed fallback slice is
-        // waiting for its durable retry time, but do not fall through to
-        // ordinary D1 maintenance or another HTTP source attempt.
+        // waiting for its durable retry time, but do not let ordinary D1 work
+        // bypass the same failure deferral and enter an automatic alarm loop.
         await this.ensureUpstreams();
         return;
       }
@@ -3886,11 +3886,16 @@ export class QuakeRelay {
       }
       if (httpSnapshotTurnProtected) {
         // An early reconnect/journal alarm can arrive between paced recovery
-        // sweeps. Keep attempting the preferred sockets, but do not let it
-        // fall through to ordinary D1/outbox maintenance: the alternate
-        // transport owns this relay turn until it is healthy again.
+        // sweeps. Keep attempting the preferred sockets. A complete outage
+        // retains the alternate transport's exclusive turn, while a partial
+        // outage may process bounded work already accepted from healthy
+        // routes without sharing a due HTTP recovery turn.
         await this.ensureUpstreams();
-        return;
+        if (!await this.partialFallbackMaintenanceAllowed(
+          fallbackActive,
+          pendingHttpSnapshot,
+          Date.now(),
+        )) return;
       }
       // Repair only durable slot shapes left by an interrupted older revision.
       // The normal active → latest → overflow transitions are transactional;
@@ -5335,16 +5340,21 @@ export class QuakeRelay {
     return UPSTREAM_ROUTES.every((route) => this.routeIsOpen(route));
   }
 
-  private async allRoutesHaveBeenDegradedForGrace(now: number): Promise<boolean> {
-    if (UPSTREAM_ROUTES.some((route) => this.routeIsOpen(route))) return false;
+  private anyRouteOpen(): boolean {
+    return UPSTREAM_ROUTES.some((route) => this.routeIsOpen(route));
+  }
+
+  private async anyRouteHasBeenDegradedForGrace(now: number): Promise<boolean> {
+    const degradedRoutes = UPSTREAM_ROUTES.filter((route) => !this.routeIsOpen(route));
+    if (degradedRoutes.length === 0) return false;
     const degradedSince = await Promise.all(
-      UPSTREAM_ROUTES.map((route) =>
+      degradedRoutes.map((route) =>
         this.state.storage.get<number>(
           `${UPSTREAM_DEGRADED_SINCE_PREFIX}${route}`,
         )
       ),
     );
-    return degradedSince.every(
+    return degradedSince.some(
       (degradedAt) =>
         typeof degradedAt === "number" &&
         Number.isFinite(degradedAt) &&
@@ -5354,10 +5364,11 @@ export class QuakeRelay {
   }
 
   /**
-   * Enter the HTTP alternate transport only after every live WebSocket route
-   * has remained down through the grace period. Once active, retain it during
-   * partial socket recovery so one still-broken source cannot make health
-   * optimistic; remove it only after all routes are demonstrably open again.
+   * Enter the HTTP alternate transport after any live WebSocket route has
+   * remained down through the grace period. Recovery polls only stale sources,
+   * so one broken list route is covered without polling healthy feeds. Once
+   * active, retain it during partial socket recovery and remove it only after
+   * all routes are demonstrably open again.
    */
   private async refreshHttpFallbackActive(): Promise<boolean> {
     const current = await this.readHttpFallbackActive();
@@ -5371,7 +5382,7 @@ export class QuakeRelay {
       return false;
     }
     if (current === true) return true;
-    if (!await this.allRoutesHaveBeenDegradedForGrace(Date.now())) return false;
+    if (!await this.anyRouteHasBeenDegradedForGrace(Date.now())) return false;
     await this.state.storage.put(HTTP_FALLBACK_ACTIVE_KEY, true);
     return true;
   }
@@ -5395,6 +5406,18 @@ export class QuakeRelay {
       Number.isFinite(notBefore) &&
       notBefore > now
     );
+  }
+
+  private async partialFallbackMaintenanceAllowed(
+    fallbackActive: boolean,
+    pendingHttpSnapshot: boolean,
+    now: number,
+  ): Promise<boolean> {
+    if (!fallbackActive || pendingHttpSnapshot || !this.anyRouteOpen()) {
+      return false;
+    }
+    if (!await this.httpFallbackTurnIsDue(now)) return false;
+    return (await this.legacyHttpSeedFenceUntil()) <= now;
   }
 
   private async deferHttpFallbackTurn(error: unknown): Promise<void> {
@@ -5496,25 +5519,23 @@ export class QuakeRelay {
       const lastSeedMs = await this.state.storage.get<number>(LAST_HTTP_SEED_MS_KEY);
       if (isInitialHttpSeedDue(lastSeedMs, now)) return now + 1;
     }
-    if (UPSTREAM_ROUTES.some((route) => this.routeIsOpen(route))) return null;
+    const degradedRoutes = UPSTREAM_ROUTES.filter((route) => !this.routeIsOpen(route));
+    if (degradedRoutes.length === 0) return null;
     const degradedSince = await Promise.all(
-      UPSTREAM_ROUTES.map((route) =>
+      degradedRoutes.map((route) =>
         this.state.storage.get<number>(
           `${UPSTREAM_DEGRADED_SINCE_PREFIX}${route}`,
         )
       ),
     );
-    if (
-      degradedSince.some(
-        (degradedAt) =>
-          typeof degradedAt !== "number" ||
-          !Number.isFinite(degradedAt) ||
-          degradedAt <= 0,
-      )
-    ) {
-      return null;
-    }
-    const activationAt = Math.max(...(degradedSince as number[])) +
+    const activationCandidates = degradedSince.filter(
+      (degradedAt): degradedAt is number =>
+        typeof degradedAt === "number" &&
+        Number.isFinite(degradedAt) &&
+        degradedAt > 0,
+    );
+    if (activationCandidates.length === 0) return null;
+    const activationAt = Math.min(...activationCandidates) +
       HTTP_RECOVERY_SEED_GRACE_MS;
     return activationAt > now ? activationAt : now + 1;
   }
@@ -5974,16 +5995,42 @@ export class QuakeRelay {
       const now = Date.now();
       const existing = await this.state.storage.getAlarm();
       const routineAlarmAt = preferredRelayAlarmAt(null, now);
-      const [fallbackAlarmAt, reconnectAlarmAt, liveSnapshotAlarmAt] = await Promise.all([
-        this.nextHttpFallbackAlarmAt(now),
-        this.nextUpstreamReconnectAlarmAt(now),
-        this.nextLiveSnapshotAlarmAt(now),
-      ]);
+      const [fallbackAlarmAt, reconnectAlarmAt, liveSnapshotAlarmAt] =
+        await Promise.all([
+          this.nextHttpFallbackAlarmAt(now),
+          this.nextUpstreamReconnectAlarmAt(now),
+          this.nextLiveSnapshotAlarmAt(now),
+        ]);
+      let effectiveLiveSnapshotAlarmAt = liveSnapshotAlarmAt;
+      if (liveSnapshotAlarmAt !== null && fallbackAlarmAt !== null) {
+        const [fallbackActive, pendingHttpSnapshot] = await Promise.all([
+          this.readHttpFallbackActive(),
+          this.pendingHttpSnapshotWorks().then((works) => works.length > 0),
+        ]);
+        if (
+          (fallbackActive || pendingHttpSnapshot) &&
+          !await this.partialFallbackMaintenanceAllowed(
+            fallbackActive,
+            pendingHttpSnapshot,
+            now,
+          )
+        ) {
+          // Do not repeatedly wake for live work while a protected HTTP turn
+          // would refuse to run it. The cursor remains durable and resumes at
+          // the same retry/sweep/fence boundary as alternate transport.
+          effectiveLiveSnapshotAlarmAt = Math.max(
+            liveSnapshotAlarmAt,
+            fallbackAlarmAt,
+          );
+        }
+      }
       const requestedAlarmAt = Math.min(
         routineAlarmAt,
         ...(fallbackAlarmAt === null ? [] : [fallbackAlarmAt]),
         ...(reconnectAlarmAt === null ? [] : [reconnectAlarmAt]),
-        ...(liveSnapshotAlarmAt === null ? [] : [liveSnapshotAlarmAt]),
+        ...(effectiveLiveSnapshotAlarmAt === null
+          ? []
+          : [effectiveLiveSnapshotAlarmAt]),
       );
       if (
         typeof existing === "number" &&
