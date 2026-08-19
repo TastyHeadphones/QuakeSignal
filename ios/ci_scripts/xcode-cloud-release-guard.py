@@ -31,9 +31,9 @@ WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev"
 VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open."
 MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
 APP_ATTEST_FINGERPRINT = "sha256:wQ7bfMyEJST5ySIwLM1Q6HwT4DtbRPR3vanIG-kXCkQ"
-XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:7JH35wpygm1JEPS5L-YOolp_32i0h5-em-tDG4c05vU"
+XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:bGqEsXA2YyJdqAp6W6XSXzAlPcuSobcNVKPmB8HjOUc"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
-PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:YGkg2DD4-kFzNt_hiwXLoEFN8dCTvnoaWjEfVYWtS_E"
+PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:6uR1jZLWBrvD89WmHoHm86ZPSUChNI04MG9Ms_y5ppw"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
 MAX_RESPONSE_BYTES = 1024 * 1024
 READINESS_TIMEOUT_SECONDS = 180.0
@@ -72,14 +72,24 @@ XCODE_SCHEME_PATHS = (
 )
 PLATFORM_CAPABILITY_POLICY_PATHS = (
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
+    "ios/QuakeSignal/Features/Detail/QuakeDetailView.swift",
+    "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
     "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
+    "ios/QuakeSignal/Features/Root/RootView.swift",
     "ios/QuakeSignal/Features/Settings/SettingsView.swift",
+    "ios/QuakeSignal/Models/EEWEvent.swift",
     "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
     "ios/QuakeSignal/Networking/LiveSocketClient.swift",
     "ios/QuakeSignal/Networking/WolfxClient.swift",
     "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
+    "ios/QuakeSignal/Notifications/NotificationManager.swift",
+    "ios/QuakeSignal/State/AlertPolicy.swift",
+    "ios/QuakeSignal/State/LocationManager.swift",
     "ios/QuakeSignal/State/QuakeStore.swift",
+    "ios/QuakeSignalShared/ForegroundQuakeStore.swift",
     "ios/QuakeSignalShared/ScreenshotAutomation.swift",
+    "ios/QuakeSignalTV/TVDashboardView.swift",
+    "ios/QuakeSignalWatch/WatchDashboardView.swift",
     "ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy",
     "ios/QuakeSignal/Resources/en.lproj/Localizable.strings",
     "ios/QuakeSignal/Resources/ja.lproj/Localizable.strings",
@@ -117,6 +127,47 @@ REQUIRED_WOLFX_SOURCES = (
     "jma_eew",
     "jma_eqlist",
     "sc_eew",
+)
+LEGAL_PAGE_CONTRACTS = (
+    {
+        "path": "/privacy",
+        "title": "Privacy Policy",
+        "effectiveDate": "19 August 2026",
+        "requiredText": (
+            "Only the app when running on an iPhone or iPad can register",
+            "embedded Apple Watch companion and Apple TV app",
+            "Apple Vision Pro, Mac Catalyst, and Designed for iPad on Mac",
+            "separate native Windows/macOS desktop app and Chrome extension",
+            "optional family contact name and telephone number stay in local app storage",
+            "erase both Family Check-In fields and uncheck each selected preparedness-kit item",
+            "Apple Maps and system Location Services",
+            "opening this public page sends ordinary web-request metadata to Cloudflare",
+            "do not provide background emergency alerts",
+            "a public support issue cannot privately identify or delete that unreachable registration",
+            "after it has not been refreshed for 90 days",
+        ),
+    },
+    {
+        "path": "/support",
+        "title": "Support",
+        "effectiveDate": "19 August 2026",
+        "requiredText": (
+            "iPhone and iPad alerts",
+            "embedded Apple Watch companion and Apple TV app",
+            "Apple Vision Pro, Mac Catalyst, and Designed for iPad on Mac",
+            "separate native Windows/macOS desktop app and Chrome extension",
+            "do not independently use the QuakeSignal notification relay",
+            "Registration removal after a reset",
+            "support cannot identify the old registration from a public issue",
+            "Never include an APNs device token",
+        ),
+    },
+    {
+        "path": "/terms",
+        "title": "Terms of Use",
+        "effectiveDate": "12 August 2026",
+        "requiredText": (),
+    },
 )
 
 
@@ -1010,10 +1061,21 @@ def verify_live_worker_release(
         root = None
     if status != 200 or content_type_essence(root_headers) != "application/json" or not isinstance(root, dict) or root.get("purpose") != "APNs alert delivery only" or root.get("earthquakeData") != "Clients fetch directly from Wolfx" or "recent" in root or "live" in root:
         fail("Worker metadata contract is not the reviewed notification-only service.")
-    for path, title in (("/privacy", "Privacy Policy"), ("/support", "Support"), ("/terms", "Terms of Use")):
+    for contract in LEGAL_PAGE_CONTRACTS:
+        path = contract["path"]
+        title = contract["title"]
         status, headers, data = _fetch(path, fetcher=fetcher)
         text = data.decode("utf-8", errors="replace")
-        if status != 200 or content_type_essence(headers) != "text/html" or f"<title>{title} · QuakeSignal</title>" not in text or "QuakeSignal" not in text:
+        required_text = (
+            f"<title>{title} · QuakeSignal</title>",
+            f"QuakeSignal · Effective {contract['effectiveDate']}",
+            *contract["requiredText"],
+        )
+        if (
+            status != 200
+            or content_type_essence(headers) != "text/html"
+            or any(marker not in text for marker in required_text)
+        ):
             fail(f"{path} is not the reviewed App Store legal/support page.")
     for path in ("/v1/quakes/recent?limit=5", "/v1/quakes/jma_eew%3Atest", "/v1/live"):
         if _fetch(path, fetcher=fetcher)[0] != 410:

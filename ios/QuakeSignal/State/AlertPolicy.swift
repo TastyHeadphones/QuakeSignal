@@ -21,6 +21,56 @@ enum AlertPresentationReason: String, Codable, Sendable, Equatable {
     }
 }
 
+/// Captures the notification-presentation decision at receipt time. Keeping
+/// this decision with a buffered payload prevents a launch or scene-state
+/// transition from causing both the system and the app to present the same
+/// warning.
+enum ForegroundNotificationSystemPresentation: Equatable {
+    case alert
+    case listOnly
+}
+
+struct ForegroundNotificationPresentationDecision: Equatable {
+    let systemPresentation: ForegroundNotificationSystemPresentation
+    let shouldPresentEmergencyInApp: Bool
+}
+
+enum ForegroundNotificationPresentationPolicy {
+    static func decision(
+        hasEventID: Bool,
+        isSceneActive: Bool
+    ) -> ForegroundNotificationPresentationDecision {
+        guard hasEventID, isSceneActive else {
+            return ForegroundNotificationPresentationDecision(
+                systemPresentation: .alert,
+                shouldPresentEmergencyInApp: false
+            )
+        }
+
+        return ForegroundNotificationPresentationDecision(
+            systemPresentation: .listOnly,
+            shouldPresentEmergencyInApp: true
+        )
+    }
+}
+
+enum PresentedEventMode: String, Equatable {
+    case emergency
+    case detail
+}
+
+/// A notification tap is navigation intent, but only a warning that is still
+/// active and fresh may reopen the imperative emergency surface. Historical,
+/// terminal, informational, training, or malformed frames open ordinary event
+/// details instead.
+enum NotificationTapPresentationPolicy {
+    static func mode(for event: EEWEvent, now: Date = Date()) -> PresentedEventMode {
+        event.isActiveWarning && WarningFreshnessPolicy.isFresh(event, now: now)
+            ? .emergency
+            : .detail
+    }
+}
+
 struct AlertPreferenceSnapshot: Sendable {
     let subscriptionEnabled: Bool
     let enabledSources: Set<String>
@@ -90,11 +140,16 @@ enum ForegroundPushPolicy {
         for event: EEWEvent,
         previous: EEWEvent?,
         requestedReason: AlertPresentationReason,
+        allowsEmergencyPresentation: Bool,
         preferences: AlertPreferenceSnapshot,
         now: Date = Date()
     ) -> IngestionDecision {
         guard EventMergePolicy.shouldAccept(event, replacing: previous) else {
             return IngestionDecision(shouldMerge: false, presentationReason: nil)
+        }
+
+        guard allowsEmergencyPresentation else {
+            return IngestionDecision(shouldMerge: true, presentationReason: nil)
         }
 
         guard let eligibleReason = ForegroundAlertPolicy.presentationReason(
@@ -123,6 +178,7 @@ enum ForegroundPushPolicy {
         for event: EEWEvent,
         previous: EEWEvent?,
         requestedReason: AlertPresentationReason,
+        allowsEmergencyPresentation: Bool,
         preferences: AlertPreferenceSnapshot,
         now: Date = Date()
     ) -> AlertPresentationReason? {
@@ -130,6 +186,7 @@ enum ForegroundPushPolicy {
             for: event,
             previous: previous,
             requestedReason: requestedReason,
+            allowsEmergencyPresentation: allowsEmergencyPresentation,
             preferences: preferences,
             now: now
         ).presentationReason

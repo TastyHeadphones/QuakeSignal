@@ -4,6 +4,7 @@ import SwiftUI
 struct TVDashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var store = ForegroundQuakeStore()
+    @State private var manualRefreshLifecycle = ForegroundManualRefreshLifecycle()
     @FocusState private var focusedEventID: EEWEvent.ID?
 
     var body: some View {
@@ -18,6 +19,17 @@ struct TVDashboardView: View {
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             await store.monitorWhileActive()
+        }
+        .task(id: manualRefreshLifecycle.taskID(isSceneActive: scenePhase == .active)) {
+            guard manualRefreshLifecycle.shouldRun(isSceneActive: scenePhase == .active) else { return }
+            await store.refresh()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase != .active else { return }
+            manualRefreshLifecycle.cancelPendingRefresh()
+        }
+        .onDisappear {
+            manualRefreshLifecycle.cancelPendingRefresh()
         }
         .task {
             guard ScreenshotAutomation.selectedFrame == .tvRecentReports else { return }
@@ -65,7 +77,7 @@ struct TVDashboardView: View {
             Spacer()
 
             Button {
-                Task { await store.refresh() }
+                manualRefreshLifecycle.requestRefresh(isSceneActive: scenePhase == .active)
             } label: {
                 if store.isLoading {
                     ProgressView()

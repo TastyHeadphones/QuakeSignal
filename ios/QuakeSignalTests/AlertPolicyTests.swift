@@ -345,6 +345,7 @@ final class AlertPolicyTests: XCTestCase {
             for: stale,
             previous: current,
             requestedReason: .updated,
+            allowsEmergencyPresentation: true,
             preferences: preferences,
             now: now
         ))
@@ -359,6 +360,7 @@ final class AlertPolicyTests: XCTestCase {
             for: reopened,
             previous: final,
             requestedReason: .new,
+            allowsEmergencyPresentation: true,
             preferences: preferences,
             now: now
         ))
@@ -367,6 +369,7 @@ final class AlertPolicyTests: XCTestCase {
             for: reopened,
             previous: current,
             requestedReason: .updated,
+            allowsEmergencyPresentation: true,
             preferences: preferences,
             now: now
         ), .updated)
@@ -391,6 +394,7 @@ final class AlertPolicyTests: XCTestCase {
             for: final,
             previous: current,
             requestedReason: .final,
+            allowsEmergencyPresentation: true,
             preferences: preferences(),
             now: now
         )
@@ -401,6 +405,7 @@ final class AlertPolicyTests: XCTestCase {
             for: cancellation,
             previous: final,
             requestedReason: .cancelled,
+            allowsEmergencyPresentation: true,
             preferences: preferences(),
             now: now
         )
@@ -411,11 +416,130 @@ final class AlertPolicyTests: XCTestCase {
             for: current,
             previous: cancellation,
             requestedReason: .new,
+            allowsEmergencyPresentation: true,
             preferences: preferences(),
             now: now
         )
         XCTAssertFalse(replayDecision.shouldMerge)
         XCTAssertNil(replayDecision.presentationReason)
+    }
+
+    func testForegroundNotificationPresentationIsCapturedAtReceiptTime() {
+        XCTAssertEqual(
+            ForegroundNotificationPresentationPolicy.decision(
+                hasEventID: true,
+                isSceneActive: true
+            ),
+            ForegroundNotificationPresentationDecision(
+                systemPresentation: .listOnly,
+                shouldPresentEmergencyInApp: true
+            )
+        )
+        XCTAssertEqual(
+            ForegroundNotificationPresentationPolicy.decision(
+                hasEventID: true,
+                isSceneActive: false
+            ),
+            ForegroundNotificationPresentationDecision(
+                systemPresentation: .alert,
+                shouldPresentEmergencyInApp: false
+            )
+        )
+        XCTAssertEqual(
+            ForegroundNotificationPresentationPolicy.decision(
+                hasEventID: false,
+                isSceneActive: true
+            ),
+            ForegroundNotificationPresentationDecision(
+                systemPresentation: .alert,
+                shouldPresentEmergencyInApp: false
+            )
+        )
+    }
+
+    func testSystemPresentedForegroundPushStillMergesWithoutEmergencyTakeover() {
+        let event = makeEvent(reportDate: now, isWarn: true)
+        let decision = ForegroundPushPolicy.ingestionDecision(
+            for: event,
+            previous: nil,
+            requestedReason: .new,
+            allowsEmergencyPresentation: false,
+            preferences: preferences(),
+            now: now
+        )
+
+        XCTAssertTrue(decision.shouldMerge)
+        XCTAssertNil(decision.presentationReason)
+    }
+
+    func testNotificationTapUsesEmergencyOnlyForFreshActiveWarning() {
+        XCTAssertEqual(
+            NotificationTapPresentationPolicy.mode(
+                for: makeEvent(reportDate: now, isWarn: true),
+                now: now
+            ),
+            .emergency
+        )
+        XCTAssertEqual(
+            NotificationTapPresentationPolicy.mode(
+                for: makeEvent(reportDate: now.addingTimeInterval(-601), isWarn: true),
+                now: now
+            ),
+            .detail
+        )
+        XCTAssertEqual(
+            NotificationTapPresentationPolicy.mode(
+                for: makeEvent(reportDate: now, isWarn: true, isFinal: true),
+                now: now
+            ),
+            .detail
+        )
+        XCTAssertEqual(
+            NotificationTapPresentationPolicy.mode(
+                for: makeEvent(reportDate: now, isWarn: true, isCancel: true),
+                now: now
+            ),
+            .detail
+        )
+        XCTAssertEqual(
+            NotificationTapPresentationPolicy.mode(
+                for: makeEvent(reportDate: now, isWarn: false, isTraining: true),
+                now: now
+            ),
+            .detail
+        )
+        XCTAssertEqual(
+            NotificationTapPresentationPolicy.mode(
+                for: makeEvent(kind: "report", reportDate: now, isWarn: false),
+                now: now
+            ),
+            .detail
+        )
+    }
+
+    func testTappedDetailSurvivesClockExpiryAndAcceptedTerminalMerge() {
+        let stale = makeEvent(reportDate: now.addingTimeInterval(-601), isWarn: true)
+        let detail = PresentedAlert(event: stale, reason: .new, mode: .detail)
+
+        XCTAssertEqual(
+            PresentedAlertLifecyclePolicy.afterClockTick(detail, now: now),
+            detail
+        )
+
+        let final = makeEvent(
+            serial: 2,
+            reportDate: now,
+            isWarn: true,
+            isFinal: true
+        )
+        XCTAssertEqual(
+            PresentedAlertLifecyclePolicy.afterAcceptedMerge(
+                final,
+                current: detail,
+                now: now
+            ),
+            PresentedAlert(event: final, reason: .new, mode: .detail)
+        )
     }
 
     func testPresentedWarningReconcilesOnlyMatchingAcceptedLifecycle() {
@@ -574,6 +698,44 @@ final class AlertPolicyTests: XCTestCase {
         XCTAssertFalse(LocationFixPolicy.isUsable(stale, now: now))
         XCTAssertFalse(LocationFixPolicy.isUsable(invalidAccuracy, now: now))
         XCTAssertFalse(LocationFixPolicy.isUsable(tooCoarse, now: now))
+    }
+
+    func testMapLocationControlFocusesRequestsOrOffersPermissionRepair() {
+        XCTAssertEqual(
+            MapLocationControlPolicy.action(
+                authorizationStatus: .authorizedWhenInUse,
+                hasCurrentLocation: true
+            ),
+            .focus
+        )
+        XCTAssertEqual(
+            MapLocationControlPolicy.action(
+                authorizationStatus: .authorizedWhenInUse,
+                hasCurrentLocation: false
+            ),
+            .request
+        )
+        XCTAssertEqual(
+            MapLocationControlPolicy.action(
+                authorizationStatus: .notDetermined,
+                hasCurrentLocation: false
+            ),
+            .request
+        )
+        XCTAssertEqual(
+            MapLocationControlPolicy.action(
+                authorizationStatus: .denied,
+                hasCurrentLocation: false
+            ),
+            .openSettings
+        )
+        XCTAssertEqual(
+            MapLocationControlPolicy.action(
+                authorizationStatus: .restricted,
+                hasCurrentLocation: false
+            ),
+            .openSettings
+        )
     }
 
     func testSilentWebSocketRouteExpiresAfterBoundedTimeout() {

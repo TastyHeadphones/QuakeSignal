@@ -261,7 +261,8 @@
 /* 設定: 新しい購読・通知セクション */
 "settings.section.subscription" = "購読設定";
 "settings.subscribedCity" = "登録都市";
-"settings.notifyAtNight" = "夜間も通知する";
+"settings.notifyAtNight" = "夜間の通常地震情報";
+"settings.notifyAtNight.detail" = "この設定は通常の地震情報にのみ適用されます。緊急警報は夜間も通知対象のままです。";
 "settings.includeTestAlerts" = "テスト・訓練情報を受信";
 "settings.includeTestAlerts.detail" = "デフォルトはオフ";
 "settings.section.disclaimer" = "情報源と免責事項";

@@ -330,7 +330,8 @@ class GuardContextTests(unittest.TestCase):
             guard.verify_platform_capabilities_sources(mutated)
 
         wrong_symbol = dict(sources)
-        settings_path = guard.PLATFORM_CAPABILITY_POLICY_PATHS[2]
+        settings_path = "ios/QuakeSignal/Features/Settings/SettingsView.swift"
+        self.assertIn(settings_path, guard.PLATFORM_CAPABILITY_POLICY_PATHS)
         wrong_symbol[settings_path] = wrong_symbol[settings_path].replace('systemImage: "eye"', 'systemImage: "macbook"', 1)
         with self.assertRaisesRegex(guard.ReleaseGuardError, "platform capability policy fingerprint"):
             guard.verify_platform_capabilities_sources(wrong_symbol)
@@ -374,6 +375,61 @@ class GuardContextTests(unittest.TestCase):
             for relative in guard.PLATFORM_CAPABILITY_POLICY_PATHS
         }
         mutations = (
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "guard hasEventID, isSceneActive else {",
+                "guard hasEventID else {",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "event.isActiveWarning && WarningFreshnessPolicy.isFresh(event, now: now)",
+                "event.isActiveWarning",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/NotificationManager.swift",
+                "self.isForegroundSceneActive &&\n                    UIApplication.shared.applicationState == .active",
+                "self.isForegroundSceneActive",
+            ),
+            (
+                "ios/QuakeSignal/State/QuakeStore.swift",
+                "let now = Date()\n        clockNow = now\n        merge(event)",
+                "let now = clockNow\n        merge(event)",
+            ),
+            (
+                "ios/QuakeSignal/Features/Root/RootView.swift",
+                "store.ingestTapped(event: cached, reason: reason)",
+                "store.presentedAlert = PresentedAlert(event: cached, reason: reason)",
+            ),
+            (
+                "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
+                "return .openSettings",
+                "return .request",
+            ),
+            (
+                "ios/QuakeSignal/State/LocationManager.swift",
+                "let remainingLifetime = LocationFixPolicy.remainingLifetime(forTimestamp: timestamp)",
+                "let remainingLifetime = LocationFixPolicy.maximumAge",
+            ),
+            (
+                "ios/QuakeSignal/Models/EEWEvent.swift",
+                "return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil",
+                "return coordinate",
+            ),
+            (
+                "ios/QuakeSignal/Networking/WolfxClient.swift",
+                "guard isSceneActive else { return }",
+                "guard pendingRequestID == nil else { return }",
+            ),
+            (
+                "ios/QuakeSignalTV/TVDashboardView.swift",
+                ".task(id: manualRefreshLifecycle.taskID(isSceneActive: scenePhase == .active))",
+                ".task",
+            ),
+            (
+                "ios/QuakeSignalWatch/WatchDashboardView.swift",
+                ".task(id: manualRefreshLifecycle.taskID(isSceneActive: scenePhase == .active))",
+                ".task",
+            ),
             (
                 "ios/QuakeSignal/State/QuakeStore.swift",
                 "case .stopSocket:\n            liveSocket.stop()",
@@ -532,9 +588,17 @@ class LiveWorkerContractTests(unittest.TestCase):
             if path == "/":
                 return 200, response_headers, json_bytes(root)
             if path in {"/privacy", "/support", "/terms"}:
-                titles = {"/privacy": "Privacy Policy", "/support": "Support", "/terms": "Terms of Use"}
+                contract = next(
+                    value for value in guard.LEGAL_PAGE_CONTRACTS
+                    if value["path"] == path
+                )
                 response_headers["content-type"] = "text/html; charset=utf-8"
-                return 200, response_headers, f"<title>{titles[path]} · QuakeSignal</title>QuakeSignal".encode()
+                markers = (
+                    f"<title>{contract['title']} · QuakeSignal</title>",
+                    f"QuakeSignal · Effective {contract['effectiveDate']}",
+                    *contract["requiredText"],
+                )
+                return 200, response_headers, "\n".join(markers).encode()
             if path in {"/v1/quakes/recent?limit=5", "/v1/quakes/jma_eew%3Atest", "/v1/live"}:
                 return 410, response_headers, b"{}"
             if path == "/v1/app-attest/challenge":
@@ -553,6 +617,25 @@ class LiveWorkerContractTests(unittest.TestCase):
     def test_live_release_contract_rejects_fingerprint_mutation(self):
         with self.assertRaisesRegex(guard.ReleaseGuardError, "fingerprint"):
             guard.verify_live_worker_release(fetcher=self.fetcher("sha256:" + "A" * 43))
+
+    def test_live_release_contract_rejects_stale_or_incomplete_legal_pages(self):
+        for target_path, marker in (
+            ("/privacy", "QuakeSignal · Effective 19 August 2026"),
+            ("/privacy", "Only the app when running on an iPhone or iPad can register"),
+            ("/support", "support cannot identify the old registration from a public issue"),
+            ("/terms", "QuakeSignal · Effective 12 August 2026"),
+        ):
+            with self.subTest(target_path=target_path, marker=marker):
+                base_fetcher = self.fetcher()
+
+                def mutated_fetcher(url, **kwargs):
+                    status, headers, body = base_fetcher(url, **kwargs)
+                    if url[len(guard.WORKER_ORIGIN):] == target_path:
+                        body = body.replace(marker.encode(), b"removed-reviewed-marker", 1)
+                    return status, headers, body
+
+                with self.assertRaisesRegex(guard.ReleaseGuardError, "legal/support page"):
+                    guard.verify_live_worker_release(fetcher=mutated_fetcher)
 
     def test_live_release_contract_requires_exact_mime_essences(self):
         for target_path, mutated_content_type, message in (

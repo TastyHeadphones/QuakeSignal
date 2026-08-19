@@ -28,6 +28,10 @@ value.
 - [ ] Open the existing iOS record (Apple ID `6800642443`) and verify its
   current portal state; do not create a duplicate record or a Universal Purchase
   claim for the distinct macOS bundle ID.
+- [ ] Record the release owner's choice between Mac Catalyst and Designed for
+  iPad on Mac, including the reviewed portal mapping, profiles, Mac QA,
+  screenshots, and availability consequences. Do not mutate either record or
+  present both as simultaneous public variants until that choice is explicit.
 - [ ] Verify the English name, category, bundle ID, SKU, version, copyright,
   and current build against `submission-answers.md` and the signed archive.
 - [ ] Enter an accountable UniSphereco LLC App Review contact name, email, and
@@ -70,6 +74,8 @@ value.
   a source-permission referral without the permission itself, or a prior portal
   selection is not permission. Do not complete Apple's rights certification or
   submit any platform before the complete written evidence exists.
+  The 2026-08-20 read-only audit still observed **Yes** in the portal; that
+  contradictory value does not satisfy this item and must not be relied on.
 
 ## Final submission decision
 

@@ -125,7 +125,16 @@ struct SettingsView: View {
                         }
                     }
 
-                    Toggle("settings.notifyAtNight", isOn: $settings.notifyAtNight)
+                    if PlatformCapabilities.supportsAttestedAlertRegistration {
+                        Toggle(isOn: $settings.notifyAtNight) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("settings.notifyAtNight")
+                                Text("settings.notifyAtNight.detail")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                     Toggle(isOn: $settings.includeTestAlerts) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("settings.includeTestAlerts")

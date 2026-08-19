@@ -262,7 +262,8 @@
 /* Settings: new subscription + notification sections */
 "settings.section.subscription" = "Subscription";
 "settings.subscribedCity" = "Subscribed City";
-"settings.notifyAtNight" = "Notify at Night";
+"settings.notifyAtNight" = "Routine Reports at Night";
+"settings.notifyAtNight.detail" = "This toggle controls routine reports only. Emergency warnings remain eligible at night.";
 "settings.includeTestAlerts" = "Receive Test/Drill Alerts";
 "settings.includeTestAlerts.detail" = "Off by default";
 "settings.section.disclaimer" = "Sources & Disclaimer";

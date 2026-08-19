@@ -73,24 +73,30 @@ fi
 
 expected_bundle_id="com.quakesignal.app"
 expected_application_id="$team_id.$expected_bundle_id"
+urgent_audio_sha256="9b8e5b3220bf6534a23b0266f3b7e0cb45516e27659d10ac75fc008abdefbfb8"
+japanese_voice_sha256="142c9d6fc382246f327dd37d4fe110f225f8d7a0819e9f861374c0bb74bbe3a6"
+audio_attribution_sha256="7dc20bb7f27f9a86e0b98c4efc2a41c7aea22410cb35643243d01cb9a76e140c"
 case "$platform" in
   ios)
     expected_profile_platform="iOS"
     expected_device_families=(1 2)
     requires_alert_entitlements=true
     requires_embedded_watch=true
+    requires_local_alert_audio=true
     ;;
   tvos)
     expected_profile_platform="tvOS"
     expected_device_families=(3)
     requires_alert_entitlements=false
     requires_embedded_watch=false
+    requires_local_alert_audio=false
     ;;
   visionos)
     expected_profile_platform="visionOS"
     expected_device_families=(7)
     requires_alert_entitlements=false
     requires_embedded_watch=false
+    requires_local_alert_audio=true
     ;;
 esac
 
@@ -105,6 +111,43 @@ trap cleanup EXIT
 error() {
   echo "::error::$*" >&2
   return 1
+}
+
+assert_regular_file_sha256() {
+  local path="$1"
+  local expected="$2"
+  local label="$3"
+  local output
+  local actual
+
+  [ -f "$path" ] && [ ! -L "$path" ] || {
+    error "$label is missing or is not a regular file"
+    return 1
+  }
+  output="$(/usr/bin/shasum -a 256 "$path")"
+  actual="${output%% *}"
+  if [ "$actual" != "$expected" ]; then
+    error "$label has unexpected SHA-256 $actual"
+    return 1
+  fi
+}
+
+verify_local_alert_audio_resources() {
+  local label="$1"
+  local app="$2"
+
+  assert_regular_file_sha256 \
+    "$app/quakesignal_urgent.caf" \
+    "$urgent_audio_sha256" \
+    "$label urgent alert audio"
+  assert_regular_file_sha256 \
+    "$app/quakesignal_japanese_voice.caf" \
+    "$japanese_voice_sha256" \
+    "$label Japanese Safety Voice audio"
+  assert_regular_file_sha256 \
+    "$app/ATTRIBUTION.md" \
+    "$audio_attribution_sha256" \
+    "$label alert-audio attribution"
 }
 
 assert_plist_value() {
@@ -307,6 +350,9 @@ verify_host_structure() {
   else
     assert_plist_key_absent "$app/Info.plist" QUAKESIGNAL_API_BASE_URL "$label Info.plist"
     assert_plist_key_absent "$app/Info.plist" QUAKESIGNAL_APP_ATTEST_MODE "$label Info.plist"
+  fi
+  if [ "$requires_local_alert_audio" = true ]; then
+    verify_local_alert_audio_resources "$label" "$app"
   fi
 }
 

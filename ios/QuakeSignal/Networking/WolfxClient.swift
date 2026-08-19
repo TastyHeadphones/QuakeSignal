@@ -95,6 +95,38 @@ enum WolfxURLSessionPolicy {
     }
 }
 
+/// Drives a manual foreground refresh through SwiftUI's scene-bound `.task`.
+/// Including scene activity in `TaskID` makes deactivation cancel the task
+/// immediately, while clearing the pending request prevents a refresh replay
+/// when the scene later becomes active again.
+struct ForegroundManualRefreshLifecycle: Equatable, Sendable {
+    struct TaskID: Equatable, Sendable {
+        let isSceneActive: Bool
+        let requestID: UInt64?
+    }
+
+    private(set) var pendingRequestID: UInt64?
+    private var nextRequestID: UInt64 = 0
+
+    func taskID(isSceneActive: Bool) -> TaskID {
+        TaskID(isSceneActive: isSceneActive, requestID: pendingRequestID)
+    }
+
+    func shouldRun(isSceneActive: Bool) -> Bool {
+        isSceneActive && pendingRequestID != nil
+    }
+
+    mutating func requestRefresh(isSceneActive: Bool) {
+        guard isSceneActive else { return }
+        nextRequestID &+= 1
+        pendingRequestID = nextRequestID
+    }
+
+    mutating func cancelPendingRefresh() {
+        pendingRequestID = nil
+    }
+}
+
 /// A process-wide reservation gate. Multiple refreshes can overlap (manual,
 /// startup, and socket recovery), so per-refresh index delays alone do not
 /// enforce Wolfx's aggregate two-requests-per-second ceiling.
@@ -268,7 +300,8 @@ enum WolfxNormalizer {
                   event.sourceId == source &&
                   !event.eventId.isEmpty &&
                   event.serial >= 0 &&
-                  (event.reportDate ?? event.originDate) != nil
+                  (event.reportDate ?? event.originDate) != nil &&
+                  event.coordinate != nil
               }) else {
             throw WolfxError.invalidResponse(source: source)
         }
@@ -301,20 +334,22 @@ enum WolfxNormalizer {
     }
 
     static func events(source: String, object: Object) -> [EEWEvent] {
+        let normalized: [EEWEvent]
         switch source {
         case "jma_eew":
-            return normalizeJmaEew(object).map { [$0] } ?? []
+            normalized = normalizeJmaEew(object).map { [$0] } ?? []
         case "sc_eew", "fj_eew":
-            return normalizeScFjEew(object, source: source).map { [$0] } ?? []
+            normalized = normalizeScFjEew(object, source: source).map { [$0] } ?? []
         case "cenc_eew", "cq_eew":
-            return normalizeCencCqEew(object, source: source).map { [$0] } ?? []
+            normalized = normalizeCencCqEew(object, source: source).map { [$0] } ?? []
         case "cenc_eqlist":
-            return rankedEntries(object).compactMap(normalizeCencEqlist)
+            normalized = rankedEntries(object).compactMap(normalizeCencEqlist)
         case "jma_eqlist":
-            return rankedEntries(object).compactMap(normalizeJmaEqlist)
+            normalized = rankedEntries(object).compactMap(normalizeJmaEqlist)
         default:
             return []
         }
+        return normalized.filter { $0.coordinate != nil }
     }
 
     private static func normalizeJmaEew(_ value: Object) -> EEWEvent? {

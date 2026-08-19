@@ -21,7 +21,7 @@ token, an exact current location, or a test-push result in product-page imagery.
 | Coordinated native-platform release runbook | `apple-platform-release.md` |
 | tvOS / visionOS / Watch metadata and screenshot plans | `platforms/` |
 | Unapproved tvOS / visionOS / Watch candidate packages | `platforms/screenshot-candidates-v1.1-build8/` |
-| Read-only App Store Connect state and safe portal sequence | `app-store-connect-portal-audit-2026-08-19.md` |
+| Read-only App Store Connect state and safe portal sequence | Historical `app-store-connect-portal-audit-2026-08-19.md` plus latest `app-store-connect-portal-audit-2026-08-20.md` addendum |
 
 ## App record
 
@@ -33,6 +33,12 @@ product in that record. The separate Tauri macOS client uses
 `com.quakesignal.desktop` and Apple ID `6800642853`; do not select macOS in the
 native shared record, attach the Tauri package there, or create a duplicate
 record.
+
+The latest read-only portal state is in
+[`app-store-connect-portal-audit-2026-08-20.md`](./app-store-connect-portal-audit-2026-08-20.md).
+Mac Catalyst versus Designed for iPad on Mac remains an explicit release-owner
+choice. Make no portal mutation until that route and its portal mapping are
+recorded; neither choice changes the Tauri app's separate record.
 
 - Name: `QuakeSignal`
 - Primary language: English (U.S.)

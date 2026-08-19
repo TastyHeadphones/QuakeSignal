@@ -295,14 +295,24 @@ async function writeFixture(options = {}) {
     "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements",
     "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements",
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
+    "ios/QuakeSignal/Features/Detail/QuakeDetailView.swift",
+    "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
     "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
+    "ios/QuakeSignal/Features/Root/RootView.swift",
     "ios/QuakeSignal/Features/Settings/SettingsView.swift",
+    "ios/QuakeSignal/Models/EEWEvent.swift",
     "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
     "ios/QuakeSignal/Networking/LiveSocketClient.swift",
     "ios/QuakeSignal/Networking/WolfxClient.swift",
     "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
+    "ios/QuakeSignal/Notifications/NotificationManager.swift",
+    "ios/QuakeSignal/State/AlertPolicy.swift",
+    "ios/QuakeSignal/State/LocationManager.swift",
     "ios/QuakeSignal/State/QuakeStore.swift",
+    "ios/QuakeSignalShared/ForegroundQuakeStore.swift",
     "ios/QuakeSignalShared/ScreenshotAutomation.swift",
+    "ios/QuakeSignalTV/TVDashboardView.swift",
+    "ios/QuakeSignalWatch/WatchDashboardView.swift",
     "ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy",
     "ios/QuakeSignal/Resources/en.lproj/Localizable.strings",
     "ios/QuakeSignal/Resources/ja.lproj/Localizable.strings",
@@ -555,6 +565,61 @@ test("fails closed when foreground-only Vision capability or localized disclosur
 test("fails closed when foreground lifecycle or nonpersistent Wolfx transport policy drifts", async (t) => {
   for (const [relativePath, from, to] of [
     [
+      "ios/QuakeSignal/State/AlertPolicy.swift",
+      "guard hasEventID, isSceneActive else {",
+      "guard hasEventID else {",
+    ],
+    [
+      "ios/QuakeSignal/State/AlertPolicy.swift",
+      "event.isActiveWarning && WarningFreshnessPolicy.isFresh(event, now: now)",
+      "event.isActiveWarning",
+    ],
+    [
+      "ios/QuakeSignal/Notifications/NotificationManager.swift",
+      "self.isForegroundSceneActive &&\n                    UIApplication.shared.applicationState == .active",
+      "self.isForegroundSceneActive",
+    ],
+    [
+      "ios/QuakeSignal/State/QuakeStore.swift",
+      "let now = Date()\n        clockNow = now\n        merge(event)",
+      "let now = clockNow\n        merge(event)",
+    ],
+    [
+      "ios/QuakeSignal/Features/Root/RootView.swift",
+      "store.ingestTapped(event: cached, reason: reason)",
+      "store.presentedAlert = PresentedAlert(event: cached, reason: reason)",
+    ],
+    [
+      "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
+      "return .openSettings",
+      "return .request",
+    ],
+    [
+      "ios/QuakeSignal/State/LocationManager.swift",
+      "let remainingLifetime = LocationFixPolicy.remainingLifetime(forTimestamp: timestamp)",
+      "let remainingLifetime = LocationFixPolicy.maximumAge",
+    ],
+    [
+      "ios/QuakeSignal/Models/EEWEvent.swift",
+      "return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil",
+      "return coordinate",
+    ],
+    [
+      "ios/QuakeSignal/Networking/WolfxClient.swift",
+      "guard isSceneActive else { return }",
+      "guard pendingRequestID == nil else { return }",
+    ],
+    [
+      "ios/QuakeSignalTV/TVDashboardView.swift",
+      ".task(id: manualRefreshLifecycle.taskID(isSceneActive: scenePhase == .active))",
+      ".task",
+    ],
+    [
+      "ios/QuakeSignalWatch/WatchDashboardView.swift",
+      ".task(id: manualRefreshLifecycle.taskID(isSceneActive: scenePhase == .active))",
+      ".task",
+    ],
+    [
       "ios/QuakeSignal/State/QuakeStore.swift",
       "case .stopSocket:\n            liveSocket.stop()",
       "case .stopSocket:\n            liveSocket.start()",
@@ -581,6 +646,72 @@ test("fails closed when foreground lifecycle or nonpersistent Wolfx transport po
         /foreground-only Apple platform policy must match the reviewed fingerprint/i,
       );
     });
+  }
+});
+
+test("Settings explains the routine-only night toggle in every supported localization", async () => {
+  const settingsView = await readFile(
+    join(repositoryRoot, "ios/QuakeSignal/Features/Settings/SettingsView.swift"),
+    "utf8",
+  );
+  assert.match(
+    settingsView,
+    /if PlatformCapabilities\.supportsAttestedAlertRegistration \{[\s\S]*Toggle\(isOn: \$settings\.notifyAtNight\) \{[\s\S]*Text\("settings\.notifyAtNight"\)[\s\S]*Text\("settings\.notifyAtNight\.detail"\)/,
+  );
+
+  const expectedCopy = new Map([
+    [
+      "en",
+      [
+        '"settings.notifyAtNight" = "Routine Reports at Night";',
+        '"settings.notifyAtNight.detail" = "This toggle controls routine reports only. Emergency warnings remain eligible at night.";',
+      ],
+    ],
+    [
+      "ja",
+      [
+        '"settings.notifyAtNight" = "夜間の通常地震情報";',
+        '"settings.notifyAtNight.detail" = "この設定は通常の地震情報にのみ適用されます。緊急警報は夜間も通知対象のままです。";',
+      ],
+    ],
+    [
+      "zh-Hans",
+      [
+        '"settings.notifyAtNight" = "夜间常规地震报告";',
+        '"settings.notifyAtNight.detail" = "此开关仅控制常规地震报告。紧急预警在夜间仍属于可通知范围。";',
+      ],
+    ],
+  ]);
+
+  for (const [locale, requiredLines] of expectedCopy) {
+    const source = await readFile(
+      join(repositoryRoot, `ios/QuakeSignal/Resources/${locale}.lproj/Localizable.strings`),
+      "utf8",
+    );
+    for (const requiredLine of requiredLines) {
+      assert.equal(source.split("\n").filter((line) => line === requiredLine).length, 1);
+    }
+  }
+});
+
+test("tvOS and Watch manual refreshes are scene-bound instead of unstructured tasks", async () => {
+  for (const [relativePath, refreshCall] of [
+    ["ios/QuakeSignalTV/TVDashboardView.swift", "await store.refresh()"],
+    ["ios/QuakeSignalWatch/WatchDashboardView.swift", "await store.refresh(limit: 12)"],
+  ]) {
+    const source = await readFile(join(repositoryRoot, relativePath), "utf8");
+    assert.match(
+      source,
+      /\.task\(id: manualRefreshLifecycle\.taskID\(isSceneActive: scenePhase == \.active\)\)/,
+    );
+    assert.match(
+      source,
+      /guard manualRefreshLifecycle\.shouldRun\(isSceneActive: scenePhase == \.active\) else \{ return \}/,
+    );
+    assert.match(source, /manualRefreshLifecycle\.cancelPendingRefresh\(\)/);
+    assert.match(source, /manualRefreshLifecycle\.requestRefresh\(isSceneActive: scenePhase == \.active\)/);
+    assert.equal(source.includes(refreshCall), true);
+    assert.doesNotMatch(source, /Task \{ await store\.refresh/);
   }
 });
 

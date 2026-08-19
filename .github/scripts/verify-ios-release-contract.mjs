@@ -22,14 +22,24 @@ const contractFiles = {
   ],
   platformCapabilityPolicy: [
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
+    "ios/QuakeSignal/Features/Detail/QuakeDetailView.swift",
+    "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
     "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
+    "ios/QuakeSignal/Features/Root/RootView.swift",
     "ios/QuakeSignal/Features/Settings/SettingsView.swift",
+    "ios/QuakeSignal/Models/EEWEvent.swift",
     "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
     "ios/QuakeSignal/Networking/LiveSocketClient.swift",
     "ios/QuakeSignal/Networking/WolfxClient.swift",
     "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
+    "ios/QuakeSignal/Notifications/NotificationManager.swift",
+    "ios/QuakeSignal/State/AlertPolicy.swift",
+    "ios/QuakeSignal/State/LocationManager.swift",
     "ios/QuakeSignal/State/QuakeStore.swift",
+    "ios/QuakeSignalShared/ForegroundQuakeStore.swift",
     "ios/QuakeSignalShared/ScreenshotAutomation.swift",
+    "ios/QuakeSignalTV/TVDashboardView.swift",
+    "ios/QuakeSignalWatch/WatchDashboardView.swift",
     "ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy",
     "ios/QuakeSignal/Resources/en.lproj/Localizable.strings",
     "ios/QuakeSignal/Resources/ja.lproj/Localizable.strings",
@@ -249,9 +259,9 @@ const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:gIdap293hpqUJ9U_gKOGiTs
 const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:pyFXJBB9gZ7oyUQR5FTk2qRZe4TlhnJmc0HjteIYnLI";
 const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:HdP5PsAe4vXSh0x6N2lFipMQ5Z7ubvxbOMJOcX1kmEQ";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
-const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:cfc1XFYH5uur53XuPS-lt-mj3_hy172yy3txy7PSeKo";
+const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:bCWps5YLQgSrvOMeB4i2plvAWrqaNWA-9uf2aRQocdY";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
-const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:YGkg2DD4-kFzNt_hiwXLoEFN8dCTvnoaWjEfVYWtS_E";
+const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:6uR1jZLWBrvD89WmHoHm86ZPSUChNI04MG9Ms_y5ppw";
 const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:ahwdsrqf-iMo_HiGEWdL0ZYZva7tWf-l37OnPyqbsdw";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:vtAIx8JZ4s9UUN07yItVzVx-po5bFVrgWPH5FV_zhXA";

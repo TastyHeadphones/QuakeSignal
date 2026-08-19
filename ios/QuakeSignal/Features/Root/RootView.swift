@@ -58,20 +58,28 @@ struct RootView: View {
             }
         }
         .fullScreenCover(item: $store.presentedAlert) { alert in
-            EEWAlertView(event: alert.event, reason: alert.reason) {
-                store.presentedAlert = nil
+            switch alert.mode {
+            case .emergency:
+                EEWAlertView(event: alert.event, reason: alert.reason) {
+                    store.presentedAlert = nil
+                }
+            case .detail:
+                NotificationEventDetailCover(event: alert.event) {
+                    store.presentedAlert = nil
+                }
             }
         }
         .task {
             guard !ScreenshotAutomation.isEnabled else {
-                store.setForegroundActive(false)
+                updateForegroundLifecycle(isActive: false)
                 return
             }
+            updateForegroundLifecycle(isActive: scenePhase == .active)
             notifications.onNotificationTapped = { payload in
                 Task { await handleTap(payload) }
             }
-            notifications.onForegroundNotification = { payload in
-                Task { await handleForegroundNotification(payload) }
+            notifications.onForegroundNotification = { delivery in
+                Task { await handleForegroundNotification(delivery) }
             }
             // AppDelegate configures the notification delegate before launch
             // finishes; callbacks buffered before this task are drained when
@@ -80,7 +88,6 @@ struct RootView: View {
             if AppSettings.shared.useCurrentLocation {
                 locationManager.requestCurrentLocation()
             }
-            store.setForegroundActive(scenePhase == .active)
             await store.start()
         }
         .onChange(of: notifications.deviceToken) { _, _ in
@@ -91,7 +98,7 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard !ScreenshotAutomation.isEnabled else { return }
-            store.setForegroundActive(phase == .active)
+            updateForegroundLifecycle(isActive: phase == .active)
             guard phase == .active else { return }
             // A person can grant notifications from the iOS Settings screen
             // opened by this app. Refresh when the scene returns so we request
@@ -116,6 +123,12 @@ struct RootView: View {
         } message: {
             Text("notification.unavailable.message")
         }
+    }
+
+    @MainActor
+    private func updateForegroundLifecycle(isActive: Bool) {
+        store.setForegroundActive(isActive)
+        notifications.setForegroundSceneActive(isActive)
     }
 
     private var coarseCurrentLocation: CoarseCoordinate? {
@@ -179,7 +192,7 @@ struct RootView: View {
         }
 
         if let cached = store.events.first(where: { $0.id == compositeId }) {
-            store.presentedAlert = PresentedAlert(event: cached, reason: reason)
+            store.ingestTapped(event: cached, reason: reason)
             return
         }
 
@@ -191,20 +204,49 @@ struct RootView: View {
         }
     }
 
-    private func handleForegroundNotification(_ payload: PushPayload) async {
+    private func handleForegroundNotification(_ delivery: ForegroundNotificationDelivery) async {
+        let payload = delivery.payload
         guard let compositeId = payload.compositeEventId else { return }
         let reason = AlertPresentationReason(wireValue: payload.reason)
         if let snapshot = payload.eventSnapshot, snapshot.id == compositeId {
-            store.ingestForegroundNotification(event: snapshot, reason: reason)
+            store.ingestForegroundNotification(
+                event: snapshot,
+                reason: reason,
+                allowsEmergencyPresentation: delivery.shouldPresentEmergencyInApp
+            )
             return
         }
         if let cached = store.events.first(where: { $0.id == compositeId }) {
-            store.ingestForegroundNotification(event: cached, reason: reason)
+            store.ingestForegroundNotification(
+                event: cached,
+                reason: reason,
+                allowsEmergencyPresentation: delivery.shouldPresentEmergencyInApp
+            )
             return
         }
         await store.refresh()
         if let fetched = store.events.first(where: { $0.id == compositeId }) {
-            store.ingestForegroundNotification(event: fetched, reason: reason)
+            store.ingestForegroundNotification(
+                event: fetched,
+                reason: reason,
+                allowsEmergencyPresentation: delivery.shouldPresentEmergencyInApp
+            )
+        }
+    }
+}
+
+private struct NotificationEventDetailCover: View {
+    let event: EEWEvent
+    let onDismiss: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            QuakeDetailView(event: event)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("alert.dismiss", action: onDismiss)
+                    }
+                }
         }
     }
 }

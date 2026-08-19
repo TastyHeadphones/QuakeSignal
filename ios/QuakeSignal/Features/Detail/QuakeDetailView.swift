@@ -21,8 +21,11 @@ struct QuakeDetailView: View {
                 LabeledContent("detail.field.status") { Text(event.reportStatus.labelKey).foregroundStyle(event.reportStatus.color) }
                 LabeledContent("detail.field.reportNumber", value: String(event.serial))
                 LabeledContent("detail.field.eventId", value: event.eventId)
-                if let latitude = event.latitude, let longitude = event.longitude {
-                    LabeledContent("detail.field.coordinates", value: String(format: "%.1f, %.1f", latitude, longitude))
+                if let coordinate = event.coordinate {
+                    LabeledContent(
+                        "detail.field.coordinates",
+                        value: String(format: "%.1f, %.1f", coordinate.latitude, coordinate.longitude)
+                    )
                 }
                 if let originDate = event.originDate {
                     LabeledContent("home.field.originTime", value: originDate.formatted(date: .abbreviated, time: .standard))

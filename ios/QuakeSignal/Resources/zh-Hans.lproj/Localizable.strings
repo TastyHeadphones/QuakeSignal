@@ -261,7 +261,8 @@
 /* 设置：新增订阅与通知分区 */
 "settings.section.subscription" = "订阅与提醒";
 "settings.subscribedCity" = "订阅城市";
-"settings.notifyAtNight" = "接收夜间通知";
+"settings.notifyAtNight" = "夜间常规地震报告";
+"settings.notifyAtNight.detail" = "此开关仅控制常规地震报告。紧急预警在夜间仍属于可通知范围。";
 "settings.includeTestAlerts" = "接收测试/演练信息";
 "settings.includeTestAlerts.detail" = "默认关闭";
 "settings.section.disclaimer" = "来源与免责声明";

@@ -40,7 +40,19 @@ enum HomeReportSelectionPolicy {
 struct PresentedAlert: Identifiable, Equatable {
     let event: EEWEvent
     let reason: AlertPresentationReason
-    var id: String { "\(event.id)#\(reason.rawValue)#\(event.serial)" }
+    let mode: PresentedEventMode
+
+    init(
+        event: EEWEvent,
+        reason: AlertPresentationReason,
+        mode: PresentedEventMode = .emergency
+    ) {
+        self.event = event
+        self.reason = reason
+        self.mode = mode
+    }
+
+    var id: String { "\(event.id)#\(reason.rawValue)#\(mode.rawValue)#\(event.serial)" }
 }
 
 /// Keeps an already-presented warning synchronized with accepted lifecycle
@@ -55,6 +67,10 @@ enum PresentedAlertLifecyclePolicy {
     ) -> PresentedAlert? {
         guard let current, current.event.id == incoming.id else { return current }
 
+        if current.mode == .detail {
+            return PresentedAlert(event: incoming, reason: current.reason, mode: .detail)
+        }
+
         if current.event.isActiveWarning {
             guard incoming.isActiveWarning,
                   WarningFreshnessPolicy.isFresh(incoming, now: now) else {
@@ -62,11 +78,12 @@ enum PresentedAlertLifecyclePolicy {
             }
         }
 
-        return PresentedAlert(event: incoming, reason: current.reason)
+        return PresentedAlert(event: incoming, reason: current.reason, mode: current.mode)
     }
 
     static func afterClockTick(_ current: PresentedAlert?, now: Date) -> PresentedAlert? {
         guard let current,
+              current.mode == .emergency,
               current.event.isActiveWarning,
               !WarningFreshnessPolicy.isFresh(current.event, now: now) else {
             return current
@@ -142,6 +159,17 @@ final class QuakeStore {
     func setForegroundActive(_ isActive: Bool) {
         let wasActive = isForegroundActive
         isForegroundActive = isActive
+        if isActive {
+            // Scene activation and notification callbacks can arrive before
+            // the periodic clock task gets its first turn. Refresh
+            // synchronously so a warm-background tap cannot classify a stale
+            // warning using the time from before the app was suspended.
+            clockNow = Date()
+            presentedAlert = PresentedAlertLifecyclePolicy.afterClockTick(
+                presentedAlert,
+                now: clockNow
+            )
+        }
         guard !screenshotAutomationEnabled else {
             for action in DirectMonitoringLifecyclePolicy.suspensionActions {
                 performDirectMonitoringAction(action)
@@ -302,12 +330,19 @@ final class QuakeStore {
     }
 
     /// Presents a notification the person explicitly tapped. The event still
-    /// merges monotonically, but a tap is navigation intent and is therefore
-    /// not re-filtered as a new unsolicited emergency.
+    /// merges monotonically. A fresh active warning may reopen the emergency
+    /// cover; every historical or terminal frame opens ordinary details so a
+    /// stale tap cannot issue imperative safety instructions.
     func ingestTapped(event: EEWEvent, reason: AlertPresentationReason) {
+        let now = Date()
+        clockNow = now
         merge(event)
         let displayedEvent = events.first(where: { $0.id == event.id }) ?? event
-        presentedAlert = PresentedAlert(event: displayedEvent, reason: reason)
+        presentedAlert = PresentedAlert(
+            event: displayedEvent,
+            reason: reason,
+            mode: NotificationTapPresentationPolicy.mode(for: displayedEvent, now: now)
+        )
     }
 
     /// Applies a real push received while the app is foreground. It shares the
@@ -315,15 +350,19 @@ final class QuakeStore {
     /// prevents duplicate full-screen UI and duplicate sound.
     func ingestForegroundNotification(
         event: EEWEvent,
-        reason requestedReason: AlertPresentationReason
+        reason requestedReason: AlertPresentationReason,
+        allowsEmergencyPresentation: Bool
     ) {
+        let now = Date()
+        clockNow = now
         let previous = events.first(where: { $0.id == event.id })
         let decision = ForegroundPushPolicy.ingestionDecision(
             for: event,
             previous: previous,
             requestedReason: requestedReason,
+            allowsEmergencyPresentation: allowsEmergencyPresentation,
             preferences: alertPreferenceSnapshot,
-            now: clockNow
+            now: now
         )
         guard decision.shouldMerge else { return }
         merge(event)

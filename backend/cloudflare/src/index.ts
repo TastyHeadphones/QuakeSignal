@@ -1246,16 +1246,40 @@ function messageExpiry(
   return calculated;
 }
 
-function isQueuedEvent(value: unknown): value is QueuedEvent {
+export function isQueuedEvent(value: unknown): value is QueuedEvent {
   if (!value || typeof value !== "object") return false;
   const event = value as Partial<QueuedEvent>;
   return (
     typeof event.id === "string" &&
-    typeof event.eventId === "string" &&
+    event.id === `${event.sourceId}:${event.eventId}` &&
+    isNonEmptyText(event.eventId) &&
     typeof event.sourceId === "string" &&
     (ALL_WOLFX_SOURCES as string[]).includes(event.sourceId) &&
     typeof event.serial === "number" &&
-    (event.kind === "eew" || event.kind === "report")
+    Number.isSafeInteger(event.serial) &&
+    event.serial >= 0 &&
+    (EEW_SOURCES.includes(event.sourceId as WolfxSourceId)
+      ? event.kind === "eew"
+      : event.kind === "report") &&
+    isNonEmptyText(event.originTimeUtc) &&
+    Number.isFinite(Date.parse(event.originTimeUtc)) &&
+    isNonEmptyText(event.reportTimeUtc) &&
+    Number.isFinite(Date.parse(event.reportTimeUtc)) &&
+    isNonEmptyText(event.hypocenter) &&
+    typeof event.latitude === "number" &&
+    isNormalizableLatitude(event.latitude) &&
+    typeof event.longitude === "number" &&
+    isNormalizableLongitude(event.longitude) &&
+    typeof event.magnitude === "number" &&
+    Number.isFinite(event.magnitude) &&
+    (event.depth === null ||
+      (typeof event.depth === "number" && Number.isFinite(event.depth))) &&
+    (event.maxIntensity === null || typeof event.maxIntensity === "string") &&
+    typeof event.isWarn === "boolean" &&
+    typeof event.isFinal === "boolean" &&
+    typeof event.isCancel === "boolean" &&
+    typeof event.isTraining === "boolean" &&
+    (event.tsunami === null || typeof event.tsunami === "string")
   );
 }
 
@@ -1863,9 +1887,19 @@ function isNonEmptyText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function isNormalizableCoordinate(value: unknown): boolean {
+function normalizableCoordinate(value: unknown): number | null {
   const number = typeof value === "string" ? Number(value) : value;
-  return typeof number === "number" && Number.isFinite(number);
+  return typeof number === "number" && Number.isFinite(number) ? number : null;
+}
+
+function isNormalizableLatitude(value: unknown): boolean {
+  const number = normalizableCoordinate(value);
+  return number !== null && number >= -90 && number <= 90;
+}
+
+function isNormalizableLongitude(value: unknown): boolean {
+  const number = normalizableCoordinate(value);
+  return number !== null && number >= -180 && number <= 180;
 }
 
 function hasValidNormalizedEventTimes(
@@ -1876,8 +1910,8 @@ function hasValidNormalizedEventTimes(
     Number.isFinite(Date.parse(event.originTimeUtc)) &&
     typeof event.reportTimeUtc === "string" &&
     Number.isFinite(Date.parse(event.reportTimeUtc)) &&
-    Number.isFinite(event.latitude) &&
-    Number.isFinite(event.longitude) &&
+    isNormalizableLatitude(event.latitude) &&
+    isNormalizableLongitude(event.longitude) &&
     Number.isFinite(event.magnitude) &&
     typeof event.hypocenter === "string" &&
     event.hypocenter.trim().length > 0
@@ -1897,8 +1931,8 @@ function isStructurallyValidEqlistEntry(
     !isNonEmptyText(value.magnitude) ||
     !isNonEmptyText(value.latitude) ||
     !isNonEmptyText(value.longitude) ||
-    !isNormalizableCoordinate(value.latitude) ||
-    !isNormalizableCoordinate(value.longitude)
+    !isNormalizableLatitude(value.latitude) ||
+    !isNormalizableLongitude(value.longitude)
   ) {
     return false;
   }
@@ -1982,7 +2016,9 @@ export function isStructurallyValidHttpSnapshot(
       isNonEmptyText(value.EventID) &&
       isNonEmptyText(value.OriginTime) &&
       isFiniteNumber(value.Latitude) &&
-      isFiniteNumber(value.Longitude);
+      isNormalizableLatitude(value.Latitude) &&
+      isFiniteNumber(value.Longitude) &&
+      isNormalizableLongitude(value.Longitude);
     if (!base) return false;
     switch (sourceId) {
       case "jma_eew":
@@ -6253,18 +6289,22 @@ export class QuakeRelay {
             : route;
         if (!source) return;
         const normalizedEvents = normalizeMessages(source, message);
-        if (isLiveSnapshotSource(source) &&
+        if ((isLiveSnapshotSource(source) || normalizedEvents.length > 0) &&
           !isStructurallyValidHttpSnapshot(source, message, normalizedEvents)) {
           // A list route has no non-event payload that can prove source
           // freshness. In particular, an empty/malformed ranked list must not
           // turn a healthy socket into a fresh alert source.
           console.warn(
             JSON.stringify({
-              outcome: "wolfx_live_snapshot_invalid",
+              outcome: isLiveSnapshotSource(source)
+                ? "wolfx_live_snapshot_invalid"
+                : "wolfx_live_event_invalid",
               source,
             }),
           );
-          this.state.waitUntil(this.flagLiveSnapshotBlocked(source, "invalid"));
+          if (isLiveSnapshotSource(source)) {
+            this.state.waitUntil(this.flagLiveSnapshotBlocked(source, "invalid"));
+          }
           return;
         }
         if (normalizedEvents.length === 0) {

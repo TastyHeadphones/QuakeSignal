@@ -43,7 +43,13 @@ recorded in the existing submission documents.
   visionOS protected archive lanes. Do not upload a native platform until its
   store-complete icon set, screenshots, profile, metadata, and platform QA are
   approved. The separate Tauri macOS client retains its own App Store record.
+- Record the release owner's Mac Catalyst-versus-Designed-for-iPad-on-Mac
+  choice and its reviewed portal mapping. Do not mutate either App Store
+  Connect record, attach a Mac artifact, or present both as simultaneous public
+  variants until that decision is explicit. The Tauri app remains separate.
 - Use `platforms/` for the platform-specific copy, review notes, planned
   screenshot manifests, and capture checklist. Use
-  `app-store-connect-portal-audit-2026-08-19.md` to resolve the observed empty
-  platform drafts without deleting or creating duplicate records.
+  `app-store-connect-portal-audit-2026-08-19.md` as history and the latest
+  `app-store-connect-portal-audit-2026-08-20.md` addendum for current planning.
+  The shared iOS, tvOS, and visionOS `1.1` drafts still have no selected build
+  or screenshots; do not delete or duplicate them.

@@ -4,6 +4,7 @@ import SwiftUI
 struct WatchDashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var store = ForegroundQuakeStore()
+    @State private var manualRefreshLifecycle = ForegroundManualRefreshLifecycle()
 
     var body: some View {
         NavigationStack {
@@ -17,6 +18,17 @@ struct WatchDashboardView: View {
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             await store.monitorWhileActive(limit: 12)
+        }
+        .task(id: manualRefreshLifecycle.taskID(isSceneActive: scenePhase == .active)) {
+            guard manualRefreshLifecycle.shouldRun(isSceneActive: scenePhase == .active) else { return }
+            await store.refresh(limit: 12)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase != .active else { return }
+            manualRefreshLifecycle.cancelPendingRefresh()
+        }
+        .onDisappear {
+            manualRefreshLifecycle.cancelPendingRefresh()
         }
     }
 
@@ -44,7 +56,7 @@ struct WatchDashboardView: View {
                         .lineLimit(2)
 
                     Button {
-                        Task { await store.refresh(limit: 12) }
+                        manualRefreshLifecycle.requestRefresh(isSceneActive: scenePhase == .active)
                     } label: {
                         if store.isLoading {
                             ProgressView()

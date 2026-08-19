@@ -184,6 +184,69 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertTrue(LocationSelectionStatus.current.canRequestCurrentLocation)
     }
 
+    func testLocationFixRemainingLifetimeUsesOriginalTimestampBoundaries() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func location(age: TimeInterval) -> CLLocation {
+            CLLocation(
+                coordinate: CLLocationCoordinate2D(latitude: 35, longitude: 140),
+                altitude: 0,
+                horizontalAccuracy: 25,
+                verticalAccuracy: 25,
+                timestamp: now.addingTimeInterval(-age)
+            )
+        }
+
+        XCTAssertEqual(
+            LocationFixPolicy.remainingLifetime(for: location(age: 0), now: now),
+            120,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            LocationFixPolicy.remainingLifetime(for: location(age: 119), now: now),
+            1,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            LocationFixPolicy.remainingLifetime(for: location(age: 120), now: now),
+            0,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            LocationFixPolicy.remainingLifetime(for: location(age: 121), now: now),
+            0,
+            accuracy: 0.000_001
+        )
+    }
+
+    func testCancelledLocationExpirationTaskDoesNotRunCallback() async {
+        var didExpire = false
+        let task = LocationFixPolicy.expirationTask(
+            after: 1,
+            sleep: { _ in
+                await Task.yield()
+                try Task.checkCancellation()
+            }
+        ) {
+            didExpire = true
+        }
+
+        task.cancel()
+        await task.value
+
+        XCTAssertFalse(didExpire)
+    }
+
+    func testExpiredLocationTaskRunsAtZeroRemainingLifetime() async {
+        var didExpire = false
+        let task = LocationFixPolicy.expirationTask(after: 0) {
+            didExpire = true
+        }
+
+        await task.value
+
+        XCTAssertTrue(didExpire)
+    }
+
     func testTestAlertCanRepairAStoppedRegistrationWhenADeviceTokenExists() {
         XCTAssertTrue(PushTestAlertPolicy.isAvailable(
             subscriptionEnabled: true,

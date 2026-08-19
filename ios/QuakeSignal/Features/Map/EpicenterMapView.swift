@@ -1,6 +1,28 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import UIKit
+
+enum MapLocationControlAction: Equatable {
+    case focus
+    case request
+    case openSettings
+}
+
+enum MapLocationControlPolicy {
+    static func action(
+        authorizationStatus: CLAuthorizationStatus,
+        hasCurrentLocation: Bool
+    ) -> MapLocationControlAction {
+        if authorizationStatus.allowsQuakeSignalLocation {
+            return hasCurrentLocation ? .focus : .request
+        }
+        if authorizationStatus == .notDetermined {
+            return .request
+        }
+        return .openSettings
+    }
+}
 
 private enum TimeWindow: CaseIterable {
     case day, week, month
@@ -41,12 +63,15 @@ enum MapTimelineReference {
 }
 
 struct EpicenterMapView: View {
+    @Environment(\.openURL) private var openURL
     @State private var store = QuakeStore.shared
     @State private var locationManager = LocationManager.shared
     @State private var selectedEvent: EEWEvent?
     @State private var detailEvent: EEWEvent?
     @State private var timeWindow: TimeWindow = .week
     @State private var minMagnitude: Double = 0
+    @State private var isWaitingToFocusLocation = false
+    @State private var showingLocationIssue = false
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 30, longitude: 125),
@@ -79,10 +104,12 @@ struct EpicenterMapView: View {
                     }
                 }
                 .mapControls {
-                    MapUserLocationButton()
-                        .accessibilityIdentifier("map.currentLocationButton")
                     MapCompass()
                     MapScaleView()
+                }
+                .overlay(alignment: .trailing) {
+                    currentLocationButton
+                        .padding(.trailing, 12)
                 }
                 .overlay {
                     if locatedEvents.isEmpty {
@@ -115,7 +142,84 @@ struct EpicenterMapView: View {
                 guard let selectedEvent, !visibleEventIDs.contains(selectedEvent.id) else { return }
                 dismissSelection()
             }
+            .onChange(of: locationManager.selectionStatus) { _, status in
+                guard isWaitingToFocusLocation else { return }
+                switch status {
+                case .current:
+                    if let coordinate = locationManager.currentLocation {
+                        focusMap(on: coordinate)
+                    }
+                    isWaitingToFocusLocation = false
+                case .denied, .unavailable:
+                    isWaitingToFocusLocation = false
+                    showingLocationIssue = true
+                case .permissionRequired, .locating:
+                    break
+                }
+            }
+            .alert("city.useCurrentLocation", isPresented: $showingLocationIssue) {
+                if locationManager.selectionStatus == .denied {
+                    Button("settings.openSystemSettings") {
+                        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                        openURL(url)
+                    }
+                } else {
+                    Button("home.banner.retry") {
+                        requestAndFocusCurrentLocation()
+                    }
+                }
+                Button("alert.dismiss", role: .cancel) {}
+            } message: {
+                Text(locationManager.selectionStatus.localizedDetail(fallbackCityName: nil))
+            }
         }
+    }
+
+    private var currentLocationButton: some View {
+        Button(action: handleCurrentLocationButton) {
+            Group {
+                if isWaitingToFocusLocation && locationManager.isRequestingLocation {
+                    ProgressView()
+                } else {
+                    Image(systemName: canShowUserLocation ? "location.fill" : "location")
+                }
+            }
+            .font(.body.weight(.semibold))
+            .frame(width: 44, height: 44)
+            .background(.regularMaterial, in: Circle())
+            .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("city.useCurrentLocation"))
+        .accessibilityIdentifier("map.currentLocationButton")
+    }
+
+    private func handleCurrentLocationButton() {
+        switch MapLocationControlPolicy.action(
+            authorizationStatus: locationManager.authorizationStatus,
+            hasCurrentLocation: locationManager.currentLocation != nil
+        ) {
+        case .focus:
+            if let coordinate = locationManager.currentLocation {
+                focusMap(on: coordinate)
+            }
+        case .request:
+            requestAndFocusCurrentLocation()
+        case .openSettings:
+            showingLocationIssue = true
+        }
+    }
+
+    private func requestAndFocusCurrentLocation() {
+        isWaitingToFocusLocation = true
+        locationManager.requestCurrentLocation()
+    }
+
+    private func focusMap(on coordinate: CLLocationCoordinate2D) {
+        cameraPosition = .region(MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 1.5, longitudeDelta: 1.5)
+        ))
     }
 
     private var canShowUserLocation: Bool {

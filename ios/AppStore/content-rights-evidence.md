@@ -17,10 +17,11 @@ portal selection are not evidence that UniSphereco LLC has the necessary
 rights.
 
 A historical portal observation on 15 August 2026 recorded Content Rights as
-selected affirmatively. That selection must not be copied forward or treated
-as authorization. If the portal still contains that answer, reconcile it only
-after the written reply below has been received and reviewed; do not make a
-false certification merely to preserve the prior value.
+selected affirmatively, and the 20 August read-only audit still displayed
+**Yes**. That selection must not be copied forward or treated as authorization.
+The portal and retained evidence currently contradict one another. Reconcile
+the answer only after the written reply below has been received and reviewed;
+do not make or preserve a false certification merely to match the prior value.
 
 ## Material and use covered by the request
 

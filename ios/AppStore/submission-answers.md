@@ -61,14 +61,15 @@ Collected” merely because the app has no account.
 | Platform | Intended 1.1 (8) behavior | Portal / evidence status |
 | --- | --- | --- |
 | Apple Watch companion | Foreground-only compact dashboard embedded in the iOS upload; no independent APNs, App Attest, alert audio, or background emergency alerts | Three source-frozen `410 × 502` Debug Simulator candidates are retained and unapproved; **PENDING** signed host + Watch profile, paired-device QA, signed parity, named screenshot review, and shared iOS description/review approval |
-| tvOS | Foreground-only large-screen dashboard; no APNs, App Attest, alert audio, or background emergency alerts | Three source-frozen `1920 × 1080` Debug Simulator candidates are retained and unapproved. Portal has an empty `1.0` draft; **PENDING** edit to 1.1 where permitted, build 8, profile, platform QA, metadata, signed parity, and named screenshot review |
-| visionOS | Full native windowed foreground app; no APNs, App Attest, Time Sensitive, Critical Alerts, or background emergency delivery. Qualifying live warnings may appear in-app and play the selected local sound only while the app is open. | Five source-frozen `3840 × 2160` Debug Simulator candidates are retained and unapproved. Portal has an empty `1.0` draft; **PENDING** edit to 1.1 where permitted, build 8, profile, platform QA, App Motion answer, metadata, signed parity, and named screenshot review |
+| tvOS | Foreground-only large-screen dashboard; no APNs, App Attest, alert audio, or background emergency alerts | Three source-frozen `1920 × 1080` Debug Simulator candidates are retained and unapproved. Portal has an empty `1.1` draft with no selected build or screenshots and a blank Apple TV Privacy Policy field; **PENDING** build 8, profile, platform QA, reviewed privacy text, metadata, signed parity, and named screenshot review |
+| visionOS | Full native windowed foreground app; no APNs, App Attest, Time Sensitive, Critical Alerts, or background emergency delivery. Qualifying live warnings may appear in-app and play the selected local sound only while the app is open. | Five source-frozen `3840 × 2160` Debug Simulator candidates are retained and unapproved. Portal has an empty `1.1` draft with no selected build or screenshots and App Motion displays **Set Up**; **PENDING** build 8, profile, platform QA, final App Motion answer, metadata, signed parity, and named screenshot review |
 
 Use `platforms/` for exact copy, review notes, immutable screenshot plans, and
 the separately retained unapproved candidate packages.
-Use `app-store-connect-portal-audit-2026-08-19.md` for the read-only portal
-contradictions and safe action order. Do not delete or repurpose an existing
-draft from this worksheet.
+Use `app-store-connect-portal-audit-2026-08-19.md` as historical evidence and
+the latest `app-store-connect-portal-audit-2026-08-20.md` addendum for the
+current read-only contradictions and safe action order. Do not delete or
+repurpose an existing draft from this worksheet.
 
 ## Required human/legal decisions — do not infer these answers
 
@@ -79,5 +80,6 @@ draft from this worksheet.
 | Export Compliance | Answer Apple's current encryption/export questions for the final signed archive | **PENDING** legal/release-owner confirmation |
 | Availability / pricing schedule | Select approved territories and distribution timing | **PENDING** release-owner decision |
 | Japanese / Simplified Chinese listing | Exact product-page names, availability, and trademark review | **PENDING**; keep English-only until approved |
+| Mac Catalyst or Designed for iPad on Mac | Release-owner choice, reviewed shared-record mapping, signing/profile implications, Mac QA, screenshots, metadata, and availability | **PENDING RELEASE-OWNER CHOICE** — make no portal mutation and do not present both as simultaneous public variants until recorded; the Tauri app remains in Apple ID `6800642853` |
 | Screenshots | Five 6.5-inch iPhone and five 13-inch iPad frames for each approved locale, recaptured from frozen build-8 source | **PARTIAL** — a source-frozen ten-image English Debug Simulator candidate is recorded with exact hashes and build evidence, but remains unsigned, unapproved, and reviewer-null. Named visual approval and signed public-Release parity are still **PENDING**. The existing 30-file provenance truthfully records build 7 and must not be relabeled or uploaded as build-8 evidence. |
 | Physical QA / launch | Complete TestFlight proof, production health/readiness proof, and App Attest launch promotion; terminal-DLQ monitoring remains an optional operational control | **PENDING** — see `docs/IOS_TESTFLIGHT_PHYSICAL_QA.md` and `docs/CLOUDFLARE_PRODUCTION.md` |

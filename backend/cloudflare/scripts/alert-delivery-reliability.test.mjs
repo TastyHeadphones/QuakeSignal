@@ -229,6 +229,17 @@ function message(serial, reason = "new") {
       kind: "eew",
       originTimeUtc: "2026-08-12T00:00:00.000Z",
       reportTimeUtc: "2026-08-12T00:00:00.000Z",
+      hypocenter: "Test Region",
+      latitude: 35,
+      longitude: 139,
+      magnitude: 5,
+      depth: 10,
+      maxIntensity: "4",
+      isWarn: true,
+      isFinal: false,
+      isCancel: false,
+      isTraining: false,
+      tsunami: null,
     },
     reason,
     expiresAtUtc: "2026-08-12T00:30:00.000Z",
@@ -2814,6 +2825,184 @@ test("HTTP fallback ingests only structurally valid changed snapshots", async ()
   }
 });
 
+test("upstream snapshots reject non-finite and out-of-range coordinates", async () => {
+  const { isStructurallyValidHttpSnapshot } = await workerModule();
+  const raw = {
+    EventID: "coordinate-boundary",
+    Serial: 1,
+    AnnouncedTime: "2026/08/13 12:00:05",
+    OriginTime: "2026/08/13 12:00:00",
+    Hypocenter: "Test coast",
+    Latitude: 90,
+    Longitude: 180,
+    Magunitude: 4.2,
+  };
+  const normalized = {
+    id: "jma_eew:coordinate-boundary",
+    sourceId: "jma_eew",
+    eventId: "coordinate-boundary",
+    serial: 1,
+    originTimeUtc: "2026-08-13T03:00:00.000Z",
+    reportTimeUtc: "2026-08-13T03:00:05.000Z",
+    latitude: 90,
+    longitude: 180,
+    magnitude: 4.2,
+    hypocenter: "Test coast",
+  };
+
+  assert.equal(
+    isStructurallyValidHttpSnapshot("jma_eew", raw, [normalized]),
+    true,
+    "inclusive WGS 84 boundaries remain valid",
+  );
+
+  for (const [label, rawMutation, normalizedMutation] of [
+    ["raw latitude above 90", { Latitude: 90.000_001 }, {}],
+    ["raw longitude below -180", { Longitude: -180.000_001 }, {}],
+    ["normalized latitude above 90", {}, { latitude: 90.000_001 }],
+    ["normalized longitude above 180", {}, { longitude: 180.000_001 }],
+    ["non-finite normalized latitude", {}, { latitude: Number.POSITIVE_INFINITY }],
+  ]) {
+    assert.equal(
+      isStructurallyValidHttpSnapshot(
+        "jma_eew",
+        { ...raw, ...rawMutation },
+        [{ ...normalized, ...normalizedMutation }],
+      ),
+      false,
+      label,
+    );
+  }
+
+  const reportRaw = {
+    md5: "invalid-report-coordinate",
+    No1: {
+      Title: "report",
+      EventID: "invalid-report-coordinate",
+      time: "2026/08/13 12:00",
+      time_full: "2026/08/13 12:00:00",
+      location: "Test coast",
+      magnitude: "4.2",
+      shindo: "2",
+      depth: "10km",
+      latitude: "35.1",
+      longitude: "181",
+      info: "",
+    },
+  };
+  assert.equal(
+    isStructurallyValidHttpSnapshot("jma_eqlist", reportRaw, [{
+      ...normalized,
+      id: "jma_eqlist:invalid-report-coordinate",
+      sourceId: "jma_eqlist",
+      eventId: "invalid-report-coordinate",
+      latitude: 35.1,
+      longitude: 140.2,
+    }]),
+    false,
+    "ranked report raw coordinates use the same range validation",
+  );
+  assert.equal(
+    isStructurallyValidHttpSnapshot("jma_eqlist", {
+      ...reportRaw,
+      No1: { ...reportRaw.No1, longitude: "140.2" },
+    }, [{
+      ...normalized,
+      id: "jma_eqlist:invalid-report-coordinate",
+      sourceId: "jma_eqlist",
+      eventId: "invalid-report-coordinate",
+      latitude: 35.1,
+      longitude: 181,
+    }]),
+    false,
+    "ranked report normalized coordinates use the same range validation",
+  );
+});
+
+test("queued event validation requires strict numeric in-range coordinates", async () => {
+  const { isQueuedEvent } = await workerModule();
+  const event = message(1).event;
+  assert.equal(isQueuedEvent(event), true);
+  assert.equal(isQueuedEvent({ ...event, latitude: "35" }), false);
+  assert.equal(isQueuedEvent({ ...event, longitude: "139" }), false);
+  assert.equal(isQueuedEvent({ ...event, latitude: 90.000_001 }), false);
+  assert.equal(isQueuedEvent({ ...event, longitude: -180.000_001 }), false);
+  assert.equal(isQueuedEvent({ ...event, id: "jma_eew:other" }), false);
+});
+
+test("live point-event listeners reject out-of-range coordinates before liveness or ingest", async () => {
+  const { QuakeRelay } = await workerModule();
+  const pending = new Set();
+  const backgroundErrors = [];
+  const ingested = [];
+  const liveness = [];
+  const state = {
+    storage: {},
+    waitUntil(promise) {
+      let tracked;
+      tracked = Promise.resolve(promise)
+        .catch((error) => backgroundErrors.push(error))
+        .finally(() => pending.delete(tracked));
+      pending.add(tracked);
+    },
+  };
+  class Socket {
+    listeners = new Map();
+
+    addEventListener(type, listener) {
+      this.listeners.set(type, listener);
+    }
+
+    emit(type, event) {
+      this.listeners.get(type)?.(event);
+    }
+  }
+  const drain = async () => {
+    for (let pass = 0; pass < 10 && pending.size > 0; pass += 1) {
+      await Promise.all([...pending]);
+    }
+    assert.equal(pending.size, 0);
+    assert.deepEqual(backgroundErrors, []);
+  };
+  const frame = {
+    type: "jma_eew",
+    EventID: "live-coordinate-boundary",
+    Serial: 1,
+    AnnouncedTime: "2026/08/13 12:00:05",
+    OriginTime: "2026/08/13 12:00:00",
+    Hypocenter: "Test coast",
+    Latitude: 35.1,
+    Longitude: 140.2,
+    Magunitude: 4.2,
+    isWarn: true,
+  };
+  const relay = new QuakeRelay(state, {});
+  relay.enqueueLiveIngest = async (event) => ingested.push(event);
+  relay.recordUpstreamLiveness = async (...arguments_) => liveness.push(arguments_);
+  const socket = new Socket();
+  relay.upstreams.set("all_eew", socket);
+  relay.attachUpstreamSocketListeners("all_eew", socket);
+
+  const originalConsoleWarn = console.warn;
+  try {
+    console.warn = () => {};
+    socket.emit("message", {
+      data: JSON.stringify({ ...frame, Latitude: 90.000_001 }),
+    });
+    await drain();
+    assert.deepEqual(ingested, [], "invalid live coordinates never reach durable ingest");
+    assert.deepEqual(liveness, [], "invalid live coordinates never publish source liveness");
+
+    socket.emit("message", { data: JSON.stringify(frame) });
+    await drain();
+    assert.equal(ingested.length, 1, "a valid live point event still reaches ingest");
+    assert.equal(ingested[0].latitude, 35.1);
+    assert.equal(liveness.length, 1, "valid point traffic records transport liveness");
+  } finally {
+    console.warn = originalConsoleWarn;
+  }
+});
+
 test("HTTP report lists resume in D1-safe slices and remain health-stale until complete", async () => {
   const { QuakeRelay } = await workerModule();
   const values = new Map();
@@ -3512,6 +3701,19 @@ function storedLiveSnapshotWork(source, now) {
       eventId: "stored",
       serial: 1,
       kind: "report",
+      originTimeUtc: "2026-08-14T00:00:00.000Z",
+      reportTimeUtc: "2026-08-14T00:00:00.000Z",
+      hypocenter: "Stored Region",
+      latitude: 35,
+      longitude: 139,
+      magnitude: 4.2,
+      depth: 10,
+      maxIntensity: "2",
+      isWarn: false,
+      isFinal: true,
+      isCancel: false,
+      isTraining: false,
+      tsunami: null,
     }],
     nextIndex: 0,
     createdAtMs: now,
@@ -4356,13 +4558,21 @@ test("the relay alarm repairs newer live-list slots left without an active curso
   const latest = {
     ...storedLiveSnapshotWork(route, now),
     fingerprint: "resume-latest",
-    events: [{ ...storedLiveSnapshotWork(route, now).events[0], eventId: "resume-latest" }],
+    events: [{
+      ...storedLiveSnapshotWork(route, now).events[0],
+      id: `${route}:resume-latest`,
+      eventId: "resume-latest",
+    }],
     retryAtMs: now + 5_000,
   };
   const overflow = {
     ...storedLiveSnapshotWork(route, now + 1),
     fingerprint: "resume-overflow",
-    events: [{ ...storedLiveSnapshotWork(route, now + 1).events[0], eventId: "resume-overflow" }],
+    events: [{
+      ...storedLiveSnapshotWork(route, now + 1).events[0],
+      id: `${route}:resume-overflow`,
+      eventId: "resume-overflow",
+    }],
     retryAtMs: now + 5_000,
   };
   try {

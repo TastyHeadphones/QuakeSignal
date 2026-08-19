@@ -20,6 +20,7 @@ extension CLAuthorizationStatus {
 enum LocationFixPolicy {
     static let maximumAge: TimeInterval = 2 * 60
     static let maximumHorizontalAccuracy: CLLocationAccuracy = 5_000
+    typealias ExpirationSleep = @Sendable (Duration) async throws -> Void
 
     static func isUsable(_ location: CLLocation, now: Date = Date()) -> Bool {
         let age = now.timeIntervalSince(location.timestamp)
@@ -42,6 +43,44 @@ enum LocationFixPolicy {
                 }
                 return left.horizontalAccuracy > right.horizontalAccuracy
             }
+    }
+
+    /// Keeps the cache lifetime anchored to the fix's timestamp. Core Location
+    /// can return a still-usable cached fix, so starting a new full lifetime at
+    /// callback time would retain that coordinate beyond `maximumAge`.
+    static func remainingLifetime(
+        for location: CLLocation,
+        now: Date = Date()
+    ) -> TimeInterval {
+        remainingLifetime(forTimestamp: location.timestamp, now: now)
+    }
+
+    static func remainingLifetime(
+        forTimestamp timestamp: Date,
+        now: Date = Date()
+    ) -> TimeInterval {
+        max(0, timestamp.addingTimeInterval(maximumAge).timeIntervalSince(now))
+    }
+
+    @MainActor
+    static func expirationTask(
+        after delay: TimeInterval,
+        sleep: @escaping ExpirationSleep = { duration in
+            try await Task.sleep(for: duration)
+        },
+        onExpiration: @escaping @MainActor @Sendable () -> Void
+    ) -> Task<Void, Never> {
+        Task { @MainActor in
+            do {
+                if delay > 0 {
+                    try await sleep(.seconds(delay))
+                }
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            onExpiration()
+        }
     }
 }
 
@@ -192,7 +231,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let coordinate = LocationFixPolicy.bestUsableLocation(in: locations)?.coordinate else {
+        guard let location = LocationFixPolicy.bestUsableLocation(in: locations) else {
             Task { @MainActor in
                 self.currentLocation = nil
                 self.isRequestingLocation = false
@@ -200,11 +239,13 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
             }
             return
         }
+        let coordinate = location.coordinate
+        let timestamp = location.timestamp
         Task { @MainActor in
             self.currentLocation = coordinate
             self.isRequestingLocation = false
             self.lastRequestFailed = false
-            self.scheduleLocationExpiration(for: coordinate)
+            self.scheduleLocationExpiration(for: coordinate, timestamp: timestamp)
         }
     }
 
@@ -218,14 +259,15 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    private func scheduleLocationExpiration(for coordinate: CLLocationCoordinate2D) {
+    private func scheduleLocationExpiration(
+        for coordinate: CLLocationCoordinate2D,
+        timestamp: Date
+    ) {
         locationExpirationTask?.cancel()
-        locationExpirationTask = Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(for: .seconds(LocationFixPolicy.maximumAge))
-            } catch {
-                return
-            }
+        let remainingLifetime = LocationFixPolicy.remainingLifetime(forTimestamp: timestamp)
+        locationExpirationTask = LocationFixPolicy.expirationTask(
+            after: remainingLifetime
+        ) { [weak self] in
             guard let self,
                   self.currentLocation?.latitude == coordinate.latitude,
                   self.currentLocation?.longitude == coordinate.longitude else {

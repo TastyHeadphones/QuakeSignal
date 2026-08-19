@@ -163,6 +163,11 @@ create_fixture() {
   local archive_app="$fixture/Archive.xcarchive/Products/Applications/QuakeSignal.app"
   local exported_app="$fixture/export/Payload/QuakeSignal.app"
   create_app "$archive_app" com.quakesignal.app "$profile_platform" "$alerts" 'Host Profile'
+  if [ "$fixture_platform" = ios ] || [ "$fixture_platform" = visionos ]; then
+    cp "$repository_root/ios/QuakeSignal/Resources/Audio/quakesignal_urgent.caf" "$archive_app/"
+    cp "$repository_root/ios/QuakeSignal/Resources/Audio/quakesignal_japanese_voice.caf" "$archive_app/"
+    cp "$repository_root/ios/QuakeSignal/Resources/Audio/ATTRIBUTION.md" "$archive_app/"
+  fi
   mkdir -p "$(dirname "$exported_app")"
   cp -R "$archive_app" "$exported_app"
   if [ "$fixture_platform" = ios ]; then
@@ -212,6 +217,19 @@ expect_failure() {
 ios_fixture="$test_root/ios"
 create_fixture "$ios_fixture" ios iOS true
 run_verifier "$ios_fixture" ios
+
+rm "$ios_fixture/export/Payload/QuakeSignal.app/quakesignal_urgent.caf"
+expect_failure missing-urgent-audio 'urgent alert audio.*missing' run_verifier "$ios_fixture" ios
+create_fixture "$ios_fixture" ios iOS true
+
+printf 'mutated' > "$ios_fixture/export/Payload/QuakeSignal.app/quakesignal_japanese_voice.caf"
+expect_failure mutated-japanese-voice 'Japanese Safety Voice audio.*SHA-256' run_verifier "$ios_fixture" ios
+create_fixture "$ios_fixture" ios iOS true
+
+rm "$ios_fixture/export/Payload/QuakeSignal.app/ATTRIBUTION.md"
+ln -s /dev/null "$ios_fixture/export/Payload/QuakeSignal.app/ATTRIBUTION.md"
+expect_failure symlinked-audio-attribution 'alert-audio attribution.*not a regular file' run_verifier "$ios_fixture" ios
+create_fixture "$ios_fixture" ios iOS true
 
 ios_exported_archive="$ios_fixture/QuakeSignal.ipa"
 (cd "$ios_fixture/export" && ditto -c -k --keepParent Payload "$ios_exported_archive")
@@ -310,5 +328,8 @@ expect_failure tvos-capability 'foreground-only capability aps-environment' run_
 vision_fixture="$test_root/visionos"
 create_fixture "$vision_fixture" visionos xrOS false
 run_verifier "$vision_fixture" visionos
+
+rm "$vision_fixture/export/Payload/QuakeSignal.app/quakesignal_japanese_voice.caf"
+expect_failure vision-missing-japanese-voice 'Japanese Safety Voice audio.*missing' run_verifier "$vision_fixture" visionos
 
 echo "Signed Apple artifact verifier mutation tests passed."
