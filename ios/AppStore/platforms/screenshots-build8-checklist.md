@@ -18,7 +18,8 @@ This checklist creates no approval by itself.
   signed-Release parity comparison required by the platform runbook.
 - [ ] Install the exact platform runtime or use physical hardware. Record Xcode,
   OS/runtime, device model, device identifier where appropriate, capture time,
-  and reviewer. For automated Simulator candidates, verify
+  and reviewer. An automated unapproved candidate intentionally keeps
+  `reviewer: null` until named review. For Simulator candidates, verify
   `candidate-metadata.json` contains the harness-recorded
   `selectedSimulator.runtimeIdentifier`, `deviceTypeIdentifier`, and
   `deviceModel`; the full runtime inventory log alone is not capture evidence.
@@ -31,10 +32,11 @@ This checklist creates no approval by itself.
 - [ ] Confirm every file is opaque, in JPEG/JPG/PNG, at the exact selected
   dimensions, and visually free of clipping, focus, localization, or safe-area
   defects.
-- [ ] Replace each manifest's `null` evidence and hash values only from the
-  completed capture. Keep automation outputs outside the repository and change
-  a manifest's status to approved only after named human review and required
-  Release-parity evidence.
+- [ ] Replace each planned manifest's `null` evidence and hash values only from
+  the completed capture. Keep the fail-closed candidate manifest unapproved;
+  record any later named approval and signed-Release parity in separately
+  reviewed release evidence unless the schema and validator are deliberately
+  extended together.
 
 ## Apple TV
 
@@ -75,15 +77,18 @@ This checklist creates no approval by itself.
 - [ ] Update `watchos/screenshot-manifest-v1.1-build8.json` with host/watch
   evidence and SHA-256 values.
 
-## Existing iOS/iPad screenshot set is not build-8 evidence
+## Historical build-7 evidence and current build-8 candidate
 
 The existing `../../screenshot-manifest-v1.1.json`,
 `../../screenshot-provenance-v1.1.json`, and 30 images truthfully record a
 build-7 simulator capture. Do not relabel or upload them as build-8 screenshots.
-Recapture the iPhone and iPad sets after the build-8 source is frozen, then
-create new truthful hashes and provenance. The current
-`../../screenshot-manifest-v1.1-build8.template.json` is planning data only;
-there is no approved build-8 manifest or capture directory yet.
+The current `../../screenshot-manifest-v1.1-build8.json`,
+`../../screenshot-provenance-v1.1-build8.json`, and ten files under
+`../../screenshots-v1.1-build8/en-US/` truthfully record a source-frozen Debug
+Simulator candidate. It remains unsigned, unapproved, and reviewer-null; its
+existence is not permission to upload. The
+`../../screenshot-manifest-v1.1-build8.template.json` file remains planning
+history, not evidence.
 
 The build-8 recapture sequence is:
 
@@ -94,10 +99,12 @@ The build-8 recapture sequence is:
    `QUAKESIGNAL_SCREENSHOT_AUTOMATION=1`) so the finalized historical fixture
    is deterministic and startup network/permission activity is disabled.
 3. Recreate all five planned frames for both the selected iPhone class and the
-   13-inch iPad class in each approved locale. Write them only to the future
-   `screenshots-v1.1-build8/` set; do not overwrite or relabel build-7 files.
-4. Create build-8 manifest and provenance records from the template, exact
-   source commit, native device/runtime evidence, and new SHA-256 hashes.
+   13-inch iPad class in English (U.S.). Japanese and Simplified Chinese remain
+   unpublished pending localized-name, trademark, and availability approval.
+   Do not overwrite or relabel build-7 files.
+4. Validate the build-8 manifest and provenance against the exact source
+   commit, build-input evidence, native device/runtime evidence, and SHA-256
+   hashes.
 5. Obtain named visual review and any signed-Release parity evidence required
    by the release runbook before marking or uploading an asset.
 

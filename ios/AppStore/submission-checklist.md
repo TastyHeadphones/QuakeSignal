@@ -40,9 +40,9 @@ value.
   exact display names, availability, and trademark review are approved.
 - [ ] Freeze `screenshot-provenance-v1.1.json`, verify all 30 hashes, and
   preserve it as historical build-7 evidence. Do not relabel those 30 images as
-  build 8. Recapture the five 6.5-inch iPhone and five 13-inch iPad screenshots
-  from frozen build-8 source for every uploaded locale, then create truthful
-  hashes and provenance.
+  build 8. Validate the separate ten-file English build-8 Debug Simulator
+  candidate manifest, build-input evidence, and hashes; then separately obtain
+  named visual approval and signed public-Release parity before any upload.
 - [ ] Complete the Apple Watch, tvOS, and visionOS metadata, screenshot, icon,
   profile, and platform-QA gates in `platforms/` before submitting those
   experiences. tvOS and Watch must remain foreground-only in every claim.

@@ -22,6 +22,24 @@ private enum TimeWindow: CaseIterable {
     }
 }
 
+/// Resolves the clock used by the map's relative time filters. Screenshot
+/// automation is a historical snapshot, so its window is anchored to the
+/// newest fixed fixture instead of the wall clock. If gated automation ever
+/// has no fixture timestamp, returning `nil` keeps the map empty rather than
+/// silently falling back to live time and producing nondeterministic output.
+enum MapTimelineReference {
+    static func resolve(
+        screenshotAutomationEnabled: Bool,
+        fixtureLastUpdated: Date?,
+        liveNow: () -> Date
+    ) -> Date? {
+        if screenshotAutomationEnabled {
+            return fixtureLastUpdated
+        }
+        return liveNow()
+    }
+}
+
 struct EpicenterMapView: View {
     @State private var store = QuakeStore.shared
     @State private var locationManager = LocationManager.shared
@@ -105,7 +123,14 @@ struct EpicenterMapView: View {
     }
 
     private var locatedEvents: [EEWEvent] {
-        let cutoff = Date().addingTimeInterval(-timeWindow.interval)
+        guard let referenceDate = MapTimelineReference.resolve(
+            screenshotAutomationEnabled: ScreenshotAutomation.isEnabled,
+            fixtureLastUpdated: ScreenshotAutomation.fixtureLastUpdated,
+            liveNow: Date.init
+        ) else {
+            return []
+        }
+        let cutoff = referenceDate.addingTimeInterval(-timeWindow.interval)
         return store.events.filter { event in
             guard event.coordinate != nil else { return false }
             guard (event.magnitude ?? 0) >= minMagnitude else { return false }

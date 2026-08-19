@@ -1,0 +1,1440 @@
+Command line invocation:
+    <XCODE_APP>/Contents/Developer/usr/bin/xcodebuild build -project ios/QuakeSignal.xcodeproj -target QuakeSignal -configuration Debug -sdk iphonesimulator26.5 SYMROOT=<ARTIFACT_ROOT>/build/Products OBJROOT=<ARTIFACT_ROOT>/build/Intermediates SHARED_PRECOMPS_DIR=<ARTIFACT_ROOT>/build/PrecompiledHeaders MODULE_CACHE_DIR=<ARTIFACT_ROOT>/build/ModuleCache ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon CODE_SIGNING_ALLOWED=NO
+
+Build settings from command line:
+    ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
+    CODE_SIGNING_ALLOWED = NO
+    MODULE_CACHE_DIR = <ARTIFACT_ROOT>/build/ModuleCache
+    OBJROOT = <ARTIFACT_ROOT>/build/Intermediates
+    SDKROOT = iphonesimulator26.5
+    SHARED_PRECOMPS_DIR = <ARTIFACT_ROOT>/build/PrecompiledHeaders
+    SYMROOT = <ARTIFACT_ROOT>/build/Products
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (2 targets)
+    Target 'QuakeSignal' in project 'QuakeSignal'
+        ➜ Explicit dependency on target 'QuakeSignalWatch' in project 'QuakeSignal'
+    Target 'QuakeSignalWatch' in project 'QuakeSignal' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool <XCODE_APP>/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 <SOURCE_ROOT>/ios/QuakeSignal/Assets.xcassets <SOURCE_ROOT>/ios/QuakeSignalWatch/Assets.xcassets
+
+ExecuteExternalTool <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -x c -c /dev/null
+
+ExecuteExternalTool <XCODE_APP>/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 <SOURCE_ROOT>/ios/QuakeSignal/Assets.xcassets
+
+ExecuteExternalTool <XCODE_APP>/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+Build description signature: 5156e69e199849fd728020c874551358
+Build description path: <ARTIFACT_ROOT>/build/Intermediates/XCBuildData/5156e69e199849fd728020c874551358.xcbuilddata
+ClangStatCache <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache
+    cd <SOURCE_ROOT>/ios/QuakeSignal.xcodeproj
+    <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -o <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache
+
+CreateBuildDirectory <ARTIFACT_ROOT>/build/Products
+    cd <SOURCE_ROOT>/ios/QuakeSignal.xcodeproj
+    builtin-create-build-directory <ARTIFACT_ROOT>/build/Products
+
+CreateBuildDirectory <ARTIFACT_ROOT>/build/Intermediates
+    cd <SOURCE_ROOT>/ios/QuakeSignal.xcodeproj
+    builtin-create-build-directory <ARTIFACT_ROOT>/build/Intermediates
+
+CreateBuildDirectory <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules
+    cd <SOURCE_ROOT>/ios/QuakeSignal.xcodeproj
+    builtin-create-build-directory <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules
+
+CreateBuildDirectory <ARTIFACT_ROOT>/build/Intermediates/ExplicitPrecompiledModules
+    cd <SOURCE_ROOT>/ios/QuakeSignal.xcodeproj
+    builtin-create-build-directory <ARTIFACT_ROOT>/build/Intermediates/ExplicitPrecompiledModules
+
+CreateBuildDirectory <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator
+    cd <SOURCE_ROOT>/ios/QuakeSignal.xcodeproj
+    builtin-create-build-directory <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator
+
+CreateBuildDirectory <ARTIFACT_ROOT>/build/Intermediates/EagerLinkingTBDs/Debug-iphonesimulator
+    cd <SOURCE_ROOT>/ios/QuakeSignal.xcodeproj
+    builtin-create-build-directory <ARTIFACT_ROOT>/build/Intermediates/EagerLinkingTBDs/Debug-iphonesimulator
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal-86f0c85b15f3a261bdebb043d52c5af3-VFS-iphonesimulator/all-product-headers.yaml
+    cd <SOURCE_ROOT>/ios/QuakeSignal.xcodeproj
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal-86f0c85b15f3a261bdebb043d52c5af3-VFS-iphonesimulator/all-product-headers.yaml
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-all-target-headers.hmap (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-all-target-headers.hmap
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-generated-files.hmap (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-generated-files.hmap
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-own-target-headers.hmap (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-own-target-headers.hmap
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch.hmap (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch.hmap
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch.DependencyStaticMetadataFileList (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch.DependencyStaticMetadataFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-project-headers.hmap (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-project-headers.hmap
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-all-non-framework-target-headers.hmap (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-all-non-framework-target-headers.hmap
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch_const_extract_protocols.json (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch_const_extract_protocols.json
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.SwiftConstValuesFileList (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.SwiftConstValuesFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch.DependencyMetadataFileList (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch.DependencyMetadataFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.SwiftFileList (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.SwiftFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.LinkFileList (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.LinkFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch-OutputFileMap.json (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch-OutputFileMap.json
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.LinkFileList (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.LinkFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch_const_extract_protocols.json (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch_const_extract_protocols.json
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.SwiftConstValuesFileList (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.SwiftConstValuesFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.SwiftFileList (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.SwiftFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch-OutputFileMap.json (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch-OutputFileMap.json
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal.hmap (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal.hmap
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal.DependencyMetadataFileList (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal.DependencyMetadataFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal.DependencyStaticMetadataFileList (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal.DependencyStaticMetadataFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-project-headers.hmap (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-project-headers.hmap
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-own-target-headers.hmap (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-own-target-headers.hmap
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-generated-files.hmap (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-generated-files.hmap
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-all-target-headers.hmap (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-all-target-headers.hmap
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-all-non-framework-target-headers.hmap (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-all-non-framework-target-headers.hmap
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal_const_extract_protocols.json (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal_const_extract_protocols.json
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.SwiftFileList (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.SwiftFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.SwiftConstValuesFileList (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.SwiftConstValuesFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.LinkFileList (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.LinkFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal-OutputFileMap.json (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal-OutputFileMap.json
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal_const_extract_protocols.json (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal_const_extract_protocols.json
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.SwiftFileList (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.SwiftFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.SwiftConstValuesFileList (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.SwiftConstValuesFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.LinkFileList (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.LinkFileList
+
+WriteAuxiliaryFile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal-OutputFileMap.json (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    write-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal-OutputFileMap.json
+
+MkDir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    /bin/mkdir -p <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app
+
+MkDir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    /bin/mkdir -p <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app
+
+MkDir <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_output/thinned (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    /bin/mkdir -p <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_output/thinned
+
+MkDir <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_output/unthinned (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    /bin/mkdir -p <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_output/unthinned
+
+GenerateAssetSymbols <SOURCE_ROOT>/ios/QuakeSignal/Assets.xcassets <SOURCE_ROOT>/ios/QuakeSignalWatch/Assets.xcassets (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/usr/bin/actool <SOURCE_ROOT>/ios/QuakeSignal/Assets.xcassets <SOURCE_ROOT>/ios/QuakeSignalWatch/Assets.xcassets --compile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app --output-format human-readable-text --notices --warnings --export-dependency-info <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_dependencies --output-partial-info-plist <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_generated_info.plist --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 17.0 --platform iphonesimulator --bundle-identifier com.quakesignal.app.watchkitapp --generate-swift-asset-symbol-extensions NO --generate-swift-asset-symbols <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/GeneratedAssetSymbols.swift --generate-objc-asset-symbols <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/GeneratedAssetSymbols.h --generate-asset-symbol-index <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/GeneratedAssetSymbols-Index.plist
+/* com.apple.actool.compilation-results */
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/GeneratedAssetSymbols-Index.plist
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/GeneratedAssetSymbols.h
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/GeneratedAssetSymbols.swift
+
+
+CopyStringsFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/zh-Hans.lproj/InfoPlist.strings <SOURCE_ROOT>/ios/QuakeSignal/Resources/zh-Hans.lproj/InfoPlist.strings (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename InfoPlist.strings --outdir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/zh-Hans.lproj -- <SOURCE_ROOT>/ios/QuakeSignal/Resources/zh-Hans.lproj/InfoPlist.strings
+<SOURCE_ROOT>/ios/QuakeSignal/Resources/zh-Hans.lproj/InfoPlist.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+CopyStringsFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/zh-Hans.lproj/Localizable.strings <SOURCE_ROOT>/ios/QuakeSignal/Resources/zh-Hans.lproj/Localizable.strings (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename Localizable.strings --outdir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/zh-Hans.lproj -- <SOURCE_ROOT>/ios/QuakeSignal/Resources/zh-Hans.lproj/Localizable.strings
+<SOURCE_ROOT>/ios/QuakeSignal/Resources/zh-Hans.lproj/Localizable.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+CopyStringsFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/ja.lproj/Localizable.strings <SOURCE_ROOT>/ios/QuakeSignal/Resources/ja.lproj/Localizable.strings (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename Localizable.strings --outdir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/ja.lproj -- <SOURCE_ROOT>/ios/QuakeSignal/Resources/ja.lproj/Localizable.strings
+<SOURCE_ROOT>/ios/QuakeSignal/Resources/ja.lproj/Localizable.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+CopyStringsFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/ja.lproj/InfoPlist.strings <SOURCE_ROOT>/ios/QuakeSignal/Resources/ja.lproj/InfoPlist.strings (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename InfoPlist.strings --outdir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/ja.lproj -- <SOURCE_ROOT>/ios/QuakeSignal/Resources/ja.lproj/InfoPlist.strings
+<SOURCE_ROOT>/ios/QuakeSignal/Resources/ja.lproj/InfoPlist.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+CopyStringsFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/en.lproj/Localizable.strings <SOURCE_ROOT>/ios/QuakeSignal/Resources/en.lproj/Localizable.strings (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename Localizable.strings --outdir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/en.lproj -- <SOURCE_ROOT>/ios/QuakeSignal/Resources/en.lproj/Localizable.strings
+<SOURCE_ROOT>/ios/QuakeSignal/Resources/en.lproj/Localizable.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+CopyStringsFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/en.lproj/InfoPlist.strings <SOURCE_ROOT>/ios/QuakeSignal/Resources/en.lproj/InfoPlist.strings (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename InfoPlist.strings --outdir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/en.lproj -- <SOURCE_ROOT>/ios/QuakeSignal/Resources/en.lproj/InfoPlist.strings
+<SOURCE_ROOT>/ios/QuakeSignal/Resources/en.lproj/InfoPlist.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+CompileAssetCatalogVariant thinned <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app <SOURCE_ROOT>/ios/QuakeSignal/Assets.xcassets <SOURCE_ROOT>/ios/QuakeSignalWatch/Assets.xcassets (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/usr/bin/actool <SOURCE_ROOT>/ios/QuakeSignal/Assets.xcassets <SOURCE_ROOT>/ios/QuakeSignalWatch/Assets.xcassets --compile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_output/thinned --output-format human-readable-text --notices --warnings --export-dependency-info <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_dependencies_thinned --output-partial-info-plist <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_generated_info.plist_thinned --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 17.0 --platform iphonesimulator
+/* com.apple.actool.compilation-results */
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_generated_info.plist_thinned
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_output/thinned/AppIcon60x60@2x.png
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_output/thinned/AppIcon76x76@2x~ipad.png
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_output/thinned/Assets.car
+
+
+SwiftDriver QuakeSignalWatch normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-SwiftDriver -- <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name QuakeSignalWatch -Onone @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target x86_64-apple-ios17.0-simulator -g -module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -Xfrontend -serialize-debugging-options -enable-testing -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache -output-file-map <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -sdk-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.swiftmodule -validate-clang-modules-once -clang-build-session-file <DARWIN_USER_CACHE>/C/org.llvm.clang/ModuleCache.noindex/Session.modulevalidation -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch_const_extract_protocols.json -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-generated-files.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-own-target-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-all-target-headers.hmap -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-project-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/include -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources-normal/x86_64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/x86_64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch-Swift.h -working-directory <SOURCE_ROOT>/ios -experimental-emit-module-separately -disable-cmo
+
+SwiftDriver QuakeSignalWatch normal arm64 com.apple.xcode.tools.swift.compiler (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-SwiftDriver -- <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name QuakeSignalWatch -Onone @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -Xfrontend -serialize-debugging-options -enable-testing -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache -output-file-map <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -sdk-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.swiftmodule -validate-clang-modules-once -clang-build-session-file <DARWIN_USER_CACHE>/C/org.llvm.clang/ModuleCache.noindex/Session.modulevalidation -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch_const_extract_protocols.json -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-generated-files.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-own-target-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-all-target-headers.hmap -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-project-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/include -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources-normal/arm64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/arm64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch-Swift.h -working-directory <SOURCE_ROOT>/ios -experimental-emit-module-separately -disable-cmo
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/DeveloperToolsSupport-N3ESKF9VL1JWPGR97XTTXRWF.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/ptrcheck-CD68JOB1UYQS3TBEMIXCR13N6.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_stdbool-4ZLW67W4LM7HO1DJEWRQMJQED.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_AvailabilityInternal-2NL3LJ9QFBL1NOIXIY0CIFU0A.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_SwiftConcurrencyShims-97141NLZ8RS4NMV8V6DDJFFC9.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_stdarg-8OPL6C4HX6ZR55FBCJQLJW59G.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_stddef-2UZN7TX3SJF8TT0UNVHEO331U.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/SwiftShims-EEFIQBZ7CBHYA6UEOZS9CIEUV.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_float-5YTIRQ8DU1HQV6IJGI235E5JP.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/ptrauth-DVZ6XIAVFEYPM7KA01WSLSTOT.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_float-E5O1A32DUWAEF0HILKV1UIOIA.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_stdbool-11V5COD9LTA8LWF1WXWT9XJV9.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_stddef-D05I7IHUMF62BLGR4WG3I5LZI.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_stdarg-3AZPHU92O7ES8DHFCFZ83O31R.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/SwiftShims-3BBRB9OX15EYX6FF6RH2ETQAE.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_AvailabilityInternal-91TBBWG06R6LGW2PRKQ1TEO45.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/DeveloperToolsSupport-DJHN6WOPFNXO8KN1HL9HYLXRZ.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/ptrcheck-KEHEEJ6RSXWNT0KSQF34LPLD.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_DarwinFoundation1-18VYJIYI65V5WHXOBNNOS9M7.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_SwiftConcurrencyShims-39C33P06GTG3UTKJ5Y7TZDCQF.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/ptrauth-CO13TTZKV0G7UKVB8XSR1RDGY.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_DarwinFoundation1-87ITG7Q8AXLO99KJT9XHTFJ2K.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_DarwinFoundation2-B8GBI70ACB5JFPSVHGEM8JKO4.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_limits-7V41RTT4LE4SJR20F3FFHT0XJ.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_DarwinFoundation2-EKC8M1JT5WWQ1DO70281PYGGI.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_limits-5F4KBSX0TDZ8OY2FSWYEV7AM9.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/sys_types-6EENUBB7QAEGM8IB12P58JDRL.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_tgmath-401FOBUNE16VAYT5LNWA4DKC0.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_stdint-15SUTBZMR5CEXRJQIS1EGQUWF.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_tgmath-BJ385GPLYMXSLS3UXAUHNZBO5.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_stdint-47WVLE89YRB2LNYM50ZFVPFQV.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/sys_types-1SLUFHAZSVHGLEQFZ2QBWYUED.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_stdatomic-EDD27E9XXBSBEZMCC11SXXPYR.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_DarwinFoundation3-70U934BAO4KB9OEZ93TY3FO8Z.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_DarwinFoundation3-AE9RPGL09WIW84LK7EGTC5YAR.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_stdatomic-3M9J3LMNU8LMOWFLZLWN2SDJG.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_intrinsics-F1NXE86OV2W36FCAT435EL6TN.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_intrinsics-62DVEOC091BAA7G4O31WXE5UG.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_inttypes-3KJT4AJ5DKEOLRZQLXAG5IX6.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_Builtin_inttypes-1MJ5W26XB45JOAKJCWLM2HUA2.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/Darwin-6C21PDUSCJ7BDOWI5MX5UOZPC.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/Darwin-B1U3EU4R4I1N6HW8MSA8XBXV9.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/simd-413NEWZU2MXUM9K0GEMA86ZPT.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/ObjectiveC-CORZ5MRYPFDPFNSGH0P7A5HHF.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/MachO-4ZFAVGSYSLESQ9MPI05KICTD7.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/simd-NWAZT8EEVIR60JV754AIS9BT.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/ObjectiveC-16LVU4Q5ZFJZW52D4OT67DBUB.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/MachO-58KX0AQZJSY0XQYOGZZV0W2UO.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/os_object-9A26NQH354U34ZQMRI7AB7EHU.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/os_object-AJ30S3I66CT2B7UMQRT5AESNL.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/os_workgroup-AI662KM068RF1AB5CTVL0KMTK.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/os_workgroup-2YRHT25WPVP0KUXF1OLUNDCPS.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/Dispatch-6KD7PQJGVUX86EZEXVGSTBFUV.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/Spatial-51CKGWSXT4JNQFRS9DP3GPABX.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/Dispatch-4DU14XNYLHRKNIXKTK4X1JVZ1.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/CoreFoundation-ABF9CHWMR6LGU13ZOPC4LKZJM.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/XPC-5Y6IES7D8LZK9EQXHO9W4FYPC.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/XPC-UQCBYEM8BIYY31OOH3M6GOPE.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/CoreFoundation-1OQBXK5KK7EYHC43J9DGZ09JP.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/os-58R74FUDUHT6OM6EJUWPT512V.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/os-EXM88N5UJVUQZB7YI2VV3DZ7H.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/Security-9WQI0ZSPWHBY2HEJUES2E0CLI.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/CFNetwork-5I99S319JATCCIS3R8JB17OV5.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/CoreGraphics-DEB0NKZ7KHIHKSESPYH61ACIL.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/Spatial-CJ15ORA93MTOJTWDL19LTESAR.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/Security-46MTHAH23US72IND59UJ05PVH.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/CoreGraphics-CNTNJ8NC78MZ8Q6JM6CWINQ0Q.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/CFNetwork-39P4CTZR3NXJZS4XETFEEGA5E.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/Foundation-CR3OLPKKDZ2JGHUXQPM0JNCWN.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/CoreText-BK0UQWEUDF9M1HH9MFHIB5AI7.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/ImageIO-4G9C7S4AZ9CEHFDY0UHFK2Y87.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/Foundation-7GLWGMSP41LFEDQXY35Y8K44Q.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/ImageIO-25888RSDCMBEE8B8BUORQO8YF.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/CoreText-5TJUXE7K2MXO4BPAGNQ0CSA5O.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/CoreTransferable-6NZBGW4UFEOH93HOKP46KW9T1.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/OSLog-3YKSCIRPQ3Q7FABWIUHU4Y6MO.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/OpenGLES-1XPZ5NOG98Q94H6Y2KZJEBJIV.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/UniformTypeIdentifiers-546YQ5TZIHBEZP4KUFHCJW3KZ.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/_LocationEssentials-5HZL23HNV0STP0INZVWXRS0MB.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/Symbols-8Z61T5MJJNGALTJZ9THP3LHX0.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/UserNotifications-9B8P4IYBOGIFGGKNSM1VW7RNM.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/IOSurface-59P2GF96KOGAU5XE7X8MAMKG9.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/Accessibility-DFW6TY1IDUE685IBJN7ZL45UV.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/UniformTypeIdentifiers-522ZQVH69JMD0KCVXOFYDBIOB.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/CoreTransferable-AHL6XOYE4OAWX15EEYJ98MLL2.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/UIUtilities-5UTR17UY3AU7APCJQEBNLLS2T.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/CoreLocation-E269HBKVC1RT4FTDICFKNSWD1.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/OpenGLES-B6XOI8Q4Q9J21GVJQMYNG5B4W.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/DataDetection-CO5BG4KH773GWKZYGMV1XLUXM.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/Accessibility-4NPBFZP6I3ULNF7GSXP757G1Q.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/CoreData-5WOQPBUKG7D325G65W627U6CN.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/FileProvider-3WBXMI31PZ1ZORGHTIQL9OCTM.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/UIUtilities-DG7GYWL23THBMKV19IBC58JL4.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/CoreData-87MSSV6PXKK3F3CCAQH8NCS0K.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/FileProvider-2VP0Z7O7BWRZN8GM6SNYYZUTS.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/_LocationEssentials-3OCEMTY2SYIIM75P4BIWQC64S.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/DataDetection-DMHT6I6DC70THGY18EMPMWODP.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/Metal-2AKC5PMQIIN2TGLGYZWCW5LFO.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/UserNotifications-8GITAAT9LMNZIMVOMS4UM73YC.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/IOSurface-3L2GE0N0OUPY19XP2XNBUZDAC.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/Symbols-6KEYVKQO7DDEXEW8Z2QS3XL9Z.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/OSLog-4EBLV3GLV1O9NYOHHM1STFTSD.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/CoreLocation-1PVMZ3EH0LK856ZTCBJXEDLRM.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/Metal-CXTSXREU9LDXOD0ZQZX118K0Y.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/CoreVideo-1I14WSXMSNGO1KBMM61GBHF9.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/QuartzCore-B90NFP882WHQN5YMZNXYK109X.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/CoreImage-83E8YJ5NQQ6BN3REUCAFJLGKB.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/CoreVideo-AUY33VPX7U9UKWAIJL01S2GOG.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/QuartzCore-10G4VIC3QWRLAAXVV23AUTXTP.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/CoreImage-83IIQ2ZX2SSX20BF4BC1BOWTQ.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/SwiftUICore-BY83HHO1GX2QDLBIQLIMTMHJ9.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/UIKit-52G7NI1P70HPB3V6CXQEHRWR0.pcm
+
+LinkAssetCatalog <SOURCE_ROOT>/ios/QuakeSignal/Assets.xcassets <SOURCE_ROOT>/ios/QuakeSignalWatch/Assets.xcassets (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-linkAssetCatalog --thinned <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_output/thinned --thinned-dependencies <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_dependencies_thinned --thinned-info-plist-content <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_generated_info.plist_thinned --unthinned <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_output/unthinned --unthinned-dependencies <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_dependencies_unthinned --unthinned-info-plist-content <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_generated_info.plist_unthinned --output <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app --plist-output <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_generated_info.plist
+note: Emplaced <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/Assets.car (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+note: Emplaced <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/AppIcon60x60@2x.png (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+note: Emplaced <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/AppIcon76x76@2x~ipad.png (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+ProcessInfoPlistFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/Info.plist <SOURCE_ROOT>/ios/QuakeSignalWatch/Supporting/Info.plist (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-infoPlistUtility <SOURCE_ROOT>/ios/QuakeSignalWatch/Supporting/Info.plist -producttype com.apple.product-type.application -genpkginfo <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/assetcatalog_generated_info.plist -o <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/Info.plist
+warning: TARGETED_DEVICE_FAMILY value (4) does not contain any device family values compatible with the iOS platform. Please add one or more of the following values to the TARGETED_DEVICE_FAMILY build setting to indicate the device families supported by this target: '1' (indicating 'iPhone'), '2' (indicating 'iPad'). (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/SwiftUICore-3D3EAFWT8Y0C6HWOLSE02TYJ7.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/UIKit-9S7YCNW9IS41V9SUR6QQDMFNN.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/SwiftUI-69XHF1IGQ6O7BH9PHX3GFDRWV.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/SwiftUI-A4MURH6JIDE7GPR9XV044DEIX.pcm
+
+SwiftEmitModule normal x86_64 Emitting\ module\ for\ QuakeSignalWatch (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+EmitSwiftModule normal x86_64 (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ QuakeSignalWatchApp.swift <SOURCE_ROOT>/ios/QuakeSignalWatch/QuakeSignalWatchApp.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignalWatch/QuakeSignalWatchApp.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ IntensityScale.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/IntensityScale.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Models/IntensityScale.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ WatchDashboardView.swift <SOURCE_ROOT>/ios/QuakeSignalWatch/WatchDashboardView.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignalWatch/WatchDashboardView.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ EEWEvent.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/EEWEvent.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Models/EEWEvent.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ ForegroundQuakeStore.swift <SOURCE_ROOT>/ios/QuakeSignalShared/ForegroundQuakeStore.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignalShared/ForegroundQuakeStore.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ GeneratedAssetSymbols.swift <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ ScreenshotAutomation.swift <SOURCE_ROOT>/ios/QuakeSignalShared/ScreenshotAutomation.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignalShared/ScreenshotAutomation.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ WolfxClient.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/WolfxClient.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/WolfxClient.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ Localization.swift <SOURCE_ROOT>/ios/QuakeSignal/App/Localization.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/App/Localization.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ QuakeSignalWatch (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+EmitSwiftModule normal arm64 (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Compiling GeneratedAssetSymbols.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ IntensityScale.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/IntensityScale.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Models/IntensityScale.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Compiling Localization.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ WolfxClient.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/WolfxClient.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/WolfxClient.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Compiling IntensityScale.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ EEWEvent.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/EEWEvent.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Models/EEWEvent.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Compiling ScreenshotAutomation.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ ForegroundQuakeStore.swift <SOURCE_ROOT>/ios/QuakeSignalShared/ForegroundQuakeStore.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignalShared/ForegroundQuakeStore.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Compiling QuakeSignalWatchApp.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ WatchDashboardView.swift <SOURCE_ROOT>/ios/QuakeSignalWatch/WatchDashboardView.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignalWatch/WatchDashboardView.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Emitting module for QuakeSignalWatch (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftDriver\ Compilation\ Requirements QuakeSignalWatch normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-Swift-Compilation-Requirements -- <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name QuakeSignalWatch -Onone @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target x86_64-apple-ios17.0-simulator -g -module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -Xfrontend -serialize-debugging-options -enable-testing -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache -output-file-map <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -sdk-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.swiftmodule -validate-clang-modules-once -clang-build-session-file <DARWIN_USER_CACHE>/C/org.llvm.clang/ModuleCache.noindex/Session.modulevalidation -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch_const_extract_protocols.json -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-generated-files.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-own-target-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-all-target-headers.hmap -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-project-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/include -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources-normal/x86_64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/x86_64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch-Swift.h -working-directory <SOURCE_ROOT>/ios -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal x86_64 Compiling ForegroundQuakeStore.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ GeneratedAssetSymbols.swift <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 Compiling\ Localization.swift <SOURCE_ROOT>/ios/QuakeSignal/App/Localization.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/App/Localization.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal arm64 Compiling IntensityScale.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal x86_64 Compiling EEWEvent.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/x86_64-apple-ios-simulator.swiftmodule <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.swiftmodule (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.swiftmodule <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/x86_64-apple-ios-simulator.swiftmodule
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/x86_64-apple-ios-simulator.swiftdoc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.swiftdoc (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.swiftdoc <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/x86_64-apple-ios-simulator.swiftdoc
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/x86_64-apple-ios-simulator.abi.json <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.abi.json (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.abi.json <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/x86_64-apple-ios-simulator.abi.json
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/Project/x86_64-apple-ios-simulator.swiftsourceinfo <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.swiftsourceinfo (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.swiftsourceinfo <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/Project/x86_64-apple-ios-simulator.swiftsourceinfo
+
+SwiftCompile normal arm64 Compiling\ ScreenshotAutomation.swift <SOURCE_ROOT>/ios/QuakeSignalShared/ScreenshotAutomation.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignalShared/ScreenshotAutomation.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 Compiling\ QuakeSignalWatchApp.swift <SOURCE_ROOT>/ios/QuakeSignalWatch/QuakeSignalWatchApp.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignalWatch/QuakeSignalWatchApp.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for QuakeSignalWatch (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftDriver\ Compilation\ Requirements QuakeSignalWatch normal arm64 com.apple.xcode.tools.swift.compiler (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-Swift-Compilation-Requirements -- <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name QuakeSignalWatch -Onone @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -Xfrontend -serialize-debugging-options -enable-testing -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache -output-file-map <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -sdk-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.swiftmodule -validate-clang-modules-once -clang-build-session-file <DARWIN_USER_CACHE>/C/org.llvm.clang/ModuleCache.noindex/Session.modulevalidation -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch_const_extract_protocols.json -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-generated-files.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-own-target-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-all-target-headers.hmap -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-project-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/include -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources-normal/arm64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/arm64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch-Swift.h -working-directory <SOURCE_ROOT>/ios -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal arm64 Compiling Localization.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftMergeGeneratedHeaders <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/QuakeSignalWatch-Swift.h <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch-Swift.h <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch-Swift.h (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-swiftHeaderTool -arch arm64 <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch-Swift.h -arch x86_64 <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch-Swift.h -o <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/QuakeSignalWatch-Swift.h
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/arm64-apple-ios-simulator.swiftmodule <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.swiftmodule (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.swiftmodule <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/arm64-apple-ios-simulator.swiftmodule
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/arm64-apple-ios-simulator.swiftdoc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.swiftdoc (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.swiftdoc <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/arm64-apple-ios-simulator.swiftdoc
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/arm64-apple-ios-simulator.abi.json <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.abi.json (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.abi.json <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/arm64-apple-ios-simulator.abi.json
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.swiftsourceinfo (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.swiftsourceinfo <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo
+
+MkDir <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_output/unthinned (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    /bin/mkdir -p <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_output/unthinned
+
+MkDir <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_output/thinned (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    /bin/mkdir -p <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_output/thinned
+
+GenerateAssetSymbols <SOURCE_ROOT>/ios/QuakeSignal/Assets.xcassets (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/usr/bin/actool <SOURCE_ROOT>/ios/QuakeSignal/Assets.xcassets --compile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app --output-format human-readable-text --notices --warnings --export-dependency-info <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_dependencies --output-partial-info-plist <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_generated_info.plist --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 17.0 --platform iphonesimulator --bundle-identifier com.quakesignal.app --generate-swift-asset-symbol-extensions NO --generate-swift-asset-symbols <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/GeneratedAssetSymbols.swift --generate-objc-asset-symbols <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/GeneratedAssetSymbols.h --generate-asset-symbol-index <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/GeneratedAssetSymbols-Index.plist
+/* com.apple.actool.compilation-results */
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/GeneratedAssetSymbols-Index.plist
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/GeneratedAssetSymbols.h
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/GeneratedAssetSymbols.swift
+
+
+SwiftDriverJobDiscovery normal arm64 Compiling GeneratedAssetSymbols.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+CompileAssetCatalogVariant thinned <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app <SOURCE_ROOT>/ios/QuakeSignal/Assets.xcassets (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/usr/bin/actool <SOURCE_ROOT>/ios/QuakeSignal/Assets.xcassets --compile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_output/thinned --output-format human-readable-text --notices --warnings --export-dependency-info <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_dependencies_thinned --output-partial-info-plist <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_generated_info.plist_thinned --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 17.0 --platform iphonesimulator
+/* com.apple.actool.compilation-results */
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_generated_info.plist_thinned
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_output/thinned/AppIcon60x60@2x.png
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_output/thinned/AppIcon76x76@2x~ipad.png
+<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_output/thinned/Assets.car
+
+
+SwiftDriver QuakeSignal normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-SwiftDriver -- <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name QuakeSignal -Onone @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target x86_64-apple-ios17.0-simulator -g -module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -Xfrontend -serialize-debugging-options -enable-testing -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache -output-file-map <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -sdk-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.swiftmodule -validate-clang-modules-once -clang-build-session-file <DARWIN_USER_CACHE>/C/org.llvm.clang/ModuleCache.noindex/Session.modulevalidation -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal_const_extract_protocols.json -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-generated-files.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-own-target-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-all-target-headers.hmap -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-project-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/include -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources-normal/x86_64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/x86_64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal-Swift.h -working-directory <SOURCE_ROOT>/ios -experimental-emit-module-separately -disable-cmo
+
+SwiftDriver QuakeSignal normal arm64 com.apple.xcode.tools.swift.compiler (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-SwiftDriver -- <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name QuakeSignal -Onone @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -Xfrontend -serialize-debugging-options -enable-testing -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache -output-file-map <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -sdk-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.swiftmodule -validate-clang-modules-once -clang-build-session-file <DARWIN_USER_CACHE>/C/org.llvm.clang/ModuleCache.noindex/Session.modulevalidation -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal_const_extract_protocols.json -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-generated-files.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-own-target-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-all-target-headers.hmap -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-project-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/include -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources-normal/arm64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/arm64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal-Swift.h -working-directory <SOURCE_ROOT>/ios -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal x86_64 Compiling WolfxClient.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal arm64 Compiling ForegroundQuakeStore.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal x86_64 Compiling WatchDashboardView.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftDriver\ Compilation QuakeSignalWatch normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-Swift-Compilation -- <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name QuakeSignalWatch -Onone @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target x86_64-apple-ios17.0-simulator -g -module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -Xfrontend -serialize-debugging-options -enable-testing -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache -output-file-map <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -sdk-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.swiftmodule -validate-clang-modules-once -clang-build-session-file <DARWIN_USER_CACHE>/C/org.llvm.clang/ModuleCache.noindex/Session.modulevalidation -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch_const_extract_protocols.json -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-generated-files.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-own-target-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-all-target-headers.hmap -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-project-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/include -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources-normal/x86_64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/x86_64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch-Swift.h -working-directory <SOURCE_ROOT>/ios -experimental-emit-module-separately -disable-cmo
+
+Ld <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/Binary/QuakeSignalWatch normal x86_64 (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target x86_64-apple-ios17.0-simulator -isysroot <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L<ARTIFACT_ROOT>/build/Intermediates/EagerLinkingTBDs/Debug-iphonesimulator -L<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F<ARTIFACT_ROOT>/build/Intermediates/EagerLinkingTBDs/Debug-iphonesimulator -F<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -filelist <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch_dependency_info.dat -fobjc-link-runtime -L<XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.swiftmodule @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch-linker-args.resp -o <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/Binary/QuakeSignalWatch
+
+SwiftDriverJobDiscovery normal arm64 Compiling ScreenshotAutomation.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal arm64 Compiling EEWEvent.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal arm64 Compiling QuakeSignalWatchApp.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal arm64 Compiling WolfxClient.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal arm64 Compiling WatchDashboardView.swift (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+
+SwiftDriver\ Compilation QuakeSignalWatch normal arm64 com.apple.xcode.tools.swift.compiler (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-Swift-Compilation -- <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name QuakeSignalWatch -Onone @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -Xfrontend -serialize-debugging-options -enable-testing -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache -output-file-map <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -sdk-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.swiftmodule -validate-clang-modules-once -clang-build-session-file <DARWIN_USER_CACHE>/C/org.llvm.clang/ModuleCache.noindex/Session.modulevalidation -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch_const_extract_protocols.json -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-generated-files.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-own-target-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-all-target-headers.hmap -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch-project-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/include -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources-normal/arm64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources/arm64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch-Swift.h -working-directory <SOURCE_ROOT>/ios -experimental-emit-module-separately -disable-cmo
+
+Ld <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/Binary/QuakeSignalWatch normal arm64 (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -isysroot <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L<ARTIFACT_ROOT>/build/Intermediates/EagerLinkingTBDs/Debug-iphonesimulator -L<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F<ARTIFACT_ROOT>/build/Intermediates/EagerLinkingTBDs/Debug-iphonesimulator -F<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -filelist <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch_dependency_info.dat -fobjc-link-runtime -L<XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.swiftmodule @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch-linker-args.resp -o <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/Binary/QuakeSignalWatch
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/DeviceCheck-92S84917WZ8FC0G2BZDB6PPAU.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/CoreAudioTypes-60N7FS4NBX4TSM3G6ZTOE4ASK.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/LocalAuthentication-4TV0TT2KE70ILDZJC9DIL3GSB.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/CoreMIDI-5Z6L7IKN4S20TVFDY2AAHEOHT.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/MapKit-BCFORK78BGTWGHZULDWIMWA62.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/CoreMIDI-55TPMTMZ3NBOLD5YQANZ9LV8B.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/LocalAuthentication-CMDY9YJIIQ8JXSYT6KCVAT2RP.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/CoreAudioTypes-2TU3NC788AX5XXLU39P7AM383.pcm
+
+CreateUniversalBinary <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/QuakeSignalWatch normal arm64\ x86_64 (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo -create <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/Binary/QuakeSignalWatch <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/Binary/QuakeSignalWatch -output <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/QuakeSignalWatch
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/MapKit-ESSEGIEB97824HKA9A7EMK87K.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/DeviceCheck-1MQU883XQBPATV1G0X0DL48IN.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/CoreAudio-5S0XCGL9NGRXAT015RI6REBTO.pcm
+
+ExtractAppIntentsMetadata (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name QuakeSignalWatch --sdk-root <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 17.0 --bundle-identifier com.quakesignal.app.watchkitapp --output <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app --target-triple arm64-apple-ios17.0-simulator --target-triple x86_64-apple-ios17.0-simulator --binary-file <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/QuakeSignalWatch --dependency-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch_dependency_info.dat --dependency-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch_dependency_info.dat --stringsdata-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --stringsdata-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.SwiftFileList --source-file-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.SwiftFileList --metadata-file-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch.DependencyMetadataFileList --static-metadata-file-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch.DependencyStaticMetadataFileList --swift-const-vals-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/arm64/QuakeSignalWatch.SwiftConstValuesFileList --swift-const-vals-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/Objects-normal/x86_64/QuakeSignalWatch.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-08-19 09:08:27.283 appintentsmetadataprocessor[30020:1549354] Starting appintentsmetadataprocessor export
+2026-08-19 09:08:27.287 appintentsmetadataprocessor[30020:1549354] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-swiftStdLibTool --copy --verbose --scan-executable <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/QuakeSignalWatch --scan-folder <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/Frameworks --scan-folder <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/PlugIns --scan-folder <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/SystemExtensions --scan-folder <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/Extensions --platform iphonesimulator --toolchain <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/Frameworks --strip-bitcode --strip-bitcode-tool <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+Ignoring --strip-bitcode because --sign was not passed
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/AudioToolbox-613MYBYURHPRPMUHH3LQJYF35.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/CoreMedia-4F3T2SXZJDJ2OZ6KY7INQ7R6V.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/CoreAudio-6X9ODFLDD5V9RDUW3HNZM6TIJ.pcm
+
+AppIntentsSSUTraining (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/Info.plist --temp-dir-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/ssu --bundle-id com.quakesignal.app.watchkitapp --product-path <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app --extracted-metadata-path <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/Metadata.appintents --metadata-file-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignalWatch.build/QuakeSignalWatch.DependencyMetadataFileList --source-file <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app/Info.plist --archive-ssu-assets
+2026-08-19 09:08:27.307 appintentsnltrainingprocessor[30024:1549362] Parsing options for appintentsnltrainingprocessor
+2026-08-19 09:08:27.307 appintentsnltrainingprocessor[30024:1549362] Starting AppIntents SSU YAML Generation
+2026-08-19 09:08:27.310 appintentsnltrainingprocessor[30024:1549362] No AppShortcuts found - Skipping.
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/AudioToolbox-1NO773L858GC7W7CPPA55V08O.pcm
+
+RegisterExecutionPolicyException <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-RegisterExecutionPolicyException <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/CoreMedia-6P1HJXMAD6M01ONZ2FI3AVBPN.pcm
+
+Validate <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-validationUtility <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app -shallow-bundle -infoplist-subpath Info.plist
+
+Touch <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    /usr/bin/touch -c <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app
+
+CpResource <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/quakesignal_japanese_voice.caf <SOURCE_ROOT>/ios/QuakeSignal/Resources/Audio/quakesignal_japanese_voice.caf (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks <SOURCE_ROOT>/ios/QuakeSignal/Resources/Audio/quakesignal_japanese_voice.caf <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app
+
+CpResource <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/quakesignal_urgent.caf <SOURCE_ROOT>/ios/QuakeSignal/Resources/Audio/quakesignal_urgent.caf (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks <SOURCE_ROOT>/ios/QuakeSignal/Resources/Audio/quakesignal_urgent.caf <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app
+
+CpResource <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/PrivacyInfo.xcprivacy <SOURCE_ROOT>/ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks <SOURCE_ROOT>/ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app
+
+CpResource <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/ATTRIBUTION.md <SOURCE_ROOT>/ios/QuakeSignal/Resources/Audio/ATTRIBUTION.md (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks <SOURCE_ROOT>/ios/QuakeSignal/Resources/Audio/ATTRIBUTION.md <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app
+
+CopyStringsFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/zh-Hans.lproj/Localizable.strings <SOURCE_ROOT>/ios/QuakeSignal/Resources/zh-Hans.lproj/Localizable.strings (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename Localizable.strings --outdir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/zh-Hans.lproj -- <SOURCE_ROOT>/ios/QuakeSignal/Resources/zh-Hans.lproj/Localizable.strings
+<SOURCE_ROOT>/ios/QuakeSignal/Resources/zh-Hans.lproj/Localizable.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'QuakeSignal' from project 'QuakeSignal')
+
+CopyStringsFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/zh-Hans.lproj/InfoPlist.strings <SOURCE_ROOT>/ios/QuakeSignal/Resources/zh-Hans.lproj/InfoPlist.strings (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename InfoPlist.strings --outdir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/zh-Hans.lproj -- <SOURCE_ROOT>/ios/QuakeSignal/Resources/zh-Hans.lproj/InfoPlist.strings
+<SOURCE_ROOT>/ios/QuakeSignal/Resources/zh-Hans.lproj/InfoPlist.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'QuakeSignal' from project 'QuakeSignal')
+
+CopyStringsFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/ja.lproj/Localizable.strings <SOURCE_ROOT>/ios/QuakeSignal/Resources/ja.lproj/Localizable.strings (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename Localizable.strings --outdir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/ja.lproj -- <SOURCE_ROOT>/ios/QuakeSignal/Resources/ja.lproj/Localizable.strings
+<SOURCE_ROOT>/ios/QuakeSignal/Resources/ja.lproj/Localizable.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'QuakeSignal' from project 'QuakeSignal')
+
+CopyStringsFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/ja.lproj/InfoPlist.strings <SOURCE_ROOT>/ios/QuakeSignal/Resources/ja.lproj/InfoPlist.strings (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename InfoPlist.strings --outdir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/ja.lproj -- <SOURCE_ROOT>/ios/QuakeSignal/Resources/ja.lproj/InfoPlist.strings
+<SOURCE_ROOT>/ios/QuakeSignal/Resources/ja.lproj/InfoPlist.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'QuakeSignal' from project 'QuakeSignal')
+
+CopyStringsFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/en.lproj/Localizable.strings <SOURCE_ROOT>/ios/QuakeSignal/Resources/en.lproj/Localizable.strings (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename Localizable.strings --outdir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/en.lproj -- <SOURCE_ROOT>/ios/QuakeSignal/Resources/en.lproj/Localizable.strings
+<SOURCE_ROOT>/ios/QuakeSignal/Resources/en.lproj/Localizable.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'QuakeSignal' from project 'QuakeSignal')
+
+CopyStringsFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/en.lproj/InfoPlist.strings <SOURCE_ROOT>/ios/QuakeSignal/Resources/en.lproj/InfoPlist.strings (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copyStrings --validate --outputencoding binary --outfilename InfoPlist.strings --outdir <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/en.lproj -- <SOURCE_ROOT>/ios/QuakeSignal/Resources/en.lproj/InfoPlist.strings
+<SOURCE_ROOT>/ios/QuakeSignal/Resources/en.lproj/InfoPlist.strings:1:1: note: detected encoding of input file as Unicode (UTF-8) (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftExplicitDependencyGeneratePcm x86_64 <ARTIFACT_ROOT>/build/ModuleCache/AVFAudio-90CJYXBVL9XY23HOGSNYGV13A.pcm
+
+LinkAssetCatalog <SOURCE_ROOT>/ios/QuakeSignal/Assets.xcassets (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-linkAssetCatalog --thinned <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_output/thinned --thinned-dependencies <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_dependencies_thinned --thinned-info-plist-content <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_generated_info.plist_thinned --unthinned <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_output/unthinned --unthinned-dependencies <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_dependencies_unthinned --unthinned-info-plist-content <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_generated_info.plist_unthinned --output <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app --plist-output <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_generated_info.plist
+note: Emplaced <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/AppIcon76x76@2x~ipad.png (in target 'QuakeSignal' from project 'QuakeSignal')
+note: Emplaced <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/AppIcon60x60@2x.png (in target 'QuakeSignal' from project 'QuakeSignal')
+note: Emplaced <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Assets.car (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftExplicitDependencyGeneratePcm arm64 <ARTIFACT_ROOT>/build/ModuleCache/AVFAudio-CXRJSZD4HEZBUB3D0EUKOS3CV.pcm
+
+SwiftEmitModule normal x86_64 Emitting\ module\ for\ QuakeSignal (in target 'QuakeSignal' from project 'QuakeSignal')
+EmitSwiftModule normal x86_64 (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ SettingsView.swift,\ SourceDisclaimerView.swift,\ WolfxClient.swift,\ GeneratedAssetSymbols.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Settings/SettingsView.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Settings/SourceDisclaimerView.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/WolfxClient.swift <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Settings/SettingsView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Settings/SourceDisclaimerView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/WolfxClient.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ QuakeSignalApp.swift,\ QuakeStore.swift,\ RootView.swift,\ ScreenshotAutomation.swift <SOURCE_ROOT>/ios/QuakeSignal/App/QuakeSignalApp.swift <SOURCE_ROOT>/ios/QuakeSignal/State/QuakeStore.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Root/RootView.swift <SOURCE_ROOT>/ios/QuakeSignalShared/ScreenshotAutomation.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/App/QuakeSignalApp.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/State/QuakeStore.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Root/RootView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignalShared/ScreenshotAutomation.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ PushPayload.swift,\ QuakeDetailView.swift,\ QuakeListView.swift,\ QuakeRowView.swift <SOURCE_ROOT>/ios/QuakeSignal/Notifications/PushPayload.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Detail/QuakeDetailView.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/List/QuakeListView.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Home/QuakeRowView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Notifications/PushPayload.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Detail/QuakeDetailView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/List/QuakeListView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Home/QuakeRowView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ EmergencyAlertAudio.swift,\ EpicenterMapView.swift,\ EventRevision.swift,\ FamilyCheckInView.swift <SOURCE_ROOT>/ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Map/EpicenterMapView.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/EventRevision.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Guide/FamilyCheckInView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Map/EpicenterMapView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Models/EventRevision.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Guide/FamilyCheckInView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ HomeView.swift,\ IntensityScale.swift,\ LiveSocketClient.swift,\ Localization.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Home/HomeView.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/IntensityScale.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/LiveSocketClient.swift <SOURCE_ROOT>/ios/QuakeSignal/App/Localization.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Home/HomeView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Models/IntensityScale.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/LiveSocketClient.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/App/Localization.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ DeviceRegistration.swift,\ DisasterGuideView.swift,\ EEWAlertView.swift,\ EEWEvent.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/DeviceRegistration.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Guide/DisasterGuideView.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/AlertDetail/EEWAlertView.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/EEWEvent.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Models/DeviceRegistration.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Guide/DisasterGuideView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/AlertDetail/EEWAlertView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Models/EEWEvent.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ LocationManager.swift,\ NotificationManager.swift,\ OnboardingView.swift,\ PlatformCapabilities.swift <SOURCE_ROOT>/ios/QuakeSignal/State/LocationManager.swift <SOURCE_ROOT>/ios/QuakeSignal/Notifications/NotificationManager.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Onboarding/OnboardingView.swift <SOURCE_ROOT>/ios/QuakeSignal/App/PlatformCapabilities.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/State/LocationManager.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Notifications/NotificationManager.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Onboarding/OnboardingView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/App/PlatformCapabilities.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ ForegroundHTTPFallbackPolicy.swift,\ GuideContent.swift,\ GuideStore.swift,\ GuideTopicDetailView.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/GuideContent.swift <SOURCE_ROOT>/ios/QuakeSignal/State/GuideStore.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Guide/GuideTopicDetailView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Models/GuideContent.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/State/GuideStore.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Guide/GuideTopicDetailView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 Compiling\ APIClient.swift,\ AlertPolicy.swift,\ AppAttestClient.swift,\ AppDelegate.swift,\ AppSettings.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/APIClient.swift <SOURCE_ROOT>/ios/QuakeSignal/State/AlertPolicy.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/AppAttestClient.swift <SOURCE_ROOT>/ios/QuakeSignal/App/AppDelegate.swift <SOURCE_ROOT>/ios/QuakeSignal/State/AppSettings.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/APIClient.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/State/AlertPolicy.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/AppAttestClient.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/App/AppDelegate.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/State/AppSettings.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ QuakeSignal (in target 'QuakeSignal' from project 'QuakeSignal')
+
+EmitSwiftModule normal arm64 (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Compiling ForegroundHTTPFallbackPolicy.swift, GuideContent.swift, GuideStore.swift, GuideTopicDetailView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ ForegroundHTTPFallbackPolicy.swift,\ GuideContent.swift,\ GuideStore.swift,\ GuideTopicDetailView.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/GuideContent.swift <SOURCE_ROOT>/ios/QuakeSignal/State/GuideStore.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Guide/GuideTopicDetailView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Models/GuideContent.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/State/GuideStore.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Guide/GuideTopicDetailView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Compiling PushPayload.swift, QuakeDetailView.swift, QuakeListView.swift, QuakeRowView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ HomeView.swift,\ IntensityScale.swift,\ LiveSocketClient.swift,\ Localization.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Home/HomeView.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/IntensityScale.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/LiveSocketClient.swift <SOURCE_ROOT>/ios/QuakeSignal/App/Localization.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Home/HomeView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Models/IntensityScale.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/LiveSocketClient.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/App/Localization.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Compiling LocationManager.swift, NotificationManager.swift, OnboardingView.swift, PlatformCapabilities.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ EmergencyAlertAudio.swift,\ EpicenterMapView.swift,\ EventRevision.swift,\ FamilyCheckInView.swift <SOURCE_ROOT>/ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Map/EpicenterMapView.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/EventRevision.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Guide/FamilyCheckInView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Map/EpicenterMapView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Models/EventRevision.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Guide/FamilyCheckInView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Emitting module for QuakeSignal (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftDriver\ Compilation\ Requirements QuakeSignal normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-Swift-Compilation-Requirements -- <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name QuakeSignal -Onone @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target x86_64-apple-ios17.0-simulator -g -module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -Xfrontend -serialize-debugging-options -enable-testing -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache -output-file-map <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -sdk-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.swiftmodule -validate-clang-modules-once -clang-build-session-file <DARWIN_USER_CACHE>/C/org.llvm.clang/ModuleCache.noindex/Session.modulevalidation -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal_const_extract_protocols.json -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-generated-files.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-own-target-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-all-target-headers.hmap -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-project-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/include -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources-normal/x86_64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/x86_64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal-Swift.h -working-directory <SOURCE_ROOT>/ios -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal x86_64 Compiling EmergencyAlertAudio.swift, EpicenterMapView.swift, EventRevision.swift, FamilyCheckInView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ QuakeSignalApp.swift,\ QuakeStore.swift,\ RootView.swift,\ ScreenshotAutomation.swift <SOURCE_ROOT>/ios/QuakeSignal/App/QuakeSignalApp.swift <SOURCE_ROOT>/ios/QuakeSignal/State/QuakeStore.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Root/RootView.swift <SOURCE_ROOT>/ios/QuakeSignalShared/ScreenshotAutomation.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/App/QuakeSignalApp.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/State/QuakeStore.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Root/RootView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignalShared/ScreenshotAutomation.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal arm64 Compiling ForegroundHTTPFallbackPolicy.swift, GuideContent.swift, GuideStore.swift, GuideTopicDetailView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/x86_64-apple-ios-simulator.swiftmodule <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.swiftmodule (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.swiftmodule <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/x86_64-apple-ios-simulator.swiftmodule
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/x86_64-apple-ios-simulator.swiftdoc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.swiftdoc (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.swiftdoc <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/x86_64-apple-ios-simulator.swiftdoc
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/x86_64-apple-ios-simulator.abi.json <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.abi.json (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.abi.json <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/x86_64-apple-ios-simulator.abi.json
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/Project/x86_64-apple-ios-simulator.swiftsourceinfo <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.swiftsourceinfo (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.swiftsourceinfo <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/Project/x86_64-apple-ios-simulator.swiftsourceinfo
+
+SwiftCompile normal arm64 Compiling\ LocationManager.swift,\ NotificationManager.swift,\ OnboardingView.swift,\ PlatformCapabilities.swift <SOURCE_ROOT>/ios/QuakeSignal/State/LocationManager.swift <SOURCE_ROOT>/ios/QuakeSignal/Notifications/NotificationManager.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Onboarding/OnboardingView.swift <SOURCE_ROOT>/ios/QuakeSignal/App/PlatformCapabilities.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/State/LocationManager.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Notifications/NotificationManager.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Onboarding/OnboardingView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/App/PlatformCapabilities.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 Compiling\ APIClient.swift,\ AlertPolicy.swift,\ AppAttestClient.swift,\ AppDelegate.swift,\ AppSettings.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/APIClient.swift <SOURCE_ROOT>/ios/QuakeSignal/State/AlertPolicy.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/AppAttestClient.swift <SOURCE_ROOT>/ios/QuakeSignal/App/AppDelegate.swift <SOURCE_ROOT>/ios/QuakeSignal/State/AppSettings.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/APIClient.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/State/AlertPolicy.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/AppAttestClient.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/App/AppDelegate.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/State/AppSettings.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Compiling QuakeSignalApp.swift, QuakeStore.swift, RootView.swift, ScreenshotAutomation.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ BackendConfig.swift,\ City.swift,\ CityPickerView.swift,\ CoarseCoordinate.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/BackendConfig.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/City.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Settings/CityPickerView.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/CoarseCoordinate.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/BackendConfig.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Models/City.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Settings/CityPickerView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Models/CoarseCoordinate.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Compiling HomeView.swift, IntensityScale.swift, LiveSocketClient.swift, Localization.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ DeviceRegistration.swift,\ DisasterGuideView.swift,\ EEWAlertView.swift,\ EEWEvent.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/DeviceRegistration.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Guide/DisasterGuideView.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/AlertDetail/EEWAlertView.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/EEWEvent.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Models/DeviceRegistration.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Guide/DisasterGuideView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/AlertDetail/EEWAlertView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Models/EEWEvent.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Compiling DeviceRegistration.swift, DisasterGuideView.swift, EEWAlertView.swift, EEWEvent.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 Compiling\ BackendConfig.swift,\ City.swift,\ CityPickerView.swift,\ CoarseCoordinate.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/BackendConfig.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/City.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Settings/CityPickerView.swift <SOURCE_ROOT>/ios/QuakeSignal/Models/CoarseCoordinate.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/BackendConfig.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Models/City.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Settings/CityPickerView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal x86_64 <SOURCE_ROOT>/ios/QuakeSignal/Models/CoarseCoordinate.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal x86_64 Compiling APIClient.swift, AlertPolicy.swift, AppAttestClient.swift, AppDelegate.swift, AppSettings.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ PushPayload.swift,\ QuakeDetailView.swift,\ QuakeListView.swift,\ QuakeRowView.swift <SOURCE_ROOT>/ios/QuakeSignal/Notifications/PushPayload.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Detail/QuakeDetailView.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/List/QuakeListView.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Home/QuakeRowView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Notifications/PushPayload.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Detail/QuakeDetailView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/List/QuakeListView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Home/QuakeRowView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for QuakeSignal (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftDriver\ Compilation\ Requirements QuakeSignal normal arm64 com.apple.xcode.tools.swift.compiler (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-Swift-Compilation-Requirements -- <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name QuakeSignal -Onone @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -Xfrontend -serialize-debugging-options -enable-testing -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache -output-file-map <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -sdk-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.swiftmodule -validate-clang-modules-once -clang-build-session-file <DARWIN_USER_CACHE>/C/org.llvm.clang/ModuleCache.noindex/Session.modulevalidation -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal_const_extract_protocols.json -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-generated-files.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-own-target-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-all-target-headers.hmap -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-project-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/include -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources-normal/arm64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/arm64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal-Swift.h -working-directory <SOURCE_ROOT>/ios -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal x86_64 Compiling SettingsView.swift, SourceDisclaimerView.swift, WolfxClient.swift, GeneratedAssetSymbols.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftCompile normal arm64 Compiling\ SettingsView.swift,\ SourceDisclaimerView.swift,\ WolfxClient.swift,\ GeneratedAssetSymbols.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Settings/SettingsView.swift <SOURCE_ROOT>/ios/QuakeSignal/Features/Settings/SourceDisclaimerView.swift <SOURCE_ROOT>/ios/QuakeSignal/Networking/WolfxClient.swift <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Settings/SettingsView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Features/Settings/SourceDisclaimerView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <SOURCE_ROOT>/ios/QuakeSignal/Networking/WolfxClient.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftCompile normal arm64 <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+
+
+SwiftMergeGeneratedHeaders <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/QuakeSignal-Swift.h <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal-Swift.h <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal-Swift.h (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-swiftHeaderTool -arch arm64 <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal-Swift.h -arch x86_64 <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal-Swift.h -o <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/QuakeSignal-Swift.h
+
+SwiftDriverJobDiscovery normal arm64 Compiling BackendConfig.swift, City.swift, CityPickerView.swift, CoarseCoordinate.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/arm64-apple-ios-simulator.swiftmodule <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.swiftmodule (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.swiftmodule <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/arm64-apple-ios-simulator.swiftmodule
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/arm64-apple-ios-simulator.swiftdoc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.swiftdoc (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.swiftdoc <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/arm64-apple-ios-simulator.swiftdoc
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/arm64-apple-ios-simulator.abi.json <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.abi.json (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.abi.json <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/arm64-apple-ios-simulator.abi.json
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.swiftsourceinfo (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.swiftsourceinfo <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo
+
+SwiftDriverJobDiscovery normal x86_64 Compiling BackendConfig.swift, City.swift, CityPickerView.swift, CoarseCoordinate.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftDriver\ Compilation QuakeSignal normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-Swift-Compilation -- <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name QuakeSignal -Onone @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target x86_64-apple-ios17.0-simulator -g -module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -Xfrontend -serialize-debugging-options -enable-testing -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache -output-file-map <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -sdk-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.swiftmodule -validate-clang-modules-once -clang-build-session-file <DARWIN_USER_CACHE>/C/org.llvm.clang/ModuleCache.noindex/Session.modulevalidation -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal_const_extract_protocols.json -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-generated-files.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-own-target-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-all-target-headers.hmap -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-project-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/include -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources-normal/x86_64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/x86_64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal-Swift.h -working-directory <SOURCE_ROOT>/ios -experimental-emit-module-separately -disable-cmo
+
+Ld <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/Binary/QuakeSignal normal x86_64 (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target x86_64-apple-ios17.0-simulator -isysroot <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L<ARTIFACT_ROOT>/build/Intermediates/EagerLinkingTBDs/Debug-iphonesimulator -L<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F<ARTIFACT_ROOT>/build/Intermediates/EagerLinkingTBDs/Debug-iphonesimulator -F<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -filelist <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal_dependency_info.dat -fobjc-link-runtime -L<XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.swiftmodule @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal-linker-args.resp -o <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/Binary/QuakeSignal
+
+SwiftDriverJobDiscovery normal arm64 Compiling LocationManager.swift, NotificationManager.swift, OnboardingView.swift, PlatformCapabilities.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal arm64 Compiling HomeView.swift, IntensityScale.swift, LiveSocketClient.swift, Localization.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal arm64 Compiling PushPayload.swift, QuakeDetailView.swift, QuakeListView.swift, QuakeRowView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal arm64 Compiling EmergencyAlertAudio.swift, EpicenterMapView.swift, EventRevision.swift, FamilyCheckInView.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal arm64 Compiling QuakeSignalApp.swift, QuakeStore.swift, RootView.swift, ScreenshotAutomation.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal arm64 Compiling DeviceRegistration.swift, DisasterGuideView.swift, EEWAlertView.swift, EEWEvent.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal arm64 Compiling APIClient.swift, AlertPolicy.swift, AppAttestClient.swift, AppDelegate.swift, AppSettings.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftDriverJobDiscovery normal arm64 Compiling SettingsView.swift, SourceDisclaimerView.swift, WolfxClient.swift, GeneratedAssetSymbols.swift (in target 'QuakeSignal' from project 'QuakeSignal')
+
+SwiftDriver\ Compilation QuakeSignal normal arm64 com.apple.xcode.tools.swift.compiler (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-Swift-Compilation -- <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name QuakeSignal -Onone @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.SwiftFileList -DDEBUG -enable-experimental-feature DebugDescriptionMacro -sdk <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios17.0-simulator -g -module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -Xfrontend -serialize-debugging-options -enable-testing -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc <DARWIN_USER_CACHE>/C/com.apple.DeveloperTools/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache -output-file-map <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path <ARTIFACT_ROOT>/build/Intermediates/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -sdk-module-cache-path <ARTIFACT_ROOT>/build/ModuleCache -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.swiftmodule -validate-clang-modules-once -clang-build-session-file <DARWIN_USER_CACHE>/C/org.llvm.clang/ModuleCache.noindex/Session.modulevalidation -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal_const_extract_protocols.json -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-generated-files.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-own-target-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-all-target-headers.hmap -Xcc -iquote -Xcc <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal-project-headers.hmap -Xcc -I<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/include -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources-normal/arm64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources/arm64 -Xcc -I<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal-Swift.h -working-directory <SOURCE_ROOT>/ios -experimental-emit-module-separately -disable-cmo
+
+Ld <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/Binary/QuakeSignal normal arm64 (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios17.0-simulator -isysroot <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L<ARTIFACT_ROOT>/build/Intermediates/EagerLinkingTBDs/Debug-iphonesimulator -L<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -F<ARTIFACT_ROOT>/build/Intermediates/EagerLinkingTBDs/Debug-iphonesimulator -F<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator -filelist <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -dependency_info -Xlinker <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal_dependency_info.dat -fobjc-link-runtime -L<XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.swiftmodule @<ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal-linker-args.resp -o <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/Binary/QuakeSignal
+
+CreateUniversalBinary <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/QuakeSignal normal arm64\ x86_64 (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/lipo -create <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/Binary/QuakeSignal <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/Binary/QuakeSignal -output <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/QuakeSignal
+
+Copy <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Watch/QuakeSignalWatch.app <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks -remove-static-executable <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignalWatch.app <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Watch
+
+ProcessInfoPlistFile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Info.plist <SOURCE_ROOT>/ios/QuakeSignal/Supporting/Info.plist (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-infoPlistUtility <SOURCE_ROOT>/ios/QuakeSignal/Supporting/Info.plist -producttype com.apple.product-type.application -genpkginfo <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/assetcatalog_generated_info.plist -scanforprivacyfile <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Watch/QuakeSignalWatch.app -o <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Info.plist
+
+CopySwiftLibs <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-swiftStdLibTool --copy --verbose --scan-executable <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/QuakeSignal --scan-folder <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Frameworks --scan-folder <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/PlugIns --scan-folder <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/SystemExtensions --scan-folder <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Extensions --platform iphonesimulator --toolchain <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Frameworks --strip-bitcode --strip-bitcode-tool <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os --back-deploy-swift-span
+Ignoring --strip-bitcode because --sign was not passed
+
+ExtractAppIntentsMetadata (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name QuakeSignal --sdk-root <XCODE_APP>/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 17.0 --bundle-identifier com.quakesignal.app --output <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app --target-triple arm64-apple-ios17.0-simulator --target-triple x86_64-apple-ios17.0-simulator --binary-file <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/QuakeSignal --dependency-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal_dependency_info.dat --dependency-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal_dependency_info.dat --stringsdata-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --stringsdata-file <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.SwiftFileList --source-file-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.SwiftFileList --metadata-file-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal.DependencyMetadataFileList --static-metadata-file-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal.DependencyStaticMetadataFileList --swift-const-vals-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/arm64/QuakeSignal.SwiftConstValuesFileList --swift-const-vals-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/Objects-normal/x86_64/QuakeSignal.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-08-19 09:08:30.570 appintentsmetadataprocessor[30080:1549607] Starting appintentsmetadataprocessor export
+2026-08-19 09:08:30.571 appintentsmetadataprocessor[30080:1549607] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+ValidateEmbeddedBinary <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Watch/QuakeSignalWatch.app (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/usr/bin/embeddedBinaryValidationUtility <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Watch/QuakeSignalWatch.app -info-plist-path <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Info.plist
+
+AppIntentsSSUTraining (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    <XCODE_APP>/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Info.plist --temp-dir-path <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/ssu --bundle-id com.quakesignal.app --product-path <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app --extracted-metadata-path <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Metadata.appintents --metadata-file-list <ARTIFACT_ROOT>/build/Intermediates/QuakeSignal.build/Debug-iphonesimulator/QuakeSignal.build/QuakeSignal.DependencyMetadataFileList --source-file <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app/Info.plist --archive-ssu-assets
+2026-08-19 09:08:30.582 appintentsnltrainingprocessor[30082:1549610] Parsing options for appintentsnltrainingprocessor
+2026-08-19 09:08:30.582 appintentsnltrainingprocessor[30082:1549610] Starting AppIntents SSU YAML Generation
+2026-08-19 09:08:30.582 appintentsnltrainingprocessor[30082:1549610] No AppShortcuts found - Skipping.
+
+RegisterExecutionPolicyException <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-RegisterExecutionPolicyException <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app
+
+Validate <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    builtin-validationUtility <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app -shallow-bundle -infoplist-subpath Info.plist
+
+Touch <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app (in target 'QuakeSignal' from project 'QuakeSignal')
+    cd <SOURCE_ROOT>/ios
+    /usr/bin/touch -c <ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app
+
+warning: ONLY_ACTIVE_ARCH=YES requested with multiple ARCHS and no active architecture could be computed; building for all applicable architectures (in target 'QuakeSignalWatch' from project 'QuakeSignal')
+warning: ONLY_ACTIVE_ARCH=YES requested with multiple ARCHS and no active architecture could be computed; building for all applicable architectures (in target 'QuakeSignal' from project 'QuakeSignal')
+** BUILD SUCCEEDED **

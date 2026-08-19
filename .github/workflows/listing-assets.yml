@@ -7,14 +7,28 @@ on:
       - "codex/**"
     paths:
       - "ios/AppStore/**"
+      - "ios/QuakeSignal/**"
+      - "ios/QuakeSignalShared/**"
+      - "ios/project.yml"
+      - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignal.xcscheme"
       - "desktop/AppStore/**"
       - ".github/scripts/verify-store-assets.rb"
+      - ".github/scripts/verify-ios-screenshot-candidates.rb"
+      - ".github/scripts/verify-ios-screenshot-candidates.test.rb"
       - ".github/workflows/listing-assets.yml"
   pull_request:
     paths:
       - "ios/AppStore/**"
+      - "ios/QuakeSignal/**"
+      - "ios/QuakeSignalShared/**"
+      - "ios/project.yml"
+      - "ios/QuakeSignal.xcodeproj/project.pbxproj"
+      - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignal.xcscheme"
       - "desktop/AppStore/**"
       - ".github/scripts/verify-store-assets.rb"
+      - ".github/scripts/verify-ios-screenshot-candidates.rb"
+      - ".github/scripts/verify-ios-screenshot-candidates.test.rb"
       - ".github/workflows/listing-assets.yml"
   workflow_dispatch:
 
@@ -29,6 +43,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
       - name: Validate listing assets
         run: ruby .github/scripts/verify-store-assets.rb
+
+      - name: Test iOS screenshot candidate validator
+        run: ruby .github/scripts/verify-ios-screenshot-candidates.test.rb
+
+      - name: Validate optional iOS screenshot candidates
+        run: ruby .github/scripts/verify-ios-screenshot-candidates.rb

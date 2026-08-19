@@ -16,6 +16,15 @@ not exported into this repository. Record them in the release evidence before
 replacing any assets; do not assume they are identical to the redesigned local
 files.
 
+## Offline screenshot-evidence addendum
+
+After this read-only portal observation, a source-frozen ten-image English
+iPhone/iPad build-8 Debug Simulator candidate was captured and recorded in the
+repository's versioned candidate manifest/provenance. It remains unsigned,
+`uploadApproved: false`, `signedReleaseEvidence: false`, and `reviewer: null`.
+This resolves the mechanical recapture task only; it does not resolve named
+visual approval, signed public-Release parity, physical QA, or any portal gate.
+
 ## Contradictions to resolve without deleting drafts
 
 1. The native release is coordinated as `1.1 (8)`, but the empty tvOS and
@@ -24,9 +33,11 @@ files.
    version number can be changed under App Information. Update each existing
    editable draft to `1.1` only after its build-8 archive and metadata are
    frozen; do not add another platform record.
-2. The iOS screenshot evidence was captured from build 7. It cannot establish
-   build-8 appearance. Preserve it as historical evidence and recapture from the
-   frozen build-8 source.
+2. The historical 30-image iOS screenshot set was captured from build 7 and
+   cannot establish build-8 appearance. Preserve it as historical evidence.
+   The separate source-frozen ten-image English build-8 Debug Simulator
+   candidate resolves mechanical recapture only; obtain named visual approval
+   and signed public-Release parity before any upload.
 3. Apple ID `6800642443` contains a macOS draft, but the shipping Tauri Mac app
    has a different bundle ID and canonical record (`6800642853`). Do not attach
    `com.quakesignal.desktop` artifacts or metadata to the macOS draft in

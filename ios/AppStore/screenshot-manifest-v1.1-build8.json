@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "status": "unapproved-debug-simulator-candidate",
+  "uploadApproved": false,
+  "signedReleaseEvidence": false,
+  "product": {
+    "appleId": "6800642443",
+    "platform": "iOS/iPadOS",
+    "marketingVersion": "1.1",
+    "build": 8,
+    "bundleIdentifier": "com.quakesignal.app",
+    "configuration": "Debug"
+  },
+  "rootDirectory": "screenshots-v1.1-build8",
+  "captureEvidence": {
+    "sourceBaselineCommit": "e9106ff6db83e1f808046d71b2ac62318816eca2",
+    "artifactSha256": "2e20fc634946a300ce27d4a700a91ff7f5247e843f0d794f4a98ef676ee18762",
+    "capturedAtUtcRange": [
+      "2026-08-19T00:11:27Z",
+      "2026-08-19T00:17:55Z"
+    ],
+    "reviewer": null
+  },
+  "locales": [
+    {
+      "directory": "en-US"
+    }
+  ],
+  "displayClasses": {
+    "iphone-6.5": {
+      "portraitPixels": [
+        1242,
+        2688
+      ],
+      "requiredFramesPerApprovedLocale": 5
+    },
+    "ipad-13": {
+      "portraitPixels": [
+        2064,
+        2752
+      ],
+      "requiredFramesPerApprovedLocale": 5
+    }
+  },
+  "frames": [
+    {
+      "file": "01-home.jpg",
+      "captureStatus": "unapproved-debug-simulator-candidate"
+    },
+    {
+      "file": "02-reports.jpg",
+      "captureStatus": "unapproved-debug-simulator-candidate"
+    },
+    {
+      "file": "03-map.jpg",
+      "captureStatus": "unapproved-debug-simulator-candidate"
+    },
+    {
+      "file": "04-guide.jpg",
+      "captureStatus": "unapproved-debug-simulator-candidate"
+    },
+    {
+      "file": "05-alert-preferences.jpg",
+      "captureStatus": "unapproved-debug-simulator-candidate"
+    }
+  ]
+}

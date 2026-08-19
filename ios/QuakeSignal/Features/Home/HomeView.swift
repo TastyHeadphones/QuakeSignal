@@ -32,7 +32,7 @@ struct HomeView: View {
                         statusCard
                     }
 
-                    if let highlighted = store.activeWarning ?? store.recentNearbyReport ?? store.nearbyEvents.first {
+                    if let highlighted = store.activeWarning ?? store.recentNearbyReport ?? store.latestNearbyReport {
                         LatestQuakeCardView(
                             event: highlighted,
                             coordinate: store.effectiveCoordinate,

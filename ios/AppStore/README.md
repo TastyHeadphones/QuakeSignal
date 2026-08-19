@@ -1,11 +1,12 @@
 # App Store Connect release kit
 
 This directory is the source of truth for QuakeSignal's localized App Store
-metadata and screenshot plan. Upload only assets captured from the frozen
-public `Release` UI that matches the shipping build; a simulator capture is
-acceptable only when its exact runtime and source are recorded in the release
-provenance. Never use a system permission prompt, a real device token, an exact
-current location, or a test-push result in product-page imagery.
+metadata and screenshot plan. A reproducible Debug Simulator capture is only
+an unapproved visual candidate, even when its exact source, runtime, build
+settings, and hashes are recorded. Upload only after a named marketing/release
+owner approves the images and the required signed public-`Release` parity has
+been recorded separately. Never use a system permission prompt, a real device
+token, an exact current location, or a test-push result in product-page imagery.
 
 | App Store Connect field | Versioned source |
 | --- | --- |
@@ -14,7 +15,9 @@ current location, or a test-push result in product-page imagery.
 | App Review notes | `review-notes.txt` |
 | Submission-answer worksheet | `submission-answers.md` |
 | Pre-submission checklist | `submission-checklist.md` |
-| Release 1.1 screenshot provenance | `screenshot-provenance-v1.1.json` |
+| Historical build-7 screenshot evidence | `screenshot-manifest-v1.1.json`, `screenshot-provenance-v1.1.json` |
+| Unapproved build-8 candidate manifest/provenance | `screenshot-manifest-v1.1-build8.json`, `screenshot-provenance-v1.1-build8.json` |
+| Unapproved build-8 English candidate images | `screenshots-v1.1-build8/en-US/` |
 | Coordinated native-platform release runbook | `apple-platform-release.md` |
 | tvOS / visionOS / Watch metadata and screenshot plans | `platforms/` |
 | Read-only App Store Connect state and safe portal sequence | `app-store-connect-portal-audit-2026-08-19.md` |
@@ -156,18 +159,25 @@ pending field.
 > **Build-8 screenshot block:** the existing 30-file
 > `screenshot-manifest-v1.1.json` / `screenshot-provenance-v1.1.json` set
 > truthfully records a build-7 simulator capture. Preserve it as historical
-> evidence. Do not relabel or upload it for build 8. Use the separate planned
-> build-8 manifest, capture into `screenshots-v1.1-build8`, and create new
-> provenance after the build-8 source is frozen.
+> evidence. Do not relabel or upload it for build 8. The separate build-8
+> manifest, provenance, and ten English iPhone/iPad files are source-frozen
+> Debug Simulator candidates only: their status is
+> `unapproved-debug-simulator-candidate`, `uploadApproved` and
+> `signedReleaseEvidence` are `false`, and `reviewer` is `null`.
 
 - 1024 × 1024 App Store icon: already in `Assets.xcassets`
 - Historical build-7 screenshot inventory: exactly the 30 files declared by
   [`screenshot-manifest-v1.1.json`](./screenshot-manifest-v1.1.json) and
   [`screenshot-provenance-v1.1.json`](./screenshot-provenance-v1.1.json)
-- Five 6.5-inch iPhone portrait screenshots per localization at
-  `1242 × 2688` pixels
-- Five 13-inch iPad portrait screenshots per localization at
-  `2064 × 2752` pixels
+- Build-8 candidate inventory: exactly five English (U.S.) 6.5-inch iPhone
+  portraits at `1242 × 2688` and five English (U.S.) 13-inch iPad portraits at
+  `2064 × 2752`, as declared by
+  [`screenshot-manifest-v1.1-build8.json`](./screenshot-manifest-v1.1-build8.json)
+  and
+  [`screenshot-provenance-v1.1-build8.json`](./screenshot-provenance-v1.1-build8.json)
+- No build-8 Japanese or Simplified Chinese screenshot set is captured or
+  publishable until its localized name, trademark, and availability approvals
+  are recorded.
 - JPEG or PNG only, with no alpha channel or transparency. The capture helper
   emits high-quality JPEG files to guarantee an uploadable, opaque asset.
 
@@ -177,14 +187,16 @@ iPad-capable target and the final map/alert-preference UI.
 
 ### Capture workflow
 
-1. Build and install the exact public `Release` candidate for version 1.1,
-   build 8, on the devices named in
-   [`screenshot-manifest-v1.1-build8.template.json`](./screenshot-manifest-v1.1-build8.template.json).
-   Never change the build number in the historical build-7 provenance.
-2. Capture both the primary 6.5-inch iPhone and 13-inch iPad sets. Do not
-   substitute a legacy 6.3-inch QA/reference set for either upload family.
-3. For each locale, launch the installed app with the matching language and
-   locale. For example, after the app has been installed:
+1. Freeze the full source commit and run the required tests. Build the
+   source-matching Debug Simulator target with signing disabled and verify the
+   ignored `Debug.local.xcconfig` override is absent. Never change the build
+   number in the historical build-7 provenance.
+2. Capture both the primary 6.5-inch iPhone and 13-inch iPad candidate sets
+   with the fixture's exact launch argument and environment gate. Do not
+   substitute a legacy 6.3-inch QA/reference set for either family.
+3. Capture English (U.S.) only until Japanese and Simplified Chinese
+   localized-name, trademark, and availability approvals are recorded. Launch
+   the installed candidate with the matching language and locale. For example:
 
    ```sh
    xcrun simctl terminate booted com.quakesignal.app || true
@@ -192,7 +204,7 @@ iPad-capable target and the final map/alert-preference UI.
      -AppleLanguages '(ja)' -AppleLocale ja_JP
    ```
 
-   Use `en_US` / `(en)` and `zh_CN` / `(zh-Hans)` for the other two localizations.
+   The current build-8 candidate uses `en_US` / `(en)`.
    Complete onboarding with a selected city rather than precise current
    location. Wait for the content to finish loading, and use the same city and
    benign report state for every frame in that locale.
@@ -212,9 +224,13 @@ iPad-capable target and the final map/alert-preference UI.
 
    The explicit `--set screenshots-v1.1-build8` keeps the new capture separate
    from the immutable historical build-7 evidence.
-6. Review every capture at full size, then upload the complete iPhone and iPad
-   sequence for each localization to the iOS version in App Store Connect. Do
-   not mix display classes within one uploaded localization.
+6. Record exact hashes, runtime/device identity, build inputs, and candidate
+   provenance, then review every capture at full size. Keep its reviewer null
+   and its status unapproved until the named review occurs.
+7. Separately compare the candidates with the signed public `Release` archive
+   as required by the release runbook. Only after that parity evidence and
+   named marketing/release-owner approval may an operator upload the complete
+   iPhone and iPad sequence. Do not mix display classes within one localization.
 
 Apple's current [screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/)
 allow one to ten screenshots and list the accepted display-size resolutions.
