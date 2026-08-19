@@ -56,8 +56,8 @@ Build settings for action build and target QuakeSignal:
     BUNDLE_PLUGINS_FOLDER_PATH = PlugIns
     BUNDLE_PRIVATE_HEADERS_FOLDER_PATH = PrivateHeaders
     BUNDLE_PUBLIC_HEADERS_FOLDER_PATH = Headers
-    CACHE_ROOT = <ARTIFACT_ROOT>/xcode-cache/26.6-17F113/Xcode
-    CCHROOT = <ARTIFACT_ROOT>/xcode-cache/26.6-17F113/Xcode
+    CACHE_ROOT = <ARTIFACT_ROOT>/xcode-cache/26.6-17F113/Xcode/26.6-17F113/Xcode
+    CCHROOT = <ARTIFACT_ROOT>/xcode-cache/26.6-17F113/Xcode/26.6-17F113/Xcode
     CHMOD = /bin/chmod
     CHOWN = chown
     CLANG_ANALYZER_NONNULL = YES
@@ -69,7 +69,7 @@ Build settings for action build and target QuakeSignal:
     CLANG_ENABLE_MODULES = YES
     CLANG_ENABLE_OBJC_ARC = YES
     CLANG_ENABLE_OBJC_WEAK = YES
-    CLANG_MODULES_BUILD_SESSION_FILE = <ARTIFACT_ROOT>/xcode-cache/ModuleCache.noindex/Session.modulevalidation
+    CLANG_MODULES_BUILD_SESSION_FILE = <ARTIFACT_ROOT>/xcode-cache/26.6-17F113/Xcode/ModuleCache.noindex/Session.modulevalidation
     CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES
     CLANG_WARN_BOOL_CONVERSION = YES
     CLANG_WARN_COMMA = YES
@@ -105,7 +105,7 @@ Build settings for action build and target QuakeSignal:
     CODE_SIGN_STYLE = Automatic
     COLOR_DIAGNOSTICS = NO
     COMBINE_HIDPI_IMAGES = NO
-    COMPILATION_CACHE_CAS_PATH = <ARTIFACT_ROOT>/xcode-cache/26.6-17F113/Xcode/CompilationCache.noindex
+    COMPILATION_CACHE_CAS_PATH = <ARTIFACT_ROOT>/xcode-cache/26.6-17F113/Xcode/26.6-17F113/Xcode/CompilationCache.noindex
     COMPILATION_CACHE_KEEP_CAS_DIRECTORY = YES
     COMPILER_INDEX_STORE_ENABLE = Default
     COMPOSITE_SDK_DIRS = <ARTIFACT_ROOT>/build/Intermediates/CompositeSDKs
@@ -452,9 +452,9 @@ Build settings for action build and target QuakeSignal:
     SDK_NAME = iphonesimulator26.5
     SDK_NAMES = iphonesimulator26.5
     SDK_PRODUCT_BUILD_VERSION = 23F81a
-    SDK_STAT_CACHE_DIR = <ARTIFACT_ROOT>/xcode-cache/26.6-17F113/Xcode
+    SDK_STAT_CACHE_DIR = <ARTIFACT_ROOT>/xcode-cache/26.6-17F113/Xcode/26.6-17F113/Xcode
     SDK_STAT_CACHE_ENABLE = YES
-    SDK_STAT_CACHE_PATH = <ARTIFACT_ROOT>/xcode-cache/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache
+    SDK_STAT_CACHE_PATH = <ARTIFACT_ROOT>/xcode-cache/26.6-17F113/Xcode/26.6-17F113/Xcode/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-1f122a3c1253c0e3a2240b2508b6516f.sdkstatcache
     SDK_VERSION = 26.5
     SDK_VERSION_ACTUAL = 260500
     SDK_VERSION_MAJOR = 260000
