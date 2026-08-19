@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct WatchDashboardView: View {
@@ -166,7 +167,7 @@ private struct WatchEventDetailView: View {
                         Label(L("quake.intensity.label", maxIntensity), systemImage: "gauge.with.dots.needle.67percent")
                     }
                     if let depth = event.depth {
-                        Label(L("quake.depth.label", depth), systemImage: "arrow.down")
+                        Label(localizedDepthLabel(depth), systemImage: "arrow.down")
                     }
                     Text(event.sourceLabelKey)
                         .foregroundStyle(.secondary)
@@ -200,4 +201,13 @@ private struct WatchEventDetailView: View {
             )
             .accessibilityIdentifier("watch-event-detail-foreground-badge")
     }
+}
+
+private func localizedDepthLabel(_ depth: Double) -> String {
+    let depthText = String(
+        format: "%.0f",
+        locale: Locale(identifier: "en_US_POSIX"),
+        depth
+    )
+    return L("quake.depth.label", depthText)
 }

@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct TVDashboardView: View {
@@ -255,7 +256,7 @@ private struct TVEventDetailView: View {
                             Label(L("quake.intensity.label", maxIntensity), systemImage: "gauge.with.dots.needle.67percent")
                         }
                         if let depth = event.depth {
-                            Label(L("quake.depth.label", depth), systemImage: "arrow.down")
+                            Label(localizedDepthLabel(depth), systemImage: "arrow.down")
                         }
                         Label(event.sourceLabelKey, systemImage: "antenna.radiowaves.left.and.right")
                     }
@@ -274,4 +275,13 @@ private struct TVEventDetailView: View {
         }
         .navigationTitle("detail.title")
     }
+}
+
+private func localizedDepthLabel(_ depth: Double) -> String {
+    let depthText = String(
+        format: "%.0f",
+        locale: Locale(identifier: "en_US_POSIX"),
+        depth
+    )
+    return L("quake.depth.label", depthText)
 }

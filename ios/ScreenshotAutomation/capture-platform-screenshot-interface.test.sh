@@ -79,4 +79,30 @@ if find "$test_root" -type f -name '*.png' -print -quit | grep -q .; then
   exit 1
 fi
 
+# Both foreground-only detail screens share a `%@` localization template.
+# Passing a Double directly to that object placeholder crashes Foundation's
+# vararg formatter before SwiftUI commits the frame, leaving a Watch clock or
+# TV system raster. Require an explicitly formatted String argument in each
+# platform-local source so this contract cannot regress unnoticed.
+for detail_source in \
+  "$script_dir/../QuakeSignalWatch/WatchDashboardView.swift" \
+  "$script_dir/../QuakeSignalTV/TVDashboardView.swift"; do
+  if grep -Fq 'L("quake.depth.label", depth)' "$detail_source"; then
+    echo "error: detail depth must not pass a Double to the %@ localization placeholder: $detail_source" >&2
+    exit 1
+  fi
+  grep -Fq 'Label(localizedDepthLabel(depth), systemImage: "arrow.down")' "$detail_source" || {
+    echo "error: detail screen does not use the reviewed localized depth helper: $detail_source" >&2
+    exit 1
+  }
+  grep -Fq 'locale: Locale(identifier: "en_US_POSIX")' "$detail_source" || {
+    echo "error: detail depth helper lost its deterministic numeric locale: $detail_source" >&2
+    exit 1
+  }
+  grep -Fq 'return L("quake.depth.label", depthText)' "$detail_source" || {
+    echo "error: detail depth helper must pass formatted text to the %@ placeholder: $detail_source" >&2
+    exit 1
+  }
+done
+
 echo "Platform screenshot interface tests passed"
