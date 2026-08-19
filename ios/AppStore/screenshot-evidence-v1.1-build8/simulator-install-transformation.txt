@@ -1,0 +1,13 @@
+purpose=Simulator installation compatibility only
+sourceProduct=<ARTIFACT_ROOT>/build/Products/Debug-iphonesimulator/QuakeSignal.app
+installCopy=<ARTIFACT_ROOT>/capture-app-no-watch/QuakeSignal.app
+operation=rsync -a --exclude=Watch/ <sourceProduct>/ <installCopy>/
+omittedRelativePath=Watch/
+reason=The host has no watchOS 26.5 runtime; the direct iOS target build embedded a Watch companion built against the iPhone Simulator SDK, which CoreSimulator rejected.
+builtProductModified=false
+nonWatchByteDiff=false
+nonWatchDiffEvidence=screenshot-evidence-v1.1-build8/non-watch.diff
+mainExecutableIdentical=true
+mainExecutableSha256=2e20fc634946a300ce27d4a700a91ff7f5247e843f0d794f4a98ef676ee18762
+distributionSigningUsed=false
+credentialsUsed=false

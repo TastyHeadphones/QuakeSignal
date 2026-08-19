@@ -128,8 +128,10 @@ record also contains a macOS draft that must not receive the separate Tauri
 Mac app (`com.quakesignal.desktop`); leave it untouched and use Apple ID
 `6800642853` for Mac 1.1.0.
 
-The existing iPhone/iPad screenshot provenance records build 7. Preserve it as
-historical evidence and capture a new build-8 set. tvOS requires a new
-`1920 × 1080` set, visionOS requires `3840 × 2160`, and the planned Watch set
-uses `410 × 502` consistently. No native-platform screenshot has been claimed
-as captured or approved by the offline metadata kit.
+The existing 30-image iPhone/iPad provenance records build 7 and remains
+historical evidence. A separate ten-image English iPhone/iPad build-8 Debug
+Simulator candidate has now been captured with exact source/build provenance,
+but it is unsigned, reviewer-null, and not approved for upload. tvOS requires a
+new `1920 × 1080` set, visionOS requires `3840 × 2160`, and the planned Watch
+set uses `410 × 502` consistently. No native-platform screenshot is approved;
+signed-build evidence and named release-owner review remain pending.
