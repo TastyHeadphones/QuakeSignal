@@ -326,35 +326,35 @@ end
 end
 
 unless source.include?('source "$script_dir/vision-map-capture-guard.sh"') &&
-       source.include?('vision_map_settle_seconds=25') &&
-       source.match?(/if \[ "\$platform" = "visionos" \] && \[ "\$frame_selector" = "visionos-map" \]; then\s*initial_settle_seconds="\$vision_map_settle_seconds"/m) &&
-       source.match?(/elif \[ "\$platform" = "visionos" \] && \[ "\$frame_selector" = "visionos-map" \]; then\s*vision_map_capture_status=0\s*quakesignal_capture_validated_vision_map/m) &&
-       source.include?('"$script_dir/validate-vision-map-content.rb"') &&
-       source.include?('exit "$vision_map_capture_status"')
-  abort "error: exact visionos-map capture must use the bounded semantic validator/retry before publication"
+       source.include?('vision_settle_seconds=25') &&
+       source.match?(/if \[ "\$platform" = "visionos" \]; then\s*initial_settle_seconds="\$vision_settle_seconds"/m) &&
+       source.match?(/elif \[ "\$platform" = "visionos" \]; then\s*vision_capture_status=0\s*quakesignal_capture_validated_vision_screenshot/m) &&
+       source.match?(/quakesignal_capture_validated_vision_screenshot.*?"\$script_dir\/validate-vision-map-content\.rb".*?"\$vision_settle_seconds" sips \/usr\/bin\/ruby \|\|/m) &&
+       source.include?('exit "$vision_capture_status"')
+  abort "error: every exact Vision capture must use the 25-second bounded semantic validator/retry before publication"
 end
-unless source.scan("quakesignal_capture_validated_vision_map").length == 1
-  abort "error: Vision semantic retry must remain exclusive to the exact map branch"
+unless source.scan("quakesignal_capture_validated_vision_screenshot").length == 1
+  abort "error: Vision semantic retry must have exactly one platform-wide capture branch"
 end
 
-map_branch = source.index('elif [ "$platform" = "visionos" ] && [ "$frame_selector" = "visionos-map" ]; then')
-guard_call = source.index("quakesignal_capture_validated_vision_map", map_branch)
-status_check = source.index('if [ "$vision_map_capture_status" -ne 0 ]; then', guard_call)
-failure_exit = source.index('exit "$vision_map_capture_status"', status_check)
+vision_branch = source.index('elif [ "$platform" = "visionos" ]; then')
+guard_call = source.index("quakesignal_capture_validated_vision_screenshot", vision_branch)
+status_check = source.index('if [ "$vision_capture_status" -ne 0 ]; then', guard_call)
+failure_exit = source.index('exit "$vision_capture_status"', status_check)
 pixel_inspection = source.index('pixel_width="$(sips -g pixelWidth "$candidate"', failure_exit)
 publication = source.index('mv "$candidate" "$output"', pixel_inspection)
 provenance = source.index('if [ -n "$provenance_output" ]; then', publication)
-unless [map_branch, guard_call, status_check, failure_exit, pixel_inspection, publication, provenance].all? &&
-       map_branch < guard_call && guard_call < status_check && status_check < failure_exit &&
+unless [vision_branch, guard_call, status_check, failure_exit, pixel_inspection, publication, provenance].all? &&
+       vision_branch < guard_call && guard_call < status_check && status_check < failure_exit &&
        failure_exit < pixel_inspection && pixel_inspection < publication && publication < provenance
-  abort "error: Vision map semantic failure must exit before pixel inspection, publication, and provenance"
+  abort "error: Vision semantic failure must exit before pixel inspection, publication, and provenance"
 end
 RUBY
 
-# Execute the real set publisher around a deterministic capture stub. Two
-# earlier frames enter its private payload, then the exact map selector fails
-# semantically. The set must clean that payload and never run aggregation or
-# atomically move any partial output into the caller-visible destination.
+# Execute the real set publisher around a deterministic capture stub. Four
+# earlier frames enter its private payload, then the final non-map selector
+# fails semantically. The set must clean that payload and never run aggregation
+# or atomically move any partial output into the caller-visible destination.
 atomic_repo="$test_root/atomic-repo"
 atomic_script_dir="$atomic_repo/ios/ScreenshotAutomation"
 atomic_output="$test_root/atomic-vision-output"
@@ -369,8 +369,10 @@ File.write(File.join(script_dir, "platform-screenshot-plan.rb"), <<~'PLAN')
   abort "unexpected atomic plan request" unless ARGV == ["visionos", "--tsv"]
   puts [
     "visionos-home\ten-US/01-home.png\t3840\t2160",
-    "visionos-emergency-history\ten-US/02-emergency-history.png\t3840\t2160",
-    "visionos-map\ten-US/03-map.png\t3840\t2160"
+    "visionos-reports\ten-US/02-reports.png\t3840\t2160",
+    "visionos-map\ten-US/03-map.png\t3840\t2160",
+    "visionos-guide\ten-US/04-guide.png\t3840\t2160",
+    "visionos-alert-preferences\ten-US/05-alert-preferences.png\t3840\t2160"
   ]
 PLAN
 File.write(File.join(script_dir, "capture-platform-screenshot.sh"), <<~'CAPTURE')
@@ -381,7 +383,7 @@ File.write(File.join(script_dir, "capture-platform-screenshot.sh"), <<~'CAPTURE'
   output="$3"
   [ "$platform" = "visionos" ]
   printf '%s\n' "$selector" >> "$QUAKESIGNAL_TEST_CAPTURE_TRACE"
-  if [ "$selector" = "visionos-map" ]; then
+  if [ "$selector" = "visionos-alert-preferences" ]; then
     exit 65
   fi
   mkdir -p "$(dirname "$output")" "$(dirname "$QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT")"
@@ -400,18 +402,18 @@ expect_status 65 env \
   "$atomic_script_dir/capture-platform-screenshot-set.sh" \
     visionos "$atomic_output"
 
-expected_atomic_trace=$'visionos-home\nvisionos-emergency-history\nvisionos-map'
+expected_atomic_trace=$'visionos-home\nvisionos-reports\nvisionos-map\nvisionos-guide\nvisionos-alert-preferences'
 if [ ! -f "$atomic_trace" ] || [ "$(<"$atomic_trace")" != "$expected_atomic_trace" ]; then
-  echo "error: atomic set fixture did not reach the exact map failure after two private frames" >&2
+  echo "error: atomic set fixture did not reach the final exact Vision failure after four private frames" >&2
   exit 1
 fi
 if [ -e "$atomic_output" ] || [ -L "$atomic_output" ] ||
     [ -e "$atomic_aggregate_marker" ] || [ -L "$atomic_aggregate_marker" ]; then
-  echo "error: semantic map rejection published a partial set or provenance aggregate" >&2
+  echo "error: semantic Vision rejection published a partial set or provenance aggregate" >&2
   exit 1
 fi
 if find "$test_root" -maxdepth 1 -name '.quakesignal-visionos-set.*' -print -quit | grep -q .; then
-  echo "error: semantic map rejection left the set's private payload behind" >&2
+  echo "error: semantic Vision rejection left the set's private payload behind" >&2
   exit 1
 fi
 

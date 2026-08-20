@@ -99,24 +99,27 @@ The lower-level command writes a sidecar only when
 `QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT` names a new absolute JSON path
 outside the repository.
 
-## Vision map readiness protection
+## Vision frame readiness protection
 
-MapKit readiness is nondeterministic even after the Vision process becomes
-launchable. The exact `visionos-map` selector therefore receives a 25-second
-bounded initial settle. After native capture, `sips` creates a temporary BMP
-copy solely for semantic inspection; the original 4K PNG is never converted,
-resized, or modified. The validator samples the central app-panel region and
-requires all of the reviewed map signals: luma variance, quantized color
-diversity, saturated pixels, and blue/cyan map content, plus bright content or
-meaningful edges. A uniform gray launch placeholder fails even though its PNG
-dimensions and opacity are valid.
+Vision frame readiness is nondeterministic even after the process becomes
+launchable. Every exact reviewed selector (`visionos-home`, `visionos-reports`,
+`visionos-map`, `visionos-guide`, and `visionos-alert-preferences`) therefore
+receives a 25-second bounded initial settle. After native capture, `sips`
+creates a temporary BMP copy solely for semantic inspection; the original 4K
+PNG is never converted, resized, or modified. The validator samples the
+central app-panel region and requires both calibrated luma variance and
+meaningful edge structure for every route. The map additionally requires its
+reviewed quantized color diversity, saturated pixels, blue/cyan content, and
+bright-content-or-edge evidence. A gray launch panel, including one with the
+centered blue app logo, fails even when its PNG dimensions and opacity are
+valid.
 
 Only semantic status 65 triggers recovery. The rejected raster is quarantined
-inside the disposable capture directory, the exact dual-gated `visionos-map`
-route is relaunched, and one further 25-second settle/capture/validation is
-allowed. Operational validator, conversion, launch, or path failures never
-retry. A second semantic rejection is also quarantined and aborts the atomic
-set before provenance or artifact publication.
+inside the disposable capture directory, the same exact dual-gated selector
+is relaunched, and one further 25-second settle/capture/validation is allowed.
+Operational validator, conversion, launch, or path failures never retry. A
+second semantic rejection is also quarantined and aborts the atomic set before
+provenance or artifact publication.
 
 ## Watch foreground protection
 

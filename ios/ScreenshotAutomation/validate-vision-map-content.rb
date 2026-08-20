@@ -1,11 +1,26 @@
 #!/usr/bin/ruby
 
-MINIMUM_LUMA_STANDARD_DEVIATION = 28.0
-MINIMUM_QUANTIZED_COLOR_BINS = 80
-MINIMUM_SATURATED_FRACTION = 0.15
+REVIEWED_FRAME_SELECTORS = %w[
+  visionos-home
+  visionos-reports
+  visionos-map
+  visionos-guide
+  visionos-alert-preferences
+].freeze
+
+# Every reviewed route must contain a committed app-panel frame rather than the
+# low-contrast launch card that visionOS can leave visible after process launch.
+# These common thresholds are intentionally below the weakest retained Guide
+# and Alert Preferences captures while remaining above both observed launch
+# placeholders. The map adds stricter, route-specific evidence below.
+MINIMUM_READY_LUMA_STANDARD_DEVIATION = 25.0
+MINIMUM_READY_EDGE_FRACTION = 0.01
+MINIMUM_MAP_LUMA_STANDARD_DEVIATION = 28.0
+MINIMUM_MAP_QUANTIZED_COLOR_BINS = 80
+MINIMUM_MAP_SATURATED_FRACTION = 0.15
 MINIMUM_MAP_BLUE_FRACTION = 0.03
-MINIMUM_BRIGHT_FRACTION = 0.0005
-MINIMUM_EDGE_FRACTION = 0.0075
+MINIMUM_MAP_BRIGHT_FRACTION = 0.0005
+MINIMUM_MAP_EDGE_FRACTION = 0.0075
 SAMPLE_STRIDE = 4
 
 def fail_validation(message, status)
@@ -29,16 +44,18 @@ end
 expected_width = parse_dimension.call(ARGV.fetch(1), "width")
 expected_height = parse_dimension.call(ARGV.fetch(2), "height")
 frame_selector = ARGV.fetch(3)
-fail_validation "unreviewed Vision frame selector", 64 unless frame_selector == "visionos-map"
+unless REVIEWED_FRAME_SELECTORS.include?(frame_selector)
+  fail_validation "unreviewed Vision frame selector", 64
+end
 
 begin
   data = File.binread(bitmap_path)
 rescue SystemCallError => error
-  fail_validation "could not read Vision map validation bitmap: #{error.message}", 70
+  fail_validation "could not read Vision validation bitmap: #{error.message}", 70
 end
 
-fail_validation "Vision map validation copy is too short to be a BMP", 70 if data.bytesize < 54
-fail_validation "Vision map validation copy is not a BMP", 70 unless data.byteslice(0, 2) == "BM"
+fail_validation "Vision validation copy is too short to be a BMP", 70 if data.bytesize < 54
+fail_validation "Vision validation copy is not a BMP", 70 unless data.byteslice(0, 2) == "BM"
 
 pixel_offset = data.byteslice(10, 4).unpack1("V")
 dib_size = data.byteslice(14, 4).unpack1("V")
@@ -52,16 +69,16 @@ height = signed_height.abs
 unless dib_size >= 40 && width == expected_width && height == expected_height &&
     signed_height != 0 && planes == 1 && bits_per_pixel == 24 && compression.zero? &&
     pixel_offset >= 14 + dib_size
-  fail_validation "unsupported Vision map validation bitmap layout", 70
+  fail_validation "unsupported Vision validation bitmap layout", 70
 end
 
 row_stride = ((width * 3 + 3) / 4) * 4
 required_size = pixel_offset + row_stride * height
-fail_validation "truncated Vision map validation bitmap", 70 if data.bytesize < required_size
+fail_validation "truncated Vision validation bitmap", 70 if data.bytesize < required_size
 
 # The Vision app window consistently occupies this central field. Sampling
-# inside it excludes the room background and checks MapKit content rather than
-# accepting a launch placeholder that happens to have valid 4K dimensions.
+# inside it excludes the room background and checks committed application
+# content rather than accepting a launch placeholder with valid 4K dimensions.
 first_x = (width * 30) / 100
 last_x = (width * 70) / 100
 first_y = (height * 28) / 100
@@ -113,7 +130,7 @@ previous_row_luma = {}
 end
 
 if sample_count.zero? || edge_comparisons.zero?
-  fail_validation "Vision map validation region has no samples", 70
+  fail_validation "Vision validation region has no samples", 70
 end
 
 mean_luma = luma_sum / sample_count
@@ -134,17 +151,27 @@ metrics = format(
   edge_fraction * 100,
 )
 
-valid_map = luma_standard_deviation >= MINIMUM_LUMA_STANDARD_DEVIATION &&
-  quantized_bins.length >= MINIMUM_QUANTIZED_COLOR_BINS &&
-  saturated_fraction >= MINIMUM_SATURATED_FRACTION &&
-  map_blue_fraction >= MINIMUM_MAP_BLUE_FRACTION &&
-  (bright_fraction >= MINIMUM_BRIGHT_FRACTION || edge_fraction >= MINIMUM_EDGE_FRACTION)
+valid_ready_frame = luma_standard_deviation >= MINIMUM_READY_LUMA_STANDARD_DEVIATION &&
+  edge_fraction >= MINIMUM_READY_EDGE_FRACTION
 
-unless valid_map
+valid_map_route = luma_standard_deviation >= MINIMUM_MAP_LUMA_STANDARD_DEVIATION &&
+  quantized_bins.length >= MINIMUM_MAP_QUANTIZED_COLOR_BINS &&
+  saturated_fraction >= MINIMUM_MAP_SATURATED_FRACTION &&
+  map_blue_fraction >= MINIMUM_MAP_BLUE_FRACTION &&
+  (bright_fraction >= MINIMUM_MAP_BRIGHT_FRACTION ||
+    edge_fraction >= MINIMUM_MAP_EDGE_FRACTION)
+valid_route = frame_selector != "visionos-map" || valid_map_route
+
+unless valid_ready_frame && valid_route
+  route_requirement = if frame_selector == "visionos-map"
+    "Vision map lacks reviewed semantic pixel diversity"
+  else
+    "Vision frame #{frame_selector} lacks reviewed app-panel pixel structure"
+  end
   fail_validation(
-    "Vision map lacks reviewed semantic pixel diversity (#{metrics}); refusing blank launch placeholder",
+    "#{route_requirement} (#{metrics}); refusing blank launch placeholder",
     65,
   )
 end
 
-puts "Validated Vision map semantic pixels: #{metrics}"
+puts "Validated Vision frame semantic pixels for #{frame_selector}: #{metrics}"

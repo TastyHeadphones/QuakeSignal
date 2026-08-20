@@ -1,13 +1,14 @@
 #!/bin/bash
 
-# Capture the exact Vision map route and reject the gray launch placeholder
-# that CoreSimulator can return before MapKit commits its first meaningful
-# frame. A first semantic rejection is quarantined and receives one exact-route
+# Capture an exact reviewed Vision route and reject the gray launch placeholder
+# that CoreSimulator can return before SwiftUI commits meaningful app content.
+# A first semantic rejection is quarantined and receives one exact-route
 # relaunch/retry; a second rejection fails before the caller can publish the
-# candidate or write provenance.
-quakesignal_capture_validated_vision_map() {
+# candidate or write provenance. The validator applies stricter map-specific
+# evidence when the selected route is visionos-map.
+quakesignal_capture_validated_vision_screenshot() {
   if [ "$#" -ne 13 ]; then
-    echo "error: validated Vision map capture expects 13 arguments" >&2
+    echo "error: validated Vision capture expects 13 arguments" >&2
     return 64
   fi
 
@@ -36,43 +37,46 @@ quakesignal_capture_validated_vision_map() {
   local spawned_pid=""
   local sleep_status=0
 
-  if [ "$frame_selector" != "visionos-map" ]; then
-    echo "error: Vision map semantic capture requires the exact visionos-map selector" >&2
-    return 64
-  fi
+  case "$frame_selector" in
+    visionos-home|visionos-reports|visionos-map|visionos-guide|visionos-alert-preferences) ;;
+    *)
+      echo "error: Vision semantic capture requires an exact reviewed selector" >&2
+      return 64
+      ;;
+  esac
   if ! [[ "$retry_settle_seconds" =~ ^(0|[1-9][0-9]*)$ ]]; then
-    echo "error: Vision map retry settle time must be a canonical nonnegative integer" >&2
+    echo "error: Vision retry settle time must be a canonical nonnegative integer" >&2
     return 64
   fi
   if [ ! -d "$validation_root" ] || [ -L "$validation_root" ]; then
-    echo "error: Vision map validation root must be a real directory" >&2
+    echo "error: Vision validation root must be a real directory" >&2
     return 64
   fi
   validation_root="$(cd "$validation_root" && pwd -P)" || return 64
   candidate_parent="$(cd "$(dirname "$candidate")" && pwd -P)" || return 64
   if [ "$candidate_parent" != "$validation_root" ]; then
-    echo "error: Vision map candidate must remain inside its validation root" >&2
+    echo "error: Vision candidate must remain inside its validation root" >&2
     return 64
   fi
   if [ ! -f "$validator_path" ] || [ -L "$validator_path" ]; then
-    echo "error: Vision map validator must be a regular non-symlink file" >&2
+    echo "error: Vision validator must be a regular non-symlink file" >&2
     return 64
   fi
   if ! command -v "$xcrun_executable" >/dev/null 2>&1 ||
       ! command -v "$sips_executable" >/dev/null 2>&1 ||
       ! command -v "$ruby_executable" >/dev/null 2>&1; then
-    echo "error: Vision map validation executables are unavailable" >&2
+    echo "error: Vision validation executables are unavailable" >&2
     return 69
   fi
 
   while [ "$capture_attempt" -le "$maximum_attempts" ]; do
-    validation_bitmap="$validation_root/vision-map-validation-$capture_attempt.bmp"
+    validation_bitmap="$validation_root/vision-validation-$capture_attempt.bmp"
     if [ -e "$candidate" ] || [ -L "$candidate" ]; then
-      echo "error: refusing to overwrite an existing Vision map candidate" >&2
+      echo "error: refusing to overwrite an existing Vision candidate" >&2
       return 73
     fi
     if [ -e "$validation_bitmap" ] || [ -L "$validation_bitmap" ]; then
-      echo "error: refusing to overwrite an existing Vision map validation bitmap" >&2
+      echo "error: refusing to overwrite an existing Vision validation bitmap" >&2
       return 73
     fi
     capture_status=0
@@ -92,11 +96,11 @@ quakesignal_capture_validated_vision_map() {
     fi
     screenshot_pid=""
     if [ "$capture_status" -ne 0 ]; then
-      echo "error: Vision map screenshot command failed with status $capture_status" >&2
+      echo "error: Vision screenshot command failed with status $capture_status" >&2
       return 70
     fi
     if [ ! -f "$candidate" ] || [ -L "$candidate" ]; then
-      echo "error: Vision map screenshot command did not create a regular candidate" >&2
+      echo "error: Vision screenshot command did not create a regular candidate" >&2
       return 70
     fi
 
@@ -104,15 +108,15 @@ quakesignal_capture_validated_vision_map() {
     # validation root is private, but this also fails closed if another local
     # process races a path into it while CoreSimulator is taking the frame.
     if [ -e "$validation_bitmap" ] || [ -L "$validation_bitmap" ]; then
-      echo "error: refusing to overwrite an existing Vision map validation bitmap" >&2
+      echo "error: refusing to overwrite an existing Vision validation bitmap" >&2
       return 73
     fi
     if ! "$sips_executable" -s format bmp "$candidate" --out "$validation_bitmap" >/dev/null; then
-      echo "error: could not create the temporary Vision map validation bitmap" >&2
+      echo "error: could not create the temporary Vision validation bitmap" >&2
       return 70
     fi
     if [ ! -f "$validation_bitmap" ] || [ -L "$validation_bitmap" ]; then
-      echo "error: Vision map conversion did not create a regular validation bitmap" >&2
+      echo "error: Vision conversion did not create a regular validation bitmap" >&2
       return 70
     fi
     validator_status=0
@@ -123,24 +127,24 @@ quakesignal_capture_validated_vision_map() {
       return 0
     fi
     if [ "$validator_status" -ne 65 ]; then
-      echo "error: Vision map validator failed operationally with status $validator_status; refusing retry" >&2
+      echo "error: Vision validator failed operationally with status $validator_status; refusing retry" >&2
       return 70
     fi
-    rejected_candidate="$validation_root/rejected-vision-map-attempt-$capture_attempt.png"
+    rejected_candidate="$validation_root/rejected-vision-attempt-$capture_attempt.png"
     if [ -e "$rejected_candidate" ] || [ -L "$rejected_candidate" ]; then
-      echo "error: refusing to overwrite a quarantined Vision map capture" >&2
+      echo "error: refusing to overwrite a quarantined Vision capture" >&2
       return 73
     fi
     if ! mv "$candidate" "$rejected_candidate"; then
-      echo "error: could not quarantine the rejected Vision map capture" >&2
+      echo "error: could not quarantine the rejected Vision capture" >&2
       return 73
     fi
     if [ "$capture_attempt" -ge "$maximum_attempts" ]; then
-      echo "error: Vision map screenshot failed semantic validation after $maximum_attempts attempts" >&2
+      echo "error: Vision screenshot failed semantic validation after $maximum_attempts attempts" >&2
       return 65
     fi
 
-    echo "Vision map screenshot failed semantic validation; relaunching the exact frame for one bounded retry" >&2
+    echo "Vision screenshot failed semantic validation; relaunching the exact frame for one bounded retry" >&2
     relaunch_status=0
     quakesignal_defer_tracked_spawn_signals
     /usr/bin/env \
@@ -166,14 +170,14 @@ quakesignal_capture_validated_vision_map() {
     fi
     watch_reactivation_pid=""
     if [ "$relaunch_status" -ne 0 ]; then
-      echo "error: exact-frame Vision map relaunch failed with status $relaunch_status" >&2
+      echo "error: exact-frame Vision relaunch failed with status $relaunch_status" >&2
       return 70
     fi
 
     sleep_status=0
     sleep "$retry_settle_seconds" || sleep_status=$?
     if [ "$sleep_status" -ne 0 ]; then
-      echo "error: Vision map retry settle was interrupted with status $sleep_status" >&2
+      echo "error: Vision retry settle was interrupted with status $sleep_status" >&2
       return 70
     fi
     capture_attempt=$((capture_attempt + 1))
