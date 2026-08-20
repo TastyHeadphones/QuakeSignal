@@ -2204,6 +2204,37 @@ test("fails closed when the normal lint runner's pinned Go toolchain is missing 
   }
 });
 
+test("fails closed when normal lint cannot validate historical screenshot commit ancestry", async (t) => {
+  const mutations = [
+    {
+      label: "missing full-history checkout",
+      from: `        with:
+          # Historical screenshot locks verify commit existence and ancestry.
+          fetch-depth: 0
+`,
+      to: "",
+    },
+    {
+      label: "shallow checkout",
+      from: "          fetch-depth: 0\n",
+      to: "          fetch-depth: 1\n",
+    },
+  ];
+
+  for (const { label, from, to } of mutations) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/workflow-lint.yml");
+      const contents = await readFile(path, "utf8");
+      assert.ok(contents.includes(from), `workflow-lint fixture must support ${label} mutation`);
+      await writeFile(path, contents.replace(from, to), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /workflow-lint full-history checkout step.*(?:contain|be) exactly/i,
+      );
+    });
+  }
+});
+
 test("fails closed when normal push and pull-request lint omits the Mac Catalyst screenshot harness", async (t) => {
   for (const command of [
     "      - \"ios/QuakeSignal/**\"\n",

@@ -408,8 +408,8 @@ const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:IrzNeaBXEZB1ZU04lsg6oa
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:vtAIx8JZ4s9UUN07yItVzVx-po5bFVrgWPH5FV_zhXA";
 const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:FziznhIyMsrK3XG4hiulKdGrLslyBQ0GnhkgxKYdK5c";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:lnd9N7p5XIGOmJKiVlR-eYrYE2N_YorMMiQZpn17kpY";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:S839YTs6JkvIiueNjDjzgoZ-Lx4sZt-jCXAz0GL7a8A";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:eHMqqYHndysneD_S65eDEn0HhM_xPgxERm5L2IrNOek";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:CbqdprNsBxzcY2H24R0_vDGY0lxdX0Ti1uRvtja8g1Q";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:gNHr13EktFUXs0KiPpLYbdaL3I7IApzP4PQjaDmX2Gk";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -1534,6 +1534,18 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
       if (!Array.isArray(actionlintJob.steps)) {
         fail("workflow-lint actionlint job steps must be a sequence.");
       }
+      const checkout = stepByName(
+        actionlintJob.steps,
+        "Check out repository",
+        "workflow-lint full-history checkout step",
+      );
+      exactRecord(checkout, {
+        name: "Check out repository",
+        uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        with: {
+          "fetch-depth": 0,
+        },
+      }, "workflow-lint full-history checkout step");
       const setupGo = stepByName(
         actionlintJob.steps,
         "Set up Go",
