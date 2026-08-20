@@ -54,6 +54,7 @@
   "frames": [
     {
       "file": "en-US/01-headline.png",
+      "captureSelector": "watchos-headline",
       "screen": "Watch dashboard headline",
       "purpose": "Compact headline with visible foreground-only context",
       "setup": "Benign finalized historical report; no live or simulated emergency.",
@@ -63,6 +64,7 @@
     },
     {
       "file": "en-US/02-recent-reports.png",
+      "captureSelector": "watchos-recent-reports",
       "screen": "Recent reports",
       "purpose": "Compact report list and manual refresh behavior",
       "setup": "Ordinary source data with no private information.",
@@ -72,6 +74,7 @@
     },
     {
       "file": "en-US/03-event-detail.png",
+      "captureSelector": "watchos-event-detail",
       "screen": "Event detail",
       "purpose": "Available event fields and foreground-only disclosure",
       "setup": "A finalized historical report, not an active warning.",

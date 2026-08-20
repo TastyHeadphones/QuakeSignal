@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 enum WolfxError: LocalizedError {
@@ -59,12 +60,71 @@ struct WolfxSnapshotFetchResult: Sendable {
 
 /// Wolfx documents a two-requests-per-second public API ceiling. Both manual
 /// refreshes and the foreground WebSocket-recovery fallback share this pacing
-/// so a full seven-source snapshot never creates a burst.
+/// so a multi-source snapshot never creates a burst.
 enum WolfxHTTPFetchPacing {
     static let requestIntervalNanoseconds: UInt64 = 600_000_000
 
     static func delayNanoseconds(forSourceIndex index: Int) -> UInt64 {
         UInt64(max(0, index)) * requestIntervalNanoseconds
+    }
+}
+
+/// Direct Wolfx traffic must not create an on-disk HTTP cache, cookie jar, or
+/// credential store. The companion targets intentionally keep report state in
+/// memory only, and the full-interface Apple targets make the same guarantee
+/// for fetched report payloads.
+enum WolfxURLSessionPolicy {
+    static func configuration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.urlCredentialStorage = nil
+        return configuration
+    }
+
+    static func makeSession() -> URLSession {
+        URLSession(configuration: configuration())
+    }
+
+    static func request(for url: URL) -> URLRequest {
+        URLRequest(
+            url: url,
+            cachePolicy: .reloadIgnoringLocalCacheData
+        )
+    }
+}
+
+/// Drives a manual foreground refresh through SwiftUI's scene-bound `.task`.
+/// Including scene activity in `TaskID` makes deactivation cancel the task
+/// immediately, while clearing the pending request prevents a refresh replay
+/// when the scene later becomes active again.
+struct ForegroundManualRefreshLifecycle: Equatable, Sendable {
+    struct TaskID: Equatable, Sendable {
+        let isSceneActive: Bool
+        let requestID: UInt64?
+    }
+
+    private(set) var pendingRequestID: UInt64?
+    private var nextRequestID: UInt64 = 0
+
+    func taskID(isSceneActive: Bool) -> TaskID {
+        TaskID(isSceneActive: isSceneActive, requestID: pendingRequestID)
+    }
+
+    func shouldRun(isSceneActive: Bool) -> Bool {
+        isSceneActive && pendingRequestID != nil
+    }
+
+    mutating func requestRefresh(isSceneActive: Bool) {
+        guard isSceneActive else { return }
+        nextRequestID &+= 1
+        pendingRequestID = nextRequestID
+    }
+
+    mutating func cancelPendingRefresh() {
+        pendingRequestID = nil
     }
 }
 
@@ -92,13 +152,21 @@ actor WolfxHTTPRequestPacer {
 final class WolfxClient: Sendable {
     static let shared = WolfxClient()
 
-    static let sources = [
-        "jma_eew", "sc_eew", "cenc_eew", "fj_eew", "cq_eew",
-        "cenc_eqlist", "jma_eqlist",
-    ]
+    /// Build 8 ships only sources whose upstream terms have been mapped to the
+    /// product's exact use. Do not add a feed here without updating the source-
+    /// rights evidence and the Worker allow-list in the same reviewed change.
+    static let sources = ["jma_eew", "jma_eqlist"]
 
-    private let session: URLSession = .shared
-    private let httpBaseURL = URL(string: "https://api.wolfx.jp")!
+    private let session: URLSession
+    private let httpBaseURL: URL
+
+    init(
+        session: URLSession = WolfxURLSessionPolicy.makeSession(),
+        httpBaseURL: URL = URL(string: "https://api.wolfx.jp")!
+    ) {
+        self.session = session
+        self.httpBaseURL = httpBaseURL
+    }
 
     /// The standard explicit-refresh behavior: any endpoint failure reports a
     /// refresh error rather than presenting a deliberately partial result.
@@ -191,7 +259,8 @@ final class WolfxClient: Sendable {
         source: String
     ) async throws -> [EEWEvent] {
         let url = httpBaseURL.appending(path: "\(source).json")
-        let (data, response) = try await session.data(from: url)
+        let request = WolfxURLSessionPolicy.request(for: url)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode) else {
             throw WolfxError.invalidResponse(source: source)
@@ -208,11 +277,24 @@ final class WolfxClient: Sendable {
 enum WolfxNormalizer {
     typealias Object = [String: Any]
 
+    private struct JmaCalendarParts {
+        let year: Int
+        let month: Int
+        let day: Int
+        let hour: Int
+        let minute: Int
+        let second: Int
+    }
+
+    private static let minimumMagnitude = -2.0
+    private static let maximumMagnitude = 12.0
+    private static let maximumDepthKm = 1_000.0
+    private static let jmaIntensities: Set<String> = [
+        "0", "1", "2", "3", "4", "5-", "5+", "6-", "6+", "7",
+    ]
+
     static func events(source: String, data: Data) -> [EEWEvent] {
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? Object else {
-            return []
-        }
-        return events(source: source, object: object)
+        (try? validatedEvents(source: source, data: data)) ?? []
     }
 
     /// HTTP snapshots fail closed. Wolfx's documented feeds retain at least
@@ -225,242 +307,315 @@ enum WolfxNormalizer {
               let object = json as? Object else {
             throw WolfxError.invalidResponse(source: source)
         }
-        let normalized = events(source: source, object: object)
-        guard !normalized.isEmpty,
-              Set(normalized.map(\.id)).count == normalized.count,
-              normalized.allSatisfy({ event in
-                  event.sourceId == source &&
-                  !event.eventId.isEmpty &&
-                  event.serial >= 0 &&
-                  (event.reportDate ?? event.originDate) != nil
-              }) else {
-            throw WolfxError.invalidResponse(source: source)
-        }
-
-        if source.hasSuffix("_eew") {
-            if let declaredSource = object["type"] as? String,
-               WolfxClient.sources.contains(declaredSource),
-               declaredSource != source {
-                throw WolfxError.invalidResponse(source: source)
-            }
-            guard normalized.count == 1,
-                  let event = normalized.first,
-                  !event.hypocenter.isEmpty,
-                  event.coordinate != nil,
-                  event.magnitude != nil else {
-                throw WolfxError.invalidResponse(source: source)
-            }
-        } else {
-            guard let md5 = object["md5"] as? String, !md5.isEmpty else {
-                throw WolfxError.invalidResponse(source: source)
-            }
-            let entries = rankedEntries(object)
-            guard !entries.isEmpty,
-                  entries.count == normalized.count,
-                  entries.count <= 50 else {
-                throw WolfxError.invalidResponse(source: source)
-            }
-        }
-        return normalized
+        return try validatedEvents(source: source, object: object)
     }
 
     static func events(source: String, object: Object) -> [EEWEvent] {
-        switch source {
-        case "jma_eew":
-            return normalizeJmaEew(object).map { [$0] } ?? []
-        case "sc_eew", "fj_eew":
-            return normalizeScFjEew(object, source: source).map { [$0] } ?? []
-        case "cenc_eew", "cq_eew":
-            return normalizeCencCqEew(object, source: source).map { [$0] } ?? []
-        case "cenc_eqlist":
-            return rankedEntries(object).compactMap(normalizeCencEqlist)
-        case "jma_eqlist":
-            return rankedEntries(object).compactMap(normalizeJmaEqlist)
-        default:
-            return []
-        }
+        (try? validatedEvents(source: source, object: object)) ?? []
     }
 
-    private static func normalizeJmaEew(_ value: Object) -> EEWEvent? {
-        guard let eventID = string(value["EventID"]), !eventID.isEmpty else { return nil }
+    private static func validatedEvents(source: String, object: Object) throws -> [EEWEvent] {
+        if let declaredSource = object["type"] {
+            guard declaredSource as? String == source else {
+                throw WolfxError.invalidResponse(source: source)
+            }
+        }
+
+        let events: [EEWEvent]
+        switch source {
+        case "jma_eew":
+            events = [try validatedJmaEew(object)]
+        case "jma_eqlist":
+            events = try validatedJmaEqlist(object)
+        default:
+            throw WolfxError.invalidResponse(source: source)
+        }
+
+        guard !events.isEmpty,
+              Set(events.map(\.id)).count == events.count,
+              events.allSatisfy({ event in
+                  event.sourceId == source &&
+                  !event.eventId.isEmpty &&
+                  event.serial > 0 &&
+                  (event.reportDate ?? event.originDate) != nil &&
+                  event.coordinate != nil
+              }) else {
+            throw WolfxError.invalidResponse(source: source)
+        }
+        return events
+    }
+
+    private static func validatedJmaEew(_ value: Object) throws -> EEWEvent {
+        guard nonEmptyString(value["Title"]) != nil,
+              nonEmptyString(value["CodeType"]) != nil,
+              let issue = value["Issue"] as? Object,
+              nonEmptyString(issue["Source"]) != nil,
+              nonEmptyString(issue["Status"]) != nil,
+              let eventID = string(value["EventID"]),
+              parseEventID(eventID) != nil,
+              let serial = positiveInteger(value["Serial"]),
+              let originRaw = string(value["OriginTime"]),
+              let origin = parseDateTime(originRaw, includesSeconds: true),
+              let announcedRaw = string(value["AnnouncedTime"]),
+              let announced = parseDateTime(announcedRaw, includesSeconds: true),
+              milliseconds(announced) >= milliseconds(origin),
+              let hypocenter = nonEmptyString(value["Hypocenter"]),
+              let latitude = finiteJSONNumber(value["Latitude"]), (-90...90).contains(latitude),
+              let longitude = finiteJSONNumber(value["Longitude"]), (-180...180).contains(longitude),
+              let magnitude = finiteJSONNumber(value["Magunitude"]),
+              (minimumMagnitude...maximumMagnitude).contains(magnitude),
+              let depth = finiteJSONNumber(value["Depth"]),
+              (0...maximumDepthKm).contains(depth),
+              let maxIntensity = string(value["MaxIntensity"]),
+              jmaIntensities.contains(maxIntensity),
+              let isWarn = strictBoolean(value["isWarn"]),
+              let isFinal = strictBoolean(value["isFinal"]),
+              let isCancel = strictBoolean(value["isCancel"]),
+              let isTraining = strictBoolean(value["isTraining"]),
+              strictBoolean(value["isSea"]) != nil,
+              strictBoolean(value["isAssumption"]) != nil,
+              value["OriginalText"] is String,
+              let accuracy = value["Accuracy"] as? Object,
+              accuracy["Epicenter"] is String,
+              accuracy["Depth"] is String,
+              accuracy["Magnitude"] is String,
+              let maxIntChange = value["MaxIntChange"] as? Object,
+              maxIntChange["String"] is String,
+              maxIntChange["Reason"] is String,
+              let warnAreas = value["WarnArea"] as? [Any],
+              warnAreas.allSatisfy(isValidWarnArea) else {
+            throw WolfxError.invalidResponse(source: "jma_eew")
+        }
+
         return EEWEvent(
             id: "jma_eew:\(eventID)",
             sourceId: "jma_eew",
             eventId: eventID,
-            serial: int(value["Serial"]) ?? 1,
+            serial: serial,
             kind: "eew",
-            originTimeUtc: localDate(string(value["OriginTime"]), offsetHours: 9),
-            reportTimeUtc: localDate(string(value["AnnouncedTime"]), offsetHours: 9),
-            hypocenter: string(value["Hypocenter"]) ?? "",
-            latitude: number(value["Latitude"]),
-            longitude: number(value["Longitude"]),
-            magnitude: number(value["Magunitude"]),
-            depth: number(value["Depth"]),
-            maxIntensity: string(value["MaxIntensity"]),
-            isWarn: bool(value["isWarn"]),
-            isFinal: bool(value["isFinal"]),
-            isCancel: bool(value["isCancel"]),
-            isTraining: bool(value["isTraining"]),
+            originTimeUtc: iso8601(origin, offsetHours: 9),
+            reportTimeUtc: iso8601(announced, offsetHours: 9),
+            hypocenter: hypocenter,
+            latitude: latitude,
+            longitude: longitude,
+            magnitude: magnitude,
+            depth: depth,
+            maxIntensity: maxIntensity,
+            isWarn: isWarn,
+            isFinal: isFinal,
+            isCancel: isCancel,
+            isTraining: isTraining,
             tsunami: nil
         )
     }
 
-    private static func normalizeScFjEew(_ value: Object, source: String) -> EEWEvent? {
-        guard let eventID = string(value["EventID"]), !eventID.isEmpty else { return nil }
-        return EEWEvent(
-            id: "\(source):\(eventID)",
-            sourceId: source,
-            eventId: eventID,
-            serial: int(value["ReportNum"]) ?? 1,
-            kind: "eew",
-            originTimeUtc: localDate(string(value["OriginTime"]), offsetHours: 8),
-            reportTimeUtc: localDate(string(value["ReportTime"]), offsetHours: 8),
-            hypocenter: string(value["HypoCenter"]) ?? "",
-            latitude: number(value["Latitude"]),
-            longitude: number(value["Longitude"]),
-            magnitude: number(value["Magunitude"]),
-            depth: number(value["Depth"]),
-            maxIntensity: string(value["MaxIntensity"]),
-            isWarn: true,
-            isFinal: bool(value["isFinal"]),
-            isCancel: false,
-            isTraining: false,
-            tsunami: nil
-        )
+    private static func validatedJmaEqlist(_ value: Object) throws -> [EEWEvent] {
+        guard let md5 = string(value["md5"]),
+              md5.wholeMatch(of: /[0-9a-f]{32}/) != nil else {
+            throw WolfxError.invalidResponse(source: "jma_eqlist")
+        }
+        let ranked = rankedEntries(value)
+        let rankedKeys = value.keys.filter { $0.hasPrefix("No") }
+        guard !ranked.isEmpty,
+              ranked.count <= 50,
+              rankedKeys.count == ranked.count,
+              ranked.enumerated().allSatisfy({ index, item in item.rank == index + 1 }) else {
+            throw WolfxError.invalidResponse(source: "jma_eqlist")
+        }
+        return try ranked.map { try validatedJmaEqlistEntry($0.entry) }
     }
 
-    private static func normalizeCencCqEew(_ value: Object, source: String) -> EEWEvent? {
-        guard let eventID = string(value["EventID"]), !eventID.isEmpty else { return nil }
-        return EEWEvent(
-            id: "\(source):\(eventID)",
-            sourceId: source,
-            eventId: eventID,
-            serial: int(value["ReportNum"]) ?? 1,
-            kind: "eew",
-            originTimeUtc: localDate(string(value["OriginTime"]), offsetHours: 8),
-            reportTimeUtc: localDate(string(value["ReportTime"]), offsetHours: 8),
-            hypocenter: string(value["HypoCenter"]) ?? "",
-            latitude: number(value["Latitude"]),
-            longitude: number(value["Longitude"]),
-            magnitude: number(value["Magnitude"]),
-            depth: number(value["Depth"]),
-            maxIntensity: number(value["MaxIntensity"]).map { String(format: "%.1f", $0) },
-            isWarn: true,
-            isFinal: false,
-            isCancel: false,
-            isTraining: false,
-            tsunami: nil
-        )
-    }
+    private static func validatedJmaEqlistEntry(_ value: Object) throws -> EEWEvent {
+        guard nonEmptyString(value["Title"]) != nil,
+              let eventID = string(value["EventID"]),
+              parseEventID(eventID) != nil,
+              let minuteRaw = string(value["time"]),
+              let minute = parseDateTime(minuteRaw, includesSeconds: false),
+              let fullRaw = string(value["time_full"]),
+              let full = parseDateTime(fullRaw, includesSeconds: true),
+              sameMinute(minute, full),
+              let hypocenter = nonEmptyString(value["location"]),
+              let magnitude = canonicalDecimal(value["magnitude"]),
+              (minimumMagnitude...maximumMagnitude).contains(magnitude),
+              let maxIntensity = string(value["shindo"]),
+              jmaIntensities.contains(maxIntensity),
+              let depth = canonicalDepth(value["depth"]),
+              let latitude = canonicalDecimal(value["latitude"]), (-90...90).contains(latitude),
+              let longitude = canonicalDecimal(value["longitude"]), (-180...180).contains(longitude),
+              let info = value["info"] as? String else {
+            throw WolfxError.invalidResponse(source: "jma_eqlist")
+        }
 
-    private static func normalizeCencEqlist(_ value: Object) -> EEWEvent? {
-        guard let eventID = string(value["EventID"]), !eventID.isEmpty else { return nil }
-        let reviewed = string(value["type"]) == "reviewed"
-        return EEWEvent(
-            id: "cenc_eqlist:\(eventID)",
-            sourceId: "cenc_eqlist",
-            eventId: eventID,
-            serial: reviewed ? 2 : 1,
-            kind: "report",
-            originTimeUtc: localDate(string(value["time"]), offsetHours: 8),
-            reportTimeUtc: localDate(string(value["ReportTime"]), offsetHours: 8),
-            hypocenter: string(value["placeName"]) ?? string(value["location"]) ?? "",
-            latitude: number(value["latitude"]),
-            longitude: number(value["longitude"]),
-            magnitude: number(value["magnitude"]),
-            depth: number(value["depth"]),
-            maxIntensity: string(value["intensity"]),
-            isWarn: false,
-            isFinal: reviewed,
-            isCancel: false,
-            isTraining: false,
-            tsunami: nil
-        )
-    }
-
-    private static func normalizeJmaEqlist(_ value: Object) -> EEWEvent? {
-        guard let eventID = string(value["EventID"]), !eventID.isEmpty else { return nil }
-        let time = string(value["time_full"]) ?? string(value["time"])
         return EEWEvent(
             id: "jma_eqlist:\(eventID)",
             sourceId: "jma_eqlist",
             eventId: eventID,
             serial: 1,
             kind: "report",
-            originTimeUtc: localDate(time, offsetHours: 9),
-            reportTimeUtc: localDate(time, offsetHours: 9),
-            hypocenter: string(value["location"]) ?? "",
-            latitude: number(value["latitude"]),
-            longitude: number(value["longitude"]),
-            magnitude: number(value["magnitude"]),
-            depth: number(value["depth"]),
-            maxIntensity: string(value["shindo"]),
+            originTimeUtc: iso8601(full, offsetHours: 9),
+            reportTimeUtc: iso8601(full, offsetHours: 9),
+            hypocenter: hypocenter,
+            latitude: latitude,
+            longitude: longitude,
+            magnitude: magnitude,
+            depth: depth,
+            maxIntensity: maxIntensity,
             isWarn: false,
             isFinal: true,
             isCancel: false,
             isTraining: false,
-            tsunami: string(value["info"])
+            tsunami: info
         )
     }
 
-    private static func rankedEntries(_ object: Object) -> [Object] {
+    private static func rankedEntries(_ object: Object) -> [(rank: Int, entry: Object)] {
         object.compactMap { key, value -> (Int, Object)? in
-            guard key.hasPrefix("No"),
+            guard key.wholeMatch(of: /No(?:[1-9]|[1-4]\d|50)/) != nil,
                   let rank = Int(key.dropFirst(2)),
                   let entry = value as? Object else { return nil }
             return (rank, entry)
         }
         .sorted { $0.0 < $1.0 }
-        .map(\.1)
     }
 
     private static func string(_ value: Any?) -> String? {
-        switch value {
-        case let value as String:
-            return value.isEmpty ? nil : value
-        case let value as NSNumber:
-            return value.stringValue
-        default:
+        value as? String
+    }
+
+    private static func nonEmptyString(_ value: Any?) -> String? {
+        guard let string = value as? String,
+              !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return string
+    }
+
+    private static func finiteJSONNumber(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let double = number.doubleValue
+        return double.isFinite ? double : nil
+    }
+
+    private static func positiveInteger(_ value: Any?) -> Int? {
+        guard let number = finiteJSONNumber(value),
+              number > 0,
+              number.rounded(.towardZero) == number,
+              number <= Double(Int.max) else { return nil }
+        return Int(number)
+    }
+
+    private static func strictBoolean(_ value: Any?) -> Bool? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
+        return number.boolValue
+    }
+
+    private static func canonicalDecimal(_ value: Any?) -> Double? {
+        guard let raw = value as? String,
+              raw.count <= 24,
+              raw.wholeMatch(of: /-?(?:0|[1-9]\d*)(?:\.\d+)?/) != nil,
+              let parsed = Double(raw), parsed.isFinite else { return nil }
+        return parsed
+    }
+
+    private static func canonicalDepth(_ value: Any?) -> Double? {
+        guard let raw = value as? String,
+              let match = raw.wholeMatch(of: /(0|[1-9]\d*)km/),
+              let depth = Double(match.1),
+              depth <= maximumDepthKm else { return nil }
+        return depth
+    }
+
+    private static func isValidWarnArea(_ value: Any) -> Bool {
+        guard let area = value as? Object else { return false }
+        return area["Chiiki"] is String &&
+            area["Shindo1"] is String &&
+            area["Shindo2"] is String &&
+            area["Time"] is String &&
+            area["Type"] is String &&
+            strictBoolean(area["Arrive"]) != nil
+    }
+
+    private static func parseEventID(_ raw: String) -> JmaCalendarParts? {
+        guard let match = raw.wholeMatch(of: /([1-9]\d{3})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/) else {
             return nil
         }
+        return validatedParts(
+            year: Int(match.1), month: Int(match.2), day: Int(match.3),
+            hour: Int(match.4), minute: Int(match.5), second: Int(match.6)
+        )
     }
 
-    private static func number(_ value: Any?) -> Double? {
-        if let number = value as? NSNumber {
-            return number.doubleValue
+    private static func parseDateTime(_ raw: String, includesSeconds: Bool) -> JmaCalendarParts? {
+        if includesSeconds {
+            guard let match = raw.wholeMatch(of: /([1-9]\d{3})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})/) else {
+                return nil
+            }
+            return validatedParts(
+                year: Int(match.1), month: Int(match.2), day: Int(match.3),
+                hour: Int(match.4), minute: Int(match.5), second: Int(match.6)
+            )
         }
-        guard let raw = value as? String, !raw.isEmpty else { return nil }
-        let cleaned = raw.filter { "0123456789.+-".contains($0) }
-        return Double(cleaned)
-    }
-
-    private static func int(_ value: Any?) -> Int? {
-        number(value).map(Int.init)
-    }
-
-    private static func bool(_ value: Any?) -> Bool {
-        if let bool = value as? Bool { return bool }
-        if let number = value as? NSNumber { return number.boolValue }
-        if let string = value as? String {
-            return ["true", "1", "yes"].contains(string.lowercased())
-        }
-        return false
-    }
-
-    private static func localDate(_ raw: String?, offsetHours: Int) -> String? {
-        guard let raw,
-              let match = raw.wholeMatch(of: /(\d{4})[\/-](\d{2})[\/-](\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/) else {
+        guard let match = raw.wholeMatch(of: /([1-9]\d{3})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2})/) else {
             return nil
         }
+        return validatedParts(
+            year: Int(match.1), month: Int(match.2), day: Int(match.3),
+            hour: Int(match.4), minute: Int(match.5), second: 0
+        )
+    }
+
+    private static func validatedParts(
+        year: Int?, month: Int?, day: Int?, hour: Int?, minute: Int?, second: Int?
+    ) -> JmaCalendarParts? {
+        guard let year, let month, let day, let hour, let minute, let second,
+              (1_000...9_999).contains(year),
+              (1...12).contains(month),
+              (0...23).contains(hour),
+              (0...59).contains(minute),
+              (0...59).contains(second) else { return nil }
+        let monthLengths = [
+            31, isLeapYear(year) ? 29 : 28, 31, 30, 31, 30,
+            31, 31, 30, 31, 30, 31,
+        ]
+        guard (1...monthLengths[month - 1]).contains(day) else { return nil }
+        return JmaCalendarParts(
+            year: year, month: month, day: day,
+            hour: hour, minute: minute, second: second
+        )
+    }
+
+    private static func isLeapYear(_ year: Int) -> Bool {
+        year.isMultiple(of: 4) && (!year.isMultiple(of: 100) || year.isMultiple(of: 400))
+    }
+
+    private static func sameMinute(_ lhs: JmaCalendarParts, _ rhs: JmaCalendarParts) -> Bool {
+        lhs.year == rhs.year && lhs.month == rhs.month && lhs.day == rhs.day &&
+            lhs.hour == rhs.hour && lhs.minute == rhs.minute
+    }
+
+    private static func milliseconds(_ parts: JmaCalendarParts) -> TimeInterval {
+        DateComponents(
+            calendar: Calendar(identifier: .gregorian),
+            timeZone: TimeZone(secondsFromGMT: 0),
+            year: parts.year,
+            month: parts.month,
+            day: parts.day,
+            hour: parts.hour,
+            minute: parts.minute,
+            second: parts.second
+        ).date?.timeIntervalSince1970 ?? -.infinity
+    }
+
+    private static func iso8601(_ parts: JmaCalendarParts, offsetHours: Int) -> String? {
         var components = DateComponents()
         components.calendar = Calendar(identifier: .gregorian)
-        components.timeZone = TimeZone(secondsFromGMT: offsetHours * 3600)
-        components.year = Int(match.1)
-        components.month = Int(match.2)
-        components.day = Int(match.3)
-        components.hour = Int(match.4)
-        components.minute = Int(match.5)
-        components.second = match.6.flatMap { Int($0) } ?? 0
+        components.timeZone = TimeZone(secondsFromGMT: offsetHours * 3_600)
+        components.year = parts.year
+        components.month = parts.month
+        components.day = parts.day
+        components.hour = parts.hour
+        components.minute = parts.minute
+        components.second = parts.second
         guard let date = components.date else { return nil }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

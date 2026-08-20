@@ -14,7 +14,7 @@ struct QuakeRowView: View {
                     .font(.headline)
                     .lineLimit(1)
                 HStack(spacing: 6) {
-                    Text(event.reportDate?.formatted(date: .omitted, time: .shortened) ?? "--")
+                    Text(event.reportDate?.formatted(date: .numeric, time: .shortened) ?? "--")
                     Text("·")
                     Text(event.sourceLabelKey)
                     if let maxIntensity = event.maxIntensity {

@@ -40,7 +40,19 @@ enum HomeReportSelectionPolicy {
 struct PresentedAlert: Identifiable, Equatable {
     let event: EEWEvent
     let reason: AlertPresentationReason
-    var id: String { "\(event.id)#\(reason.rawValue)#\(event.serial)" }
+    let mode: PresentedEventMode
+
+    init(
+        event: EEWEvent,
+        reason: AlertPresentationReason,
+        mode: PresentedEventMode = .emergency
+    ) {
+        self.event = event
+        self.reason = reason
+        self.mode = mode
+    }
+
+    var id: String { "\(event.id)#\(reason.rawValue)#\(mode.rawValue)#\(event.serial)" }
 }
 
 /// Keeps an already-presented warning synchronized with accepted lifecycle
@@ -55,6 +67,10 @@ enum PresentedAlertLifecyclePolicy {
     ) -> PresentedAlert? {
         guard let current, current.event.id == incoming.id else { return current }
 
+        if current.mode == .detail {
+            return PresentedAlert(event: incoming, reason: current.reason, mode: .detail)
+        }
+
         if current.event.isActiveWarning {
             guard incoming.isActiveWarning,
                   WarningFreshnessPolicy.isFresh(incoming, now: now) else {
@@ -62,11 +78,12 @@ enum PresentedAlertLifecyclePolicy {
             }
         }
 
-        return PresentedAlert(event: incoming, reason: current.reason)
+        return PresentedAlert(event: incoming, reason: current.reason, mode: current.mode)
     }
 
     static func afterClockTick(_ current: PresentedAlert?, now: Date) -> PresentedAlert? {
         guard let current,
+              current.mode == .emergency,
               current.event.isActiveWarning,
               !WarningFreshnessPolicy.isFresh(current.event, now: now) else {
             return current
@@ -91,8 +108,11 @@ final class QuakeStore {
     private let pushRegistrationSerialiser = PushRegistrationSerialiser()
     private var revisionsByEvent: [String: [EventRevision]] = [:]
     private var isForegroundActive = true
+    private var hasStarted = false
     private var foregroundHTTPFallbackTask: Task<Void, Never>?
     private var expirationClockTask: Task<Void, Never>?
+    private var activeRefreshTask: Task<WolfxSnapshotFetchResult, Error>?
+    private var foregroundResumeTask: Task<Void, Never>?
     private var refreshGeneration = 0
     private var clockNow = Date()
     private var alertedRevisionKeys: Set<String> = []
@@ -117,31 +137,68 @@ final class QuakeStore {
 
     func start() async {
         guard !screenshotAutomationEnabled else { return }
-        liveSocket.start()
-        updateForegroundHTTPFallback()
-        updateExpirationClock()
-        await refresh()
+        let actions = DirectMonitoringLifecyclePolicy.actionsForStart(
+            hasStarted: hasStarted,
+            isForegroundActive: isForegroundActive
+        )
+        guard !actions.isEmpty else { return }
+        hasStarted = true
+
+        for action in actions where action != .refreshSnapshot {
+            performDirectMonitoringAction(action)
+        }
+        if actions.contains(.refreshSnapshot) {
+            await refresh()
+        }
     }
 
-    /// Keeps recovery polling strictly in the foreground. The normal socket
-    /// reconnection loop remains active; this merely lets the regular HTTPS
-    /// snapshot path keep the UI fresh during a prolonged upstream socket
-    /// outage. It never generates a local alert for fetched backfill.
+    /// Owns the complete direct-Wolfx lifecycle. All targets suspend sockets,
+    /// in-flight HTTP refreshes, and app-owned alert audio outside an active
+    /// scene. iPhone/iPad background warnings remain an APNs responsibility;
+    /// relay-disabled targets therefore have no hidden background data path.
     func setForegroundActive(_ isActive: Bool) {
+        let wasActive = isForegroundActive
         isForegroundActive = isActive
+        if isActive {
+            // Scene activation and notification callbacks can arrive before
+            // the periodic clock task gets its first turn. Refresh
+            // synchronously so a warm-background tap cannot classify a stale
+            // warning using the time from before the app was suspended.
+            clockNow = Date()
+            presentedAlert = PresentedAlertLifecyclePolicy.afterClockTick(
+                presentedAlert,
+                now: clockNow
+            )
+        }
         guard !screenshotAutomationEnabled else {
-            foregroundHTTPFallbackTask?.cancel()
-            foregroundHTTPFallbackTask = nil
-            expirationClockTask?.cancel()
-            expirationClockTask = nil
+            for action in DirectMonitoringLifecyclePolicy.suspensionActions {
+                performDirectMonitoringAction(action)
+            }
             return
         }
-        updateForegroundHTTPFallback()
-        updateExpirationClock()
+
+        let actions = DirectMonitoringLifecyclePolicy.actionsForSceneTransition(
+            hasStarted: hasStarted,
+            wasForegroundActive: wasActive,
+            isForegroundActive: isForegroundActive
+        )
+        for action in actions {
+            if action == .refreshSnapshot {
+                foregroundResumeTask?.cancel()
+                foregroundResumeTask = Task { @MainActor [weak self] in
+                    await self?.refresh()
+                }
+            } else {
+                performDirectMonitoringAction(action)
+            }
+        }
     }
 
     func refresh() async {
-        guard !screenshotAutomationEnabled else { return }
+        guard !screenshotAutomationEnabled,
+              DirectMonitoringLifecyclePolicy.shouldAcceptDirectEvent(
+                  isForegroundActive: isForegroundActive
+              ) else { return }
         // The upstream feeds are independent. One malformed or temporarily
         // unavailable source must not hide validated reports from every
         // healthy source. The partial path still fails closed when all
@@ -150,30 +207,47 @@ final class QuakeStore {
     }
 
     private func refresh(allowingPartialResults: Bool) async {
+        guard DirectMonitoringLifecyclePolicy.shouldAcceptDirectEvent(
+            isForegroundActive: isForegroundActive
+        ) else { return }
+
         refreshGeneration += 1
         let generation = refreshGeneration
         isLoading = true
         loadError = nil
-        do {
+
+        activeRefreshTask?.cancel()
+        let refreshTask = Task { [wolfx] in
             if allowingPartialResults {
-                let snapshot = try await wolfx.fetchRecentQuakesAllowingPartialResults()
-                guard generation == refreshGeneration else { return }
-                guard snapshot.hasSuccessfulSources else {
-                    loadError = snapshot.statusDescription
-                    ?? "Wolfx snapshot unavailable."
-                    isLoading = false
-                    return
-                }
-                applyFetchedEvents(snapshot.events)
-                // A partial fallback is useful data, not a failed refresh. The
-                // existing banner exposes the concise source summary without
-                // removing the refreshed event list.
-                loadError = snapshot.statusDescription
-            } else {
-                let snapshot = try await wolfx.fetchRecentQuakes()
-                guard generation == refreshGeneration else { return }
-                applyFetchedEvents(snapshot)
+                return try await wolfx.fetchRecentQuakesAllowingPartialResults()
             }
+            let events = try await wolfx.fetchRecentQuakes()
+            return WolfxSnapshotFetchResult(
+                events: events,
+                failedSources: [],
+                successfulSourceCount: WolfxClient.sources.count
+            )
+        }
+        activeRefreshTask = refreshTask
+
+        do {
+            let snapshot = try await refreshTask.value
+            guard generation == refreshGeneration, isForegroundActive else { return }
+            guard snapshot.hasSuccessfulSources else {
+                loadError = snapshot.statusDescription
+                    ?? "Wolfx snapshot unavailable."
+                isLoading = false
+                activeRefreshTask = nil
+                return
+            }
+            applyFetchedEvents(snapshot.events)
+            // A partial fallback is useful data, not a failed refresh. The
+            // existing banner exposes the concise source summary without
+            // removing the refreshed event list.
+            loadError = snapshot.statusDescription
+        } catch is CancellationError {
+            // Scene deactivation and a newer refresh both cancel obsolete
+            // requests. Neither is a user-visible network failure.
         } catch {
             if generation == refreshGeneration {
                 loadError = error.localizedDescription
@@ -181,6 +255,7 @@ final class QuakeStore {
         }
         if generation == refreshGeneration {
             isLoading = false
+            activeRefreshTask = nil
         }
     }
 
@@ -255,12 +330,19 @@ final class QuakeStore {
     }
 
     /// Presents a notification the person explicitly tapped. The event still
-    /// merges monotonically, but a tap is navigation intent and is therefore
-    /// not re-filtered as a new unsolicited emergency.
+    /// merges monotonically. A fresh active warning may reopen the emergency
+    /// cover; every historical or terminal frame opens ordinary details so a
+    /// stale tap cannot issue imperative safety instructions.
     func ingestTapped(event: EEWEvent, reason: AlertPresentationReason) {
+        let now = Date()
+        clockNow = now
         merge(event)
         let displayedEvent = events.first(where: { $0.id == event.id }) ?? event
-        presentedAlert = PresentedAlert(event: displayedEvent, reason: reason)
+        presentedAlert = PresentedAlert(
+            event: displayedEvent,
+            reason: reason,
+            mode: NotificationTapPresentationPolicy.mode(for: displayedEvent, now: now)
+        )
     }
 
     /// Applies a real push received while the app is foreground. It shares the
@@ -268,15 +350,19 @@ final class QuakeStore {
     /// prevents duplicate full-screen UI and duplicate sound.
     func ingestForegroundNotification(
         event: EEWEvent,
-        reason requestedReason: AlertPresentationReason
+        reason requestedReason: AlertPresentationReason,
+        allowsEmergencyPresentation: Bool
     ) {
+        let now = Date()
+        clockNow = now
         let previous = events.first(where: { $0.id == event.id })
         let decision = ForegroundPushPolicy.ingestionDecision(
             for: event,
             previous: previous,
             requestedReason: requestedReason,
+            allowsEmergencyPresentation: allowsEmergencyPresentation,
             preferences: alertPreferenceSnapshot,
-            now: clockNow
+            now: now
         )
         guard decision.shouldMerge else { return }
         merge(event)
@@ -307,6 +393,10 @@ final class QuakeStore {
     }
 
     private func ingestDirect(event: EEWEvent, isBackfill: Bool) {
+        guard DirectMonitoringLifecyclePolicy.shouldAcceptDirectEvent(
+            isForegroundActive: isForegroundActive
+        ) else { return }
+
         let previous = events.first(where: { $0.id == event.id })
         guard EventMergePolicy.shouldAccept(event, replacing: previous) else { return }
         let reason = ForegroundAlertPolicy.presentationReason(
@@ -328,10 +418,44 @@ final class QuakeStore {
         event: EEWEvent,
         reason: AlertPresentationReason
     ) {
+        guard DirectMonitoringLifecyclePolicy.shouldPresentForegroundEmergency(
+            isForegroundActive: isForegroundActive
+        ) else { return }
+
         let key = "\(event.id)#\(event.serial)#\(event.isWarn)#\(event.isFinal)#\(event.isCancel)#\(event.isTraining)"
         guard alertedRevisionKeys.insert(key).inserted else { return }
         presentedAlert = PresentedAlert(event: event, reason: reason)
         EmergencyAlertAudio.shared.playSelectedSound(for: event, reason: reason)
+    }
+
+    private func performDirectMonitoringAction(_ action: DirectMonitoringLifecycleAction) {
+        switch action {
+        case .startSocket:
+            liveSocket.start()
+        case .stopSocket:
+            liveSocket.stop()
+        case .cancelRefreshes:
+            refreshGeneration += 1
+            activeRefreshTask?.cancel()
+            activeRefreshTask = nil
+            foregroundResumeTask?.cancel()
+            foregroundResumeTask = nil
+            isLoading = false
+        case .refreshSnapshot:
+            // The async callers own this action so startup can await its first
+            // snapshot and a scene transition can retain a cancellable task.
+            assertionFailure("refreshSnapshot must be performed by the async caller")
+        case .startForegroundMaintenance:
+            updateForegroundHTTPFallback()
+            updateExpirationClock()
+        case .stopForegroundMaintenance:
+            foregroundHTTPFallbackTask?.cancel()
+            foregroundHTTPFallbackTask = nil
+            expirationClockTask?.cancel()
+            expirationClockTask = nil
+        case .stopAlertAudio:
+            EmergencyAlertAudio.shared.stop()
+        }
     }
 
     private func recordRevision(for event: EEWEvent) {

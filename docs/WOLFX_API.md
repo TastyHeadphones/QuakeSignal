@@ -5,18 +5,52 @@ verified against live responses on 2026-07-19. Not an official Wolfx document �
 this is our own distillation for QuakeSignal's implementation. Re-check
 `https://wolfx.jp` if Wolfx bumps their doc version (footer shows `Doc version`).
 
-Wolfx is an unofficial relay of JMA / CENC / provincial earthquake bureau data.
-Contact for the upstream service: contact@mtf.edu.kg. Review their Privacy Policy
-and TOS (linked at the bottom of https://wolfx.jp) before shipping an app that
-depends on it.
+Wolfx is an unofficial relay whose broader API includes JMA, CENC, and
+provincial earthquake-administration data. Review the current
+[Wolfx Terms of Service](https://wolfx.jp/en/legal/terms/) and
+[Open API documentation](https://wolfx.jp/en/docs/open-api/) before shipping an
+app that depends on it. No Wolfx email is planned for Apple build 8.
 
-For App Store distribution, use the release-owner permission request in
-[`WOLFX_PERMISSION_REQUEST.md`](WOLFX_PERMISSION_REQUEST.md) and complete the
-[`content-rights-evidence.md`](../ios/AppStore/content-rights-evidence.md)
-register before certifying third-party-content rights in App Store Connect. A
-Wolfx reply is not sufficient for an underlying feed that Wolfx cannot
-authorize; obtain and review the separately required source permission too. The
-app must never expose a public secondary API for Wolfx data.
+For App Store distribution, use the reviewed published-terms mapping in
+[`content-rights-evidence.md`](../ios/AppStore/content-rights-evidence.md).
+The release owner decided on 20 August 2026 not to send the contingency request
+in [`WOLFX_PERMISSION_REQUEST.md`](WOLFX_PERMISSION_REQUEST.md). Open-source
+licensing of QuakeSignal is not itself permission for a third-party service:
+recheck the current Wolfx Terms of Service, this API document version,
+applicable source terms, enabled feeds, attribution, product behavior, and
+territories at action time. The app must never expose a public secondary API or
+resell Wolfx data. If Apple or a source asks for additional authorization,
+pause and narrow the affected scope or obtain it instead of claiming a private
+license.
+
+## Apple build-8 release scope
+
+The coordinated Apple build-8 contract enables exactly:
+
+- `jma_eew`
+- `jma_eqlist`
+
+It disables `cenc_eew`, `cenc_eqlist`, `sc_eew`, `fj_eew`, and `cq_eew` in
+every submitted Apple target and the developer-operated notification relay.
+The Apple clients and relay must connect to the two direct JMA routes; the
+combined `all_eew` route is outside this release contract. The wider endpoint
+and schema inventory below remains implementation/reference history and must
+not be read as a claim that every documented Wolfx feed ships in build 8.
+
+JMA content is mapped through JMA's
+[website terms](https://www.jma.go.jp/jma/en/copyright.html) and the
+[Public Data License 1.0](https://www.digital.go.jp/en/resources/open_data/public_data_license_v1.0),
+including source citation, normalized/edited-content identification, and
+non-endorsement requirements. JMA's
+[earthquake-motion forecasting FAQ](https://www.jma.go.jp/jma/kishou/minkan/q_a_s.html)
+and [application guide](https://www.jma.go.jp/jma/kishou/minkan/tebiki/jishin_tebiki.pdf)
+define the statutory boundary used by this release: QuakeSignal formats,
+deduplicates, and filters delivery of JMA-issued facts, but does not calculate
+predicted local intensity or ground-motion arrival and does not issue a
+QuakeSignal-authored official warning. Relay events and revisions become
+eligible for deletion after 89 days and are removed by the next successful
+daily cleanup; operational failures can delay deletion. The relay exposes no
+public secondary data API.
 
 Every endpoint is available two ways:
 - **HTTP GET**, returns the current/latest snapshot as JSON — good for polling
@@ -28,10 +62,13 @@ Every endpoint is available two ways:
 ## WebSocket connection contract
 
 - Base host: `wss://ws-api.wolfx.jp/<endpoint>`
-- Server sends a `{"type":"heartbeat","ver":...,"id":"<connection-uuid>","timestamp":"<ms>"}`
-  roughly once a minute; there is no requirement to respond, but a client may
-  send the literal string `ping` and expect `{"type":"pong","timestamp":"<ms>"}`
-  back, useful as a liveness check.
+- The published v20260415 table describes heartbeat `ver` as a number, `id` as
+  a connection UUID, and the millisecond `timestamp` as a string. Direct-route
+  observations on 2026-08-21 instead returned a positive decimal connection
+  ID and numeric millisecond timestamps for both heartbeat and pong. The relay
+  accepts only canonical forms of either documented or observed representation;
+  arbitrary text or objects fail closed. There is no requirement to respond,
+  but a client may send the literal string `ping` for a pong liveness check.
 - A client may also send one of the manual query commands below to force a
   fresh push of current data without waiting for the next natural update:
   `query_sceew`, `query_jmaeew`, `query_fjeew`, `query_cqeew`, `query_cenceew`,
@@ -41,7 +78,7 @@ Every endpoint is available two ways:
   the endpoint name, e.g. `"jma_eew"`. Use it to route the payload to the
   right decoder on the combined `all_eew` feed.
 
-## Endpoints
+## Full upstream endpoint reference
 
 | Source | HTTP GET | WebSocket | Purpose |
 |---|---|---|---|
@@ -165,7 +202,10 @@ transport, one level up, not per-entry).
 ```
 `depth` includes the `km` unit inside the string (e.g. `"20km"`) — strip it
 before parsing as a number. `info` (tsunami advisory text) is usually only
-non-empty on the first entry.
+non-empty on the first entry. `EventID` contains the earthquake's origin time,
+whereas `time`/`time_full` contain the published report time; current valid
+snapshots can differ by one or more minutes. Validate both calendars, but do
+not require those two distinct timestamps to share a minute.
 
 ## Practical notes for QuakeSignal
 
@@ -177,9 +217,11 @@ non-empty on the first entry.
   every message as a brand-new event.
 - **No documented rate limit** was published; be a good citizen anyway — one
   persistent WebSocket per endpoint from the backend, not per-device polling.
-  If every backend WebSocket route remains unavailable for 90 seconds, the
-  private relay switches to a bounded emergency HTTP alternate transport: one
-  source request at a time, at least 600 ms apart. It validates and deduplicates
-  each snapshot before durable ingestion, and returns to WebSocket transport
-  only after every route recovers. This is not a public secondary API.
+  If a required backend WebSocket source remains unavailable for 90 seconds,
+  the private relay polls only the affected stale JMA source or sources through
+  a bounded emergency HTTP alternate transport: one source request at a time,
+  at least 600 ms apart. It validates and deduplicates each snapshot before
+  durable ingestion. A recovered source leaves alternate polling once its
+  WebSocket is current again; aggregate health reports WebSocket transport only
+  after all required routes recover. This is not a public secondary API.
 - **No auth/API key required** for any of the endpoints used here.

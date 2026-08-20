@@ -9,9 +9,11 @@ on:
       - ".github/workflows/**"
       - ".github/scripts/**"
       - "packaging/homebrew-tap/**"
+      - "desktop/src-tauri/src/lib.rs"
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
       - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
+      - "ios/QuakeSignal/**"
       - "ios/QuakeSignal/Supporting/Info.plist"
       - "ios/QuakeSignalTV/Supporting/Info.plist"
       - "ios/QuakeSignalVision/Supporting/Info.plist"
@@ -20,8 +22,18 @@ on:
       - "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements"
       - "ios/QuakeSignal/App/PlatformCapabilities.swift"
       - "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift"
+      - "ios/QuakeSignal/Features/Root/RootView.swift"
       - "ios/QuakeSignal/Features/Settings/SettingsView.swift"
+      - "ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy"
       - "ios/QuakeSignal/Resources/**/Localizable.strings"
+      - "ios/QuakeSignalShared/**"
+      - "ios/QuakeSignalTests/**"
+      - "ios/QuakeSignalTV/**"
+      - "ios/QuakeSignalTVTests/**"
+      - "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy"
+      - "ios/QuakeSignalWatch/**"
+      - "ios/AppStore/**"
+      - "ios/AppStore/platforms/**/screenshot-manifest-*.json"
       - "ios/AppStore/ExportOptions.plist"
       - "ios/ci_scripts/**"
       - "ios/ScreenshotAutomation/**"
@@ -29,6 +41,7 @@ on:
       - "backend/cloudflare/package.json"
       - "backend/cloudflare/package-lock.json"
       - "backend/cloudflare/staging/wrangler.staging.template.json"
+      - "backend/cloudflare/scripts/legal-page-contract.mjs"
       - "backend/cloudflare/scripts/render-staging-config.mjs"
       - "backend/cloudflare/scripts/smoke-test.mjs"
       - "backend/cloudflare/scripts/smoke-test-policy.mjs"
@@ -44,9 +57,11 @@ on:
       - ".github/workflows/**"
       - ".github/scripts/**"
       - "packaging/homebrew-tap/**"
+      - "desktop/src-tauri/src/lib.rs"
       - "ios/project.yml"
       - "ios/QuakeSignal.xcodeproj/project.pbxproj"
       - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
+      - "ios/QuakeSignal/**"
       - "ios/QuakeSignal/Supporting/Info.plist"
       - "ios/QuakeSignalTV/Supporting/Info.plist"
       - "ios/QuakeSignalVision/Supporting/Info.plist"
@@ -55,8 +70,18 @@ on:
       - "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements"
       - "ios/QuakeSignal/App/PlatformCapabilities.swift"
       - "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift"
+      - "ios/QuakeSignal/Features/Root/RootView.swift"
       - "ios/QuakeSignal/Features/Settings/SettingsView.swift"
+      - "ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy"
       - "ios/QuakeSignal/Resources/**/Localizable.strings"
+      - "ios/QuakeSignalShared/**"
+      - "ios/QuakeSignalTests/**"
+      - "ios/QuakeSignalTV/**"
+      - "ios/QuakeSignalTVTests/**"
+      - "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy"
+      - "ios/QuakeSignalWatch/**"
+      - "ios/AppStore/**"
+      - "ios/AppStore/platforms/**/screenshot-manifest-*.json"
       - "ios/AppStore/ExportOptions.plist"
       - "ios/ci_scripts/**"
       - "ios/ScreenshotAutomation/**"
@@ -64,6 +89,7 @@ on:
       - "backend/cloudflare/package.json"
       - "backend/cloudflare/package-lock.json"
       - "backend/cloudflare/staging/wrangler.staging.template.json"
+      - "backend/cloudflare/scripts/legal-page-contract.mjs"
       - "backend/cloudflare/scripts/render-staging-config.mjs"
       - "backend/cloudflare/scripts/smoke-test.mjs"
       - "backend/cloudflare/scripts/smoke-test-policy.mjs"
@@ -82,19 +108,33 @@ permissions:
 jobs:
   actionlint:
     name: Validate GitHub Actions workflows
-    runs-on: ubuntu-latest
+    # The reviewed screenshot contract includes AppKit, CoreGraphics, and
+    # ScreenCaptureKit Swift helpers. Keep this job on an Xcode-bearing host so
+    # normal push/PR validation executes those native checks rather than merely
+    # finding their command strings.
+    runs-on: macos-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Historical screenshot locks verify commit existence and ancestry.
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
 
-      # Ubuntu hosted runners include Go. Pin the actionlint module version so
-      # workflow syntax and expression validation is reproducible and does not
-      # depend on a floating GitHub Action implementation.
+      # The installed tools on GitHub-hosted macOS images can change. Pin both
+      # the setup action and toolchain so actionlint has a reproducible Go host.
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.24.13"
+          cache: false
+
+      # Pin the actionlint module version so syntax and expression validation
+      # does not depend on a floating GitHub Action implementation.
       - name: Run actionlint
         run: |
           set -euo pipefail
@@ -130,15 +170,125 @@ jobs:
           ruby .github/scripts/verify-store-assets.test.rb
 
       - name: Test credential-free Apple screenshot harness
+        env:
+          QUAKESIGNAL_TEST_TEMP_ROOT: ${{ runner.temp }}
+          RUNNER_TEMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
         run: |
           set -euo pipefail
+          bash -n ios/ScreenshotAutomation/capture-ios-screenshot.sh
+          bash -n ios/ScreenshotAutomation/capture-ios-screenshot-set.sh
+          bash -n ios/ScreenshotAutomation/ios-screenshot-capture-interface.test.sh
+          bash -n ios/ScreenshotAutomation/ios-screenshot-content-validator.test.sh
+          bash -n ios/ScreenshotAutomation/screenshot-process-guard.sh
+          bash -n ios/ScreenshotAutomation/screenshot-process-guard.test.sh
+          bash -n ios/ScreenshotAutomation/capture-maccatalyst-screenshot.sh
+          bash -n ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh
+          bash -n ios/ScreenshotAutomation/maccatalyst-capture-interface.test.sh
+          bash -n ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.sh
+          bash -n ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.test.sh
+          bash -n ios/ScreenshotAutomation/maccatalyst-content-validator.test.sh
+          bash -n ios/ScreenshotAutomation/maccatalyst-process-guard.sh
+          bash -n ios/ScreenshotAutomation/maccatalyst-process-guard.test.sh
           bash -n ios/ScreenshotAutomation/capture-platform-screenshot.sh
+          bash -n ios/ScreenshotAutomation/capture-platform-screenshot-set.sh
+          bash -n ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
           bash -n ios/ScreenshotAutomation/watch-capture-guard.sh
           bash -n ios/ScreenshotAutomation/watch-capture-guard.test.sh
+          bash -n ios/ScreenshotAutomation/vision-map-capture-guard.sh
+          bash -n ios/ScreenshotAutomation/vision-map-capture-guard.test.sh
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-ios-screenshot-provenance.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-ios-screenshot-provenance.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-build-binding.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-build-binding.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-plan.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-plan.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-simulator-lease.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-swift-inputs.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/safe-zip-tree.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/safe-zip-tree.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/screenshot-test-temp-root.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/seal-screenshot-capture-package.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/seal-screenshot-capture-package.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/platform-screenshot-plan.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/platform-screenshot-plan.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/maccatalyst-screenshot-plan.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/maccatalyst-screenshot-plan.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/validate-vision-map-content.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/validate-vision-map-content.test.rb
+          /usr/bin/ruby -c .github/scripts/assemble-apple-screenshot-release-set.rb
+          /usr/bin/ruby -c .github/scripts/assemble-apple-screenshot-release-set.test.rb
+          /usr/bin/ruby -c .github/scripts/verify-apple-screenshot-release-set.rb
+          /usr/bin/ruby -c .github/scripts/verify-apple-screenshot-release-set.test.rb
+          /usr/bin/ruby -c .github/scripts/verify-native-apple-screenshot-candidates.rb
+          /usr/bin/ruby -c .github/scripts/verify-native-apple-screenshot-candidates.test.rb
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-capture-window.swift
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-content-validator-fixture.swift
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-flatten-png.swift
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-validate-content.swift
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-window-evidence.swift
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/ios-screenshot-content-validator.swift
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/ios-screenshot-content-validator-fixture.swift
+          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-plan.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-build-binding.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/safe-zip-tree.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/seal-screenshot-capture-package.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/assemble-ios-screenshot-provenance.test.rb
+          bash ios/ScreenshotAutomation/ios-screenshot-capture-interface.test.sh
+          bash ios/ScreenshotAutomation/ios-screenshot-content-validator.test.sh
+          bash ios/ScreenshotAutomation/screenshot-process-guard.test.sh
+          /usr/bin/ruby ios/ScreenshotAutomation/maccatalyst-screenshot-plan.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.test.rb
+          bash ios/ScreenshotAutomation/maccatalyst-capture-interface.test.sh
+          bash ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.test.sh
+          bash ios/ScreenshotAutomation/maccatalyst-content-validator.test.sh
+          bash ios/ScreenshotAutomation/maccatalyst-process-guard.test.sh
+          /usr/bin/ruby ios/ScreenshotAutomation/platform-screenshot-plan.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb
+          bash ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
           bash ios/ScreenshotAutomation/watch-capture-guard.test.sh
           /usr/bin/ruby ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
+          bash ios/ScreenshotAutomation/vision-map-capture-guard.test.sh
+          /usr/bin/ruby ios/ScreenshotAutomation/validate-vision-map-content.test.rb
+          /usr/bin/ruby .github/scripts/assemble-apple-screenshot-release-set.test.rb
+          /usr/bin/ruby .github/scripts/verify-apple-screenshot-release-set.test.rb
+          /usr/bin/ruby .github/scripts/verify-apple-screenshot-release-set.rb
+
+      - name: Test foreground Apple TV emergency policy
+        run: |
+          set -euo pipefail
+          xcrun swiftc \
+            ios/QuakeSignalTV/TVEmergencyPresentationPolicy.swift \
+            ios/QuakeSignalTVTests/TVEmergencyPresentationPolicyStandaloneTests.swift \
+            -o "$RUNNER_TEMP/tvos-emergency-policy-tests"
+          "$RUNNER_TEMP/tvos-emergency-policy-tests"
+          xcrun swiftc \
+            ios/QuakeSignalShared/AlertSoundPreference.swift \
+            ios/QuakeSignalTV/TVAlertPreferences.swift \
+            ios/QuakeSignalTVTests/TVAlertAudioPolicyStandaloneTests.swift \
+            -o "$RUNNER_TEMP/tvos-alert-audio-policy-tests"
+          "$RUNNER_TEMP/tvos-alert-audio-policy-tests"
+          /usr/bin/ruby -c ios/QuakeSignalTVTests/tvos-emergency-interface.test.rb
+          /usr/bin/ruby ios/QuakeSignalTVTests/tvos-emergency-interface.test.rb
 
       - name: Test iOS release contract
         run: |

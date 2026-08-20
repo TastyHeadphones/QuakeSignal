@@ -59,7 +59,7 @@ class IOSBuild8ScreenshotCandidateValidatorTest < Minitest::Test
     IOSBuild8ScreenshotCandidateValidator.new(
       root: @root,
       image_inspector: @inspector,
-      source_guard: @source_guard,
+      historical_commit_guard: @source_guard,
     )
   end
 
@@ -299,7 +299,7 @@ class IOSBuild8ScreenshotCandidateValidatorTest < Minitest::Test
       IOSBuild8ScreenshotCandidateValidator.new(
         root: root_link,
         image_inspector: @inspector,
-        source_guard: @source_guard,
+        historical_commit_guard: @source_guard,
       )
     end
     root_link.delete
@@ -1185,9 +1185,29 @@ class ListingAssetsWorkflowContractTest < Minitest::Test
         "        with:\n          fetch-depth: 0\n          ref: main\n",
       ],
       ["      - \"ios/QuakeSignal/**\"\n", ""],
+      ["      - \"ios/ScreenshotAutomation/**\"\n", ""],
+      ["      - \"ios/QuakeSignalTV/**\"\n", ""],
+      ["      - \"ios/QuakeSignalVision/**\"\n", ""],
+      ["      - \"ios/QuakeSignalWatch/**\"\n", ""],
+      [
+        "      - \"ios/QuakeSignal.xcodeproj/project.xcworkspace/contents.xcworkspacedata\"\n",
+        "",
+      ],
+      ["      - \"ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**\"\n", ""],
       ["      - \".github/scripts/verify-ios-screenshot-candidates.rb\"\n", ""],
+      ["      - \".github/scripts/verify-native-apple-screenshot-candidates.rb\"\n", ""],
+      ["      - \".github/scripts/verify-apple-screenshot-release-set.rb\"\n", ""],
+      ["      - \".github/scripts/verify-apple-screenshot-release-set.test.rb\"\n", ""],
+      ["      - \".github/scripts/verify-ios-release-contract.mjs\"\n", ""],
+      ["      - \".github/scripts/verify-ios-release-contract.test.mjs\"\n", ""],
+      ["      - \".github/workflows/apple-platform-screenshots.yml\"\n", ""],
+      ["      - \".github/workflows/workflow-lint.yml\"\n", ""],
       ["ruby .github/scripts/verify-ios-screenshot-candidates.test.rb", "ruby -v"],
       ["ruby .github/scripts/verify-ios-screenshot-candidates.rb", "ruby -v"],
+      ["ruby .github/scripts/verify-native-apple-screenshot-candidates.test.rb", "ruby -v"],
+      ["ruby .github/scripts/verify-native-apple-screenshot-candidates.rb", "ruby -v"],
+      ["ruby .github/scripts/verify-apple-screenshot-release-set.test.rb", "ruby -v"],
+      ["ruby .github/scripts/verify-apple-screenshot-release-set.rb", "ruby -v"],
       [
         "        run: ruby .github/scripts/verify-ios-screenshot-candidates.rb\n",
         "        run: |\n" \
@@ -1196,26 +1216,26 @@ class ListingAssetsWorkflowContractTest < Minitest::Test
         "          exit 0\n",
       ],
       [
-        "      - name: Validate optional iOS screenshot candidates\n        run:",
-        "      - name: Validate optional iOS screenshot candidates\n        if: false\n        run:",
+        "      - name: Validate historical iOS screenshot bytes\n        run:",
+        "      - name: Validate historical iOS screenshot bytes\n        if: false\n        run:",
       ],
       [
-        "      - name: Validate optional iOS screenshot candidates\n        run:",
-        "      - name: Validate optional iOS screenshot candidates\n        continue-on-error: true\n        run:",
+        "      - name: Validate historical iOS screenshot bytes\n        run:",
+        "      - name: Validate historical iOS screenshot bytes\n        continue-on-error: true\n        run:",
       ],
       [
-        "      - name: Validate optional iOS screenshot candidates\n        run:",
-        "      - name: Validate optional iOS screenshot candidates\n" \
+        "      - name: Validate historical iOS screenshot bytes\n        run:",
+        "      - name: Validate historical iOS screenshot bytes\n" \
         "        shell: \"bash {0} || true\"\n        run:",
       ],
       [
-        "      - name: Validate optional iOS screenshot candidates\n        run:",
-        "      - name: Validate optional iOS screenshot candidates\n" \
+        "      - name: Validate historical iOS screenshot bytes\n        run:",
+        "      - name: Validate historical iOS screenshot bytes\n" \
         "        working-directory: .\n        run:",
       ],
       [
-        "      - name: Validate optional iOS screenshot candidates\n        run:",
-        "      - name: Validate optional iOS screenshot candidates\n" \
+        "      - name: Validate historical iOS screenshot bytes\n        run:",
+        "      - name: Validate historical iOS screenshot bytes\n" \
         "        env:\n          RUBYOPT: \"-w\"\n        run:",
       ],
       [

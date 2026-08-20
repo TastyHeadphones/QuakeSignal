@@ -1,10 +1,7 @@
 import {
   extractEqlistEntries,
-  normalizeCencCqEew,
-  normalizeCencEqlistEntry,
   normalizeJmaEew,
   normalizeJmaEqlistEntry,
-  normalizeScFjEew,
 } from "../../src/alerts/normalize";
 import type {
   AlertSound,
@@ -26,14 +23,10 @@ import {
 // bundled Worker tests without duplicating its implementation in a fixture.
 export { buildPushPayload, notificationReasonForEvent, reconcileEventRevision };
 import {
-  ALL_WOLFX_SOURCES,
   isHeartbeat,
   isPong,
-  type CencCqEewMessage,
-  type CencEqlistEntry,
   type JmaEewMessage,
   type JmaEqlistEntry,
-  type ScFjEewMessage,
   type WolfxEqlistMessage,
   type WolfxSourceId,
 } from "../../src/types/wolfx";
@@ -187,21 +180,57 @@ interface DeviceRow {
 }
 
 const HTTP_BASE = "https://api.wolfx.jp";
-const EEW_SOURCES: WolfxSourceId[] = [
+/**
+ * Build 8's APNs relay intentionally accepts only feeds whose upstream reuse
+ * terms have been mapped for this release. Keep this policy immutable and
+ * server-owned: a registration body or deployment variable cannot widen it.
+ */
+export const APNS_RELAY_EEW_SOURCES = [
   "jma_eew",
+] as const satisfies readonly WolfxSourceId[];
+const APNS_RELAY_REPORT_SOURCES = [
+  "jma_eqlist",
+] as const satisfies readonly WolfxSourceId[];
+export const APNS_RELAY_SOURCES = [
+  ...APNS_RELAY_EEW_SOURCES,
+  ...APNS_RELAY_REPORT_SOURCES,
+] as const satisfies readonly WolfxSourceId[];
+export const APNS_RELAY_DISABLED_SOURCES = [
   "sc_eew",
   "cenc_eew",
   "fj_eew",
   "cq_eew",
-];
-const UPSTREAM_ROUTES = ["all_eew", "cenc_eqlist", "jma_eqlist"] as const;
+  "cenc_eqlist",
+] as const satisfies readonly WolfxSourceId[];
+type ApnsRelaySourceId = (typeof APNS_RELAY_SOURCES)[number];
+
+export function isApnsRelaySource(value: unknown): value is ApnsRelaySourceId {
+  return typeof value === "string" &&
+    (APNS_RELAY_SOURCES as readonly string[]).includes(value);
+}
+
+function isDisabledApnsRelaySource(value: unknown): value is WolfxSourceId {
+  return typeof value === "string" &&
+    (APNS_RELAY_DISABLED_SOURCES as readonly string[]).includes(value);
+}
+
+const UPSTREAM_ROUTES = ["jma_eew", "jma_eqlist"] as const;
 type UpstreamRoute = (typeof UPSTREAM_ROUTES)[number];
+interface UpstreamDataReadinessCandidate {
+  socket: WebSocket;
+  durableIntentRecorded: boolean;
+}
 const APNS_MAX_CONCURRENT_DELIVERIES = 2;
 // Keep one queue message comfortably below Workers' subrequest limits: a page
 // has at most 20 APNs requests plus a small, fixed number of D1 operations.
 const DEVICE_DELIVERY_PAGE_SIZE = 20;
 const DEVICE_REGISTRATION_MAX_AGE_MS = 90 * 24 * 60 * 60_000;
 const DELIVERY_DEDUP_RETENTION_MS = 14 * 24 * 60 * 60_000;
+// Normalized upstream facts are private relay state, not a public historical
+// feed. The daily cleanup uses an 89-day eligibility cutoff while comfortably
+// exceeding every Queue/outbox safety window. A failed or delayed cleanup may
+// postpone deletion and is disclosed in the public privacy text.
+const RELAY_EVENT_RETENTION_CUTOFF_MS = 89 * 24 * 60 * 60_000;
 // A production training-push claim stores no APNs token or proof. Retain it
 // only long enough for operational review and bounded cleanup after its UTC
 // day has ended.
@@ -310,7 +339,7 @@ const OUTBOX_QUEUE_LEASE_MS = 72 * 60 * 60_000;
 const OUTBOX_ENQUEUE_FAILURE_RETRY_MS = 60_000;
 const OUTBOX_STALE_AFTER_MS = 2 * 60 * 60_000;
 const UPSTREAM_STALE_AFTER_MS = 3 * 60_000;
-// A live WebSocket relay can receive frequent heartbeats for seven sources.
+// A live WebSocket relay can receive frequent heartbeats for both JMA sources.
 // Checkpoint their already-confirmed freshness at most once a minute: the
 // active Durable Object retains the exact in-memory timestamp, while the
 // durable checkpoint remains comfortably inside the three-minute stale window
@@ -567,7 +596,7 @@ interface PendingIngestRecord {
   fingerprint?: string;
 }
 
-type LiveSnapshotSource = "cenc_eqlist" | "jma_eqlist";
+type LiveSnapshotSource = "jma_eqlist";
 
 /**
  * A complete WebSocket earthquake-list snapshot is journaled before the first
@@ -1074,7 +1103,7 @@ export function preferredRelayAlarmAt(
 
 /**
  * Compute a bounded, deterministic per-route reconnect delay. A stable jitter
- * prevents the three Wolfx routes from retrying in lockstep without making
+ * prevents the two required JMA routes from retrying in lockstep without making
  * outages non-reproducible in logs or tests.
  */
 export function upstreamReconnectDelayMs(
@@ -1180,7 +1209,7 @@ export async function mapWithMinimumSpacing<T, Result>(
 }
 
 /**
- * Bound setup-time upstream work so the three long-lived watcher connections
+ * Bound setup-time upstream work so the two direct JMA watcher connections
  * retain room under the Workers/Durable Objects simultaneous-connection limit.
  * Results preserve source order, which keeps initial-seed completion policy
  * deterministic without starting every source request at once.
@@ -1246,16 +1275,40 @@ function messageExpiry(
   return calculated;
 }
 
-function isQueuedEvent(value: unknown): value is QueuedEvent {
+export function isQueuedEvent(value: unknown): value is QueuedEvent {
   if (!value || typeof value !== "object") return false;
   const event = value as Partial<QueuedEvent>;
   return (
     typeof event.id === "string" &&
-    typeof event.eventId === "string" &&
+    event.id === `${event.sourceId}:${event.eventId}` &&
+    isNonEmptyText(event.eventId) &&
     typeof event.sourceId === "string" &&
-    (ALL_WOLFX_SOURCES as string[]).includes(event.sourceId) &&
+    isApnsRelaySource(event.sourceId) &&
     typeof event.serial === "number" &&
-    (event.kind === "eew" || event.kind === "report")
+    Number.isSafeInteger(event.serial) &&
+    event.serial >= 0 &&
+    (event.sourceId === "jma_eew"
+      ? event.kind === "eew"
+      : event.kind === "report") &&
+    isNonEmptyText(event.originTimeUtc) &&
+    Number.isFinite(Date.parse(event.originTimeUtc)) &&
+    isNonEmptyText(event.reportTimeUtc) &&
+    Number.isFinite(Date.parse(event.reportTimeUtc)) &&
+    isNonEmptyText(event.hypocenter) &&
+    typeof event.latitude === "number" &&
+    isNormalizableLatitude(event.latitude) &&
+    typeof event.longitude === "number" &&
+    isNormalizableLongitude(event.longitude) &&
+    typeof event.magnitude === "number" &&
+    Number.isFinite(event.magnitude) &&
+    (event.depth === null ||
+      (typeof event.depth === "number" && Number.isFinite(event.depth))) &&
+    (event.maxIntensity === null || typeof event.maxIntensity === "string") &&
+    typeof event.isWarn === "boolean" &&
+    typeof event.isFinal === "boolean" &&
+    typeof event.isCancel === "boolean" &&
+    typeof event.isTraining === "boolean" &&
+    (event.tsunami === null || typeof event.tsunami === "string")
   );
 }
 
@@ -1267,7 +1320,7 @@ function isPendingHttpSnapshotWork(
   return (
     work.version === 1 &&
     typeof work.source === "string" &&
-    (ALL_WOLFX_SOURCES as string[]).includes(work.source) &&
+    isApnsRelaySource(work.source) &&
     (work.mode === "initial" || work.mode === "recovery") &&
     typeof work.fingerprint === "string" &&
     work.fingerprint.length > 0 &&
@@ -1354,7 +1407,7 @@ function isPendingIngestRecord(value: unknown): value is PendingIngestRecord {
 }
 
 function isLiveSnapshotSource(source: WolfxSourceId): source is LiveSnapshotSource {
-  return source === "cenc_eqlist" || source === "jma_eqlist";
+  return source === "jma_eqlist";
 }
 
 function isPendingLiveSnapshotWork(
@@ -1364,8 +1417,7 @@ function isPendingLiveSnapshotWork(
   const work = value as Partial<PendingLiveSnapshotWork>;
   return (
     work.version === 1 &&
-    typeof work.source === "string" &&
-    (work.source === "cenc_eqlist" || work.source === "jma_eqlist") &&
+    work.source === "jma_eqlist" &&
     typeof work.fingerprint === "string" &&
     work.fingerprint.length > 0 &&
     Array.isArray(work.events) &&
@@ -1413,7 +1465,7 @@ function isLiveSnapshotOverload(
   const overload = value as Partial<LiveSnapshotOverload>;
   return (
     overload.version === 1 &&
-    (overload.source === "cenc_eqlist" || overload.source === "jma_eqlist") &&
+    overload.source === "jma_eqlist" &&
     (overload.reason === "invalid" || overload.reason === "overload") &&
     typeof overload.observedAtMs === "number" &&
     Number.isSafeInteger(overload.observedAtMs) &&
@@ -1447,6 +1499,35 @@ function isAlertDeliveryMessage(value: unknown): value is AlertDeliveryMessage {
         Number.isSafeInteger(message.afterDeviceCursor) &&
         message.afterDeviceCursor >= 0))
   );
+}
+
+/**
+ * Recognize only the two bounded fields needed to retire a Queue copy created
+ * before the JMA-only policy. The body is otherwise untrusted and is never
+ * allowed to reach payload construction or APNs.
+ */
+function disabledSourceOutboxId(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as { outboxId?: unknown; event?: unknown };
+  if (
+    typeof candidate.outboxId !== "string" ||
+    candidate.outboxId.length === 0 ||
+    candidate.outboxId.length > 128 ||
+    !candidate.event ||
+    typeof candidate.event !== "object" ||
+    Array.isArray(candidate.event)
+  ) {
+    return null;
+  }
+  const sourceId = (candidate.event as { sourceId?: unknown }).sourceId;
+  return isDisabledApnsRelaySource(sourceId) ? candidate.outboxId : null;
+}
+
+function disabledSourceFromEventReference(value: string): WolfxSourceId | null {
+  const separator = value.indexOf(":");
+  if (separator <= 0) return null;
+  const sourceId = value.slice(0, separator);
+  return isDisabledApnsRelaySource(sourceId) ? sourceId : null;
 }
 
 /** Accept only for one-way migration of messages queued before outboxId. */
@@ -1490,6 +1571,9 @@ function createAlertDeliveryMessage(
   expiresAtUtc?: string,
   expiryPolicy?: AlertDeliveryExpiryPolicy,
 ): AlertDeliveryMessage {
+  if (!isApnsRelaySource(event.sourceId)) {
+    throw new RangeError("APNs relay source is not permitted");
+  }
   const { raw: _raw, ...eventSnapshot } = event;
   const deliveryId = `v1:${event.id}:${event.serial}:${reason}`;
   const expiry = messageExpiry(
@@ -1723,6 +1807,7 @@ function legalPage(
   title: string,
   summary: string,
   sections: Array<{ heading: string; body: string }>,
+  effectiveDate = "12 August 2026",
 ): Response {
   const content = sections
     .map(
@@ -1749,7 +1834,7 @@ function legalPage(
   </style>
 </head>
 <body><main>
-  <header><span class="mark">⌁</span><h1>${title}</h1><p>${summary}</p><p class="meta">QuakeSignal · Effective 12 August 2026</p></header>
+  <header><span class="mark">⌁</span><h1>${title}</h1><p>${summary}</p><p class="meta">QuakeSignal · Effective ${effectiveDate}</p></header>
   ${content}
   <section><h2>Contact</h2><p>For privacy, safety, or support questions, open an issue in the <a href="https://github.com/TastyHeadphones/QuakeSignal/issues">QuakeSignal GitHub repository</a>.</p></section>
 </main></body></html>`,
@@ -1786,12 +1871,25 @@ function rowToEvent(row: EventRow): NormalizedEvent {
   };
 }
 
+function storedDeviceRelaySources(value: string): WolfxSourceId[] {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? [...new Set(parsed.filter(isApnsRelaySource))]
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 function rowToDevice(row: DeviceRow): RoutedDeviceRecord {
   return {
     token: row.token,
     environment: row.environment,
     locale: row.locale,
-    sources: JSON.parse(row.sources) as WolfxSourceId[],
+    // Read old registrations fail-closed. A pre-build-8 row may still contain
+    // other source IDs, but none can participate in matching or test alerts.
+    sources: storedDeviceRelaySources(row.sources),
     minMagnitude: row.min_magnitude,
     // Critical Alerts are not approved for this public bundle. Keep legacy
     // storage readable, but never let a saved or forged preference enable it.
@@ -1833,24 +1931,14 @@ function normalizeMessages(
       return "EventID" in message
         ? [normalizeJmaEew(message as JmaEewMessage)]
         : [];
-    case "sc_eew":
-    case "fj_eew":
-      return "EventID" in message
-        ? [normalizeScFjEew(message as ScFjEewMessage, sourceId)]
-        : [];
-    case "cenc_eew":
-    case "cq_eew":
-      return "EventID" in message
-        ? [normalizeCencCqEew(message as CencCqEewMessage, sourceId)]
-        : [];
-    case "cenc_eqlist":
-      return extractEqlistEntries<CencEqlistEntry>(
-        message as WolfxEqlistMessage,
-      ).map(({ entry }) => normalizeCencEqlistEntry(entry));
     case "jma_eqlist":
       return extractEqlistEntries<JmaEqlistEntry>(
         message as WolfxEqlistMessage,
       ).map(({ entry }) => normalizeJmaEqlistEntry(entry));
+    default:
+      // The shared client domain still knows about other Wolfx source IDs,
+      // but the build-8 APNs relay must fail closed for every non-JMA feed.
+      return [];
   }
 }
 
@@ -1862,9 +1950,251 @@ function isNonEmptyText(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function isNormalizableCoordinate(value: unknown): boolean {
+const MAX_WOLFX_CONTROL_VERSION = 99_999_999;
+const MAX_WOLFX_DECIMAL_CONNECTION_ID_DIGITS = 20;
+const MIN_13_DIGIT_EPOCH_MS = 1_000_000_000_000;
+const MAX_13_DIGIT_EPOCH_MS = 9_999_999_999_999;
+const MIN_EARTHQUAKE_MAGNITUDE = -2;
+const MAX_EARTHQUAKE_MAGNITUDE = 12;
+const MAX_EARTHQUAKE_DEPTH_KM = 1_000;
+const JMA_INTENSITIES = [
+  "0", "1", "2", "3", "4", "5-", "5+", "6-", "6+", "7",
+] as const;
+const NORMALIZED_EVENT_VALIDATION_FIELDS: readonly (keyof NormalizedEvent)[] = [
+  "id",
+  "sourceId",
+  "eventId",
+  "serial",
+  "kind",
+  "originTimeUtc",
+  "reportTimeUtc",
+  "hypocenter",
+  "latitude",
+  "longitude",
+  "magnitude",
+  "depth",
+  "maxIntensity",
+  "isWarn",
+  "isFinal",
+  "isCancel",
+  "isTraining",
+  "tsunami",
+  "raw",
+];
+
+interface JmaCalendarParts {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isLeapYear(year: number): boolean {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+function isValidJmaCalendarParts(parts: JmaCalendarParts): boolean {
+  const daysInMonth = [
+    31,
+    isLeapYear(parts.year) ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ];
+  return (
+    parts.year >= 1_000 &&
+    parts.year <= 9_999 &&
+    parts.month >= 1 &&
+    parts.month <= 12 &&
+    parts.day >= 1 &&
+    parts.day <= (daysInMonth[parts.month - 1] ?? 0) &&
+    parts.hour >= 0 &&
+    parts.hour <= 23 &&
+    parts.minute >= 0 &&
+    parts.minute <= 59 &&
+    parts.second >= 0 &&
+    parts.second <= 59
+  );
+}
+
+function parseJmaDateTime(
+  value: unknown,
+  includeSeconds: boolean,
+): JmaCalendarParts | null {
+  if (typeof value !== "string") return null;
+  const match = (includeSeconds
+    ? /^([1-9]\d{3})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})$/
+    : /^([1-9]\d{3})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2})$/
+  ).exec(value);
+  if (!match) return null;
+  const parts: JmaCalendarParts = {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4]),
+    minute: Number(match[5]),
+    second: includeSeconds ? Number(match[6]) : 0,
+  };
+  return isValidJmaCalendarParts(parts) ? parts : null;
+}
+
+function parseJmaEventId(value: unknown): JmaCalendarParts | null {
+  if (typeof value !== "string") return null;
+  const match = /^([1-9]\d{3})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(value);
+  if (!match) return null;
+  const parts: JmaCalendarParts = {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4]),
+    minute: Number(match[5]),
+    second: Number(match[6]),
+  };
+  return isValidJmaCalendarParts(parts) ? parts : null;
+}
+
+function jmaCalendarMinuteMatches(
+  left: JmaCalendarParts,
+  right: JmaCalendarParts,
+): boolean {
+  return (
+    left.year === right.year &&
+    left.month === right.month &&
+    left.day === right.day &&
+    left.hour === right.hour &&
+    left.minute === right.minute
+  );
+}
+
+function jmaCalendarMilliseconds(parts: JmaCalendarParts): number {
+  return Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
+}
+
+function canonicalDecimal(value: unknown): number | null {
+  if (
+    typeof value !== "string" ||
+    value.length > 24 ||
+    !/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)
+  ) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isBoundedMagnitude(value: unknown): value is number {
+  return (
+    isFiniteNumber(value) &&
+    value >= MIN_EARTHQUAKE_MAGNITUDE &&
+    value <= MAX_EARTHQUAKE_MAGNITUDE
+  );
+}
+
+function isJmaIntensity(value: unknown): value is string {
+  return typeof value === "string" &&
+    (JMA_INTENSITIES as readonly string[]).includes(value);
+}
+
+function canonicalEqlistDepth(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const match = /^(0|[1-9]\d*)km$/.exec(value);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return parsed <= MAX_EARTHQUAKE_DEPTH_KM ? parsed : null;
+}
+
+function normalizedEventExactlyMatches(
+  actual: NormalizedEvent,
+  expected: NormalizedEvent,
+): boolean {
+  return NORMALIZED_EVENT_VALIDATION_FIELDS.every((field) =>
+    Object.is(actual[field], expected[field])
+  );
+}
+
+function isCanonicalWolfxUuid(value: unknown): value is string {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
+}
+
+function isCanonicalWolfxControlVersion(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value > 0 &&
+    value <= MAX_WOLFX_CONTROL_VERSION
+  );
+}
+
+function isCanonicalWolfxConnectionId(value: unknown): value is string {
+  if (isCanonicalWolfxUuid(value)) return true;
+  return (
+    typeof value === "string" &&
+    value.length <= MAX_WOLFX_DECIMAL_CONNECTION_ID_DIGITS &&
+    /^[1-9]\d*$/.test(value)
+  );
+}
+
+function isCanonicalWolfxTimestamp(value: unknown): value is string | number {
+  if (typeof value === "string") {
+    if (!/^[1-9]\d{12}$/.test(value)) return false;
+    const milliseconds = Number(value);
+    return Number.isSafeInteger(milliseconds) && String(milliseconds) === value;
+  }
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= MIN_13_DIGIT_EPOCH_MS &&
+    value <= MAX_13_DIGIT_EPOCH_MS
+  );
+}
+
+function isStructurallyValidWolfxControlFrame(message: unknown): boolean {
+  if (!isPlainRecord(message)) return false;
+  const value = message as Record<string, unknown>;
+  if (isHeartbeat(message)) {
+    return (
+      isCanonicalWolfxControlVersion(value.ver) &&
+      isCanonicalWolfxConnectionId(value.id) &&
+      isCanonicalWolfxTimestamp(value.timestamp)
+    );
+  }
+  return isPong(message) && isCanonicalWolfxTimestamp(value.timestamp);
+}
+
+function normalizableCoordinate(value: unknown): number | null {
   const number = typeof value === "string" ? Number(value) : value;
-  return typeof number === "number" && Number.isFinite(number);
+  return typeof number === "number" && Number.isFinite(number) ? number : null;
+}
+
+function isNormalizableLatitude(value: unknown): boolean {
+  const number = normalizableCoordinate(value);
+  return number !== null && number >= -90 && number <= 90;
+}
+
+function isNormalizableLongitude(value: unknown): boolean {
+  const number = normalizableCoordinate(value);
+  return number !== null && number >= -180 && number <= 180;
 }
 
 function hasValidNormalizedEventTimes(
@@ -1875,8 +2205,8 @@ function hasValidNormalizedEventTimes(
     Number.isFinite(Date.parse(event.originTimeUtc)) &&
     typeof event.reportTimeUtc === "string" &&
     Number.isFinite(Date.parse(event.reportTimeUtc)) &&
-    Number.isFinite(event.latitude) &&
-    Number.isFinite(event.longitude) &&
+    isNormalizableLatitude(event.latitude) &&
+    isNormalizableLongitude(event.longitude) &&
     Number.isFinite(event.magnitude) &&
     typeof event.hypocenter === "string" &&
     event.hypocenter.trim().length > 0
@@ -1884,47 +2214,49 @@ function hasValidNormalizedEventTimes(
 }
 
 function isStructurallyValidEqlistEntry(
-  sourceId: "cenc_eqlist" | "jma_eqlist",
   entry: unknown,
 ): boolean {
-  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+  if (!isPlainRecord(entry)) return false;
   const value = entry as Record<string, unknown>;
-  if (
-    !isNonEmptyText(value.EventID) ||
-    !isNonEmptyText(value.time) ||
-    !isNonEmptyText(value.location) ||
-    !isNonEmptyText(value.magnitude) ||
-    !isNonEmptyText(value.latitude) ||
-    !isNonEmptyText(value.longitude) ||
-    !isNormalizableCoordinate(value.latitude) ||
-    !isNormalizableCoordinate(value.longitude)
-  ) {
-    return false;
-  }
-  if (sourceId === "cenc_eqlist") {
-    return (
-      (value.type === "automatic" || value.type === "reviewed") &&
-      isNonEmptyText(value.ReportTime) &&
-      isNonEmptyText(value.placeName) &&
-      isNonEmptyText(value.depth) &&
-      isNonEmptyText(value.intensity)
-    );
-  }
+  const eventId = parseJmaEventId(value.EventID);
+  const time = parseJmaDateTime(value.time, false);
+  const timeFull = parseJmaDateTime(value.time_full, true);
+  const magnitude = canonicalDecimal(value.magnitude);
+  const latitude = canonicalDecimal(value.latitude);
+  const longitude = canonicalDecimal(value.longitude);
+  const depth = canonicalEqlistDepth(value.depth);
   return (
+    eventId !== null &&
+    time !== null &&
+    timeFull !== null &&
+    jmaCalendarMinuteMatches(time, timeFull) &&
     isNonEmptyText(value.Title) &&
-    isNonEmptyText(value.time_full) &&
-    isNonEmptyText(value.shindo) &&
-    isNonEmptyText(value.depth) &&
+    isNonEmptyText(value.location) &&
+    magnitude !== null &&
+    magnitude >= MIN_EARTHQUAKE_MAGNITUDE &&
+    magnitude <= MAX_EARTHQUAKE_MAGNITUDE &&
+    isJmaIntensity(value.shindo) &&
+    depth !== null &&
+    latitude !== null &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude !== null &&
+    longitude >= -180 &&
+    longitude <= 180 &&
     typeof value.info === "string"
   );
 }
 
 function isStructurallyValidEqlistSnapshot(
-  sourceId: "cenc_eqlist" | "jma_eqlist",
   message: Record<string, unknown>,
   normalizedEvents: readonly NormalizedEvent[],
 ): boolean {
-  if (!isNonEmptyText(message.md5) || normalizedEvents.length === 0) return false;
+  if (
+    typeof message.md5 !== "string" ||
+    !/^[0-9a-f]{32}$/.test(message.md5) ||
+    (Object.hasOwn(message, "type") && message.type !== "jma_eqlist") ||
+    normalizedEvents.length === 0
+  ) return false;
   const entries = extractEqlistEntries(message as WolfxEqlistMessage);
   const rankedKeys = Object.keys(message).filter((key) => key.startsWith("No"));
   if (
@@ -1932,16 +2264,23 @@ function isStructurallyValidEqlistSnapshot(
     entries.length > MAX_HTTP_SNAPSHOT_EVENTS ||
     rankedKeys.length !== entries.length ||
     rankedKeys.some((key) => !/^No(?:[1-9]|[1-4]\d|50)$/.test(key)) ||
-    entries.some(({ rank, entry }) =>
+    entries.some(({ rank, entry }, index) =>
       !Number.isSafeInteger(rank) ||
-      rank < 1 ||
-      rank > MAX_HTTP_SNAPSHOT_EVENTS ||
-      !isStructurallyValidEqlistEntry(sourceId, entry)
+      rank !== index + 1 ||
+      !isStructurallyValidEqlistEntry(entry)
     )
   ) {
     return false;
   }
-  return hasValidNormalizedEventTimes(normalizedEvents);
+  const expectedEvents = entries.map(({ entry }) =>
+    normalizeJmaEqlistEntry(entry as JmaEqlistEntry)
+  );
+  return (
+    hasValidNormalizedEventTimes(normalizedEvents) &&
+    expectedEvents.every((expected, index) =>
+      normalizedEventExactlyMatches(normalizedEvents[index], expected)
+    )
+  );
 }
 
 /**
@@ -1955,6 +2294,7 @@ export function isStructurallyValidHttpSnapshot(
   message: unknown,
   normalizedEvents: readonly NormalizedEvent[],
 ): boolean {
+  if (!isApnsRelaySource(sourceId)) return false;
   if (!message || typeof message !== "object" || Array.isArray(message)) {
     return false;
   }
@@ -1972,50 +2312,76 @@ export function isStructurallyValidHttpSnapshot(
     return false;
   }
 
-  if (EEW_SOURCES.includes(sourceId)) {
+  if (sourceId === "jma_eew") {
     if (normalizedEvents.length !== 1 || !hasValidNormalizedEventTimes(normalizedEvents)) {
       return false;
     }
     const value = message as Record<string, unknown>;
+    const eventId = parseJmaEventId(value.EventID);
+    const originTime = parseJmaDateTime(value.OriginTime, true);
+    const announcedTime = parseJmaDateTime(value.AnnouncedTime, true);
+    const issue = isPlainRecord(value.Issue) ? value.Issue : null;
+    const accuracy = isPlainRecord(value.Accuracy) ? value.Accuracy : null;
+    const maxIntChange = isPlainRecord(value.MaxIntChange) ? value.MaxIntChange : null;
+    const warnArea = Array.isArray(value.WarnArea) ? value.WarnArea : null;
     const base =
-      isNonEmptyText(value.EventID) &&
-      isNonEmptyText(value.OriginTime) &&
+      (Object.hasOwn(value, "type") ? value.type === "jma_eew" : true) &&
+      isNonEmptyText(value.Title) &&
+      isNonEmptyText(value.CodeType) &&
+      issue !== null &&
+      isNonEmptyText(issue.Source) &&
+      isNonEmptyText(issue.Status) &&
+      eventId !== null &&
+      originTime !== null &&
+      announcedTime !== null &&
+      jmaCalendarMilliseconds(announcedTime) >= jmaCalendarMilliseconds(originTime) &&
       isFiniteNumber(value.Latitude) &&
-      isFiniteNumber(value.Longitude);
+      isNormalizableLatitude(value.Latitude) &&
+      isFiniteNumber(value.Longitude) &&
+      isNormalizableLongitude(value.Longitude) &&
+      accuracy !== null &&
+      typeof accuracy.Epicenter === "string" &&
+      typeof accuracy.Depth === "string" &&
+      typeof accuracy.Magnitude === "string" &&
+      maxIntChange !== null &&
+      typeof maxIntChange.String === "string" &&
+      typeof maxIntChange.Reason === "string" &&
+      warnArea !== null &&
+      warnArea.every((area) =>
+        isPlainRecord(area) &&
+        typeof area.Chiiki === "string" &&
+        typeof area.Shindo1 === "string" &&
+        typeof area.Shindo2 === "string" &&
+        typeof area.Time === "string" &&
+        typeof area.Type === "string" &&
+        typeof area.Arrive === "boolean"
+      ) &&
+      typeof value.isSea === "boolean" &&
+      typeof value.isAssumption === "boolean" &&
+      typeof value.OriginalText === "string";
     if (!base) return false;
-    switch (sourceId) {
-      case "jma_eew":
-        return (
-          Number.isSafeInteger(value.Serial) &&
-          (value.Serial as number) >= 0 &&
-          isNonEmptyText(value.AnnouncedTime) &&
-          isNonEmptyText(value.Hypocenter) &&
-          isFiniteNumber(value.Magunitude)
-        );
-      case "sc_eew":
-      case "fj_eew":
-        return (
-          Number.isSafeInteger(value.ReportNum) &&
-          (value.ReportNum as number) >= 0 &&
-          isNonEmptyText(value.ReportTime) &&
-          isNonEmptyText(value.HypoCenter) &&
-          isFiniteNumber(value.Magunitude)
-        );
-      case "cenc_eew":
-      case "cq_eew":
-        return (
-          Number.isSafeInteger(value.ReportNum) &&
-          (value.ReportNum as number) >= 0 &&
-          isNonEmptyText(value.ReportTime) &&
-          isNonEmptyText(value.HypoCenter) &&
-          isFiniteNumber(value.Magnitude)
-        );
+    if (
+      Number.isSafeInteger(value.Serial) &&
+      (value.Serial as number) > 0 &&
+      isNonEmptyText(value.Hypocenter) &&
+      isBoundedMagnitude(value.Magunitude) &&
+      isFiniteNumber(value.Depth) &&
+      value.Depth >= 0 &&
+      value.Depth <= MAX_EARTHQUAKE_DEPTH_KM &&
+      isJmaIntensity(value.MaxIntensity) &&
+      typeof value.isWarn === "boolean" &&
+      typeof value.isFinal === "boolean" &&
+      typeof value.isCancel === "boolean" &&
+      typeof value.isTraining === "boolean"
+    ) {
+      const expected = normalizeJmaEew(message as JmaEewMessage);
+      return normalizedEventExactlyMatches(normalizedEvents[0], expected);
     }
+    return false;
   }
 
-  if (sourceId !== "cenc_eqlist" && sourceId !== "jma_eqlist") return false;
+  if (sourceId !== "jma_eqlist") return false;
   return isStructurallyValidEqlistSnapshot(
-    sourceId,
     message as Record<string, unknown>,
     normalizedEvents,
   );
@@ -2041,17 +2407,6 @@ async function liveSnapshotFingerprint(
     .map(snapshotEvent)
     .sort((left, right) => left.id.localeCompare(right.id));
   return sha256Hex(JSON.stringify(canonical));
-}
-
-function sourceFromMessage(message: unknown): WolfxSourceId | null {
-  if (!message || typeof message !== "object" || !("type" in message)) {
-    return null;
-  }
-  const type = (message as { type?: unknown }).type;
-  return typeof type === "string" &&
-    EEW_SOURCES.includes(type as WolfxSourceId)
-    ? (type as WolfxSourceId)
-    : null;
 }
 
 function isRecentHttpRecoveryEvent(event: NormalizedEvent): boolean {
@@ -2286,6 +2641,9 @@ async function persistEventAndOutbox(
   previous: NormalizedEvent | null;
   message: AlertDeliveryMessage | null;
 }> {
+  if (!isApnsRelaySource(event.sourceId)) {
+    throw new RangeError("APNs relay source is not permitted");
+  }
   const previous = await getEvent(db, event.id);
   const acceptedEvent = reconcileEventRevision(event, previous);
   if (acceptedEvent === null) return { previous, message: null };
@@ -2320,6 +2678,9 @@ async function persistHttpSnapshotEvents(
   mode: "initial" | "recovery" | "live",
 ): Promise<void> {
   if (snapshots.length === 0) return;
+  if (snapshots.some((event) => !isApnsRelaySource(event.sourceId))) {
+    throw new RangeError("APNs relay source is not permitted");
+  }
   if (snapshots.length > HTTP_SNAPSHOT_INGEST_BATCH_SIZE) {
     throw new RangeError("snapshot persistence slice exceeds its D1-safe bound");
   }
@@ -2412,13 +2773,9 @@ function outboxRowToMessage(row: AlertOutboxRow): AlertDeliveryMessage | null {
 function isValidSources(value: unknown): value is WolfxSourceId[] {
   return (
     Array.isArray(value) &&
-    value.length <= ALL_WOLFX_SOURCES.length &&
+    value.length <= APNS_RELAY_SOURCES.length &&
     new Set(value).size === value.length &&
-    value.every(
-      (source) =>
-        typeof source === "string" &&
-        (ALL_WOLFX_SOURCES as string[]).includes(source),
-    )
+    value.every(isApnsRelaySource)
   );
 }
 
@@ -2450,6 +2807,7 @@ function shouldNotify(
   event: NormalizedEvent,
   reason: NotifyReason,
 ): boolean {
+  if (!isApnsRelaySource(event.sourceId)) return false;
   if (!device.sources.includes(event.sourceId)) return false;
   if (event.isTraining && !device.includeTestAlerts) return false;
   if ((event.magnitude ?? 0) < device.minMagnitude) return false;
@@ -2917,6 +3275,11 @@ async function sendPush(
   authorization: string,
   collapseId: string,
 ): Promise<ApnsDeliveryResult> {
+  // Final defense in depth: no direct caller, legacy Queue copy, or tampered
+  // D1 row can turn a disabled source into an APNs request.
+  if (!isApnsRelaySource(event.sourceId)) {
+    throw new RangeError("APNs relay source is not permitted");
+  }
   requireApnsConfiguration(env);
   // `device.apnsTopic` came from the server-derived registration row. Match
   // all persisted route fields against the current allow-list again so a
@@ -3374,6 +3737,9 @@ export async function dispatchPushPage(
   afterDeviceCursor?: number,
   beforeApnsBatch?: () => Promise<OutboxDeliveryGateState>,
 ): Promise<DeliveryPageResult> {
+  if (!isApnsRelaySource(event.sourceId)) {
+    throw new RangeError("APNs relay source is not permitted");
+  }
   // APNs JWT credentials are environment-specific. A production Worker must
   // never page a legacy sandbox subscription (and an isolated development
   // Worker must never reach production subscriptions), even if an older
@@ -3602,14 +3968,27 @@ export class QuakeRelay {
   // reconnect history only after it remains live for a bounded interval.
   // This keeps an Upgrade-then-close flap from returning to the five-second
   // retry floor and spending Durable Object rows indefinitely.
+  private readonly upstreamActivatedAtMs = new Map<UpstreamRoute, number>();
   private readonly upstreamLivenessSinceMs = new Map<UpstreamRoute, number>();
+  private readonly lastUpstreamTransportMessageMs = new Map<UpstreamRoute, number>();
   private readonly stableReconnectBackoffResetRoutes = new Set<UpstreamRoute>();
+  // Transport traffic and alert-source readiness are deliberately separate.
+  // A heartbeat can keep a previously validated socket alive, but only a data
+  // frame that later crosses its durable D1/journal boundary may put that
+  // exact socket in this ready map. The validated map is the in-flight token
+  // that lets the eventual commit prove which connection supplied the data.
+  private readonly validatedUpstreamDataSockets = new Map<
+    UpstreamRoute,
+    UpstreamDataReadinessCandidate
+  >();
+  private readonly readyUpstreamSockets = new Map<UpstreamRoute, WebSocket>();
   private readonly statuses = new Map<WolfxSourceId, string>();
   private readonly lastSuccessfulUpstreamMs = new Map<WolfxSourceId, number>();
   private readonly lastSuccessfulHttpPollMs = new Map<WolfxSourceId, number>();
   // These maps are a per-instance cache of successfully committed durable
   // freshness checkpoints. They are populated from storage on the first
-  // heartbeat after an eviction, so a restart never fabricates a checkpoint.
+  // committed data frame (or later ready-socket heartbeat) after an eviction,
+  // so a restart never fabricates a checkpoint.
   private readonly lastPersistedUpstreamSuccessMs = new Map<WolfxSourceId, number>();
   private readonly lastPersistedHttpSuccessMs = new Map<WolfxSourceId, number>();
   // A failed write must not publish fresh in-memory evidence, but retrying it
@@ -3628,7 +4007,7 @@ export class QuakeRelay {
   // WebSocket message handlers use waitUntil and may overlap while awaiting
   // storage. Serialize one source/transport freshness update so a burst of
   // heartbeats cannot all observe the same old checkpoint and write it again.
-  private readonly freshnessUpdates = new Map<string, Promise<void>>();
+  private readonly freshnessUpdates = new Map<string, Promise<unknown>>();
   private httpSeedInFlight: Promise<void> | null = null;
   private pendingIngestDrain: Promise<void> | null = null;
   // One source can publish the same complete ranked list more than once while
@@ -3710,6 +4089,31 @@ export class QuakeRelay {
         );
       }
       return this.statusResponse();
+    }
+    if (
+      url.pathname === "/outbox/source-policy/reject" &&
+      request.method === "POST"
+    ) {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return Response.json({ error: "invalid source-policy rejection" }, { status: 400 });
+      }
+      const outboxId =
+        body && typeof body === "object" && !Array.isArray(body) &&
+          "outboxId" in body
+          ? (body as { outboxId?: unknown }).outboxId
+          : null;
+      if (
+        typeof outboxId !== "string" ||
+        outboxId.length === 0 ||
+        outboxId.length > 128
+      ) {
+        return Response.json({ error: "invalid source-policy rejection" }, { status: 400 });
+      }
+      const superseded = await this.supersedeOutboxForSourcePolicy(outboxId);
+      return Response.json({ ok: true, alreadyMissingOrAllowed: !superseded });
     }
     await this.ensureStarted();
     if (url.pathname === "/deliver" && request.method === "POST") {
@@ -4074,6 +4478,20 @@ export class QuakeRelay {
       limit: OUTBOX_REPLAY_BATCH_SIZE,
     });
     for (const [key, value] of pending) {
+      const disabledSource = value && typeof value === "object" &&
+          !Array.isArray(value) && "event" in value &&
+          (value as { event?: unknown }).event &&
+          typeof (value as { event?: unknown }).event === "object"
+        ? ((value as { event: { sourceId?: unknown } }).event.sourceId)
+        : null;
+      if (isDisabledApnsRelaySource(disabledSource)) {
+        await this.state.storage.delete(key);
+        console.info(JSON.stringify({
+          sourceId: disabledSource,
+          outcome: "disabled_source_legacy_outbox_superseded",
+        }));
+        continue;
+      }
       const legacy = value as Partial<LegacyAlertDeliveryMessage>;
       const message =
         isAlertDeliveryMessage(value)
@@ -4123,7 +4541,17 @@ export class QuakeRelay {
    * key per source/event so a burst of revisions retains the highest serial;
    * `writeId` prevents a drain of an older snapshot from deleting a newer one.
    */
-  private async enqueueLiveIngest(event: NormalizedEvent): Promise<void> {
+  private async enqueueLiveIngest(
+    event: NormalizedEvent,
+    readinessCandidate?: UpstreamDataReadinessCandidate,
+  ): Promise<void> {
+    if (!isApnsRelaySource(event.sourceId)) {
+      console.error(JSON.stringify({
+        sourceId: event.sourceId,
+        outcome: "disabled_source_live_ingest_rejected",
+      }));
+      return;
+    }
     const { raw: _raw, ...snapshot } = event;
     const key = `${PENDING_INGEST_PREFIX}${event.sourceId}:${encodeURIComponent(event.id)}`;
     const fingerprint = await liveEventFingerprint(snapshot);
@@ -4132,7 +4560,8 @@ export class QuakeRelay {
     // journal delete both succeed. A cache hit can skip journal churn, but it
     // still takes the normal fail-closed freshness path.
     if (this.hasCommittedLiveEventFingerprint(fingerprint)) {
-      await this.markSourceSuccessful(event.sourceId);
+      if (readinessCandidate) readinessCandidate.durableIntentRecorded = true;
+      await this.markSourceSuccessfulAndPublishReadiness(event.sourceId);
       return;
     }
     const record: PendingIngestRecord = {
@@ -4170,8 +4599,19 @@ export class QuakeRelay {
       // durable retry alarm. Retrying an exact pending replay here would turn
       // one upstream duplicate burst into a D1 retry loop even though no new
       // event intent exists.
-      if (journalOutcome === "duplicate") return;
+      if (readinessCandidate) readinessCandidate.durableIntentRecorded = true;
+      if (journalOutcome === "duplicate") {
+        // The original drain may have crossed its delete/mark boundary between
+        // the transaction above and this candidate flag. Re-check once; if it
+        // is still pending, that drain will perform the same publication.
+        await this.markSourceSuccessfulAndPublishReadiness(event.sourceId);
+        return;
+      }
       await this.drainPendingIngestJournal();
+      // A pre-existing drain can process this just-written record before it
+      // observes the candidate flag above. Re-check after the shared drain
+      // settles; the pending-work fence still prevents premature readiness.
+      await this.markSourceSuccessfulAndPublishReadiness(event.sourceId);
     } catch (error) {
       console.error(
         JSON.stringify({
@@ -4233,6 +4673,25 @@ export class QuakeRelay {
       if (pending.size === 0) return;
 
       for (const [key, value] of pending) {
+        const storedSource = value && typeof value === "object" &&
+            !Array.isArray(value) && "event" in value &&
+            (value as { event?: unknown }).event &&
+            typeof (value as { event?: unknown }).event === "object"
+          ? ((value as { event: { sourceId?: unknown } }).event.sourceId)
+          : null;
+        if (isDisabledApnsRelaySource(storedSource)) {
+          // This is not malformed unknown work: it is an explicitly retired
+          // pre-build-8 source. Remove it so the old journal cannot ingest or
+          // force a permanent five-second retry loop after the policy change.
+          await this.state.storage.delete(key);
+          console.info(JSON.stringify({
+            journalKey: key,
+            sourceId: storedSource,
+            outcome: "disabled_source_live_ingest_superseded",
+          }));
+          if (remaining !== null) remaining -= 1;
+          continue;
+        }
         if (!isPendingIngestRecord(value)) {
           // Do not silently drop an unreadable durable event. It is safer to
           // retain the journal record, hold health stale, and require repair
@@ -4274,7 +4733,7 @@ export class QuakeRelay {
           }
           // Freshness follows the durable D1/outbox transaction—not merely a
           // live WebSocket frame—so readiness exposes ingestion failures.
-          await this.markSourceSuccessful(value.event.sourceId);
+          await this.markSourceSuccessfulAndPublishReadiness(value.event.sourceId);
           if (remaining !== null) remaining -= 1;
         } catch (error) {
           console.error(
@@ -4410,7 +4869,7 @@ export class QuakeRelay {
   }
 
   private async repairPendingLiveSnapshotSlots(): Promise<void> {
-    for (const source of ["cenc_eqlist", "jma_eqlist"] as const) {
+    for (const source of APNS_RELAY_REPORT_SOURCES) {
       await this.liveSnapshotDrain(source, async () => {
         await this.readAndRepairLiveSnapshotSlots(source);
       });
@@ -4471,6 +4930,8 @@ export class QuakeRelay {
     // the next reconnect asks Wolfx for a fresh complete list after the two
     // durable cursors finish.
     this.upstreams.delete(source);
+    this.clearUpstreamLiveness(source);
+    this.setRouteStatus(source, "error");
     try {
       socket.close(1013, "live snapshot backpressure");
     } catch {
@@ -4523,6 +4984,7 @@ export class QuakeRelay {
   private enqueueLiveSnapshot(
     source: LiveSnapshotSource,
     normalizedEvents: readonly NormalizedEvent[],
+    readinessCandidate?: UpstreamDataReadinessCandidate,
   ): Promise<void> {
     return this.liveSnapshotDrain(source, async () => {
       const fingerprint = await liveSnapshotFingerprint(normalizedEvents);
@@ -4565,7 +5027,8 @@ export class QuakeRelay {
         // evidence that the bounded overload window has ended. Clear the
         // stale marker before allowing a freshness checkpoint.
         if (overload) await this.state.storage.delete(overloadKey);
-        await this.markSourceSuccessful(source);
+        if (readinessCandidate) readinessCandidate.durableIntentRecorded = true;
+        await this.markSourceSuccessfulAndPublishReadiness(source);
         return;
       }
 
@@ -4637,6 +5100,12 @@ export class QuakeRelay {
         // before its first D1 slice. Ask for a prompt but bounded continuation.
         await this.scheduleRelayAlarm(Date.now() + 1);
       }
+      if (
+        readinessCandidate &&
+        [active, latest, overflow].some((work) => work?.fingerprint === fingerprint)
+      ) {
+        readinessCandidate.durableIntentRecorded = true;
+      }
       await this.drainLiveSnapshotWorkForSource(source);
     });
   }
@@ -4685,7 +5154,7 @@ export class QuakeRelay {
     }
     // The advance transaction deleted the durability fence before this update,
     // so this is the first point where source freshness may be published.
-    await this.markSourceSuccessful(work.source);
+    await this.markSourceSuccessfulAndPublishReadiness(work.source);
     return true;
   }
 
@@ -4855,6 +5324,18 @@ export class QuakeRelay {
     for (const row of rows.results) {
       const message = outboxRowToMessage(row);
       if (!message) {
+        const disabledSource = disabledSourceFromEventReference(row.event_ref);
+        if (disabledSource !== null) {
+          await this.supersedeOutboxForSourcePolicy(row.id);
+          console.info(
+            JSON.stringify({
+              outboxId: row.id,
+              sourceId: disabledSource,
+              outcome: "disabled_source_alert_outbox_superseded",
+            }),
+          );
+          continue;
+        }
         console.error(
           JSON.stringify({
             outboxId: row.id,
@@ -5049,6 +5530,48 @@ export class QuakeRelay {
     return (result.meta.changes ?? 0) > 0;
   }
 
+  /**
+   * Terminalize only an outbox row whose stored event reference names one of
+   * the five explicitly disabled sources. The D1 predicate is authoritative,
+   * so a forged Queue body cannot retire an allowed JMA alert by ID alone.
+   */
+  private async supersedeOutboxForSourcePolicy(outboxId: string): Promise<boolean> {
+    const now = new Date().toISOString();
+    const results = await this.env.DB.batch([
+      this.env.DB
+        .prepare(
+          `UPDATE alert_delivery_outbox
+           SET acknowledged_at_utc = COALESCE(acknowledged_at_utc, ?),
+               terminal_reason = COALESCE(terminal_reason, 'superseded'),
+               queue_lease_until_utc = NULL
+           WHERE id = ?
+             AND acknowledged_at_utc IS NULL
+             AND final_status IS NULL
+             AND instr(event_ref, ':') > 1
+             AND substr(event_ref, 1, instr(event_ref, ':') - 1) IN (
+               'sc_eew',
+               'cenc_eew',
+               'fj_eew',
+               'cq_eew',
+               'cenc_eqlist'
+             )`,
+        )
+        .bind(now, outboxId),
+      this.env.DB
+        .prepare(
+          `UPDATE alert_delivery_page_failures
+           SET status = 'resolved', resolved_at_utc = COALESCE(resolved_at_utc, ?)
+           WHERE outbox_id = ? AND status = 'active'
+             AND EXISTS (
+               SELECT 1 FROM alert_delivery_outbox
+               WHERE id = ? AND terminal_reason = 'superseded'
+             )`,
+        )
+        .bind(now, outboxId, outboxId),
+    ]);
+    return (results[0]?.meta.changes ?? 0) > 0;
+  }
+
   private async purgeExpiredDevicesIfDue(): Promise<void> {
     const lastPurge = await this.state.storage.get<number>(LAST_DEVICE_PURGE_KEY);
     if (lastPurge && Date.now() - lastPurge < DEVICE_PURGE_INTERVAL_MS) return;
@@ -5058,6 +5581,9 @@ export class QuakeRelay {
     ).toISOString();
     const deliveryCutoff = new Date(
       Date.now() - DELIVERY_DEDUP_RETENTION_MS,
+    ).toISOString();
+    const eventCutoff = new Date(
+      Date.now() - RELAY_EVENT_RETENTION_CUTOFF_MS,
     ).toISOString();
     await this.env.DB.batch([
       this.env.DB
@@ -5095,6 +5621,15 @@ export class QuakeRelay {
              AND acknowledged_at_utc < ?`,
         )
         .bind(deliveryCutoff),
+      // Revision rows have no foreign-key cascade in the original schema, so
+      // prune them before their canonical event rows. Event retention remains
+      // far longer than Queue delivery and terminal-outbox retention.
+      this.env.DB
+        .prepare("DELETE FROM event_revisions WHERE recorded_at_utc < ?")
+        .bind(eventCutoff),
+      this.env.DB
+        .prepare("DELETE FROM events WHERE last_updated_utc < ?")
+        .bind(eventCutoff),
       this.env.DB
         .prepare("DELETE FROM devices WHERE updated_at < ?")
         .bind(deviceCutoff),
@@ -5285,11 +5820,18 @@ export class QuakeRelay {
     const now = Date.now();
     for (const route of UPSTREAM_ROUTES) {
       const current = this.upstreams.get(route);
-      // A transport can remain nominally open while heartbeats/data stop.
-      // Treat a stale route as a failed route: close it, persist degradation,
-      // and let the same bounded reconnect/fallback policy recover it.
-      if (current?.readyState === 1 && !this.routeIsOpen(route)) {
+      // Data readiness and transport activity are intentionally independent.
+      // Keep HTTP fallback active for an unready route, but do not churn a
+      // newly upgraded socket while its initial snapshot is still arriving.
+      // An unready socket gets one bounded window; after readiness, only a
+      // current heartbeat/data frame extends the transport watchdog.
+      if (
+        current?.readyState === 1 &&
+        this.upstreamTransportIsStale(route, current, now)
+      ) {
         this.upstreams.delete(route);
+        this.clearUpstreamLiveness(route);
+        this.setRouteStatus(route, "closed");
         try {
           current.close(1011);
         } catch {
@@ -5324,16 +5866,34 @@ export class QuakeRelay {
     }
   }
 
+  private upstreamTransportIsStale(
+    route: UpstreamRoute,
+    socket: WebSocket,
+    now: number,
+  ): boolean {
+    if (this.upstreams.get(route) !== socket || socket.readyState !== 1) return true;
+    const activatedAtMs = this.upstreamActivatedAtMs.get(route);
+    const ready = this.readyUpstreamSockets.get(route) === socket;
+    const watchdogAtMs = ready
+      ? this.lastUpstreamTransportMessageMs.get(route)
+      : activatedAtMs;
+    return (
+      typeof watchdogAtMs !== "number" ||
+      !Number.isFinite(watchdogAtMs) ||
+      watchdogAtMs <= 0 ||
+      watchdogAtMs > now ||
+      now - watchdogAtMs > UPSTREAM_STALE_AFTER_MS
+    );
+  }
+
   private routeIsOpen(route: UpstreamRoute): boolean {
-    const sources: WolfxSourceId[] =
-      route === "all_eew" ? EEW_SOURCES : [route];
     const now = Date.now();
-    return sources.every((source) => !isUpstreamSourceStale(
-      this.statuses.get(source) ?? "connecting",
-      this.lastSuccessfulUpstreamMs.get(source),
+    return !isUpstreamSourceStale(
+      this.statuses.get(route) ?? "connecting",
+      this.lastSuccessfulUpstreamMs.get(route),
       false,
       now,
-    ));
+    );
   }
 
   private allRoutesOpen(): boolean {
@@ -5576,11 +6136,11 @@ export class QuakeRelay {
     );
     const start = typeof storedIndex === "number" &&
         Number.isSafeInteger(storedIndex) && storedIndex >= 0
-      ? storedIndex % ALL_WOLFX_SOURCES.length
+      ? storedIndex % APNS_RELAY_SOURCES.length
       : 0;
-    for (let offset = 0; offset < ALL_WOLFX_SOURCES.length; offset += 1) {
-      const index = (start + offset) % ALL_WOLFX_SOURCES.length;
-      const candidate = ALL_WOLFX_SOURCES[index];
+    for (let offset = 0; offset < APNS_RELAY_SOURCES.length; offset += 1) {
+      const index = (start + offset) % APNS_RELAY_SOURCES.length;
+      const candidate = APNS_RELAY_SOURCES[index];
       if (candidates.includes(candidate)) return candidate;
     }
     return null;
@@ -5589,8 +6149,9 @@ export class QuakeRelay {
   private async advanceHttpSeedSource(
     source: WolfxSourceId,
   ): Promise<boolean> {
-    const index = ALL_WOLFX_SOURCES.indexOf(source);
-    const next = (index + 1) % ALL_WOLFX_SOURCES.length;
+    const index = APNS_RELAY_SOURCES.indexOf(source as ApnsRelaySourceId);
+    if (index < 0) return false;
+    const next = (index + 1) % APNS_RELAY_SOURCES.length;
     const storage = this.state.storage;
     const advance = async (target: DurableKeyValueStore): Promise<boolean> => {
       await target.put(HTTP_SEED_SOURCE_CURSOR_KEY, next);
@@ -5643,7 +6204,7 @@ export class QuakeRelay {
   }
 
   private sourcesNeedingHttpRecovery(now = Date.now()): WolfxSourceId[] {
-    return ALL_WOLFX_SOURCES.filter(
+    return APNS_RELAY_SOURCES.filter(
       (source) => isUpstreamSourceStale(
         this.statuses.get(source) ?? "connecting",
         this.lastSuccessfulUpstreamMs.get(source),
@@ -5788,7 +6349,7 @@ export class QuakeRelay {
     // than turning a status probe into an exception.
     const httpFallbackActive = await this.readHttpFallbackActive();
     const sourceHealth = await Promise.all(
-      ALL_WOLFX_SOURCES.map(async (source) => {
+      APNS_RELAY_SOURCES.map(async (source) => {
         const [
           persisted,
           persistedHttp,
@@ -5949,7 +6510,18 @@ export class QuakeRelay {
   }
 
   private connect(route: UpstreamRoute): void {
+    if (!(UPSTREAM_ROUTES as readonly string[]).includes(route)) {
+      console.error(JSON.stringify({
+        route: typeof route === "string" ? route.slice(0, 64) : "invalid",
+        outcome: "disabled_wolfx_upstream_route_rejected",
+      }));
+      return;
+    }
     if (this.connectingRoutes.has(route)) return;
+    // A new handshake attempt is a new route lifecycle even before the
+    // Upgrade resolves. Never leave a prior socket's validation token or
+    // readiness available while the replacement connection is in flight.
+    this.clearUpstreamLiveness(route);
     this.setRouteStatus(route, "connecting");
     this.connectingRoutes.add(route);
     // `fetch(... Upgrade)` is the documented alternative client path for
@@ -6091,6 +6663,8 @@ export class QuakeRelay {
       const ownsRecovery = socket === null || this.upstreams.get(route) === socket;
       if (socket && ownsRecovery) {
         this.upstreams.delete(route);
+        this.clearUpstreamLiveness(route);
+        this.setRouteStatus(route, "error");
         try {
           socket.close(1011);
         } catch {
@@ -6207,24 +6781,54 @@ export class QuakeRelay {
 
   private activateUpstreamSocket(route: UpstreamRoute, socket: WebSocket): void {
     this.clearUpstreamLiveness(route);
+    this.upstreamActivatedAtMs.set(route, Date.now());
     this.setRouteStatus(route, "connecting");
     // Do not treat the HTTP 101 as a usable upstream response. A peer can
     // accept the Upgrade and immediately close; freshness and reconnect
     // recovery begin only after a later valid Wolfx message reaches the
     // listener below.
-    const queries =
-      route === "all_eew"
-        ? [
-            "query_jmaeew",
-            "query_sceew",
-            "query_cenceew",
-            "query_fjeew",
-            "query_cqeew",
-          ]
-        : route === "cenc_eqlist"
-          ? ["query_cenceqlist"]
-          : ["query_jmaeqlist"];
+    const queries = route === "jma_eew"
+      ? ["query_jmaeew"]
+      : ["query_jmaeqlist"];
     for (const query of queries) socket.send(query);
+  }
+
+  private rejectUpstreamFrame(
+    route: UpstreamRoute,
+    socket: WebSocket,
+    reason: "non_text" | "invalid_json" | "unexpected_type" | "invalid_data",
+  ): Promise<void> {
+    if (this.upstreams.get(route) !== socket) return Promise.resolve();
+    // Detach and clear readiness synchronously. Buffered messages from this
+    // socket can still be delivered after close(), and none may restore the
+    // route while durable reconnect scheduling is in flight.
+    this.upstreams.delete(route);
+    this.clearUpstreamLiveness(route);
+    this.setRouteStatus(route, "error");
+    try {
+      socket.close(1008, "invalid upstream frame");
+    } catch {
+      // The socket is already detached; the durable reconnect below owns
+      // recovery even if the runtime has closed it first.
+    }
+    console.warn(JSON.stringify({
+      outcome: "wolfx_upstream_frame_rejected",
+      route,
+      reason,
+    }));
+    const reconnect = this.scheduleUpstreamReconnect(
+      route,
+      "wolfx_upstream_websocket_error",
+      { reason: `invalid_frame_${reason}` },
+    );
+    if (!isLiveSnapshotSource(route)) return reconnect;
+    // The list-specific durability marker and route reconnect are independent
+    // fail-closed actions. Start both now so a queued snapshot drain cannot
+    // postpone the transport recovery alarm.
+    return Promise.all([
+      this.flagLiveSnapshotBlocked(route, "invalid"),
+      reconnect,
+    ]).then(() => undefined);
   }
 
   private attachUpstreamSocketListeners(
@@ -6232,68 +6836,85 @@ export class QuakeRelay {
     socket: WebSocket,
   ): void {
     socket.addEventListener("message", (event) => {
-      if (typeof event.data !== "string") return;
       // A deliberate backpressure close removes route ownership before the
       // runtime finishes draining already-buffered WebSocket events. Never
       // accept those orphaned frames after the relay has switched to a fresh
       // reconnect/query cycle.
       if (this.upstreams.get(route) !== socket) return;
+      if (typeof event.data !== "string") {
+        this.state.waitUntil(this.rejectUpstreamFrame(route, socket, "non_text"));
+        return;
+      }
+      let message: unknown;
       try {
-        const message: unknown = JSON.parse(event.data);
-        if (isHeartbeat(message) || isPong(message)) {
-          this.state.waitUntil(
-            this.recordUpstreamLiveness(route, socket, "route"),
-          );
+        message = JSON.parse(event.data);
+      } catch {
+        this.state.waitUntil(this.rejectUpstreamFrame(route, socket, "invalid_json"));
+        return;
+      }
+      if (isHeartbeat(message) || isPong(message)) {
+        if (!isStructurallyValidWolfxControlFrame(message)) {
+          this.state.waitUntil(this.rejectUpstreamFrame(route, socket, "invalid_data"));
           return;
         }
-        const source =
-          route === "all_eew"
-            ? sourceFromMessage(message)
-            : route;
-        if (!source) return;
-        const normalizedEvents = normalizeMessages(source, message);
-        if (isLiveSnapshotSource(source) &&
-          !isStructurallyValidHttpSnapshot(source, message, normalizedEvents)) {
-          // A list route has no non-event payload that can prove source
-          // freshness. In particular, an empty/malformed ranked list must not
-          // turn a healthy socket into a fresh alert source.
-          console.warn(
-            JSON.stringify({
-              outcome: "wolfx_live_snapshot_invalid",
-              source,
-            }),
-          );
-          this.state.waitUntil(this.flagLiveSnapshotBlocked(source, "invalid"));
-          return;
-        }
-        if (normalizedEvents.length === 0) {
-          // A valid non-event frame still proves the WebSocket route is alive.
-          this.state.waitUntil(
-            this.recordUpstreamLiveness(route, socket, source),
-          );
-          return;
-        }
-        // A normalized event proves transport liveness, but its source cannot
-        // become fresh until the journal crosses the D1/outbox boundary.
-        this.state.waitUntil(this.recordUpstreamLiveness(route, socket, null));
-        if (isLiveSnapshotSource(source)) {
-          // Ranked earthquake lists are full snapshots. Journal their complete
-          // normalized list once, then fingerprint only after every bounded D1
-          // slice commits; a repeated unchanged frame therefore makes no
-          // per-event Durable Object writes.
-          this.state.waitUntil(
-            this.enqueueLiveSnapshot(source, normalizedEvents),
-          );
-          return;
-        }
-        for (const normalized of normalizedEvents) {
-          // The journal persists first and marks freshness only after the D1
-          // event/outbox transaction commits. Multiple revisions are safely
-          // coalesced and serialized by the Durable Object drain.
-          this.state.waitUntil(this.enqueueLiveIngest(normalized));
-        }
-      } catch (error) {
-        console.warn(`Unable to handle ${route} message`, error);
+        // Heartbeats are transport watchdog evidence only. They may extend a
+        // route that this exact socket already made ready, but can neither
+        // create readiness after Upgrade nor restore it after invalid data.
+        this.state.waitUntil(this.recordUpstreamTransportLiveness(route, socket));
+        return;
+      }
+      if (
+        !message ||
+        typeof message !== "object" ||
+        Array.isArray(message) ||
+        (message as { type?: unknown }).type !== route
+      ) {
+        this.state.waitUntil(this.rejectUpstreamFrame(route, socket, "unexpected_type"));
+        return;
+      }
+
+      const source = route;
+      let normalizedEvents: NormalizedEvent[];
+      try {
+        normalizedEvents = normalizeMessages(source, message);
+      } catch {
+        this.state.waitUntil(this.rejectUpstreamFrame(route, socket, "invalid_data"));
+        return;
+      }
+      if (
+        normalizedEvents.length === 0 ||
+        !isStructurallyValidHttpSnapshot(source, message, normalizedEvents)
+      ) {
+        this.state.waitUntil(this.rejectUpstreamFrame(route, socket, "invalid_data"));
+        return;
+      }
+
+      // This token is not readiness. The ingest path flips its durable-intent
+      // bit only after this particular frame is journaled (or proven already
+      // committed); an older drain can therefore never certify newer data.
+      const readinessCandidate: UpstreamDataReadinessCandidate = {
+        socket,
+        durableIntentRecorded: false,
+      };
+      this.validatedUpstreamDataSockets.set(route, readinessCandidate);
+      this.readyUpstreamSockets.delete(route);
+      this.setRouteStatus(route, "connecting");
+      this.state.waitUntil(this.recordUpstreamTransportLiveness(route, socket));
+      if (isLiveSnapshotSource(source)) {
+        // Ranked earthquake lists are full snapshots. Journal their complete
+        // normalized list once, then fingerprint only after every bounded D1
+        // slice commits; a repeated unchanged frame therefore makes no
+        // per-event Durable Object writes.
+        this.state.waitUntil(
+          this.enqueueLiveSnapshot(source, normalizedEvents, readinessCandidate),
+        );
+        return;
+      }
+      for (const normalized of normalizedEvents) {
+        // The journal persists first and marks freshness only after the D1
+        // event/outbox transaction commits. Multiple revisions are safely
+        // coalesced and serialized by the Durable Object drain.
+        this.state.waitUntil(this.enqueueLiveIngest(normalized, readinessCandidate));
       }
     });
     socket.addEventListener("close", (event) => {
@@ -6303,6 +6924,8 @@ export class QuakeRelay {
       // Close reasons are upstream-controlled text, so expose only bounded,
       // operationally useful metadata in the structured log.
       this.upstreams.delete(route);
+      this.clearUpstreamLiveness(route);
+      this.setRouteStatus(route, "closed");
       this.state.waitUntil(
         this.scheduleUpstreamReconnect(
           route,
@@ -6326,6 +6949,8 @@ export class QuakeRelay {
       // short alarm always establishes a replacement rather than retaining a
       // broken entry in the route map.
       this.upstreams.delete(route);
+      this.clearUpstreamLiveness(route);
+      this.setRouteStatus(route, "error");
       try {
         socket.close(1011);
       } catch {
@@ -6342,38 +6967,37 @@ export class QuakeRelay {
   }
 
   private setRouteStatus(route: UpstreamRoute, status: string): void {
-    const sources: WolfxSourceId[] =
-      route === "all_eew" ? EEW_SOURCES : [route];
-    for (const source of sources) this.statuses.set(source, status);
+    this.statuses.set(route, status);
   }
 
   private clearUpstreamLiveness(route: UpstreamRoute): void {
+    this.upstreamActivatedAtMs.delete(route);
     this.upstreamLivenessSinceMs.delete(route);
+    this.lastUpstreamTransportMessageMs.delete(route);
     this.stableReconnectBackoffResetRoutes.delete(route);
+    this.validatedUpstreamDataSockets.delete(route);
+    this.readyUpstreamSockets.delete(route);
   }
 
   /**
-   * Record evidence that a socket has carried a syntactically valid Wolfx
-   * frame. Freshness follows the frame type's existing durability rule; the
-   * route-level reconnect backoff is independently reset only after stable
-   * liveness so a brief open/frame/close cycle remains exponentially paced.
+   * Record transport watchdog evidence without creating source readiness.
+   * Only a socket already made ready by a durable data commit may use later
+   * heartbeats to extend freshness or reset stable reconnect history.
    */
-  private async recordUpstreamLiveness(
+  private async recordUpstreamTransportLiveness(
     route: UpstreamRoute,
     socket: WebSocket,
-    freshness: "route" | WolfxSourceId | null,
   ): Promise<void> {
     if (this.upstreams.get(route) !== socket) return;
     const now = Date.now();
     const livenessSinceMs = this.upstreamLivenessSinceMs.get(route) ?? now;
     this.upstreamLivenessSinceMs.set(route, livenessSinceMs);
-    this.setRouteStatus(route, "open");
+    this.lastUpstreamTransportMessageMs.set(route, now);
 
-    if (freshness === "route") {
-      await this.markRouteSuccessful(route);
-    } else if (freshness !== null) {
-      await this.markSourceSuccessful(freshness);
+    if (this.readyUpstreamSockets.get(route) !== socket) {
+      return;
     }
+    await this.markSourceSuccessful(route, socket);
 
     // A close listener deletes the socket synchronously before it queues its
     // durable recovery. Re-check ownership after any freshness I/O so a stale
@@ -6396,18 +7020,15 @@ export class QuakeRelay {
     }
   }
 
-  private async markRouteSuccessful(route: UpstreamRoute): Promise<void> {
-    const sources: WolfxSourceId[] =
-      route === "all_eew" ? EEW_SOURCES : [route];
-    await Promise.all(sources.map((source) => this.markSourceSuccessful(source)));
-  }
-
-  private serializeFreshnessUpdate(
+  private serializeFreshnessUpdate<T>(
     key: string,
-    operation: () => Promise<void>,
-  ): Promise<void> {
+    operation: () => Promise<T>,
+  ): Promise<T> {
     const previous = this.freshnessUpdates.get(key) ?? Promise.resolve();
-    const update = previous.then(operation, operation);
+    const update = previous.then(
+      () => operation(),
+      () => operation(),
+    );
     this.freshnessUpdates.set(key, update);
     // Keep an error from one heartbeat from blocking later evidence. The
     // caller still receives the same rejection through `update` so failed
@@ -6468,8 +7089,22 @@ export class QuakeRelay {
     return true;
   }
 
-  private markSourceSuccessful(source: WolfxSourceId): Promise<void> {
+  private markSourceSuccessful(
+    source: WolfxSourceId,
+    expectedReadySocket?: WebSocket,
+  ): Promise<boolean> {
     return this.serializeFreshnessUpdate(`websocket:${source}`, async () => {
+      const route = isApnsRelaySource(source) ? source : null;
+      if (
+        expectedReadySocket &&
+        (
+          route === null ||
+          this.upstreams.get(route) !== expectedReadySocket ||
+          this.readyUpstreamSockets.get(route) !== expectedReadySocket
+        )
+      ) {
+        return false;
+      }
       const pendingForSource = await this.state.storage.list({
         prefix: `${PENDING_INGEST_PREFIX}${source}:`,
         limit: 1,
@@ -6480,7 +7115,7 @@ export class QuakeRelay {
       // A heartbeat can prove that a socket is open, but not that its preceding
       // event or complete ranked list was durably committed. Leave readiness
       // stale until the appropriate journal drains successfully.
-      if (pendingForSource.size > 0 || pendingLiveSnapshot) return;
+      if (pendingForSource.size > 0 || pendingLiveSnapshot) return false;
       const now = Date.now();
       const checkpointAvailable = await this.checkpointFreshness(
         source,
@@ -6490,8 +7125,54 @@ export class QuakeRelay {
         UPSTREAM_FRESHNESS_CHECKPOINT_INTERVAL_MS,
         now,
       );
-      if (checkpointAvailable) this.lastSuccessfulUpstreamMs.set(source, now);
+      if (!checkpointAvailable) return false;
+      // A close, invalid frame, or replacement socket may have won while the
+      // heartbeat checkpoint was awaiting storage. Its old evidence may not
+      // republish in-memory freshness for the new route lifecycle.
+      if (
+        expectedReadySocket &&
+        (
+          route === null ||
+          this.upstreams.get(route) !== expectedReadySocket ||
+          this.readyUpstreamSockets.get(route) !== expectedReadySocket
+        )
+      ) {
+        return false;
+      }
+      this.lastSuccessfulUpstreamMs.set(source, now);
+      return true;
     });
+  }
+
+  private async markSourceSuccessfulAndPublishReadiness(
+    source: WolfxSourceId,
+  ): Promise<void> {
+    const route = isApnsRelaySource(source) ? source : null;
+    const candidate = route === null
+      ? null
+      : this.validatedUpstreamDataSockets.get(route) ?? null;
+    // Snapshot the token before the asynchronous pending-work check. If a new
+    // frame records durable intent while an older completion is checkpointing,
+    // the older completion cannot adopt that newer token after the await.
+    const publishableCandidate = candidate?.durableIntentRecorded === true
+      ? candidate
+      : null;
+    const checkpointAvailable = await this.markSourceSuccessful(source);
+    if (
+      !checkpointAvailable ||
+      route === null ||
+      publishableCandidate === null ||
+      this.validatedUpstreamDataSockets.get(route) !== publishableCandidate ||
+      this.upstreams.get(route) !== publishableCandidate.socket
+    ) {
+      return;
+    }
+    // This is the only transition into WebSocket readiness: this exact frame
+    // was durably admitted, every source fence is now drained, and the current
+    // socket's freshness checkpoint succeeded.
+    this.readyUpstreamSockets.set(route, publishableCandidate.socket);
+    this.validatedUpstreamDataSockets.delete(route);
+    this.setRouteStatus(route, "open");
   }
 
   private markHttpSourceSuccessful(source: WolfxSourceId): Promise<void> {
@@ -6526,6 +7207,9 @@ export class QuakeRelay {
     source: WolfxSourceId,
     mode: "initial" | "recovery",
   ): Promise<HttpSeedOutcome> {
+    if (!isApnsRelaySource(source)) {
+      return { completed: false, snapshotWorkStarted: false };
+    }
     const workKey = httpSnapshotWorkStorageKey(source);
     const storedWorkValue = await this.state.storage.get<unknown>(workKey);
     const storedWork = isPendingHttpSnapshotWork(storedWorkValue)
@@ -6698,7 +7382,7 @@ export class QuakeRelay {
   ): Promise<PendingHttpSnapshotWork[]> {
     const pending = await this.state.storage.list<unknown>({
       prefix: PENDING_HTTP_SNAPSHOT_PREFIX,
-      limit: ALL_WOLFX_SOURCES.length,
+      limit: APNS_RELAY_SOURCES.length,
     });
     const works: PendingHttpSnapshotWork[] = [];
     for (const [key, value] of pending) {
@@ -6770,7 +7454,7 @@ export class QuakeRelay {
   private async initialHttpSeedIsComplete(): Promise<boolean> {
     if ((await this.pendingHttpSnapshotSources()).length > 0) return false;
     const fingerprints = await Promise.all(
-      ALL_WOLFX_SOURCES.map((source) =>
+      APNS_RELAY_SOURCES.map((source) =>
         this.state.storage.get<string>(
           `${UPSTREAM_HTTP_FINGERPRINT_PREFIX}${source}`,
         )
@@ -6783,7 +7467,7 @@ export class QuakeRelay {
 
   private async runInitialHttpSeed(): Promise<void> {
     const missingSources = (await Promise.all(
-      ALL_WOLFX_SOURCES.map(async (candidate) => ({
+      APNS_RELAY_SOURCES.map(async (candidate) => ({
         candidate,
         fingerprint: await this.state.storage.get<string>(
           `${UPSTREAM_HTTP_FINGERPRINT_PREFIX}${candidate}`,
@@ -6871,7 +7555,7 @@ export class QuakeRelay {
     // Persist one small next-sweep scalar before external I/O. Unlike the old
     // lease/cursor/last-seed churn, this is one bounded row per minute and
     // survives eviction or an unrelated reconnect alarm, so a restarted relay
-    // cannot re-run a full seven-source sweep immediately. Claim it
+    // cannot immediately re-run the full JMA-only sweep. Claim it
     // transactionally so a replaced/overlapping relay turn cannot duplicate a
     // sweep after both observe the same expired deadline.
     if (!await this.claimHttpRecoverySweep(startedAtMs)) return;
@@ -6902,6 +7586,9 @@ export class QuakeRelay {
     mode: "live" | "initial" | "recovery",
     outboxFlushLimit: number | null = ROUTINE_OUTBOX_FLUSH_BATCH_SIZE,
   ): Promise<void> {
+    if (!isApnsRelaySource(event.sourceId)) {
+      throw new RangeError("APNs relay source is not permitted");
+    }
     const { message } = await persistEventAndOutbox(
       this.env.DB,
       event,
@@ -6973,9 +7660,11 @@ export function delayedTrainingTestPushDueAt(nowMs = Date.now()): number {
   return nowMs + DELAYED_TRAINING_TEST_PUSH_DELAY_MS;
 }
 
-function trainingTestEvent(device: DeviceRecord, now = new Date().toISOString()): NormalizedEvent {
+function trainingTestEvent(now = new Date().toISOString()): NormalizedEvent {
   return {
-    id: TRAINING_TEST_EVENT_ID, sourceId: device.sources[0] ?? "jma_eew", eventId: "TEST-EVENT",
+    // Training alerts exercise only the fixed relay policy, never a legacy
+    // registration's first stored source selection.
+    id: TRAINING_TEST_EVENT_ID, sourceId: "jma_eew", eventId: "TEST-EVENT",
     serial: 1, kind: "eew", originTimeUtc: now, reportTimeUtc: now,
     hypocenter: "Test Region", latitude: 35, longitude: 135, magnitude: 5.5,
     depth: 10, maxIntensity: "5-", isWarn: true, isFinal: false,
@@ -7069,7 +7758,7 @@ export class TrainingPushScheduler {
         ) ||
         !hasApnsConfiguration(this.env)
       ) return;
-      const event = trainingTestEvent(device);
+      const event = trainingTestEvent();
       const result = await sendPush(
         this.env,
         device,
@@ -7902,7 +8591,7 @@ function appAttestRetentionCleanupStatements(
 }
 
 function registrationValues(body: Record<string, unknown>): DeviceRegistrationValues {
-  const sources = body.sources === undefined ? ALL_WOLFX_SOURCES : body.sources;
+  const sources = body.sources === undefined ? APNS_RELAY_SOURCES : body.sources;
   return {
     token: body.token as string,
     environment: body.environment === "sandbox" ? "sandbox" : "production",
@@ -9318,28 +10007,7 @@ export async function handleDeviceTestPush(
       );
     }
   }
-  const now = new Date().toISOString();
-  const event: NormalizedEvent = {
-    id: "test:0",
-    sourceId: device.sources[0] ?? "jma_eew",
-    eventId: "TEST-EVENT",
-    serial: 1,
-    kind: "eew",
-    originTimeUtc: now,
-    reportTimeUtc: now,
-    hypocenter: "Test Region",
-    latitude: 35,
-    longitude: 135,
-    magnitude: 5.5,
-    depth: 10,
-    maxIntensity: "5-",
-    isWarn: true,
-    isFinal: false,
-    isCancel: false,
-    isTraining: true,
-    tsunami: null,
-    raw: null,
-  };
+  const event = trainingTestEvent();
   const deviceTokenHash = await tokenHash(device.token);
   try {
     const result = await sendPush(
@@ -9392,29 +10060,38 @@ async function handleRequest(
   if (url.pathname === "/privacy" && request.method === "GET") {
     return legalPage(
       "Privacy Policy",
-      "QuakeSignal is designed to collect only the information required to provide location-aware earthquake notifications.",
+      "QuakeSignal clients fetch public earthquake information directly from Wolfx. Only opted-in alert registration on an iPhone or iPad sends app registration data to QuakeSignal-operated notification infrastructure; opening this public page sends ordinary web-request metadata to Cloudflare but no local app settings.",
       [
         {
+          heading: "Platform scope",
+          body: "Only the app when running on an iPhone or iPad can register with the QuakeSignal notification relay in this release. The embedded Apple Watch companion and Apple TV app request recent reports directly from Wolfx over encrypted WebSocket and HTTPS connections while open, keep current report state in memory, and store only the selected alert presentation mode locally. Apple Vision Pro and Mac Catalyst use the full interface, contact Wolfx directly while open, and keep preferences and guide details in local app storage. Those foreground-only Apple experiences do not independently use the notification relay, App Attest, or APNs and do not provide background emergency alerts. A system-mirrored iPhone notification on a paired Watch remains part of the iPhone registration. The separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 8), and Chrome extension also contact Wolfx directly and do not register with the relay.",
+        },
+        {
           heading: "Data we process",
-          body: "If you enable notifications, the service stores the APNs device token, app locale, selected earthquake sources, magnitude threshold, alert preferences (including the exact alert-sound identifier and a test-alert preference), alert radius, optional selected-city label, registration timestamps, and one approximate coordinate on a 0.1° grid. That coordinate is derived from either the selected city's coordinate or the current device location; neither an exact GPS fix nor an unrounded selected-city coordinate is sent. To prevent fraudulent subscription changes, the service also stores an opaque Apple App Attest key identifier, public verification key, attestation receipt, monotonic assertion counter, and integrity timestamps; newer Apple proofs may additionally carry the app build version and distribution category. The app does not require an account, name, email address, contacts, photos, or advertising identifier.",
+          body: "If you enable alert registration on an iPhone or iPad, the service stores the APNs device token, app locale, selected JMA feed types, magnitude threshold, alert preferences (including the exact alert-sound identifier and a test-alert preference), alert radius, optional selected-city label, registration timestamps, and one approximate coordinate on a 0.1° grid. That coordinate is derived from either the selected city's coordinate or the current device location; neither an exact GPS fix nor an unrounded selected-city coordinate is sent. To prevent fraudulent subscription changes, the service also stores an opaque Apple App Attest key identifier, public verification key, attestation receipt, monotonic assertion counter, and integrity timestamps; newer Apple proofs may additionally carry the app build version and distribution category. QuakeSignal does not require an account, name, email address, contacts, photos, or advertising identifier for this registration.",
+        },
+        {
+          heading: "Data kept on your device",
+          body: "In the full Apple interface, alert preferences, the chosen city, the preparedness-kit checklist, and any optional family contact name and telephone number stay in local app storage. Within QuakeSignal, current report and GPS state remain in app memory; Apple provides the map and system Location Services under its own policies. Direct Wolfx earthquake requests do not include the chosen city or device location, and QuakeSignal does not send the exact GPS fix, checklist, or family contact details to its notification service. To clear local guide values, erase both Family Check-In fields and uncheck each selected preparedness-kit item; this is separate from removing an iPhone/iPad alert registration. The Apple Watch and Apple TV apps keep current report state only in memory for the foreground session, store the selected System, Urgent, or Japanese Voice presentation mode locally, and do not persist guide details. The Windows desktop app, legacy Tauri macOS builds, and Chrome extension keep their event history and preferences in their own local storage.",
         },
         {
           heading: "How data is used",
-          body: "Subscription data is used only to decide whether an earthquake event matches your preferences and to send the requested Apple Push Notification. Location is not used for advertising, profiling, or sale.",
+          body: "The iPhone/iPad subscription data is used only to secure the notification service, apply your selected JMA feed type, magnitude, and radius filters to JMA-issued information relayed through Wolfx, send the requested Apple Push Notification, and investigate bounded delivery failures. These filters control relay delivery and presentation only; QuakeSignal does not forecast earthquakes or predict local intensity or arrival time. Location is not used for advertising, profiling, or sale.",
         },
         {
           heading: "Storage and deletion",
-          body: "Subscription settings and the associated App Attest integrity record are stored in Cloudflare D1. Removing notification registration from the app deletes the matching device registration, even when this launch has no APNs token, if an existing App Attest key can prove it owns that subscription. A new key cannot claim a legacy subscription with an empty request. After reinstall or device restore, a fresh Apple attestation plus the exact APNs token may safely rebind that one token and retire its old key record; assertions and tokenless requests cannot transfer another key's subscription. If it was the last registration using an App Attest key, that associated verifier, receipt, and assertion-counter record is deleted. A reviewed production training test creates a separate token-free claim containing only the opaque App Attest key ID and UTC timestamps; it is retained for at most 14 days to enforce one production training attempt per key per UTC day. Its optional fixed-delay check also creates one private scheduler record containing only that opaque App Attest key ID, a due time, and an at-most-once attempted state; it contains no APNs token, request body, proof, preferences, location, or earthquake payload. That temporary record is deleted after its one scheduled attempt or cancellation; an alarm more than 30 seconds late is deleted without delivery. Each App Attest challenge expires in no more than five minutes and expired records are removed by routine cleanup. A daily retention job purges registrations that are not refreshed for 90 days with their orphaned integrity records. Sanitized delivery-failure token hashes are retained for at most 14 days for reliability investigations. Disabling notifications or location access stops new collection but does not reliably send a deletion request, so use the in-app removal control when possible.",
+          body: "Subscription settings and the associated App Attest integrity record are stored in Cloudflare D1. Removing notification registration from the app deletes the matching device registration, even when this launch has no APNs token, if an existing App Attest key can prove it owns that subscription. A new key cannot claim a legacy subscription with an empty request. After reinstall or device restore, a fresh Apple attestation plus the exact APNs token may safely rebind that one token and retire its old key record; assertions and tokenless requests cannot transfer another key's subscription. If the old App Attest key and exact APNs token are both unavailable, a public support issue cannot privately identify or delete that unreachable registration; do not post either identifier or any proof there. Support can guide recovery. An old registration becomes eligible for deletion after it has not been refreshed for 90 days, together with its orphaned integrity record; the next successful daily cleanup removes them, and an operational cleanup failure can delay deletion. Normalized earthquake event rows and their revision history become eligible for deletion after 89 days and are removed by the next successful daily cleanup; an operational cleanup failure can delay deletion. If an in-app removal deletes the last registration using an App Attest key, the associated verifier, receipt, and assertion-counter record is deleted too. A reviewed production training test creates a separate token-free claim containing only the opaque App Attest key ID and UTC timestamps. The training-test claim becomes eligible for deletion after 14 days and is removed by the next successful routine cleanup; an operational cleanup failure can delay deletion. Its optional fixed-delay check also creates one private scheduler record containing only that opaque App Attest key ID, a due time, and an at-most-once attempted state; it contains no APNs token, request body, proof, preferences, location, or earthquake payload. That temporary record is deleted after its one scheduled attempt or cancellation; an alarm more than 30 seconds late is deleted without delivery. Each App Attest challenge becomes invalid in no more than five minutes; its expired row is removed by the next successful routine cleanup, and an operational cleanup failure can delay deletion. Sanitized delivery-failure token hashes become eligible for deletion after 14 days and are removed by the next successful routine cleanup; an operational cleanup failure can delay deletion. Disabling notifications or location access stops new collection but does not reliably send a deletion request, so use the in-app removal control before a reset when possible.",
         },
         {
           heading: "Third-party services",
-          body: "The app fetches earthquake information directly from the Wolfx Open API. Cloudflare is used only to store notification subscriptions, verify Apple App Attest proofs, watch upstream alerts, and request delivery through Apple Push Notification service. Their handling of network metadata is governed by their own policies. The App Attest private key never leaves your device.",
+          body: "All clients fetch earthquake information directly from the Wolfx Open API, which receives ordinary connection metadata such as an IP address under its own policies. Full-interface Apple clients also use Apple Maps and system Location Services when those features are used; Apple handles associated service data under its own policies, while QuakeSignal does not include the exact location in Wolfx requests or its relay. Cloudflare hosts these public pages and may process ordinary web-request and security metadata. Cloudflare D1, Apple Push Notification service, and Apple App Attest are used for app data only on opted-in iPhone/iPad alerts: Cloudflare stores subscriptions, verifies proofs, watches only the jma_eew and jma_eqlist Wolfx feeds, filters and presents the relayed JMA-issued information, and requests delivery through APNs. The relay does not create an earthquake forecast or predict local intensity or arrival time. The App Attest private key never leaves the iPhone or iPad. Following the public GitHub support link is subject to GitHub's policies.",
         },
         {
           heading: "Safety notice",
           body: "QuakeSignal is not an official government warning platform. Data and notifications can be delayed, incomplete, or inaccurate. Follow official announcements and local emergency instructions.",
         },
       ],
+      "20 August 2026",
     );
   }
   if (url.pathname === "/terms" && request.method === "GET") {
@@ -9424,7 +10101,7 @@ async function handleRequest(
       [
         {
           heading: "Informational service",
-          body: "QuakeSignal provides aggregated earthquake information and preparedness guidance for general informational purposes. It is not an official emergency warning system and does not replace government alerts, emergency services, or professional advice.",
+          body: "QuakeSignal filters and presents relayed earthquake information and provides preparedness guidance for general informational purposes. It does not forecast earthquakes or predict local intensity or arrival time. It is not an official emergency warning system and does not replace government alerts, emergency services, or professional advice.",
         },
         {
           heading: "No delivery guarantee",
@@ -9444,17 +10121,30 @@ async function handleRequest(
   if (url.pathname === "/support" && request.method === "GET") {
     return legalPage(
       "Support",
-      "Get help with notifications, data sources, localization, or earthquake subscription settings.",
+      "Get help with QuakeSignal on iPhone, iPad, Apple Watch, Apple TV, Apple Vision Pro, Mac Catalyst, Windows, legacy Tauri macOS builds, or Chrome.",
       [
         {
-          heading: "Before reporting a problem",
-          body: "Confirm that notifications and location access are enabled in iOS Settings, your selected source and magnitude threshold match the event, and the device has a working network connection.",
+          heading: "iPhone and iPad alerts",
+          body: "For opted-in background alerts, confirm that alert registration is enabled in QuakeSignal, notifications are allowed in system Settings, the selected JMA feed type and magnitude/radius filters match the issued report, and the device has a working network connection. If you use Current Location for radius filtering, also confirm location access. These settings filter relayed JMA-issued information; they do not predict local intensity or arrival time. Focus modes, system settings, and device state can delay or suppress delivery; Time Sensitive notifications remain under user and system control and are not Critical Alerts.",
+        },
+        {
+          heading: "Foreground-only Apple experiences",
+          body: "The embedded Apple Watch companion and Apple TV app refresh recent Wolfx reports while open. A fresh active warning can present protective guidance and the native Watch warning haptic; if Urgent or Japanese Voice is selected on the paired iPhone, Watch can also play that mirrored sound while active. Apple TV warning ingestion remains visual-only: System is visual-only on Apple TV, and custom Apple TV audio requires an explicit Siri Remote action. Neither target independently registers for APNs or App Attest, provides background emergency delivery, or uses Critical Alerts; Apple TV never starts warning audio automatically. A notification mirrored to a paired Watch is still an iPhone feature. Apple Vision Pro and Mac Catalyst use the full interface and direct Wolfx data while open, but do not independently use the QuakeSignal notification relay or provide background emergency alerts.",
+        },
+        {
+          heading: "Registration removal after a reset",
+          body: "Use Settings → Remove Alert Registration before deleting the iPhone/iPad app or resetting its integrity key when possible. A newly attested app that receives the exact same APNs token can safely rebind and retire that token's old key record. If both the old integrity key and token are unavailable, support cannot identify the old registration from a public issue; it becomes eligible for deletion after it has not been refreshed for 90 days and is removed by the next successful daily cleanup. An operational cleanup failure can delay deletion. Never post an APNs token, App Attest key identifier or proof, or location in an issue.",
+        },
+        {
+          heading: "Native desktop and Chrome",
+          body: "The separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 8), and Chrome extension connect directly to Wolfx and keep preferences and recent event state locally. They do not register with the QuakeSignal iPhone/iPad notification service. Check the app or extension connection status, selected sources and thresholds, local notification permission, and network access when troubleshooting.",
         },
         {
           heading: "Report an issue",
-          body: "Open a GitHub issue with your app version, iOS version, language, selected data source, and a description of what happened. Never include an APNs device token or precise home address.",
+          body: "Open a GitHub issue with the app version and build, exact platform and operating-system version, language, selected data source, expected result, and what happened. Redact screenshots before posting. Never include an APNs device token, App Attest proof, exact address or GPS coordinate, family contact details, or other private information.",
         },
       ],
+      "20 August 2026",
     );
   }
   if (url.pathname === "/healthz" && request.method === "GET") {
@@ -9502,15 +10192,15 @@ async function handleRequest(
           mode: "notification-only",
           error: "relay health status is temporarily unavailable",
           upstreams: Object.fromEntries(
-            ALL_WOLFX_SOURCES.map((source) => [source, "unavailable"]),
+            APNS_RELAY_SOURCES.map((source) => [source, "unavailable"]),
           ),
           upstream: {
             status: "degraded",
             transport: "degraded",
             websocketStatus: "degraded",
             httpFallbackActive: null,
-            staleSources: ALL_WOLFX_SOURCES,
-            pendingIngestSources: ALL_WOLFX_SOURCES,
+            staleSources: APNS_RELAY_SOURCES,
+            pendingIngestSources: APNS_RELAY_SOURCES,
             sources: {},
           },
           delivery: {
@@ -9677,6 +10367,43 @@ async function handleAlertDeliveryQueue(
   const relay = env.RELAY.get(env.RELAY.idFromName("global"));
   for (const message of batch.messages) {
     if (!isAlertDeliveryMessage(message.body)) {
+      const disabledOutboxId = disabledSourceOutboxId(message.body);
+      if (disabledOutboxId !== null) {
+        try {
+          const response = await relay.fetch(
+            new Request("https://relay.internal/outbox/source-policy/reject", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ outboxId: disabledOutboxId }),
+            }),
+          );
+          if (!response.ok) {
+            message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
+            continue;
+          }
+          console.info(
+            JSON.stringify({
+              queueMessageId: message.id,
+              queueAttempt: message.attempts,
+              outboxId: disabledOutboxId,
+              outcome: "disabled_source_alert_queue_message_superseded",
+            }),
+          );
+          message.ack();
+        } catch (error) {
+          console.warn(
+            JSON.stringify({
+              queueMessageId: message.id,
+              queueAttempt: message.attempts,
+              outboxId: disabledOutboxId,
+              outcome: "disabled_source_alert_queue_rejection_retry",
+              errorName: error instanceof Error ? error.name : "UnknownError",
+            }),
+          );
+          message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
+        }
+        continue;
+      }
       if (isLegacyAlertDeliveryMessage(message.body)) {
         try {
           // A Worker upgrade can encounter a pre-outbox Queue message. First

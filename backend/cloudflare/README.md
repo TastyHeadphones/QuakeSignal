@@ -164,8 +164,9 @@ push. `0010_alert_sound_and_urgent_eew_deadline.sql` adds the exact alert-sound
 preference values and the shorter delivery deadline for urgent EEW warnings.
 `0011_authenticated_app_routes.sql` backfills the current iOS App Attest
 identity, APNs topic, and platform on every registration and adds the route
-audit index. Migrations `0008` through `0011` are required by this Worker
-revision.
+audit index. `0012_event_retention_index.sql` adds the revision timestamp index
+used by the 89-day-cutoff event/revision cleanup. Migrations `0008` through
+`0012` are required by this Worker revision.
 
 The protected **Cloudflare Worker → Run workflow → deploy_production** job is
 the sole normal route for remote D1 migrations and `wrangler deploy`. It runs
@@ -380,7 +381,7 @@ npx wrangler secret put APNS_BUNDLE_ID
   local signing key, a stale pending outbox row,
   DLQ/Durable-Object-persistence-fallback/retry/quarantine incident, or any
   required Wolfx source with neither a current WebSocket nor a current valid
-  HTTP-alternate snapshot. After all three WebSocket routes have been degraded
+  HTTP-alternate snapshot. After any required WebSocket source has been degraded
   for 90 seconds, the relay may report `upstream.transport: "http-polling"`
   (with `websocketStatus: "degraded"`) only while every affected source has a
   structurally valid, durably ingested HTTP snapshot less than three minutes
@@ -421,20 +422,26 @@ npx wrangler secret put APNS_BUNDLE_ID
   UTC midnight, and `retryAtUtc`; an APNs failure after a claim still consumes
   that day's single outbound training attempt. The claim retains only the
   opaque App Attest key ID and UTC timestamps—never an APNs token, proof, or
-  request body—and is purged after 14 days. The always-available immediate and
+  request body—and becomes eligible for deletion after 14 days. The next
+  successful routine cleanup removes it; an operational cleanup failure can
+  delay deletion. The always-available immediate and
   flag-gated delayed modes share this same claim. The delayed mode stores only the opaque key ID, due
   time, and at-most-once state in a private per-key Durable Object; it rechecks
   the current D1 ownership and the production flag before APNs, drops jobs more
   than 30 seconds late, and never retries an APNs result.
-- Device registrations are refreshed by the client and expire after 90 days.
-  The relay's daily maintenance pass removes stale registrations and matching
+- Device registrations are refreshed by the client and become eligible for
+  deletion after they have not been refreshed for 90 days. The next successful
+  daily maintenance pass removes stale registrations and matching
   delivery records, plus orphaned App Attest key, public verifier, receipt,
-  counter, and challenge records. Expired App Attest challenges are deleted
-  within five minutes; when the last registration for a key is removed, that
-  integrity record is deleted too. The separate token-free production-training
-  claim retains its opaque App Attest key ID for up to 14 days. It also removes 14-day
-  delivery-deduplication records, resolved page-failure evidence, terminal
-  outbox snapshots, and delivery-failure token hashes after 14 days.
+  counter, and challenge records; an operational cleanup failure can delay
+  deletion. App Attest challenges become invalid within five minutes, and their
+  expired rows are removed by the next successful routine cleanup. When the
+  last registration for a key is removed, that integrity record is deleted too.
+  The separate token-free production-training claim, delivery-deduplication
+  records, resolved page-failure evidence, terminal outbox snapshots, and
+  delivery-failure token hashes become eligible for deletion after 14 days and
+  are removed by the next successful routine cleanup; an operational cleanup
+  failure can delay deletion.
 - Device APIs use JSON request bodies and `Cache-Control: no-store`; there is
   intentionally no permissive browser CORS policy. Native iOS networking is
   unaffected. Before parsing device bodies, `DEVICE_API_RATE_LIMIT` allows at

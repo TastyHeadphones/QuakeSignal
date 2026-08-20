@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 2,
+  "status": "unapproved-debug-simulator-capture-set-evidence",
+  "uploadApproved": false,
+  "releaseBinaryEvidence": null,
+  "reviewer": null,
+  "platform": "visionos",
+  "locale": "en-US",
+  "fixture": "finalized-historical-reports",
+  "planManifest": {
+    "file": "ios/AppStore/platforms/visionos/screenshot-manifest-v1.1-build8.json",
+    "sha256": "e521ab9ed5fb82265e8913489d9dcaf4a251fe080e75ce2ed75c5ffaaa69c32b"
+  },
+  "captureWindowUtc": {
+    "startedAt": "2026-08-20T08:28:42Z",
+    "completedAt": "2026-08-20T08:56:21Z"
+  },
+  "frames": [
+    {
+      "captureSelector": "visionos-home",
+      "file": "en-US/01-home.png",
+      "screen": "Home",
+      "purpose": "Normal nearby report and service state in the native visionOS window",
+      "setup": "Listed city; no precise current location; benign finalized historical report.",
+      "sha256": "a4d51909c00df0b55b70f4ed4577e19b03dd6436f6c5b3bc44b72fb8c73202c1",
+      "pixels": [
+        3840,
+        2160
+      ],
+      "capturedAtUtc": "2026-08-20T08:28:42Z",
+      "selectedSimulator": {
+        "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.xrOS-26-5",
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K",
+        "deviceModel": "Apple Vision Pro",
+        "udid": "6458A481-48EA-4C17-A631-26E21834A06A"
+      },
+      "captureEvidenceFile": "frame-capture-evidence/visionos-home.json",
+      "captureEvidenceSha256": "7d16c650495046860f90096b7e7ec9a44f72a31f58c86a620707fa0d193123ff"
+    },
+    {
+      "captureSelector": "visionos-reports",
+      "file": "en-US/02-reports.png",
+      "screen": "Reports",
+      "purpose": "Filterable current and historical report list",
+      "setup": "Ordinary source data; no simulated warning.",
+      "sha256": "b875440b0e6a1e01dac6d0b82212858972265e2c17b4f6b4a5fdec48d9b80b34",
+      "pixels": [
+        3840,
+        2160
+      ],
+      "capturedAtUtc": "2026-08-20T08:35:57Z",
+      "selectedSimulator": {
+        "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.xrOS-26-5",
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K",
+        "deviceModel": "Apple Vision Pro",
+        "udid": "52E7868D-4970-466A-BE13-382F470BC83B"
+      },
+      "captureEvidenceFile": "frame-capture-evidence/visionos-reports.json",
+      "captureEvidenceSha256": "709283209bcf1c14e309046e5794cbb47f8aa7732d84e3859baa600a96c8625f"
+    },
+    {
+      "captureSelector": "visionos-map",
+      "file": "en-US/03-map.png",
+      "screen": "Map",
+      "purpose": "Epicenter context, filters, and current-location control",
+      "setup": "Ordinary report markers; current-location permission not granted and no private coordinate displayed.",
+      "sha256": "ff2306abdb2b07e2a829f06ca2e5fc84d68bc09889bca31ba600acd30c18c46b",
+      "pixels": [
+        3840,
+        2160
+      ],
+      "capturedAtUtc": "2026-08-20T08:42:55Z",
+      "selectedSimulator": {
+        "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.xrOS-26-5",
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K",
+        "deviceModel": "Apple Vision Pro",
+        "udid": "882CAEE8-9862-4935-A89A-F84C61B8ECC7"
+      },
+      "captureEvidenceFile": "frame-capture-evidence/visionos-map.json",
+      "captureEvidenceSha256": "c86d0d1235f59654b40d0e537cb21762926e1b27314aca16ac645e13bdefa823"
+    },
+    {
+      "captureSelector": "visionos-guide",
+      "file": "en-US/04-guide.png",
+      "screen": "Preparedness Guide",
+      "purpose": "Offline safety guidance and emergency-kit preparation",
+      "setup": "No user-entered family or personal details.",
+      "sha256": "e61afb3f9343d5df8d268ea88b72430bf46f34aa9153a3f7a3c47a872c03084a",
+      "pixels": [
+        3840,
+        2160
+      ],
+      "capturedAtUtc": "2026-08-20T08:49:55Z",
+      "selectedSimulator": {
+        "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.xrOS-26-5",
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K",
+        "deviceModel": "Apple Vision Pro",
+        "udid": "1D5BFDD4-59DB-4BED-A81E-CBEE4AC2D86A"
+      },
+      "captureEvidenceFile": "frame-capture-evidence/visionos-guide.json",
+      "captureEvidenceSha256": "999ab79e3bb1d2a33945523aa131d0bc36a73a6c225d1936da1578597ea32abc"
+    },
+    {
+      "captureSelector": "visionos-alert-preferences",
+      "file": "en-US/05-alert-preferences.png",
+      "screen": "Alert Sound",
+      "purpose": "Selectable foreground warning sounds and Japanese voice attribution",
+      "setup": "Japanese safety voice selected; visible non-official and CC BY 3.0 disclosure; no notification permission prompt.",
+      "sha256": "0a4044119cc12fbb38b356de4d30bcdc7eabb9ff74405db9fe6932b7d707cc51",
+      "pixels": [
+        3840,
+        2160
+      ],
+      "capturedAtUtc": "2026-08-20T08:56:21Z",
+      "selectedSimulator": {
+        "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.xrOS-26-5",
+        "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K",
+        "deviceModel": "Apple Vision Pro",
+        "udid": "FFCEAA68-DB55-41EC-A3E3-0D889516A339"
+      },
+      "captureEvidenceFile": "frame-capture-evidence/visionos-alert-preferences.json",
+      "captureEvidenceSha256": "4835781fc14e002c1b1a741923cb980975a50745075ca9538f1dced1d51c9632"
+    }
+  ],
+  "approvalRequired": "Named visual review and runbook-required signed Release parity comparison"
+}

@@ -6,6 +6,7 @@ import {
   fetchWithoutRedirect,
   parseSmokeTestArguments,
 } from "./smoke-test-policy.mjs";
+import { LEGAL_PAGE_CONTRACTS } from "./legal-page-contract.mjs";
 
 let smokeArguments;
 try {
@@ -74,11 +75,7 @@ assert.equal(rootBody.earthquakeData, "Clients fetch directly from Wolfx");
 assert.equal(rootBody.recent, undefined, "metadata must not advertise data APIs");
 assert.equal(rootBody.live, undefined, "metadata must not advertise a live relay");
 
-for (const [path, title] of [
-  ["/privacy", "Privacy Policy"],
-  ["/support", "Support"],
-  ["/terms", "Terms of Use"],
-]) {
+for (const { path, title, effectiveDate, requiredText } of LEGAL_PAGE_CONTRACTS) {
   const response = await fetchWithoutRedirect(fetch, `${baseURL}${path}`);
   assert.equal(response.status, 200, `${path} must be an App Store-ready HTTPS page`);
   assert.match(
@@ -89,6 +86,16 @@ for (const [path, title] of [
   const body = await response.text();
   assert.match(body, new RegExp(`<title>${title} · QuakeSignal</title>`));
   assert.match(body, /QuakeSignal/);
+  assert.ok(
+    body.includes(`QuakeSignal · Effective ${effectiveDate}`),
+    `${path} must publish its source-controlled effective date`,
+  );
+  for (const requiredFragment of requiredText) {
+    assert.ok(
+      body.includes(requiredFragment),
+      `${path} must include the required platform/data statement: ${requiredFragment}`,
+    );
+  }
 }
 
 const recent = await fetchWithoutRedirect(fetch, `${baseURL}/v1/quakes/recent?limit=5`);

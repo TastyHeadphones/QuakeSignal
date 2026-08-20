@@ -13,7 +13,9 @@
 		06EF8BFA7423886E765B25C4 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B0692F2F796B70A77314C23B /* Localizable.strings */; };
 		079822277E33C23AC7363D72 /* WolfxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6815129F2447CE72E122CE0 /* WolfxClient.swift */; };
 		0B8CEB3509599E4BA3BB5CD2 /* QuakeSignalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A0053EFB595D59068829B2 /* QuakeSignalApp.swift */; };
+		0BF433F6AED76D1209A9E846 /* TVEmergencyAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D34C7699F0FCF8822EB69EDB /* TVEmergencyAlertView.swift */; };
 		0C3EC0B633E26287A449E3EC /* SourceDisclaimerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CF66A4956C46CA1A148C070 /* SourceDisclaimerView.swift */; };
+		0DA2CC05959AC9E2088BA2A2 /* TVUserInitiatedAlertAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F9B5189E40BE94239C4200 /* TVUserInitiatedAlertAudio.swift */; };
 		0EA04CC2D8769B4D1119146E /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401F05AD76497DD2ACB64C7F /* LocationManager.swift */; };
 		1075621479579BA0A18B4940 /* EventRevision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BEC24C83F9F7FEB6C1D8F41 /* EventRevision.swift */; };
 		1372DEE531C64E0F42DBFFD3 /* CityPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FD76A1C9FFB9929722BA327 /* CityPickerView.swift */; };
@@ -21,6 +23,7 @@
 		160860686FA5DA1231C9B09E /* GuideStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC4C4FFC783F65DB874CB2CD /* GuideStore.swift */; };
 		192C3E0C5150764B8635D67E /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D224641E8F2E766BEF1FA2E /* SettingsView.swift */; };
 		1931BFD99782ED3DA8A6E288 /* EEWEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */; };
+		1BA9D29A0E0E4EE26C6DE768 /* TVAlertSoundSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF601B4FE77BF947CE3756B0 /* TVAlertSoundSettingsView.swift */; };
 		1DAF3142799F4F35F8AE699A /* CoarseCoordinateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D470158F86E7CD243746CAA1 /* CoarseCoordinateTests.swift */; };
 		1DD243C69A61181782B08F96 /* ScreenshotAutomationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFB9D8739B07942FB63B39AD /* ScreenshotAutomationTests.swift */; };
 		1F48F6399215767F911DBAE6 /* CoarseCoordinate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F8D96701CD094BC65C3127 /* CoarseCoordinate.swift */; };
@@ -28,6 +31,8 @@
 		21894A51778D29BC9A6E2141 /* IntensityScale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662358026FACAB4DA608E630 /* IntensityScale.swift */; };
 		219D23C4DB05DE6AC9D87B25 /* quakesignal_japanese_voice.caf in Resources */ = {isa = PBXBuildFile; fileRef = 3F0E75125AACAD64A0FAD9B7 /* quakesignal_japanese_voice.caf */; };
 		21D6D218ECC13C1844FDAC08 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = DA0B489340F90173C681EA84 /* InfoPlist.strings */; };
+		22BD502B389087FD1779EE59 /* WatchAlertPreferenceBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E8E6C7E887CBCD21EE8BF20 /* WatchAlertPreferenceBridge.swift */; };
+		25CAF26429A5B8C606D153B0 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7DDC5FE116D6B1D935F7B1A3 /* PrivacyInfo.xcprivacy */; };
 		270DEBC62F5495435C5094ED /* ForegroundHTTPFallbackPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCAD92FC9E1A1EE5AFD62669 /* ForegroundHTTPFallbackPolicyTests.swift */; };
 		277BF2AD6E6D16286A094D09 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33AFA4921875AD86CEB86D47 /* Assets.xcassets */; };
 		27FF64E9AF3A6852EE097CB3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 46FE5BCBB83F7CA14C20E6FA /* Assets.xcassets */; };
@@ -35,22 +40,27 @@
 		2B994284BC74999EA578CD1C /* WolfxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6815129F2447CE72E122CE0 /* WolfxClient.swift */; };
 		300716B6C8AD2C38974ED1C8 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = DA0B489340F90173C681EA84 /* InfoPlist.strings */; };
 		30787BE285C2AF3865685D31 /* PushPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54ADAFC4D778C958BC996871 /* PushPayload.swift */; };
+		3332F46B49D0F0F1F996DC93 /* LiveSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BD11E3C4D40F7F456CAF5AA /* LiveSocketClient.swift */; };
 		3521C5AEBBE6BD1B200E6534 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E397F876EB72C79A9710C4 /* OnboardingView.swift */; };
 		3578006137ABBE79E0A5B06F /* FamilyCheckInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB33C47F86F32C61F4CC83CB /* FamilyCheckInView.swift */; };
 		366B308C5B296B4347A5FC12 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = DA0B489340F90173C681EA84 /* InfoPlist.strings */; };
 		3B9B81C77BE2B0DAE7FA1D6D /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16B1C64A6D002370B927BF7 /* NotificationManager.swift */; };
 		3DB9B6B8A47E1BE6F2AB4B42 /* GuideTopicDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FFEE58B247EFABCA2FBF98 /* GuideTopicDetailView.swift */; };
+		3DBA34640EB4BB432E82F016 /* WatchAlertPreferenceBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E8E6C7E887CBCD21EE8BF20 /* WatchAlertPreferenceBridge.swift */; };
 		401D81C61074F8E0B821A0DC /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */; };
-		403065F07BF79FF2E24A006F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FB035B0C75FC4309B8A80D43 /* PrivacyInfo.xcprivacy */; };
 		40BA7730C3FA24F8ABAF1E85 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48820A9D89E7DA9CE7EEECA1 /* HomeView.swift */; };
 		41F5DDF967DC83F72A7D5CDF /* QuakeListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B58B74D54691C905E32B3BE /* QuakeListView.swift */; };
 		423F90193A49F30A63F386B8 /* EEWEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */; };
+		47D5FB1173EACC47AA85CFF0 /* WatchEmergencyAlertAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26A0D5E955A52ED150DB9098 /* WatchEmergencyAlertAudio.swift */; };
 		4B23C902C2E1CEF36C608191 /* EpicenterMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E59ED0E3F738AC6AE4FF165 /* EpicenterMapView.swift */; };
 		4BF03EE23D5F476E518295C2 /* QuakeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2145117E4D6B0221B490C9F4 /* QuakeStore.swift */; };
 		4CFC59C9E1BF37D668AD4138 /* GuideStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC4C4FFC783F65DB874CB2CD /* GuideStore.swift */; };
 		4DE244FF929828F55C441091 /* QuakeSignalWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 4985E067F152D33E6D3873CD /* QuakeSignalWatch.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		5965D4C2C897BD817231CFA6 /* WolfxHTTPFetchPacingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 257AE1C288EED96009491911 /* WolfxHTTPFetchPacingTests.swift */; };
+		5A40295FD9E7891A3C9A973C /* TVAlertPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ED2FB2440128CC68519D52F /* TVAlertPreferences.swift */; };
 		5B28AB3AC5478552CD1AD48F /* TVDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B83B3B63C11A5EFC2AF74F28 /* TVDashboardView.swift */; };
+		5B2A4C583DD8716DF1B48BB4 /* quakesignal_japanese_voice.caf in Resources */ = {isa = PBXBuildFile; fileRef = 3F0E75125AACAD64A0FAD9B7 /* quakesignal_japanese_voice.caf */; };
+		5E0940FF527254D5C3504CF5 /* TVEmergencyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 845FD1AB484F0060419F7540 /* TVEmergencyMonitor.swift */; };
 		6221D8ADA6A6A44E45C2C5EE /* EventRevision.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BEC24C83F9F7FEB6C1D8F41 /* EventRevision.swift */; };
 		6279092DC98DB8233CEEE8B8 /* BackendConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DADE472DF1F2B627818A5F8 /* BackendConfig.swift */; };
 		65F98C5FF54AEF2261BAFBAC /* BackendConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DADE472DF1F2B627818A5F8 /* BackendConfig.swift */; };
@@ -59,6 +69,8 @@
 		685AE05165088DCE6A7159A5 /* ATTRIBUTION.md in Resources */ = {isa = PBXBuildFile; fileRef = C2B4DD59D0DAE82284A0FC66 /* ATTRIBUTION.md */; };
 		6AA2343197F1352D29D92CDD /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C57E54B5E816643F7401A58F /* RootView.swift */; };
 		6B6E89AB5EE885007554F98A /* DisasterGuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0542F5FDBF2D0122F19F2A88 /* DisasterGuideView.swift */; };
+		6BC117EC3B283866A4078493 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0F3FB3C0BF26164CDBD79FC4 /* PrivacyInfo.xcprivacy */; };
+		6C85D3D370545BAEFB57A9DD /* ATTRIBUTION.md in Resources */ = {isa = PBXBuildFile; fileRef = C2B4DD59D0DAE82284A0FC66 /* ATTRIBUTION.md */; };
 		6DDE22A65353BC33BF456D90 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = DA0B489340F90173C681EA84 /* InfoPlist.strings */; };
 		6EE7DAFE78B108C4941CEEEB /* City.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFBDB4E5BC222EB32F6ACEA /* City.swift */; };
 		6F2DBB8C795DBC1C32545FD0 /* ScreenshotAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94136FB707EA39D05E83A74D /* ScreenshotAutomation.swift */; };
@@ -68,9 +80,12 @@
 		79DC01D40F9258D975CAE290 /* ForegroundQuakeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC96E0CE9FD5998FC3FDFAC3 /* ForegroundQuakeStore.swift */; };
 		7B1CF70F3C72B6F019FDECC4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 68921860CD3DBD9ECC1C49F3 /* Assets.xcassets */; };
 		7B3FA17AD79618AB0802AE3E /* LiveSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BD11E3C4D40F7F456CAF5AA /* LiveSocketClient.swift */; };
+		7C29C6424E77D85C8A0DCDD9 /* AlertSoundPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD2453C2540CD14DD436B661 /* AlertSoundPreference.swift */; };
 		7C5B448E50480137082D2C1B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5A17CC4550F0D6AF5C05845F /* Assets.xcassets */; };
 		7E008E58665F263BDC9DDD08 /* GuideTopicDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FFEE58B247EFABCA2FBF98 /* GuideTopicDetailView.swift */; };
 		7F4DA5A0679F788B98DEF8D9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33AFA4921875AD86CEB86D47 /* Assets.xcassets */; };
+		8196E2A442E63734A26E2F4D /* quakesignal_japanese_voice.caf in Resources */ = {isa = PBXBuildFile; fileRef = 3F0E75125AACAD64A0FAD9B7 /* quakesignal_japanese_voice.caf */; };
+		83B44F6334C98DC51C539E6D /* WatchForegroundEmergencyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34F9BEC1F57660ACC90030FA /* WatchForegroundEmergencyPolicy.swift */; };
 		87147003176FF9AB1030C3AA /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */; };
 		886B1D45E82EB94236AAC86C /* quakesignal_urgent.caf in Resources */ = {isa = PBXBuildFile; fileRef = 16717A3C1A8CD585C6BE1923 /* quakesignal_urgent.caf */; };
 		8A44BDC71084D4D1C2E223D5 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48820A9D89E7DA9CE7EEECA1 /* HomeView.swift */; };
@@ -81,10 +96,12 @@
 		9267A9B731AA2EBC62DBD502 /* AlertPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665F4A0DC280B9FA949024E3 /* AlertPolicy.swift */; };
 		9327AD03393019F71997BCAE /* WolfxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6815129F2447CE72E122CE0 /* WolfxClient.swift */; };
 		940D1C06F9370AE4EA2F1040 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B0692F2F796B70A77314C23B /* Localizable.strings */; };
+		94BB7A09F2F0BCC6C5AB47FD /* WatchForegroundEmergencyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34F9BEC1F57660ACC90030FA /* WatchForegroundEmergencyPolicy.swift */; };
 		99912A9F35669522264D1A56 /* EpicenterMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E59ED0E3F738AC6AE4FF165 /* EpicenterMapView.swift */; };
 		9A1EE3D0BCEE13F790BEC7D5 /* AppAttestWireFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95F3401BE11EE7C35379E76F /* AppAttestWireFormatTests.swift */; };
 		9AAC1CF8B2A760F00E998C16 /* QuakeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5CC2AF0389FFB5D223C0DD /* QuakeDetailView.swift */; };
 		9AB557DE97E186101B9A6CC6 /* IntensityScale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662358026FACAB4DA608E630 /* IntensityScale.swift */; };
+		9B9A42F23585ABB541C3F803 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 31280CBFD85D6FB4F206CD1E /* PrivacyInfo.xcprivacy */; };
 		A0C800DDD5AA279784B297EA /* EmergencyAlertAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62512CC36041035EFC3BFF5 /* EmergencyAlertAudio.swift */; };
 		A3F9E7BE95E6C769B42F138C /* WolfxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6815129F2447CE72E122CE0 /* WolfxClient.swift */; };
 		AF5BF169FE8A1A1FD4765E0F /* IntensityScale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662358026FACAB4DA608E630 /* IntensityScale.swift */; };
@@ -96,6 +113,7 @@
 		BAD8BB0744EB1269AD91FA53 /* AppAttestClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F74B9E3617F5FBD0A063EBB7 /* AppAttestClient.swift */; };
 		C1A1A8478DD6F33434901D71 /* quakesignal_japanese_voice.caf in Resources */ = {isa = PBXBuildFile; fileRef = 3F0E75125AACAD64A0FAD9B7 /* quakesignal_japanese_voice.caf */; };
 		C30D6EEA8560C3BE4E130569 /* QuakeSignalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2A0053EFB595D59068829B2 /* QuakeSignalApp.swift */; };
+		C710AA7EEF27F7E5FD8CBBAB /* TVEmergencyPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CB61B7AF271A8DB25D7BA3 /* TVEmergencyPresentationPolicy.swift */; };
 		C95674FB61B4A12788753D96 /* City.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFBDB4E5BC222EB32F6ACEA /* City.swift */; };
 		CA3049CA253E701032A59F73 /* AlertPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A2C804E47294E140904C23 /* AlertPolicyTests.swift */; };
 		CA521524D78B0522245870D7 /* QuakeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5CC2AF0389FFB5D223C0DD /* QuakeDetailView.swift */; };
@@ -109,30 +127,42 @@
 		D0ECDC45A65C41E446EE8134 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16B1C64A6D002370B927BF7 /* NotificationManager.swift */; };
 		D107043DF51F2F071D1E3AA2 /* QuakeListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B58B74D54691C905E32B3BE /* QuakeListView.swift */; };
 		D35D8DC38DADFC7832E3859A /* ATTRIBUTION.md in Resources */ = {isa = PBXBuildFile; fileRef = C2B4DD59D0DAE82284A0FC66 /* ATTRIBUTION.md */; };
+		D392A0BFF4E1D796CA70494E /* WatchForegroundEmergencyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75C052BB2E63A9BCBE9B6DC1 /* WatchForegroundEmergencyMonitor.swift */; };
 		D4E255D3E4F76C2C602276B9 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B0692F2F796B70A77314C23B /* Localizable.strings */; };
 		D5DCAE2BA799B31CE46B07EB /* EEWEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */; };
 		D9B498E119DDF0A3145A54BD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33AFA4921875AD86CEB86D47 /* Assets.xcassets */; };
+		DA80A09E3DDC5739998B978D /* LiveSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BD11E3C4D40F7F456CAF5AA /* LiveSocketClient.swift */; };
 		DA9722C2E131BBE0CFCC8DF0 /* IntensityScale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662358026FACAB4DA608E630 /* IntensityScale.swift */; };
+		DE1EB1A89A079310E6EEAF0F /* WatchForegroundEmergencyPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D150F86D05897C67C62D7AC /* WatchForegroundEmergencyPolicyTests.swift */; };
 		DFBD32451B2D74367698EFC2 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D224641E8F2E766BEF1FA2E /* SettingsView.swift */; };
+		DFC78B10E1992814220492C5 /* quakesignal_urgent.caf in Resources */ = {isa = PBXBuildFile; fileRef = 16717A3C1A8CD585C6BE1923 /* quakesignal_urgent.caf */; };
 		E0FE82387D0BDDFAEBF74A3A /* quakesignal_urgent.caf in Resources */ = {isa = PBXBuildFile; fileRef = 16717A3C1A8CD585C6BE1923 /* quakesignal_urgent.caf */; };
 		E1D493D3A04F0B26E0FBCA49 /* QuakeSignalTVApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E461668A7F7A5EE7519E086 /* QuakeSignalTVApp.swift */; };
 		E20C48FA24EC8505F4454277 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5CDC5F5361A20005A34BCD0 /* APIClient.swift */; };
 		E220374CE96B01289FC46C11 /* AppAttestClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F74B9E3617F5FBD0A063EBB7 /* AppAttestClient.swift */; };
+		E544B287525CE3EAF78AA171 /* AlertSoundPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD2453C2540CD14DD436B661 /* AlertSoundPreference.swift */; };
+		E9A0DDDE8D192B8F3E61EA5A /* ForegroundManualRefreshLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D6846852A4C1EDB9D0E6960 /* ForegroundManualRefreshLifecycleTests.swift */; };
 		EA136C06A2A42BCC9968D99F /* QuakeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2145117E4D6B0221B490C9F4 /* QuakeStore.swift */; };
 		EA475FB51AB7D04BC5BCC93E /* DeviceRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C54A7070352BEB382AD32B /* DeviceRegistration.swift */; };
 		EB68B0A59F9F99DA6D274C91 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E397F876EB72C79A9710C4 /* OnboardingView.swift */; };
 		ED8137E396C9EC2F1EB8CCC4 /* EmergencyAlertAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = D62512CC36041035EFC3BFF5 /* EmergencyAlertAudio.swift */; };
+		ED96FB86745C05E9A3C337AC /* ForegroundHTTPFallbackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F9DCB855FF5D952D0920F49 /* ForegroundHTTPFallbackPolicy.swift */; };
 		EE1E88BCC99DC38B575F15AA /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */; };
 		EE681EF451424C59EED37927 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401F05AD76497DD2ACB64C7F /* LocationManager.swift */; };
+		EE867AC7E07BC87FAF7F5294 /* AlertSoundPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD2453C2540CD14DD436B661 /* AlertSoundPreference.swift */; };
 		EF51705BAC5681511D2032FF /* EEWAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C53C8F8BFB7156840BCDD1 /* EEWAlertView.swift */; };
 		F09197006FA5AD5D8E868EF6 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B0692F2F796B70A77314C23B /* Localizable.strings */; };
+		F0FC4FD27110FE861553DD2F /* ATTRIBUTION.md in Resources */ = {isa = PBXBuildFile; fileRef = C2B4DD59D0DAE82284A0FC66 /* ATTRIBUTION.md */; };
 		F1AD0AD2CB1523B566A3AC79 /* PlatformCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4BF73CDB98477AD3BAABB37 /* PlatformCapabilities.swift */; };
 		F1FFAEE76DFCC009CBCDFD11 /* ForegroundHTTPFallbackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F9DCB855FF5D952D0920F49 /* ForegroundHTTPFallbackPolicy.swift */; };
 		F24DDEE17769C40FE259C9BD /* QuakeSignalWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD0A76DD2E8AE53974060310 /* QuakeSignalWatchApp.swift */; };
 		F39A74F5F787A92968F355BB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 33AFA4921875AD86CEB86D47 /* Assets.xcassets */; };
 		F44520F00F5256BBB9FE6F39 /* CityPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FD76A1C9FFB9929722BA327 /* CityPickerView.swift */; };
+		F61C1FEC009EFE48938CF122 /* WatchAlertPreferenceBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E8E6C7E887CBCD21EE8BF20 /* WatchAlertPreferenceBridge.swift */; };
 		F84DF1F4E43BB15091513F3E /* ForegroundHTTPFallbackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F9DCB855FF5D952D0920F49 /* ForegroundHTTPFallbackPolicy.swift */; };
 		FB35CF93C5A3652CCB788757 /* ScreenshotAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94136FB707EA39D05E83A74D /* ScreenshotAutomation.swift */; };
+		FDF6D1E0EC51CBE539A90118 /* quakesignal_urgent.caf in Resources */ = {isa = PBXBuildFile; fileRef = 16717A3C1A8CD585C6BE1923 /* quakesignal_urgent.caf */; };
+		FEC09EFCC18B36F21BEB8B04 /* AlertSoundPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD2453C2540CD14DD436B661 /* AlertSoundPreference.swift */; };
 		FF530E600AA4FDE2F5585018 /* PlatformCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4BF73CDB98477AD3BAABB37 /* PlatformCapabilities.swift */; };
 /* End PBXBuildFile section */
 
@@ -172,16 +202,23 @@
 		0542F5FDBF2D0122F19F2A88 /* DisasterGuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisasterGuideView.swift; sourceTree = "<group>"; };
 		0965C3C7E85D5C1B2BB65FD2 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		0B4C630D4060DEC1DA1AC5EB /* QuakeRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeRowView.swift; sourceTree = "<group>"; };
+		0D6846852A4C1EDB9D0E6960 /* ForegroundManualRefreshLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundManualRefreshLifecycleTests.swift; sourceTree = "<group>"; };
+		0F3FB3C0BF26164CDBD79FC4 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		12ABFE7475C9CB0B85A6C404 /* QuakeSignalTV.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = QuakeSignalTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		16717A3C1A8CD585C6BE1923 /* quakesignal_urgent.caf */ = {isa = PBXFileReference; path = quakesignal_urgent.caf; sourceTree = "<group>"; };
 		1BD11E3C4D40F7F456CAF5AA /* LiveSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSocketClient.swift; sourceTree = "<group>"; };
 		1E5CC2AF0389FFB5D223C0DD /* QuakeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeDetailView.swift; sourceTree = "<group>"; };
+		1ED2FB2440128CC68519D52F /* TVAlertPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVAlertPreferences.swift; sourceTree = "<group>"; };
 		1FD76A1C9FFB9929722BA327 /* CityPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CityPickerView.swift; sourceTree = "<group>"; };
 		2145117E4D6B0221B490C9F4 /* QuakeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeStore.swift; sourceTree = "<group>"; };
 		2372157BA03FB135F30D085A /* QuakeSignal.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = QuakeSignal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		257AE1C288EED96009491911 /* WolfxHTTPFetchPacingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WolfxHTTPFetchPacingTests.swift; sourceTree = "<group>"; };
+		26A0D5E955A52ED150DB9098 /* WatchEmergencyAlertAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchEmergencyAlertAudio.swift; sourceTree = "<group>"; };
 		2BEC24C83F9F7FEB6C1D8F41 /* EventRevision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventRevision.swift; sourceTree = "<group>"; };
+		2E8E6C7E887CBCD21EE8BF20 /* WatchAlertPreferenceBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchAlertPreferenceBridge.swift; sourceTree = "<group>"; };
+		31280CBFD85D6FB4F206CD1E /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		33AFA4921875AD86CEB86D47 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		34F9BEC1F57660ACC90030FA /* WatchForegroundEmergencyPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchForegroundEmergencyPolicy.swift; sourceTree = "<group>"; };
 		3CF66A4956C46CA1A148C070 /* SourceDisclaimerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceDisclaimerView.swift; sourceTree = "<group>"; };
 		3D224641E8F2E766BEF1FA2E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		3DADE472DF1F2B627818A5F8 /* BackendConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendConfig.swift; sourceTree = "<group>"; };
@@ -197,6 +234,7 @@
 		4985E067F152D33E6D3873CD /* QuakeSignalWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QuakeSignalWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		54ADAFC4D778C958BC996871 /* PushPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushPayload.swift; sourceTree = "<group>"; };
 		5A17CC4550F0D6AF5C05845F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		5D150F86D05897C67C62D7AC /* WatchForegroundEmergencyPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchForegroundEmergencyPolicyTests.swift; sourceTree = "<group>"; };
 		5D6A4439FF8F98D55714D2C1 /* QuakeSignalVision.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = QuakeSignalVision.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5E461668A7F7A5EE7519E086 /* QuakeSignalTVApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeSignalTVApp.swift; sourceTree = "<group>"; };
 		662358026FACAB4DA608E630 /* IntensityScale.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntensityScale.swift; sourceTree = "<group>"; };
@@ -205,8 +243,11 @@
 		67D5A0D955C6D9F0A33F738C /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		68921860CD3DBD9ECC1C49F3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		759EAC4A90329D3CD0F82833 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
+		75C052BB2E63A9BCBE9B6DC1 /* WatchForegroundEmergencyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchForegroundEmergencyMonitor.swift; sourceTree = "<group>"; };
 		7B58B74D54691C905E32B3BE /* QuakeListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeListView.swift; sourceTree = "<group>"; };
+		7DDC5FE116D6B1D935F7B1A3 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		80C54A7070352BEB382AD32B /* DeviceRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRegistration.swift; sourceTree = "<group>"; };
+		845FD1AB484F0060419F7540 /* TVEmergencyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVEmergencyMonitor.swift; sourceTree = "<group>"; };
 		8DE196D534922B8AE9051684 /* PushRegistrationLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistrationLifecycleTests.swift; sourceTree = "<group>"; };
 		8ECF89FDF3F2879D09784FE3 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		9399D7DEA2638CABE5AFF970 /* GuideContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideContent.swift; sourceTree = "<group>"; };
@@ -222,17 +263,22 @@
 		B5C53C8F8BFB7156840BCDD1 /* EEWAlertView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EEWAlertView.swift; sourceTree = "<group>"; };
 		B5CDC5F5361A20005A34BCD0 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		B83B3B63C11A5EFC2AF74F28 /* TVDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVDashboardView.swift; sourceTree = "<group>"; };
+		BF601B4FE77BF947CE3756B0 /* TVAlertSoundSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVAlertSoundSettingsView.swift; sourceTree = "<group>"; };
 		BFB9D8739B07942FB63B39AD /* ScreenshotAutomationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotAutomationTests.swift; sourceTree = "<group>"; };
 		C2B4DD59D0DAE82284A0FC66 /* ATTRIBUTION.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ATTRIBUTION.md; sourceTree = "<group>"; };
 		C57E54B5E816643F7401A58F /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		CB33C47F86F32C61F4CC83CB /* FamilyCheckInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyCheckInView.swift; sourceTree = "<group>"; };
 		CD0A76DD2E8AE53974060310 /* QuakeSignalWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuakeSignalWatchApp.swift; sourceTree = "<group>"; };
+		D34C7699F0FCF8822EB69EDB /* TVEmergencyAlertView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVEmergencyAlertView.swift; sourceTree = "<group>"; };
+		D3CB61B7AF271A8DB25D7BA3 /* TVEmergencyPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVEmergencyPresentationPolicy.swift; sourceTree = "<group>"; };
 		D470158F86E7CD243746CAA1 /* CoarseCoordinateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoarseCoordinateTests.swift; sourceTree = "<group>"; };
 		D4F8D96701CD094BC65C3127 /* CoarseCoordinate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoarseCoordinate.swift; sourceTree = "<group>"; };
 		D62512CC36041035EFC3BFF5 /* EmergencyAlertAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmergencyAlertAudio.swift; sourceTree = "<group>"; };
 		D6815129F2447CE72E122CE0 /* WolfxClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WolfxClient.swift; sourceTree = "<group>"; };
 		DCAD92FC9E1A1EE5AFD62669 /* ForegroundHTTPFallbackPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundHTTPFallbackPolicyTests.swift; sourceTree = "<group>"; };
 		DCFBDB4E5BC222EB32F6ACEA /* City.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = City.swift; sourceTree = "<group>"; };
+		DD2453C2540CD14DD436B661 /* AlertSoundPreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertSoundPreference.swift; sourceTree = "<group>"; };
+		E2F9B5189E40BE94239C4200 /* TVUserInitiatedAlertAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVUserInitiatedAlertAudio.swift; sourceTree = "<group>"; };
 		EC9526BA6D37376BA0EA03C6 /* EEWEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EEWEvent.swift; sourceTree = "<group>"; };
 		EC96E0CE9FD5998FC3FDFAC3 /* ForegroundQuakeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundQuakeStore.swift; sourceTree = "<group>"; };
 		F0A2C804E47294E140904C23 /* AlertPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertPolicyTests.swift; sourceTree = "<group>"; };
@@ -259,6 +305,7 @@
 			isa = PBXGroup;
 			children = (
 				68921860CD3DBD9ECC1C49F3 /* Assets.xcassets */,
+				CD2FCB8D3725168D5625229E /* Resources */,
 			);
 			path = QuakeSignalVision;
 			sourceTree = "<group>";
@@ -276,10 +323,21 @@
 		35F2C22C7259A5C7CCC51D6D /* QuakeSignalShared */ = {
 			isa = PBXGroup;
 			children = (
+				DD2453C2540CD14DD436B661 /* AlertSoundPreference.swift */,
 				EC96E0CE9FD5998FC3FDFAC3 /* ForegroundQuakeStore.swift */,
 				94136FB707EA39D05E83A74D /* ScreenshotAutomation.swift */,
+				2E8E6C7E887CBCD21EE8BF20 /* WatchAlertPreferenceBridge.swift */,
+				34F9BEC1F57660ACC90030FA /* WatchForegroundEmergencyPolicy.swift */,
 			);
 			path = QuakeSignalShared;
+			sourceTree = "<group>";
+		};
+		37B088D39C3E2F3741280623 /* Supporting */ = {
+			isa = PBXGroup;
+			children = (
+				7DDC5FE116D6B1D935F7B1A3 /* PrivacyInfo.xcprivacy */,
+			);
+			path = Supporting;
 			sourceTree = "<group>";
 		};
 		473DDD1B8C41FFA667D097F3 /* Map */ = {
@@ -315,6 +373,9 @@
 				5A17CC4550F0D6AF5C05845F /* Assets.xcassets */,
 				CD0A76DD2E8AE53974060310 /* QuakeSignalWatchApp.swift */,
 				3EB4A99FB4CAC9378A8C8CDB /* WatchDashboardView.swift */,
+				26A0D5E955A52ED150DB9098 /* WatchEmergencyAlertAudio.swift */,
+				75C052BB2E63A9BCBE9B6DC1 /* WatchForegroundEmergencyMonitor.swift */,
+				37B088D39C3E2F3741280623 /* Supporting */,
 			);
 			path = QuakeSignalWatch;
 			sourceTree = "<group>";
@@ -426,8 +487,10 @@
 				95F3401BE11EE7C35379E76F /* AppAttestWireFormatTests.swift */,
 				D470158F86E7CD243746CAA1 /* CoarseCoordinateTests.swift */,
 				DCAD92FC9E1A1EE5AFD62669 /* ForegroundHTTPFallbackPolicyTests.swift */,
+				0D6846852A4C1EDB9D0E6960 /* ForegroundManualRefreshLifecycleTests.swift */,
 				8DE196D534922B8AE9051684 /* PushRegistrationLifecycleTests.swift */,
 				BFB9D8739B07942FB63B39AD /* ScreenshotAutomationTests.swift */,
+				5D150F86D05897C67C62D7AC /* WatchForegroundEmergencyPolicyTests.swift */,
 				257AE1C288EED96009491911 /* WolfxHTTPFetchPacingTests.swift */,
 			);
 			path = QuakeSignalTests;
@@ -439,6 +502,14 @@
 				41E397F876EB72C79A9710C4 /* OnboardingView.swift */,
 			);
 			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		CD2FCB8D3725168D5625229E /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				0F3FB3C0BF26164CDBD79FC4 /* PrivacyInfo.xcprivacy */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		DD5697597B2CC2FA561F3400 /* Home */ = {
@@ -495,6 +566,14 @@
 			path = QuakeSignal;
 			sourceTree = "<group>";
 		};
+		EFA4B9BE95433017A26A4E6C /* Supporting */ = {
+			isa = PBXGroup;
+			children = (
+				31280CBFD85D6FB4F206CD1E /* PrivacyInfo.xcprivacy */,
+			);
+			path = Supporting;
+			sourceTree = "<group>";
+		};
 		F0A0A11FFA4D31B54D40C650 /* State */ = {
 			isa = PBXGroup;
 			children = (
@@ -512,7 +591,14 @@
 			children = (
 				46FE5BCBB83F7CA14C20E6FA /* Assets.xcassets */,
 				5E461668A7F7A5EE7519E086 /* QuakeSignalTVApp.swift */,
+				1ED2FB2440128CC68519D52F /* TVAlertPreferences.swift */,
+				BF601B4FE77BF947CE3756B0 /* TVAlertSoundSettingsView.swift */,
 				B83B3B63C11A5EFC2AF74F28 /* TVDashboardView.swift */,
+				D34C7699F0FCF8822EB69EDB /* TVEmergencyAlertView.swift */,
+				845FD1AB484F0060419F7540 /* TVEmergencyMonitor.swift */,
+				D3CB61B7AF271A8DB25D7BA3 /* TVEmergencyPresentationPolicy.swift */,
+				E2F9B5189E40BE94239C4200 /* TVUserInitiatedAlertAudio.swift */,
+				EFA4B9BE95433017A26A4E6C /* Supporting */,
 			);
 			path = QuakeSignalTV;
 			sourceTree = "<group>";
@@ -669,10 +755,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6C85D3D370545BAEFB57A9DD /* ATTRIBUTION.md in Resources */,
 				7F4DA5A0679F788B98DEF8D9 /* Assets.xcassets in Resources */,
 				27FF64E9AF3A6852EE097CB3 /* Assets.xcassets in Resources */,
 				21D6D218ECC13C1844FDAC08 /* InfoPlist.strings in Resources */,
 				06EF8BFA7423886E765B25C4 /* Localizable.strings in Resources */,
+				9B9A42F23585ABB541C3F803 /* PrivacyInfo.xcprivacy in Resources */,
+				5B2A4C583DD8716DF1B48BB4 /* quakesignal_japanese_voice.caf in Resources */,
+				FDF6D1E0EC51CBE539A90118 /* quakesignal_urgent.caf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -685,7 +775,7 @@
 				7B1CF70F3C72B6F019FDECC4 /* Assets.xcassets in Resources */,
 				366B308C5B296B4347A5FC12 /* InfoPlist.strings in Resources */,
 				940D1C06F9370AE4EA2F1040 /* Localizable.strings in Resources */,
-				403065F07BF79FF2E24A006F /* PrivacyInfo.xcprivacy in Resources */,
+				6BC117EC3B283866A4078493 /* PrivacyInfo.xcprivacy in Resources */,
 				C1A1A8478DD6F33434901D71 /* quakesignal_japanese_voice.caf in Resources */,
 				886B1D45E82EB94236AAC86C /* quakesignal_urgent.caf in Resources */,
 			);
@@ -695,10 +785,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F0FC4FD27110FE861553DD2F /* ATTRIBUTION.md in Resources */,
 				277BF2AD6E6D16286A094D09 /* Assets.xcassets in Resources */,
 				7C5B448E50480137082D2C1B /* Assets.xcassets in Resources */,
 				6DDE22A65353BC33BF456D90 /* InfoPlist.strings in Resources */,
 				F09197006FA5AD5D8E868EF6 /* Localizable.strings in Resources */,
+				25CAF26429A5B8C606D153B0 /* PrivacyInfo.xcprivacy in Resources */,
+				8196E2A442E63734A26E2F4D /* quakesignal_japanese_voice.caf in Resources */,
+				DFC78B10E1992814220492C5 /* quakesignal_urgent.caf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -725,6 +819,7 @@
 			files = (
 				00CBA3F9A30565BBA1B7E842 /* APIClient.swift in Sources */,
 				AFAC29AA0D04F4D4CFE8247E /* AlertPolicy.swift in Sources */,
+				E544B287525CE3EAF78AA171 /* AlertSoundPreference.swift in Sources */,
 				BAD8BB0744EB1269AD91FA53 /* AppAttestClient.swift in Sources */,
 				CB398BC7708A86279C3BF6D4 /* AppDelegate.swift in Sources */,
 				8AB603839990610758AFC649 /* AppSettings.swift in Sources */,
@@ -762,6 +857,8 @@
 				FB35CF93C5A3652CCB788757 /* ScreenshotAutomation.swift in Sources */,
 				DFBD32451B2D74367698EFC2 /* SettingsView.swift in Sources */,
 				0C3EC0B633E26287A449E3EC /* SourceDisclaimerView.swift in Sources */,
+				3DBA34640EB4BB432E82F016 /* WatchAlertPreferenceBridge.swift in Sources */,
+				94BB7A09F2F0BCC6C5AB47FD /* WatchForegroundEmergencyPolicy.swift in Sources */,
 				079822277E33C23AC7363D72 /* WolfxClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -770,13 +867,20 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EE867AC7E07BC87FAF7F5294 /* AlertSoundPreference.swift in Sources */,
 				AFF631C0F52D1A42169517A4 /* EEWEvent.swift in Sources */,
+				ED96FB86745C05E9A3C337AC /* ForegroundHTTPFallbackPolicy.swift in Sources */,
 				79DC01D40F9258D975CAE290 /* ForegroundQuakeStore.swift in Sources */,
 				21894A51778D29BC9A6E2141 /* IntensityScale.swift in Sources */,
+				3332F46B49D0F0F1F996DC93 /* LiveSocketClient.swift in Sources */,
 				87147003176FF9AB1030C3AA /* Localization.swift in Sources */,
 				F24DDEE17769C40FE259C9BD /* QuakeSignalWatchApp.swift in Sources */,
 				6F2DBB8C795DBC1C32545FD0 /* ScreenshotAutomation.swift in Sources */,
+				22BD502B389087FD1779EE59 /* WatchAlertPreferenceBridge.swift in Sources */,
 				75F8F085EB77DC40DBFCAE5E /* WatchDashboardView.swift in Sources */,
+				47D5FB1173EACC47AA85CFF0 /* WatchEmergencyAlertAudio.swift in Sources */,
+				D392A0BFF4E1D796CA70494E /* WatchForegroundEmergencyMonitor.swift in Sources */,
+				83B44F6334C98DC51C539E6D /* WatchForegroundEmergencyPolicy.swift in Sources */,
 				9327AD03393019F71997BCAE /* WolfxClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -789,8 +893,10 @@
 				9A1EE3D0BCEE13F790BEC7D5 /* AppAttestWireFormatTests.swift in Sources */,
 				1DAF3142799F4F35F8AE699A /* CoarseCoordinateTests.swift in Sources */,
 				270DEBC62F5495435C5094ED /* ForegroundHTTPFallbackPolicyTests.swift in Sources */,
+				E9A0DDDE8D192B8F3E61EA5A /* ForegroundManualRefreshLifecycleTests.swift in Sources */,
 				B55EE7B71D09CFF033F9814A /* PushRegistrationLifecycleTests.swift in Sources */,
 				1DD243C69A61181782B08F96 /* ScreenshotAutomationTests.swift in Sources */,
+				DE1EB1A89A079310E6EEAF0F /* WatchForegroundEmergencyPolicyTests.swift in Sources */,
 				5965D4C2C897BD817231CFA6 /* WolfxHTTPFetchPacingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -799,13 +905,21 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FEC09EFCC18B36F21BEB8B04 /* AlertSoundPreference.swift in Sources */,
 				D5DCAE2BA799B31CE46B07EB /* EEWEvent.swift in Sources */,
 				8D9AB68CF526637B0343B963 /* ForegroundQuakeStore.swift in Sources */,
 				AF5BF169FE8A1A1FD4765E0F /* IntensityScale.swift in Sources */,
+				DA80A09E3DDC5739998B978D /* LiveSocketClient.swift in Sources */,
 				EE1E88BCC99DC38B575F15AA /* Localization.swift in Sources */,
 				E1D493D3A04F0B26E0FBCA49 /* QuakeSignalTVApp.swift in Sources */,
 				D0E886D9BCD5736BCF796408 /* ScreenshotAutomation.swift in Sources */,
+				5A40295FD9E7891A3C9A973C /* TVAlertPreferences.swift in Sources */,
+				1BA9D29A0E0E4EE26C6DE768 /* TVAlertSoundSettingsView.swift in Sources */,
 				5B28AB3AC5478552CD1AD48F /* TVDashboardView.swift in Sources */,
+				0BF433F6AED76D1209A9E846 /* TVEmergencyAlertView.swift in Sources */,
+				5E0940FF527254D5C3504CF5 /* TVEmergencyMonitor.swift in Sources */,
+				C710AA7EEF27F7E5FD8CBBAB /* TVEmergencyPresentationPolicy.swift in Sources */,
+				0DA2CC05959AC9E2088BA2A2 /* TVUserInitiatedAlertAudio.swift in Sources */,
 				A3F9E7BE95E6C769B42F138C /* WolfxClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -816,6 +930,7 @@
 			files = (
 				E20C48FA24EC8505F4454277 /* APIClient.swift in Sources */,
 				9267A9B731AA2EBC62DBD502 /* AlertPolicy.swift in Sources */,
+				7C29C6424E77D85C8A0DCDD9 /* AlertSoundPreference.swift in Sources */,
 				E220374CE96B01289FC46C11 /* AppAttestClient.swift in Sources */,
 				010E1BD42BF66078635BE8DA /* AppDelegate.swift in Sources */,
 				B0F94E066C1DB2F532C98B6C /* AppSettings.swift in Sources */,
@@ -853,6 +968,7 @@
 				B1EB38045281D40C4E0A4CA2 /* ScreenshotAutomation.swift in Sources */,
 				192C3E0C5150764B8635D67E /* SettingsView.swift in Sources */,
 				8BC8975D02DC5BB881331F29 /* SourceDisclaimerView.swift in Sources */,
+				F61C1FEC009EFE48938CF122 /* WatchAlertPreferenceBridge.swift in Sources */,
 				2B994284BC74999EA578CD1C /* WolfxClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1243,6 +1359,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = 5TT564H883;
+				"ENABLE_APP_SANDBOX[sdk=macosx*]" = YES;
 				INFOPLIST_FILE = QuakeSignal/Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1253,7 +1370,7 @@
 				QUAKESIGNAL_APP_ATTEST_MODE = development;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = YES;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -1287,6 +1404,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = 5TT564H883;
+				"ENABLE_APP_SANDBOX[sdk=macosx*]" = YES;
 				ENABLE_TESTABILITY = YES;
 				INFOPLIST_FILE = QuakeSignal/Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -1301,7 +1419,7 @@
 				QUAKESIGNAL_APP_ATTEST_MODE = production;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = YES;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) QUAKESIGNAL_INTERNAL_QA";
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -1340,6 +1458,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = 5TT564H883;
+				"ENABLE_APP_SANDBOX[sdk=macosx*]" = YES;
 				INFOPLIST_FILE = QuakeSignal/Supporting/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1353,7 +1472,7 @@
 				QUAKESIGNAL_APP_ATTEST_MODE = production;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = YES;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;

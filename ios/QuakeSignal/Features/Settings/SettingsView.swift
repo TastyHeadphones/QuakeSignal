@@ -1,6 +1,42 @@
 import SwiftUI
 import UIKit
 
+enum PushSubscriptionControlAction: Equatable {
+    case none
+    case remove
+    case resume
+    case retry
+
+    static func resolve(
+        subscriptionEnabled: Bool,
+        registrationState: PushRegistrationState,
+        canRegisterForRemoteNotifications: Bool
+    ) -> Self {
+        // Only a successful protected registration proves that there is a
+        // server-side record to remove. The subscription preference defaults
+        // on so the app can register after permission is granted, but that
+        // intent must never be presented as an existing registration.
+        if registrationState == .active {
+            return .remove
+        }
+        if !subscriptionEnabled {
+            return .resume
+        }
+        guard canRegisterForRemoteNotifications else {
+            // The surrounding notification-permission control supplies the
+            // actionable Enable/Open Settings affordance in this state.
+            return .none
+        }
+        return registrationState.isRetryable ? .retry : .none
+    }
+}
+
+enum TierChipAccessibility {
+    static func traits(isSelected: Bool) -> AccessibilityTraits {
+        isSelected ? .isSelected : []
+    }
+}
+
 struct SettingsView: View {
     @State private var settings = AppSettings.shared
     @State private var notifications = NotificationManager.shared
@@ -23,7 +59,12 @@ struct SettingsView: View {
         @Bindable var settings = settings
 
         NavigationStack {
-            Form {
+            if ScreenshotAutomation.isAlertPreferencesFrame(
+                ScreenshotAutomation.selectedFrame
+            ) {
+                AlertSoundSelectionView(screenshotSelectedPreference: .japaneseVoice)
+            } else {
+                Form {
                 Section("settings.section.subscription") {
                     Button {
                         showingCityPicker = true
@@ -74,9 +115,11 @@ struct SettingsView: View {
                             }
                         } else if notifications.authorizationStatus == .denied {
                             Button("settings.openSystemSettings") { openNotificationSettings() }
-                            Text("settings.pushSubscription.permissionDenied")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                            if settings.pushRegistrationState == .active {
+                                Text("settings.pushSubscription.permissionDenied")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
 
                         pushSubscriptionControl
@@ -122,7 +165,16 @@ struct SettingsView: View {
                         }
                     }
 
-                    Toggle("settings.notifyAtNight", isOn: $settings.notifyAtNight)
+                    if PlatformCapabilities.supportsAttestedAlertRegistration {
+                        Toggle(isOn: $settings.notifyAtNight) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("settings.notifyAtNight")
+                                Text("settings.notifyAtNight.detail")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                     Toggle(isOn: $settings.includeTestAlerts) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("settings.includeTestAlerts")
@@ -243,8 +295,9 @@ struct SettingsView: View {
             .onChange(of: settings.radiusKm) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.selectedCityId) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.useCurrentLocation) { _, _ in resyncPushPreferences() }
-            .sheet(isPresented: $showingCityPicker) {
-                CityPickerView()
+                .sheet(isPresented: $showingCityPicker) {
+                    CityPickerView()
+                }
             }
         }
     }
@@ -317,10 +370,15 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var pushSubscriptionControl: some View {
-        if settings.pushSubscriptionEnabled {
-            // Server-side deletion is authenticated by App Attest. It remains
-            // available if APNs has not provided a token in this app session;
-            // the Worker then removes the registration for that credential.
+        switch PushSubscriptionControlAction.resolve(
+            subscriptionEnabled: settings.pushSubscriptionEnabled,
+            registrationState: settings.pushRegistrationState,
+            canRegisterForRemoteNotifications: notifications.canRegisterForRemoteNotifications
+        ) {
+        case .remove:
+            // Server-side deletion is authenticated by App Attest. An active
+            // state is persisted only after the Worker accepts registration,
+            // so this destructive action never appears for a fresh install.
             Button(role: .destructive) {
                 showingRemovePushConfirmation = true
             } label: {
@@ -339,29 +397,28 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
 
             pushRegistrationStatus
+        case .retry:
+            pushRegistrationStatus
 
-            if settings.pushRegistrationState.isRetryable {
-                Button {
-                    Task { await retryPushRegistration() }
-                } label: {
-                    Group {
-                        if isUpdatingPushSubscription {
-                            ProgressView()
-                        } else {
-                            Text("settings.pushSubscription.retry")
-                        }
+            Button {
+                Task { await retryPushRegistration() }
+            } label: {
+                Group {
+                    if isUpdatingPushSubscription {
+                        ProgressView()
+                    } else {
+                        Text("settings.pushSubscription.retry")
                     }
                 }
-                .disabled(isUpdatingPushSubscription || !notifications.canRegisterForRemoteNotifications)
-
-                if notifications.deviceToken == nil,
-                   notifications.canRegisterForRemoteNotifications {
-                    Text("settings.pushSubscription.waiting")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
             }
-        } else {
+            .disabled(isUpdatingPushSubscription)
+
+            if notifications.deviceToken == nil {
+                Text("settings.pushSubscription.waiting")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        case .resume:
             Button {
                 Task { await resumePushSubscription() }
             } label: {
@@ -378,6 +435,10 @@ struct SettingsView: View {
             Text("settings.pushSubscription.resume.detail")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+        case .none:
+            if settings.pushSubscriptionEnabled {
+                pushRegistrationStatus
+            }
         }
 
         if let pushSubscriptionMessage {
@@ -547,6 +608,11 @@ struct SettingsView: View {
 
 private struct AlertSoundSelectionView: View {
     @State private var settings = AppSettings.shared
+    let screenshotSelectedPreference: AlertSoundPreference?
+
+    init(screenshotSelectedPreference: AlertSoundPreference? = nil) {
+        self.screenshotSelectedPreference = screenshotSelectedPreference
+    }
 
     var body: some View {
         @Bindable var settings = settings
@@ -555,7 +621,9 @@ private struct AlertSoundSelectionView: View {
             Section {
                 ForEach(AlertSoundPreference.allCases, id: \.self) { preference in
                     Button {
-                        settings.alertSound = preference
+                        if screenshotSelectedPreference == nil {
+                            settings.alertSound = preference
+                        }
                     } label: {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: preference.systemImage)
@@ -572,7 +640,7 @@ private struct AlertSoundSelectionView: View {
                                     .multilineTextAlignment(.leading)
                             }
                             Spacer(minLength: 8)
-                            if settings.alertSound == preference {
+                            if selectedPreference == preference {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(Color("BrandColor"))
                                     .accessibilityHidden(true)
@@ -581,13 +649,13 @@ private struct AlertSoundSelectionView: View {
                         .padding(.vertical, 5)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityAddTraits(settings.alertSound == preference ? .isSelected : [])
+                    .accessibilityAddTraits(selectedPreference == preference ? .isSelected : [])
                 }
             }
 
             Section {
                 Button {
-                    EmergencyAlertAudio.shared.preview(settings.alertSound)
+                    EmergencyAlertAudio.shared.preview(selectedPreference)
                 } label: {
                     Label("settings.alertSound.preview", systemImage: "play.circle.fill")
                 }
@@ -601,6 +669,10 @@ private struct AlertSoundSelectionView: View {
         }
         .navigationTitle("settings.alertSound.title")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var selectedPreference: AlertSoundPreference {
+        screenshotSelectedPreference ?? settings.alertSound
     }
 }
 
@@ -619,5 +691,8 @@ private struct TierChip: View {
                 .foregroundStyle(isSelected ? .white : .primary)
         }
         .buttonStyle(.plain)
+        // VoiceOver localizes and announces the native selected state; the
+        // visible label remains the chip's accessible name.
+        .accessibilityAddTraits(TierChipAccessibility.traits(isSelected: isSelected))
     }
 }

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 
+import { LEGAL_PAGE_CONTRACTS } from "./legal-page-contract.mjs";
+
 // This deliberately has no health/APNs assertion: it is meant for an isolated
 // `wrangler dev --local` instance where only the request-validation boundary is
 // under test. Start the Worker after applying the local D1 migrations, then run
@@ -17,11 +19,7 @@ if (!suppliedBaseURL) {
 const baseURL = new URL(suppliedBaseURL);
 const devicesURL = new URL("/v1/devices", baseURL);
 
-for (const [path, title] of [
-  ["/privacy", "Privacy Policy"],
-  ["/support", "Support"],
-  ["/terms", "Terms of Use"],
-]) {
+for (const { path, title, effectiveDate, requiredText } of LEGAL_PAGE_CONTRACTS) {
   const response = await fetch(new URL(path, baseURL));
   assert.equal(response.status, 200, `${path} must be available for App Store links`);
   assert.match(
@@ -31,6 +29,16 @@ for (const [path, title] of [
   );
   const body = await response.text();
   assert.match(body, new RegExp(`<title>${title} · QuakeSignal</title>`));
+  assert.ok(
+    body.includes(`QuakeSignal · Effective ${effectiveDate}`),
+    `${path} must publish its source-controlled effective date`,
+  );
+  for (const requiredFragment of requiredText) {
+    assert.ok(
+      body.includes(requiredFragment),
+      `${path} must include the required platform/data statement: ${requiredFragment}`,
+    );
+  }
 }
 
 async function assertNoStore(response, expectedStatus, message) {

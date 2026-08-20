@@ -1,6 +1,7 @@
 import Foundation
 import CoreLocation
 import DeviceCheck
+import SwiftUI
 import XCTest
 @testable import QuakeSignal
 
@@ -48,6 +49,87 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertEqual(restored.pushRegistrationState, .failed)
         XCTAssertTrue(restored.pushRegistrationState.isRetryable)
         XCTAssertEqual(defaults.string(forKey: "settings.pushRegistrationState"), PushRegistrationState.failed.rawValue)
+    }
+
+    func testSettingsRegistrationControlRequiresConfirmedRegistrationBeforeOfferingRemoval() {
+        XCTAssertEqual(
+            PushSubscriptionControlAction.resolve(
+                subscriptionEnabled: true,
+                registrationState: .unregistered,
+                canRegisterForRemoteNotifications: false
+            ),
+            .none,
+            "A fresh permission-skipped install uses the separate Enable Notifications affordance."
+        )
+        XCTAssertEqual(
+            PushSubscriptionControlAction.resolve(
+                subscriptionEnabled: true,
+                registrationState: .unregistered,
+                canRegisterForRemoteNotifications: true
+            ),
+            .retry
+        )
+        XCTAssertEqual(
+            PushSubscriptionControlAction.resolve(
+                subscriptionEnabled: true,
+                registrationState: .failed,
+                canRegisterForRemoteNotifications: true
+            ),
+            .retry
+        )
+        XCTAssertEqual(
+            PushSubscriptionControlAction.resolve(
+                subscriptionEnabled: true,
+                registrationState: .registering,
+                canRegisterForRemoteNotifications: true
+            ),
+            .none
+        )
+        XCTAssertEqual(
+            PushSubscriptionControlAction.resolve(
+                subscriptionEnabled: false,
+                registrationState: .unregistered,
+                canRegisterForRemoteNotifications: true
+            ),
+            .resume
+        )
+        XCTAssertEqual(
+            PushSubscriptionControlAction.resolve(
+                subscriptionEnabled: true,
+                registrationState: .active,
+                canRegisterForRemoteNotifications: false
+            ),
+            .remove,
+            "A known registration remains removable even when notification permission is off."
+        )
+    }
+
+    func testTierChipAccessibilityExposesNativeSelectedState() {
+        XCTAssertTrue(
+            TierChipAccessibility.traits(isSelected: true).contains(.isSelected)
+        )
+        XCTAssertFalse(
+            TierChipAccessibility.traits(isSelected: false).contains(.isSelected)
+        )
+    }
+
+    func testPersistedSourcesAreMigratedToTheReviewedJMAAllowList() throws {
+        let suiteName = "PushRegistrationLifecycleTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(
+            ["cenc_eew", "jma_eew", "sc_eew", "jma_eqlist"],
+            forKey: "settings.sources"
+        )
+
+        let settings = AppSettings(defaults: defaults)
+        XCTAssertEqual(AppSettings.allSources, ["jma_eew", "jma_eqlist"])
+        XCTAssertEqual(settings.enabledSources, ["jma_eew", "jma_eqlist"])
+        XCTAssertEqual(
+            defaults.stringArray(forKey: "settings.sources"),
+            ["jma_eew", "jma_eqlist"]
+        )
     }
 
     func testSelectingCurrentLocationPreservesTheLastCityAsFallback() throws {
@@ -130,7 +212,138 @@ final class PushRegistrationLifecycleTests: XCTestCase {
 
         XCTAssertEqual(payload.compositeEventId, event.id)
         XCTAssertEqual(payload.eventSnapshot, event)
+        XCTAssertTrue(payload.hasUsableMatchingEventSnapshot)
         XCTAssertEqual(AlertPresentationReason(wireValue: payload.reason), .updated)
+        XCTAssertEqual(
+            ForegroundNotificationPresentationPolicy.decision(
+                for: payload,
+                isSceneActive: true
+            ),
+            ForegroundNotificationPresentationDecision(
+                systemPresentation: .listOnly,
+                shouldPresentEmergencyInApp: true
+            )
+        )
+        XCTAssertEqual(
+            ForegroundNotificationPresentationPolicy.decision(
+                for: payload,
+                isSceneActive: false
+            ),
+            ForegroundNotificationPresentationDecision(
+                systemPresentation: .alert,
+                shouldPresentEmergencyInApp: false
+            )
+        )
+    }
+
+    func testForegroundNotificationKeepsSystemAlertForMissingMalformedOrMismatchedSnapshot() throws {
+        let event = EEWEvent(
+            id: "jma_eew:test",
+            sourceId: "jma_eew",
+            eventId: "test",
+            serial: 2,
+            kind: "eew",
+            originTimeUtc: "2026-08-19T01:00:00Z",
+            reportTimeUtc: "2026-08-19T01:00:02Z",
+            hypocenter: "Test",
+            latitude: 35,
+            longitude: 140,
+            magnitude: 5,
+            depth: 10,
+            maxIntensity: "5-",
+            isWarn: true,
+            isFinal: false,
+            isCancel: false,
+            isTraining: false,
+            tsunami: nil
+        )
+        let validSnapshot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(event)) as? [String: Any]
+        )
+        var malformedSnapshot = validSnapshot
+        malformedSnapshot["serial"] = -1
+        var mismatchedIDSnapshot = validSnapshot
+        mismatchedIDSnapshot["id"] = "jma_eew:another-event"
+
+        let payloads = [
+            PushPayload(userInfo: [
+                "sourceId": "jma_eew",
+                "eventId": "test",
+            ]),
+            PushPayload(userInfo: [
+                "sourceId": "jma_eew",
+                "eventId": "test",
+                "event": malformedSnapshot,
+            ]),
+            PushPayload(userInfo: [
+                "sourceId": "jma_eew",
+                "eventId": "different-event",
+                "event": validSnapshot,
+            ]),
+            PushPayload(userInfo: [
+                "sourceId": "jma_eqlist",
+                "eventId": "test",
+                "event": validSnapshot,
+            ]),
+            PushPayload(userInfo: [
+                "sourceId": "jma_eew",
+                "eventId": "test",
+                "event": mismatchedIDSnapshot,
+            ]),
+        ]
+
+        for payload in payloads {
+            XCTAssertNotNil(payload.compositeEventId)
+            XCTAssertNil(payload.eventSnapshot)
+            XCTAssertFalse(payload.hasUsableMatchingEventSnapshot)
+            XCTAssertEqual(
+                ForegroundNotificationPresentationPolicy.decision(
+                    for: payload,
+                    isSceneActive: true
+                ),
+                ForegroundNotificationPresentationDecision(
+                    systemPresentation: .alert,
+                    shouldPresentEmergencyInApp: false
+                )
+            )
+        }
+    }
+
+    func testPushPayloadRejectsAnUnreviewedSourceAndSnapshot() throws {
+        let event = EEWEvent(
+            id: "cenc_eew:test",
+            sourceId: "cenc_eew",
+            eventId: "test",
+            serial: 1,
+            kind: "eew",
+            originTimeUtc: "2026-08-19T01:00:00Z",
+            reportTimeUtc: "2026-08-19T01:00:02Z",
+            hypocenter: "Test",
+            latitude: 35,
+            longitude: 140,
+            magnitude: 5,
+            depth: 10,
+            maxIntensity: "5-",
+            isWarn: true,
+            isFinal: false,
+            isCancel: false,
+            isTraining: false,
+            tsunami: nil
+        )
+        let snapshot = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(event)) as? [String: Any]
+        )
+
+        let payload = PushPayload(userInfo: [
+            "sourceId": "cenc_eew",
+            "eventId": "test",
+            "event": snapshot,
+        ])
+
+        XCTAssertNil(payload.sourceId)
+        XCTAssertNil(payload.compositeEventId)
+        XCTAssertNil(payload.eventSnapshot)
+        XCTAssertFalse(payload.hasUsableMatchingEventSnapshot)
     }
 
     func testLocationSelectionStatusDistinguishesGPSFallbackAndPermissionStates() {
@@ -182,6 +395,69 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertFalse(LocationSelectionStatus.denied.canRequestCurrentLocation)
         XCTAssertTrue(LocationSelectionStatus.permissionRequired.canRequestCurrentLocation)
         XCTAssertTrue(LocationSelectionStatus.current.canRequestCurrentLocation)
+    }
+
+    func testLocationFixRemainingLifetimeUsesOriginalTimestampBoundaries() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func location(age: TimeInterval) -> CLLocation {
+            CLLocation(
+                coordinate: CLLocationCoordinate2D(latitude: 35, longitude: 140),
+                altitude: 0,
+                horizontalAccuracy: 25,
+                verticalAccuracy: 25,
+                timestamp: now.addingTimeInterval(-age)
+            )
+        }
+
+        XCTAssertEqual(
+            LocationFixPolicy.remainingLifetime(for: location(age: 0), now: now),
+            120,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            LocationFixPolicy.remainingLifetime(for: location(age: 119), now: now),
+            1,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            LocationFixPolicy.remainingLifetime(for: location(age: 120), now: now),
+            0,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            LocationFixPolicy.remainingLifetime(for: location(age: 121), now: now),
+            0,
+            accuracy: 0.000_001
+        )
+    }
+
+    func testCancelledLocationExpirationTaskDoesNotRunCallback() async {
+        var didExpire = false
+        let task = LocationFixPolicy.expirationTask(
+            after: 1,
+            sleep: { _ in
+                await Task.yield()
+                try Task.checkCancellation()
+            }
+        ) {
+            didExpire = true
+        }
+
+        task.cancel()
+        await task.value
+
+        XCTAssertFalse(didExpire)
+    }
+
+    func testExpiredLocationTaskRunsAtZeroRemainingLifetime() async {
+        var didExpire = false
+        let task = LocationFixPolicy.expirationTask(after: 0) {
+            didExpire = true
+        }
+
+        await task.value
+
+        XCTAssertTrue(didExpire)
     }
 
     func testTestAlertCanRepairAStoppedRegistrationWhenADeviceTokenExists() {

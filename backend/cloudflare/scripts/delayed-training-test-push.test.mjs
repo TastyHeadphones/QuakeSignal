@@ -7,6 +7,8 @@ import test from "node:test";
 
 import { build } from "esbuild";
 
+import { LEGAL_PAGE_CONTRACTS } from "./legal-page-contract.mjs";
+
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const cloudflareDirectory = resolve(scriptDirectory, "..");
 const expectedDelaySeconds = 90;
@@ -229,14 +231,23 @@ test("ordinary production test alerts remain available while only delayed traini
   assert.equal(productionTestPushAllowed("false", "sandbox", "delayed"), true);
 });
 
-test("the privacy page discloses the delayed scheduler's minimal data and deletion behavior", async () => {
+test("legal pages disclose the platform boundaries and delayed scheduler behavior", async () => {
   const { default: worker } = await workerModule();
-  const response = await worker.fetch(
-    new Request("https://quakesignal-api.example/privacy"),
-    {},
-  );
-  assert.equal(response.status, 200);
-  const page = await response.text();
+  let page = "";
+  for (const contract of LEGAL_PAGE_CONTRACTS) {
+    const response = await worker.fetch(
+      new Request(`https://quakesignal-api.example${contract.path}`),
+      {},
+    );
+    assert.equal(response.status, 200);
+    const body = await response.text();
+    assert.match(body, new RegExp(`<title>${contract.title} · QuakeSignal</title>`));
+    assert.ok(body.includes(`QuakeSignal · Effective ${contract.effectiveDate}`));
+    for (const requiredFragment of contract.requiredText) {
+      assert.ok(body.includes(requiredFragment));
+    }
+    if (contract.path === "/privacy") page = body;
+  }
   assert.match(
     page,
     /private scheduler record containing only that opaque App Attest key ID, a due time, and an at-most-once attempted state/i,

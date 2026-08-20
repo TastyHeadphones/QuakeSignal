@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "status": "unapproved-debug-simulator-capture-evidence",
+  "uploadApproved": false,
+  "platform": "tvos",
+  "locale": "en",
+  "captureSelector": "tvos-event-detail",
+  "plannedFile": "en-US/03-event-detail.png",
+  "screenshotFile": "03-event-detail.png",
+  "screenshotSha256": "2e8d1ce650562092d866b7acb86b36a2da7982cc0ce40e4ef95fdfc2f32618f3",
+  "pixels": [
+    1920,
+    1080
+  ],
+  "capturedAtUtc": "2026-08-20T08:22:45Z",
+  "selectedSimulator": {
+    "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.tvOS-26-5",
+    "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-TV-4K-3rd-generation-1080p",
+    "deviceModel": "Apple TV 4K (3rd generation) (at 1080p)",
+    "udid": "44532EDA-88D4-4064-AE51-14B02F85F137"
+  }
+}

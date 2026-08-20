@@ -37,6 +37,9 @@ targets:
       - path: QuakeSignal/Features
       - path: QuakeSignal/Resources
       - path: QuakeSignal/Assets.xcassets
+      - path: QuakeSignalShared/AlertSoundPreference.swift
+      - path: QuakeSignalShared/WatchAlertPreferenceBridge.swift
+      - path: QuakeSignalShared/WatchForegroundEmergencyPolicy.swift
       - path: QuakeSignalShared/ScreenshotAutomation.swift
     dependencies:
       - target: QuakeSignalWatch
@@ -49,7 +52,11 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: YES
         DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER: NO
-        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
+        # The release owner selected the Swift-native Mac Catalyst product.
+        # Do not also expose the unadapted iPhone/iPad binary on Apple-silicon
+        # Macs; that would create two competing Mac experiences.
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        "ENABLE_APP_SANDBOX[sdk=macosx*]": YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_STYLE: Automatic
@@ -108,8 +115,13 @@ targets:
       - path: QuakeSignal/State
       - path: QuakeSignal/Features
       - path: QuakeSignal/Resources
+        excludes:
+          - PrivacyInfo.xcprivacy
       - path: QuakeSignal/Assets.xcassets
       - path: QuakeSignalVision/Assets.xcassets
+      - path: QuakeSignalVision/Resources
+      - path: QuakeSignalShared/AlertSoundPreference.swift
+      - path: QuakeSignalShared/WatchAlertPreferenceBridge.swift
       - path: QuakeSignalShared/ScreenshotAutomation.swift
     settings:
       base:
@@ -141,18 +153,30 @@ targets:
     sources:
       - path: QuakeSignalTV/QuakeSignalTVApp.swift
       - path: QuakeSignalTV/TVDashboardView.swift
+      - path: QuakeSignalTV/TVAlertPreferences.swift
+      - path: QuakeSignalTV/TVAlertSoundSettingsView.swift
+      - path: QuakeSignalTV/TVEmergencyAlertView.swift
+      - path: QuakeSignalTV/TVEmergencyMonitor.swift
+      - path: QuakeSignalTV/TVEmergencyPresentationPolicy.swift
+      - path: QuakeSignalTV/TVUserInitiatedAlertAudio.swift
       - path: QuakeSignalShared/ForegroundQuakeStore.swift
       - path: QuakeSignalShared/ScreenshotAutomation.swift
       - path: QuakeSignal/App/Localization.swift
       - path: QuakeSignal/Models/EEWEvent.swift
       - path: QuakeSignal/Models/IntensityScale.swift
+      - path: QuakeSignal/Networking/LiveSocketClient.swift
       - path: QuakeSignal/Networking/WolfxClient.swift
+      - path: QuakeSignalShared/AlertSoundPreference.swift
       - path: QuakeSignal/Resources
         excludes:
           - Audio
           - PrivacyInfo.xcprivacy
+      - path: QuakeSignal/Resources/Audio/quakesignal_urgent.caf
+      - path: QuakeSignal/Resources/Audio/quakesignal_japanese_voice.caf
+      - path: QuakeSignal/Resources/Audio/ATTRIBUTION.md
       - path: QuakeSignal/Assets.xcassets
       - path: QuakeSignalTV/Assets.xcassets
+      - path: QuakeSignalTV/Supporting/PrivacyInfo.xcprivacy
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app
@@ -181,18 +205,29 @@ targets:
     sources:
       - path: QuakeSignalWatch/QuakeSignalWatchApp.swift
       - path: QuakeSignalWatch/WatchDashboardView.swift
+      - path: QuakeSignalWatch/WatchEmergencyAlertAudio.swift
+      - path: QuakeSignalWatch/WatchForegroundEmergencyMonitor.swift
+      - path: QuakeSignalShared/AlertSoundPreference.swift
       - path: QuakeSignalShared/ForegroundQuakeStore.swift
       - path: QuakeSignalShared/ScreenshotAutomation.swift
+      - path: QuakeSignalShared/WatchAlertPreferenceBridge.swift
+      - path: QuakeSignalShared/WatchForegroundEmergencyPolicy.swift
       - path: QuakeSignal/App/Localization.swift
       - path: QuakeSignal/Models/EEWEvent.swift
       - path: QuakeSignal/Models/IntensityScale.swift
+      - path: QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift
+      - path: QuakeSignal/Networking/LiveSocketClient.swift
       - path: QuakeSignal/Networking/WolfxClient.swift
       - path: QuakeSignal/Resources
         excludes:
           - Audio
           - PrivacyInfo.xcprivacy
+      - path: QuakeSignal/Resources/Audio/quakesignal_urgent.caf
+      - path: QuakeSignal/Resources/Audio/quakesignal_japanese_voice.caf
+      - path: QuakeSignal/Resources/Audio/ATTRIBUTION.md
       - path: QuakeSignal/Assets.xcassets
       - path: QuakeSignalWatch/Assets.xcassets
+      - path: QuakeSignalWatch/Supporting/PrivacyInfo.xcprivacy
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app.watchkitapp

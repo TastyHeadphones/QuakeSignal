@@ -11,6 +11,7 @@ final class EmergencyAlertAudio {
     static let shared = EmergencyAlertAudio()
 
     private var player: AVAudioPlayer?
+    private var playbackCompletionTask: Task<Void, Never>?
     private var recentPlaybackKeys: [String: Date] = [:]
     private let duplicateWindow: TimeInterval = 15
 
@@ -24,6 +25,20 @@ final class EmergencyAlertAudio {
         guard event.isActiveWarning else { return }
         let key = "\(event.id)#\(event.serial)#\(reason.rawValue)"
         play(AppSettings.shared.alertSound, deduplicationKey: key)
+    }
+
+    /// Scene deactivation ends any app-owned playback immediately. APNs owns
+    /// notification sounds delivered while an eligible iPhone/iPad app is in
+    /// the background; a foreground player must never bridge that boundary.
+    func stop() {
+        playbackCompletionTask?.cancel()
+        playbackCompletionTask = nil
+        player?.stop()
+        player = nil
+        try? AVAudioSession.sharedInstance().setActive(
+            false,
+            options: .notifyOthersOnDeactivation
+        )
     }
 
     private func play(
@@ -43,6 +58,7 @@ final class EmergencyAlertAudio {
             recentPlaybackKeys[deduplicationKey] = now
         }
 
+        stop()
         guard let filename = preference.bundledFilename else {
             AudioServicesPlaySystemSound(1007)
             return
@@ -59,11 +75,33 @@ final class EmergencyAlertAudio {
             try session.setCategory(.ambient, options: [.mixWithOthers])
             try session.setActive(true)
             let nextPlayer = try AVAudioPlayer(contentsOf: url)
-            nextPlayer.prepareToPlay()
-            nextPlayer.play()
+            guard nextPlayer.prepareToPlay(), nextPlayer.play() else {
+                try? session.setActive(false, options: .notifyOthersOnDeactivation)
+                AudioServicesPlaySystemSound(1007)
+                return
+            }
             player = nextPlayer
+            let duration = max(nextPlayer.duration, 0)
+            playbackCompletionTask = Task { @MainActor [weak self] in
+                do {
+                    try await Task.sleep(for: .seconds(duration + 0.25))
+                } catch {
+                    return
+                }
+                self?.finishCompletedPlayback()
+            }
         } catch {
+            stop()
             AudioServicesPlaySystemSound(1007)
         }
+    }
+
+    private func finishCompletedPlayback() {
+        playbackCompletionTask = nil
+        player = nil
+        try? AVAudioSession.sharedInstance().setActive(
+            false,
+            options: .notifyOthersOnDeactivation
+        )
     }
 }

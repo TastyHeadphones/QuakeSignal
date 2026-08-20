@@ -3,6 +3,12 @@
 This folder holds local App Store submission material for the macOS edition.
 Nothing here is uploaded automatically.
 
+> **NOT SELECTED FOR THE CURRENT APPLE RELEASE.** On 20 August 2026, the
+> release owner selected the repository's SwiftUI Mac Catalyst target in shared
+> Apple ID `6800642443` as the sole Mac storefront route. Leave this separate
+> Tauri record (`6800642853`) and its draft/build/assets unchanged. The material
+> below is preserved only as a dormant future-release kit.
+
 ## English (U.S.) copy
 
 | App Store Connect field | Source file |
@@ -45,22 +51,14 @@ The read-only 2026-08-19 portal audit found an editable `1.0.0` draft with its
 old `1.0.0` build Ready to Submit, four older screenshot assets, and zero
 installs. That package and imagery predate the current reliability and
 desktop-layout work and must not be selected for review. Preserve the existing
-draft and portal evidence. If App Store Connect permits editing the unreleased
-version number, change that same canonical draft to `1.1.0` only after the new
-signed package is frozen; if it does not, stop and contact App Store Connect
-Support rather than create or delete a record. Attach only the package built
-from the frozen 1.1.0 source. Then complete the age rating, content rights,
-export-compliance and App Privacy answers.
-Before certifying content rights for Wolfx-supplied data, send the request in
-[`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md) and
-complete the shared
+draft and portal evidence without changing the version, attaching a build, or
+uploading assets for the current release. If a later release owner reactivates
+this separate product, revalidate every instruction in this dormant kit,
+complete the shared published-terms/source review in
 [`content-rights-evidence.md`](../../ios/AppStore/content-rights-evidence.md),
-including every separately required underlying-source permission.
-Upload the signed Mac App Store build, the icon, this directory's approved
-screenshots, and the localized metadata. For a later upload, first increase the
-checked-in desktop version and use a higher App Store build. Confirm the Mac
-App Store sandbox build does not expose the direct-distribution-only Launch at
-Login feature.
+and use a newly signed sandboxed package and current screenshots. Do not send
+the contingency Wolfx request unless the evidence record's stop conditions are
+triggered.
 
 The iOS multi-platform record (Apple ID `6800642443`) also contains a macOS
 draft. Do not attach this Tauri app or its metadata there: that record expects

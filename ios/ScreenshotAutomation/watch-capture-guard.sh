@@ -108,14 +108,91 @@ quakesignal_restore_tracked_spawn_signals() {
   esac
 }
 
+# Launch one exact Watch fixture route with a single bounded recovery from
+# CoreSimulator's transient FBS code-4 failure. Initial launch and semantic
+# retry both use this helper so their dual environment/argument gates, process
+# tracking, attempt limit, backoff, and operational status cannot drift.
+quakesignal_launch_exact_watch_frame() {
+  if [ "$#" -ne 5 ]; then
+    echo "error: exact Watch launch expects simulator, bundle, locale, Apple locale, and frame" >&2
+    return 64
+  fi
+
+  local simulator_id="$1"
+  local bundle_id="$2"
+  local locale="$3"
+  local apple_locale="$4"
+  local frame_selector="$5"
+  local xcrun_executable="${QUAKESIGNAL_XCRUN_EXECUTABLE:-xcrun}"
+  local launch_attempt=1
+  local launch_max_attempts=2
+  local launch_backoff_seconds=5
+  local launch_status=0
+  local spawned_pid=""
+
+  case "$frame_selector" in
+    watchos-headline|watchos-recent-reports|watchos-event-detail) ;;
+    *)
+      echo "error: exact Watch launch received an unreviewed frame selector" >&2
+      return 64
+      ;;
+  esac
+
+  while [ "$launch_attempt" -le "$launch_max_attempts" ]; do
+    echo "Watch exact-frame launch attempt ${launch_attempt}/${launch_max_attempts}"
+    quakesignal_defer_tracked_spawn_signals
+    SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1 \
+    SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_FRAME="$frame_selector" \
+    SIMCTL_CHILD_AppleLanguages="($locale)" \
+    SIMCTL_CHILD_AppleLocale="$apple_locale" \
+    SIMCTL_CHILD_TZ=UTC \
+      "$xcrun_executable" simctl launch --terminate-running-process \
+        "$simulator_id" "$bundle_id" \
+        --quakesignal-screenshot-automation \
+        "--quakesignal-screenshot-frame=$frame_selector" >/dev/null &
+    spawned_pid=$!
+    if [ "${QUAKESIGNAL_TEST_HOLD_PID_ASSIGNMENT:-0}" = "1" ]; then
+      sleep 1 || true
+    fi
+    watch_reactivation_pid="$spawned_pid"
+    quakesignal_restore_tracked_spawn_signals
+
+    launch_status=0
+    if wait "$watch_reactivation_pid"; then
+      launch_status=0
+    else
+      launch_status=$?
+    fi
+    watch_reactivation_pid=""
+    if [ "$launch_status" -eq 0 ]; then
+      echo "Watch exact-frame launch attempt ${launch_attempt}/${launch_max_attempts} succeeded"
+      return 0
+    fi
+
+    echo "Watch exact-frame launch attempt ${launch_attempt}/${launch_max_attempts} failed with status $launch_status" >&2
+    if [ "$launch_attempt" -ge "$launch_max_attempts" ]; then
+      echo "error: could not launch the exact Watch frame after $launch_max_attempts attempts" >&2
+      return 70
+    fi
+    echo "Waiting ${launch_backoff_seconds}s before the final exact-frame Watch launch attempt" >&2
+    if ! sleep "$launch_backoff_seconds"; then
+      echo "error: Watch launch backoff was interrupted" >&2
+      return 70
+    fi
+    launch_attempt=$((launch_attempt + 1))
+  done
+
+  return 70
+}
+
 # Captures a Watch screenshot while periodically restarting the fixture app.
 # The caller initializes global screenshot_pid/watch_reactivation_pid values so
 # its EXIT trap can stop the exact external children if interrupted. Production
 # uses xcrun; the executable override exists solely for the credential-free
 # process-supervisor test.
 quakesignal_capture_watch_screenshot() {
-  if [ "$#" -ne 7 ]; then
-    echo "error: Watch capture guard expects simulator, bundle, output, locale, Apple locale, timeout, and interval" >&2
+  if [ "$#" -ne 8 ]; then
+    echo "error: Watch capture guard expects simulator, bundle, output, locale, Apple locale, frame, timeout, and interval" >&2
     return 64
   fi
 
@@ -124,9 +201,17 @@ quakesignal_capture_watch_screenshot() {
   local candidate="$3"
   local locale="$4"
   local apple_locale="$5"
-  local timeout_seconds="$6"
-  local reactivation_interval_seconds="$7"
+  local frame_selector="$6"
+  local timeout_seconds="$7"
+  local reactivation_interval_seconds="$8"
   local xcrun_executable="${QUAKESIGNAL_XCRUN_EXECUTABLE:-xcrun}"
+  case "$frame_selector" in
+    watchos-headline|watchos-recent-reports|watchos-event-detail) ;;
+    *)
+      echo "error: Watch capture guard received an unreviewed frame selector" >&2
+      return 64
+      ;;
+  esac
   case "$timeout_seconds" in
     ""|0|0*|*[!0-9]*)
       echo "error: Watch capture timeout must be one canonical positive integer" >&2
@@ -205,12 +290,14 @@ quakesignal_capture_watch_screenshot() {
       # here would make $! identify a wrapper and could orphan its xcrun child.
       quakesignal_defer_tracked_spawn_signals
       SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1 \
+      SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_FRAME="$frame_selector" \
       SIMCTL_CHILD_AppleLanguages="($locale)" \
       SIMCTL_CHILD_AppleLocale="$apple_locale" \
       SIMCTL_CHILD_TZ=UTC \
         "$xcrun_executable" simctl launch --terminate-running-process \
           "$simulator_id" "$bundle_id" \
-          --quakesignal-screenshot-automation >/dev/null &
+          --quakesignal-screenshot-automation \
+          "--quakesignal-screenshot-frame=$frame_selector" >/dev/null &
       spawned_pid=$!
       if [ "${QUAKESIGNAL_TEST_HOLD_PID_ASSIGNMENT:-0}" = "1" ]; then
         sleep 1 || true
@@ -242,4 +329,126 @@ quakesignal_capture_watch_screenshot() {
     echo "error: deterministic Watch foreground restart failed with status $reactivation_status" >&2
     return 70
   fi
+}
+
+# Capture and semantically validate one Watch frame. A CoreSimulator screenshot
+# can finish immediately after the foreground keeper terminates/relaunches the
+# app, producing a transition or clock raster even though both commands exit
+# successfully. Quarantine that first rejection and retry the exact frame once;
+# the caller's temporary directory contains every attempt until EXIT cleanup.
+quakesignal_capture_validated_watch_screenshot() {
+  if [ "$#" -ne 15 ]; then
+    echo "error: validated Watch capture expects 15 arguments" >&2
+    return 64
+  fi
+
+  local simulator_id="$1"
+  local bundle_id="$2"
+  local candidate="$3"
+  local locale="$4"
+  local apple_locale="$5"
+  local frame_selector="$6"
+  local timeout_seconds="$7"
+  local reactivation_interval_seconds="$8"
+  local validation_root="$9"
+  local expected_width="${10}"
+  local expected_height="${11}"
+  local validator_path="${12}"
+  local retry_settle_seconds="${13}"
+  local sips_executable="${14}"
+  local ruby_executable="${15}"
+  local candidate_parent=""
+  local capture_status=0
+  local retry_reactivation_status=0
+  local validator_status=0
+  local watch_capture_attempt=1
+  local watch_capture_max_attempts=2
+  local watch_validation_bmp=""
+  local rejected_candidate=""
+
+  case "$retry_settle_seconds" in
+    ""|0[0-9]*|*[!0-9]*)
+      echo "error: Watch retry settle time must be a canonical nonnegative integer" >&2
+      return 64
+      ;;
+  esac
+  if [ ! -d "$validation_root" ] || [ -L "$validation_root" ]; then
+    echo "error: Watch validation root must be a real directory" >&2
+    return 64
+  fi
+  validation_root="$(cd "$validation_root" && pwd -P)" || return 64
+  candidate_parent="$(cd "$(dirname "$candidate")" && pwd -P)" || return 64
+  if [ "$candidate_parent" != "$validation_root" ]; then
+    echo "error: Watch candidate must remain inside its validation root" >&2
+    return 64
+  fi
+  if [ ! -f "$validator_path" ] || [ -L "$validator_path" ]; then
+    echo "error: Watch validator must be a regular non-symlink file" >&2
+    return 64
+  fi
+  if ! command -v "$sips_executable" >/dev/null 2>&1 || \
+      ! command -v "$ruby_executable" >/dev/null 2>&1; then
+    echo "error: Watch validation executables are unavailable" >&2
+    return 69
+  fi
+
+  while [ "$watch_capture_attempt" -le "$watch_capture_max_attempts" ]; do
+    capture_status=0
+    if quakesignal_capture_watch_screenshot \
+        "$simulator_id" "$bundle_id" "$candidate" "$locale" "$apple_locale" \
+        "$frame_selector" "$timeout_seconds" "$reactivation_interval_seconds"; then
+      capture_status=0
+    else
+      capture_status=$?
+    fi
+    if [ "$capture_status" -ne 0 ]; then
+      return "$capture_status"
+    fi
+
+    watch_validation_bmp="$validation_root/watch-foreground-validation-$watch_capture_attempt.bmp"
+    if ! "$sips_executable" -s format bmp "$candidate" --out "$watch_validation_bmp" >/dev/null; then
+      echo "error: could not create the temporary Watch validation bitmap" >&2
+      return 70
+    fi
+    validator_status=0
+    "$ruby_executable" "$validator_path" \
+      "$watch_validation_bmp" "$expected_width" "$expected_height" "$frame_selector" || \
+      validator_status=$?
+    if [ "$validator_status" -eq 0 ]; then
+      return 0
+    fi
+    if [ "$validator_status" -ne 65 ]; then
+      echo "error: Watch validator failed operationally with status $validator_status; refusing retry" >&2
+      return 70
+    fi
+    if [ "$watch_capture_attempt" -ge "$watch_capture_max_attempts" ]; then
+      echo "error: Watch screenshot failed foreground validation after $watch_capture_max_attempts attempts" >&2
+      return 65
+    fi
+
+    rejected_candidate="$validation_root/rejected-watch-attempt-$watch_capture_attempt.png"
+    if [ -e "$rejected_candidate" ] || [ -L "$rejected_candidate" ]; then
+      echo "error: refusing to overwrite a quarantined Watch capture" >&2
+      return 73
+    fi
+    if ! mv "$candidate" "$rejected_candidate"; then
+      echo "error: could not quarantine the rejected Watch capture" >&2
+      return 73
+    fi
+    echo "Watch screenshot failed semantic validation; relaunching the exact frame for one bounded retry" >&2
+    retry_reactivation_status=0
+    quakesignal_launch_exact_watch_frame \
+      "$simulator_id" "$bundle_id" "$locale" "$apple_locale" \
+      "$frame_selector" || retry_reactivation_status=$?
+    if [ "$retry_reactivation_status" -ne 0 ]; then
+      return "$retry_reactivation_status"
+    fi
+    if [ "$retry_settle_seconds" -gt 0 ] && ! sleep "$retry_settle_seconds"; then
+      echo "error: Watch retry settling period was interrupted" >&2
+      return 70
+    fi
+    watch_capture_attempt=$((watch_capture_attempt + 1))
+  done
+
+  return 65
 }

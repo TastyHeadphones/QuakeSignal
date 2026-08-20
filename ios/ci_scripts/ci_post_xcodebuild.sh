@@ -18,12 +18,13 @@ if [ "${CI_XCODEBUILD_ACTION:-}" != "archive" ]; then
   exit 0
 fi
 
-case "${CI_XCODE_SCHEME:-}" in
-  QuakeSignal) verifier_platform=ios ;;
-  QuakeSignalTV) verifier_platform=tvos ;;
-  QuakeSignalVision) verifier_platform=visionos ;;
+case "${CI_XCODE_SCHEME:-}:${CI_PRODUCT_PLATFORM:-}" in
+  QuakeSignal:iOS) verifier_platform=ios ;;
+  QuakeSignal:macOS) verifier_platform=maccatalyst ;;
+  QuakeSignalTV:tvOS) verifier_platform=tvos ;;
+  QuakeSignalVision:*) verifier_platform=visionos ;;
   *)
-    echo "::error::Unsupported protected archive scheme ${CI_XCODE_SCHEME:-missing}."
+    echo "::error::Unsupported protected archive route ${CI_XCODE_SCHEME:-missing}:${CI_PRODUCT_PLATFORM:-missing}."
     exit 1
     ;;
 esac

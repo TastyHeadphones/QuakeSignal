@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "status": "unapproved-debug-simulator-capture-evidence",
+  "uploadApproved": false,
+  "platform": "visionos",
+  "locale": "en",
+  "captureSelector": "visionos-reports",
+  "plannedFile": "en-US/02-reports.png",
+  "screenshotFile": "02-reports.png",
+  "screenshotSha256": "b875440b0e6a1e01dac6d0b82212858972265e2c17b4f6b4a5fdec48d9b80b34",
+  "pixels": [
+    3840,
+    2160
+  ],
+  "capturedAtUtc": "2026-08-20T08:35:57Z",
+  "selectedSimulator": {
+    "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.xrOS-26-5",
+    "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K",
+    "deviceModel": "Apple Vision Pro",
+    "udid": "52E7868D-4970-466A-BE13-382F470BC83B"
+  }
+}

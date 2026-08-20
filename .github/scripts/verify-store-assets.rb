@@ -9,8 +9,11 @@ require "json"
 require "digest"
 require "open3"
 require "pathname"
+require "rexml/document"
+require "rexml/xpath"
 require "set"
 require "time"
+require_relative "verify-apple-screenshot-release-set"
 
 class StoreAssetValidator
   MAX_DESCRIPTION_CHARACTERS = 4000
@@ -31,7 +34,7 @@ class StoreAssetValidator
   # Store review material is deliberately version controlled alongside the
   # listing copy. A merely present placeholder is not enough: keep a small,
   # stable set of anchors so an accidental replacement cannot silently drop
-  # the reviewer route or the Wolfx content-rights gate.
+  # the reviewer route or the published-terms content-rights gate.
   def validate_submission_document(path, document_name, required_phrases)
     require_nonempty_file(path)
     return unless path.file? && path.size.positive?
@@ -45,14 +48,14 @@ class StoreAssetValidator
   end
 
   # A release-ready checklist may legitimately have every item checked. Check
-  # that Content Rights/Wolfx remains a real checkbox item without requiring
-  # either an unfinished marker or a particular completion state.
+  # that the Content Rights/Wolfx published-terms review remains a real
+  # checkbox item without requiring a particular completion state or bolding.
   def validate_submission_checklist(path, document_name)
     validate_submission_document(path, document_name, ["Content Rights", "Wolfx"])
     return unless path.file? && path.size.positive?
 
     text = path.read(encoding: "UTF-8")
-    return if text.match?(/^- \[[ xX]\] \*\*Content Rights\b.*?\bWolfx\b/m)
+    return if text.match?(/^- \[[ xX]\].*?\bContent Rights\b.*?\bWolfx\b/m)
 
     error("#{path}: #{document_name} must contain a Content Rights/Wolfx checkbox item")
   end
@@ -90,7 +93,7 @@ class StoreAssetValidator
     end
   end
 
-  def validate_ios_listing_copy(directory)
+  def validate_ios_listing_copy(directory, require_subtitle: false)
     description = listing_text(directory.join("description.txt"))
     promotional_text = listing_text(directory.join("promotional_text.txt"))
     keywords_path = directory.join("keywords.txt")
@@ -109,6 +112,17 @@ class StoreAssetValidator
       "promotional text",
     )
     validate_keywords(keywords_path, keywords)
+
+    return unless require_subtitle
+
+    subtitle_path = directory.join("subtitle.txt")
+    subtitle = listing_text(subtitle_path)
+    validate_character_limit(
+      subtitle_path,
+      subtitle,
+      MAX_SUBTITLE_CHARACTERS,
+      "subtitle",
+    )
   end
 
   def validate_macos_listing_copy(directory)
@@ -198,6 +212,111 @@ class StoreAssetValidator
   end
 end
 
+WATCH_ICON_SHA256 = "b792fccc4c08645fb6485ab96c1882c069229246162b02ebdbb605157a5bc65f"
+WATCH_ICON_SOURCE_SHA256 = "e0817684601e3a2e7b0581ec1810ed2d95293a23ee8ed97b1d5303803aaa0321"
+WATCH_ICON_MAX_FOREGROUND_RADIUS = 384.0
+
+def validate_watch_app_icon_contract!(root)
+  root = Pathname.new(root).realpath
+  catalog = root.join("ios/QuakeSignalWatch/Assets.xcassets/WatchAppIcon.appiconset")
+  contents_path = catalog.join("Contents.json")
+  icon_path = catalog.join("watch-icon-1024.png")
+  ios_icon_path = root.join("ios/QuakeSignal/Assets.xcassets/AppIcon.appiconset/icon-1024.png")
+  source_path = root.join("assets/app-icon.svg")
+
+  expected_contents = {
+    "images" => [
+      {
+        "filename" => "watch-icon-1024.png",
+        "idiom" => "universal",
+        "platform" => "watchos",
+        "size" => "1024x1024",
+      },
+    ],
+    "info" => { "author" => "xcode", "version" => 1 },
+  }
+  contents = JSON.parse(contents_path.read(encoding: "UTF-8"))
+  raise "Watch app icon catalog schema drifted" unless contents == expected_contents
+
+  project_source = root.join("ios/project.yml").read(encoding: "UTF-8")
+  watch_target = project_source[/^  QuakeSignalWatch:\n.*?(?=^  \S|\z)/m]
+  unless watch_target&.include?("ASSETCATALOG_COMPILER_APPICON_NAME: WatchAppIcon")
+    raise "Watch target must select the reviewed WatchAppIcon catalog"
+  end
+
+  raise "Watch app icon file digest drifted" unless Digest::SHA256.file(icon_path).hexdigest == WATCH_ICON_SHA256
+  raise "canonical app icon source digest drifted" unless Digest::SHA256.file(source_path).hexdigest == WATCH_ICON_SOURCE_SHA256
+  unless Digest::SHA256.file(ios_icon_path).hexdigest == WATCH_ICON_SHA256
+    raise "reviewed shared iOS/Watch icon artwork drifted"
+  end
+
+  output, status = Open3.capture2e("sips", "-g", "all", icon_path.to_s)
+  raise "could not inspect Watch app icon: #{output.strip}" unless status.success?
+
+  properties = output.each_line.each_with_object({}) do |line, values|
+    match = line.match(/^\s*([A-Za-z][A-Za-z0-9]+):\s*(.+?)\s*$/)
+    values[match[1]] = match[2] if match
+  end
+  expected_properties = {
+    "pixelWidth" => "1024",
+    "pixelHeight" => "1024",
+    "format" => "png",
+    "samplesPerPixel" => "3",
+    "bitsPerSample" => "8",
+    "hasAlpha" => "no",
+    "space" => "RGB",
+    "profile" => "sRGB IEC61966-2.1",
+  }
+  expected_properties.each do |key, expected|
+    actual = properties[key]
+    raise "Watch app icon #{key} must be #{expected.inspect}, found #{actual.inspect}" unless actual == expected
+  end
+
+  document = REXML::Document.new(source_path.read(encoding: "UTF-8"))
+  svg = document.root
+  raise "canonical app icon SVG canvas drifted" unless svg&.attributes&.[]("viewBox") == "0 0 1024 1024"
+
+  gradient = REXML::XPath.first(document, "//*[local-name()='linearGradient' and @id='brand']")
+  stops = REXML::XPath.match(gradient, "*[local-name()='stop']").map do |stop|
+    [stop.attributes["offset"], stop.attributes["stop-color"]]
+  end
+  raise "canonical app icon gradient drifted" unless stops == [["0", "#0E63C4"], ["1", "#0A3D73"]]
+
+  paths = REXML::XPath.match(document, "//*[local-name()='path']")
+  expected_paths = [
+    ["M 165 614 A 347 347 0 0 1 859 614", "#FFFFFF", "0.5", "26"],
+    ["M 312 614 A 200 200 0 0 1 712 614", "#FFFFFF", "0.9", "26"],
+  ]
+  actual_paths = paths.map do |path|
+    %w[d stroke stroke-opacity stroke-width].map { |attribute| path.attributes[attribute] }
+  end
+  raise "canonical app icon signal geometry drifted" unless actual_paths == expected_paths
+
+  circle = REXML::XPath.first(document, "//*[local-name()='circle']")
+  expected_circle = { "cx" => "512", "cy" => "614", "r" => "48", "fill" => "#FFFFFF" }
+  actual_circle = expected_circle.keys.to_h { |attribute| [attribute, circle&.attributes&.[](attribute)] }
+  raise "canonical app icon center mark drifted" unless actual_circle == expected_circle
+
+  # The outer arc endpoints are the farthest reviewed foreground pixels from
+  # the 512px circular-mask center. Include half the stroke width so the check
+  # accounts for antialiased ink, not only the path centerline.
+  radial_extent = Math.hypot(859.0 - 512.0, 614.0 - 512.0) + (26.0 / 2.0)
+  unless radial_extent <= WATCH_ICON_MAX_FOREGROUND_RADIUS
+    raise "Watch app icon foreground exceeds the reviewed circular safe radius"
+  end
+
+  icon_composer_packages = root.glob("ios/**/*").select do |path|
+    path.basename.to_s.end_with?(".icon")
+  end
+  unless icon_composer_packages.empty?
+    raise "an unreviewed Icon Composer package would supersede the Watch app icon catalog"
+  end
+
+  true
+rescue JSON::ParserError, REXML::ParseException, Errno::ENOENT => error
+  raise "invalid Watch app icon contract: #{error.message}"
+end
+
 def validate_macos_release_approval!(mac_provenance, expected_source_commit: nil)
   raise "macOS screenshot provenance is not release-approved" unless mac_provenance.fetch("status") == "approved"
 
@@ -235,15 +354,20 @@ end
 
 if $PROGRAM_NAME == __FILE__
 require_macos_release_ready = false
-expected_macos_source_commit = nil
+require_build8_screenshot_release_ready = false
+expected_source_commit = nil
 ARGV.each do |argument|
   case argument
   when "--require-macos-release-ready"
     require_macos_release_ready = true
+  when "--require-build8-screenshot-release-ready"
+    require_build8_screenshot_release_ready = true
   when /\A--expected-source-commit=([0-9a-f]{40})\z/
-    expected_macos_source_commit = Regexp.last_match(1)
+    expected_source_commit = Regexp.last_match(1)
   else
-    warn "Usage: #{$PROGRAM_NAME} [--require-macos-release-ready] [--expected-source-commit=<40-character-sha>]"
+    warn "Usage: #{$PROGRAM_NAME} [--require-macos-release-ready] " \
+         "[--require-build8-screenshot-release-ready] " \
+         "[--expected-source-commit=<40-character-sha>]"
     warn "Unknown argument: #{argument}"
     exit 2
   end
@@ -262,6 +386,13 @@ expected_mac_screenshots = %w[
 total_ios_screenshots = 0
 
 begin
+  AppleScreenshotReleaseSetValidator.new(root: root).validate!(
+    require_release_ready: require_build8_screenshot_release_ready,
+    expected_source_commit:
+      require_build8_screenshot_release_ready ? expected_source_commit : nil,
+  )
+  validate_watch_app_icon_contract!(root)
+
   # The 1.0 kit remains in the repository as historical release evidence. The
   # current release validator must never silently fall back to that directory.
   manifest_path = ios_store.join("screenshot-manifest-v1.1.json")
@@ -305,9 +436,9 @@ begin
   if require_macos_release_ready || mac_provenance.fetch("status") == "approved"
     validate_macos_release_approval!(
       mac_provenance,
-      expected_source_commit: require_macos_release_ready ? expected_macos_source_commit : nil,
+      expected_source_commit: require_macos_release_ready ? expected_source_commit : nil,
     )
-    if require_macos_release_ready && expected_macos_source_commit.nil?
+    if require_macos_release_ready && expected_source_commit.nil?
       raise "macOS release-ready validation requires --expected-source-commit"
     end
   end
@@ -323,8 +454,31 @@ begin
   validator.error("duplicate iOS screenshot frames: #{duplicate_frames.join(', ')}") unless duplicate_frames.empty?
 
   locales.each do |locale|
-    validator.validate_ios_listing_copy(ios_store.join(locale))
+    validator.validate_ios_listing_copy(ios_store.join(locale), require_subtitle: true)
   end
+
+  platform_store = ios_store.join("platforms")
+  %w[tvos visionos maccatalyst].each do |platform|
+    validator.validate_ios_listing_copy(platform_store.join(platform, "en-US"))
+    validator.validate_submission_document(
+      platform_store.join(platform, "review-notes.txt"),
+      "#{platform} App Review notes",
+      ["QuakeSignal", "jma_eew", "jma_eqlist", "JMA"],
+    )
+  end
+  watch_description_path = platform_store.join("watchos", "en-US", "description.txt")
+  watch_description = validator.listing_text(watch_description_path)
+  validator.validate_character_limit(
+    watch_description_path,
+    watch_description,
+    StoreAssetValidator::MAX_DESCRIPTION_CHARACTERS,
+    "description",
+  )
+  validator.validate_submission_document(
+    platform_store.join("watchos", "review-notes.txt"),
+    "watchOS App Review notes",
+    ["QuakeSignal", "jma_eew", "jma_eqlist", "JMA"],
+  )
 
   screenshot_root_name = manifest.fetch("rootDirectory")
   unless Pathname.new(screenshot_root_name).basename.to_s == screenshot_root_name
@@ -503,7 +657,8 @@ begin
     validator.error("#{screenshot}: provenance format must be png") unless entry.fetch("format").downcase == "png"
     validator.error("#{screenshot}: provenance must record an opaque image") unless entry.fetch("hasAlpha") == false
   end
-rescue JSON::ParserError, KeyError, TypeError, ArgumentError, RuntimeError, SystemCallError => error
+rescue AppleScreenshotReleaseSetValidationError, JSON::ParserError, KeyError, TypeError,
+       ArgumentError, RuntimeError, SystemCallError => error
   validator.error("invalid store asset manifest or provenance: #{error.message}")
 end
 

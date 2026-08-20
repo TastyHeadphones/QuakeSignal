@@ -6,8 +6,8 @@
 /* Onboarding */
 "onboarding.title1" = "Welcome to QuakeSignal";
 "onboarding.body1" = "Earthquake reports, nearby reminders, and preparedness guidance in one focused app.";
-"onboarding.title2" = "Aggregated public data";
-"onboarding.body2" = "QuakeSignal organizes third-party data from the Wolfx Open API. Information may be delayed, revised, or inaccurate.";
+"onboarding.title2" = "JMA information via Wolfx";
+"onboarding.body2" = "QuakeSignal formats and presents public JMA earthquake information relayed by the Wolfx Open API. Information may be delayed, revised, or inaccurate.";
 "onboarding.title3" = "Turn on notifications";
 "onboarding.body3" = "Allow notifications to receive matching earthquake information while the app is in the background. Delivery is not guaranteed.";
 "onboarding.continue" = "Continue";
@@ -27,10 +27,6 @@
 "quake.intensity.label" = "Max intensity %1$@";
 "quake.depth.label" = "Depth %1$@ km";
 "quake.source.jma" = "JMA";
-"quake.source.cenc" = "CENC";
-"quake.source.sc" = "Sichuan EQA";
-"quake.source.fj" = "Fujian EQA";
-"quake.source.cq" = "Chongqing EQA";
 
 /* Full-screen alert */
 "alert.badge.new" = "EARTHQUAKE EARLY WARNING";
@@ -67,11 +63,6 @@
 "settings.section.sources" = "Alert Sources";
 "settings.source.jma_eew" = "JMA — Early Warning";
 "settings.source.jma_eqlist" = "JMA — Earthquake Reports";
-"settings.source.cenc_eew" = "CENC — Early Warning";
-"settings.source.cenc_eqlist" = "CENC — Earthquake Reports";
-"settings.source.sc_eew" = "Sichuan EQA — Early Warning";
-"settings.source.fj_eew" = "Fujian EQA — Early Warning";
-"settings.source.cq_eew" = "Chongqing EQA — Early Warning";
 "settings.section.threshold" = "Minimum Magnitude";
 "settings.section.notifications" = "Notifications";
 "settings.openNotificationSettings" = "Review Notification Settings";
@@ -121,9 +112,9 @@
 "settings.section.about" = "About";
 "settings.privacyPolicy" = "Privacy Policy";
 "settings.support" = "Support";
-"settings.about.dataSource" = "Earthquake data is relayed via the Wolfx Open API from JMA, CENC, and provincial earthquake authorities.";
+"settings.about.dataSource" = "Earthquake data is relayed via the Wolfx Open API from public Japan Meteorological Agency (JMA) data.";
 "settings.about.version" = "Version %1$@";
-"settings.about.disclaimer" = "QuakeSignal is an independent app and is not affiliated with JMA, CENC, or any government agency.";
+"settings.about.disclaimer" = "QuakeSignal is an independent app and is not affiliated with JMA or any government agency.";
 
 /* Push notification loc-key pairs -- MUST stay in sync with
    backend/src/push/payload.ts LOC_KEYS. title-loc-args passes [sourceLabel];
@@ -150,7 +141,7 @@
 "onboarding.title4" = "Choose your location";
 "onboarding.body4" = "Subscribe to a city or use your current location so QuakeSignal can tell you how far away an earthquake is.";
 "onboarding.chooseLocation" = "Choose Location";
-"onboarding.disclaimer" = "QuakeSignal is not an official warning platform. Information comes from third-party aggregated sources and may be delayed or inaccurate.";
+"onboarding.disclaimer" = "QuakeSignal is not an official warning platform. It presents JMA-issued information relayed through Wolfx and may be delayed or inaccurate.";
 
 /* Home */
 "home.status.normal" = "No nearby activity";
@@ -184,14 +175,13 @@
 "compass.nw" = "NW";
 
 /* Shared */
-"shared.disclaimer" = "Data is relayed from third-party aggregated sources. Refer to official announcements for authoritative information.";
+"shared.disclaimer" = "JMA information is relayed through Wolfx. Always follow official announcements.";
 "quake.depth.label.plain" = "Depth";
 
 /* Full-screen alert rebuild */
 "alert.header.final" = "Earthquake Report";
 "alert.header.cancelled" = "Warning Cancelled";
 "alert.header.training" = "Earthquake Warning (Test)";
-"alert.countdown.label" = "until strong shaking";
 "alert.step.drop" = "Drop";
 "alert.step.cover" = "Cover";
 "alert.step.holdOn" = "Hold On";
@@ -262,18 +252,21 @@
 /* Settings: new subscription + notification sections */
 "settings.section.subscription" = "Subscription";
 "settings.subscribedCity" = "Subscribed City";
-"settings.notifyAtNight" = "Notify at Night";
+"settings.notifyAtNight" = "Routine Reports at Night";
+"settings.notifyAtNight.detail" = "This toggle controls routine reports only. Emergency warnings remain eligible at night.";
 "settings.includeTestAlerts" = "Receive Test/Drill Alerts";
 "settings.includeTestAlerts.detail" = "Off by default";
 "settings.section.disclaimer" = "Sources & Disclaimer";
 
 /* Source & Disclaimer screen */
 "disclaimer.badge" = "Not an official warning platform";
-"disclaimer.summary" = "Data comes from third-party aggregated services. Refer to official announcements for authoritative information. Data may be delayed, incomplete, or inaccurate.";
+"disclaimer.summary" = "JMA information is relayed through Wolfx. Refer to official announcements for authoritative information. Data may be delayed, incomplete, or inaccurate.";
 "disclaimer.section.sources" = "Data Sources";
-"disclaimer.source.wolfx" = "Wolfx Open API (aggregated)";
-"disclaimer.source.cenc" = "CENC public reports (aggregated)";
-"disclaimer.source.jma" = "JMA public reports (aggregated)";
+"disclaimer.source.wolfx" = "Wolfx Open API (JMA data relay)";
+"disclaimer.source.jma" = "JMA public earthquake information";
+"disclaimer.source.jmaAttribution" = "Source: Japan Meteorological Agency (JMA). Normalized and edited by QuakeSignal; not created or endorsed by JMA. Used under Public Data License 1.0.";
+"disclaimer.source.jmaTerms" = "JMA terms and source notice";
+"disclaimer.source.publicDataLicense" = "Public Data License 1.0";
 "disclaimer.notOfficial" = "QuakeSignal is not an official government earthquake warning platform and does not replace official authoritative information.";
 "disclaimer.mayBeDelayed" = "Information may be delayed, incomplete, or inaccurate — always follow official announcements and local emergency instructions.";
 "disclaimer.deliveryNotGuaranteed" = "Notification delivery depends on the operating system, network conditions, and device settings, and cannot be guaranteed to arrive within seconds.";
@@ -337,7 +330,20 @@
 "platform.historical.reports" = "Historical reports";
 "platform.tv.title" = "Earthquake dashboard";
 "platform.tv.foregroundOnly.detail" = "Apple TV refreshes earthquake information only while this dashboard is open. It does not register for background alerts.";
-"platform.watch.foregroundOnly.detail" = "Open the watch app to refresh. Background alerts remain on your paired iPhone until secure companion delivery is available.";
-"platform.watch.foregroundOnly.short" = "Refreshes while open. Alerts stay on the paired iPhone.";
+"platform.tv.alertSound.detail" = "Choose how Apple TV handles alert audio. Sound never starts automatically; use the Siri Remote to preview or play a QuakeSignal sound.";
+"platform.tv.alertSound.disclosure" = "Apple TV warnings are foreground-only and always include visual safety guidance. QuakeSignal Urgent Tone and Japanese Safety Voice play only after you press Preview or Play. System Default is visual-only because tvOS does not play notification sounds. Japanese Safety Voice uses HTS Voice ‘Mei’ by Nagoya Institute of Technology (CC BY 3.0). None are J-Alert or JMA recordings.";
+"platform.tv.alertSound.selected" = "Selected";
+"platform.tv.alertSound.notSelected" = "Not selected";
+"platform.tv.alertSound.previewPlaying" = "Preview is playing.";
+"platform.tv.alertSound.previewUnavailable" = "The selected sound is unavailable.";
+"platform.tv.alertSound.system.detail" = "tvOS does not play system notification sounds. This choice keeps foreground warnings visual-only.";
+"platform.tv.alertSound.system.visualOnly" = "System Default is visual-only on Apple TV.";
+"platform.tv.alert.safetyTitle" = "Protect yourself now";
+"platform.tv.alert.playSelectedSound" = "Play Selected Sound";
+"platform.tv.alert.playSelectedSound.hint" = "Starts the selected QuakeSignal sound after you press the Siri Remote.";
+"platform.watch.foregroundOnly.detail" = "Open the Watch app for live foreground warnings and refreshes. Background alerts remain on your paired iPhone.";
+"platform.watch.foregroundOnly.short" = "Live alerts while open. Background alerts stay on the paired iPhone.";
+"platform.watch.alertSound.changeOnPhone" = "Choose the sound in QuakeSignal on your paired iPhone. System Default uses the Watch warning haptic; custom choices also play while this app is open.";
+"platform.watch.emergency.foregroundOnly" = "Foreground alert from current JMA information. Delivery is not guaranteed; follow official local guidance.";
 "platform.refresh" = "Refresh";
 "platform.loading" = "Loading earthquake data…";

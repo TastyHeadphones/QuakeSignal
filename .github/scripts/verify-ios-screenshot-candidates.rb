@@ -1,10 +1,10 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Fail-closed validation for the optional QuakeSignal 1.1 (8) iPhone/iPad
-# screenshot candidate set. This is deliberately separate from
-# verify-store-assets.rb: Debug Simulator candidates must never satisfy the
-# historical or release-approved screenshot contracts.
+# Fail-closed integrity validation for the preserved QuakeSignal 1.1 (8)
+# iPhone/iPad Debug Simulator candidate set. These bytes are historical and
+# permanently ineligible for upload. Current-source eligibility is a separate,
+# mandatory contract in verify-apple-screenshot-release-set.rb.
 
 require "digest"
 require "json"
@@ -86,6 +86,33 @@ class IOSBuild8ScreenshotSourceGuard
   end
 end
 
+class IOSBuild8ScreenshotHistoricalCommitGuard
+  def initialize(root)
+    @root = Pathname.new(root).realpath
+  end
+
+  def validate!(source_commit)
+    run_git!("cat-file", "-e", "#{source_commit}^{commit}", failure: "historical source commit is unavailable")
+    run_git!(
+      "merge-base", "--is-ancestor", source_commit, "HEAD",
+      failure: "historical source commit is not an ancestor of HEAD",
+    )
+    true
+  end
+
+  private
+
+  def run_git!(*arguments, failure:)
+    output, error_output, status = Open3.capture3("git", "-C", @root.to_s, *arguments)
+    return output if status.success?
+
+    detail = error_output.strip
+    detail = output.strip if detail.empty?
+    suffix = detail.empty? ? "" : ": #{detail}"
+    raise IOSBuild8ScreenshotCandidateValidationError, "#{failure}#{suffix}"
+  end
+end
+
 class SipsScreenshotInspector
   def inspect(path)
     output, status = Open3.capture2e(
@@ -118,20 +145,42 @@ class ListingAssetsWorkflowContract
   FORBIDDEN_WORKFLOW_KEYS = %w[env defaults].freeze
   FORBIDDEN_JOB_KEYS = %w[if continue-on-error env defaults].freeze
   REQUIRED_PATHS = %w[
+    assets/app-icon.svg
     ios/AppStore/**
+    ios/ScreenshotAutomation/**
     ios/QuakeSignal/**
     ios/QuakeSignalShared/**
+    ios/QuakeSignalTV/**
+    ios/QuakeSignalVision/**
+    ios/QuakeSignalWatch/**
     ios/project.yml
     ios/QuakeSignal.xcodeproj/project.pbxproj
+    ios/QuakeSignal.xcodeproj/project.xcworkspace/contents.xcworkspacedata
     ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignal.xcscheme
+    ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**
     .github/scripts/verify-ios-screenshot-candidates.rb
     .github/scripts/verify-ios-screenshot-candidates.test.rb
+    .github/scripts/verify-store-assets.rb
+    .github/scripts/verify-store-assets.test.rb
+    .github/scripts/verify-native-apple-screenshot-candidates.rb
+    .github/scripts/verify-native-apple-screenshot-candidates.test.rb
+    .github/scripts/verify-apple-screenshot-release-set.rb
+    .github/scripts/verify-apple-screenshot-release-set.test.rb
+    .github/scripts/verify-ios-release-contract.mjs
+    .github/scripts/verify-ios-release-contract.test.mjs
+    .github/workflows/apple-platform-screenshots.yml
     .github/workflows/listing-assets.yml
+    .github/workflows/workflow-lint.yml
   ].freeze
   REQUIRED_COMMANDS = %w[
     ruby\ .github/scripts/verify-store-assets.rb
+    ruby\ .github/scripts/verify-store-assets.test.rb
     ruby\ .github/scripts/verify-ios-screenshot-candidates.test.rb
     ruby\ .github/scripts/verify-ios-screenshot-candidates.rb
+    ruby\ .github/scripts/verify-native-apple-screenshot-candidates.test.rb
+    ruby\ .github/scripts/verify-native-apple-screenshot-candidates.rb
+    ruby\ .github/scripts/verify-apple-screenshot-release-set.test.rb
+    ruby\ .github/scripts/verify-apple-screenshot-release-set.rb
   ].freeze
 
   def self.validate!(source)
@@ -310,7 +359,11 @@ class IOSBuild8ScreenshotCandidateValidator
     FRAMES.map { |frame| File.join("en-US", display_class, frame) }
   end.freeze
 
-  def initialize(root:, image_inspector: SipsScreenshotInspector.new, source_guard: nil)
+  def initialize(
+    root:,
+    image_inspector: SipsScreenshotInspector.new,
+    historical_commit_guard: nil
+  )
     requested_root = Pathname.new(root).expand_path
     if requested_root.symlink?
       raise IOSBuild8ScreenshotCandidateValidationError,
@@ -323,7 +376,13 @@ class IOSBuild8ScreenshotCandidateValidator
     ensure_plain_directory!(app_store, "iOS App Store root")
     @ios_store = app_store.realpath
     @image_inspector = image_inspector
-    @source_guard = source_guard || IOSBuild8ScreenshotSourceGuard.new(@root)
+    # The preserved package proves its own historical source binding and byte
+    # integrity. It must not claim that today's app source still equals that old
+    # commit. The unchanged IOSBuild8ScreenshotSourceGuard remains intact for
+    # its direct contract tests; active sets use the stricter cross-platform
+    # NativeAppleScreenshotSourceGuard and do not weaken or bypass either gate.
+    @historical_commit_guard =
+      historical_commit_guard || IOSBuild8ScreenshotHistoricalCommitGuard.new(@root)
   end
 
   def validate_optional!
@@ -357,7 +416,11 @@ class IOSBuild8ScreenshotCandidateValidator
   private
 
   def parse_json_object!(path)
-    value = JSON.parse(path.read, object_class: DuplicateRejectingJSONObject)
+    value = JSON.parse(
+      path.read,
+      object_class: DuplicateRejectingJSONObject,
+      allow_duplicate_key: false,
+    )
     return value if value.is_a?(Hash)
 
     raise IOSBuild8ScreenshotCandidateValidationError, "#{path} must contain a JSON object"
@@ -525,7 +588,7 @@ class IOSBuild8ScreenshotCandidateValidator
     )
     validate_debug_local_override!(build_evidence)
     validate_build_evidence!(build_evidence)
-    @source_guard.validate!(source_commit)
+    @historical_commit_guard.validate!(source_commit)
   rescue KeyError, TypeError, ArgumentError, NoMethodError => error
     raise IOSBuild8ScreenshotCandidateValidationError, "invalid build-8 screenshot provenance: #{error.message}"
   end
@@ -1247,12 +1310,12 @@ if $PROGRAM_NAME == __FILE__
     ListingAssetsWorkflowContract.validate!(workflow_path.read)
     result = IOSBuild8ScreenshotCandidateValidator.new(root: root).validate_optional!
     if result == :absent
-      puts "Build-8 iOS screenshot candidate evidence is absent; optional candidate validation skipped."
+      puts "Historical build-8 iOS screenshot evidence is absent; integrity validation skipped."
     else
-      puts "Unapproved build-8 iOS screenshot candidates validated: 10 English Debug Simulator JPEGs."
+      puts "Historical unapproved build-8 iOS screenshot bytes validated: 10 English Debug Simulator JPEGs."
     end
   rescue IOSBuild8ScreenshotCandidateValidationError, SystemCallError => error
-    warn "Build-8 iOS screenshot candidate validation failed: #{error.message}"
+    warn "Historical build-8 iOS screenshot integrity validation failed: #{error.message}"
     exit 1
   end
 end

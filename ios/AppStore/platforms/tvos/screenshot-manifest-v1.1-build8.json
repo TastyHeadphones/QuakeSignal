@@ -38,6 +38,7 @@
   "frames": [
     {
       "file": "en-US/01-dashboard.png",
+      "captureSelector": "tvos-dashboard",
       "screen": "Dashboard",
       "purpose": "Normal headline, recent reports, source context, and visible foreground-only disclosure",
       "setup": "Benign finalized historical reports; no active warning, training alert, private location, or notification artwork.",
@@ -47,6 +48,7 @@
     },
     {
       "file": "en-US/02-recent-reports.png",
+      "captureSelector": "tvos-recent-reports",
       "screen": "Recent reports",
       "purpose": "Remote-focusable report list and manual refresh",
       "setup": "Focus ring visible on a genuine interactive element; no fabricated platform chrome.",
@@ -56,6 +58,7 @@
     },
     {
       "file": "en-US/03-event-detail.png",
+      "captureSelector": "tvos-event-detail",
       "screen": "Event detail",
       "purpose": "Magnitude, status, source, time, available intensity and depth, plus non-official disclaimer",
       "setup": "A finalized historical report, not a live or simulated emergency.",

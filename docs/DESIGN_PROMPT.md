@@ -13,6 +13,13 @@
 
 ## Current release boundaries (supersede the historical prompt below)
 
+- Build 8 uses only the Wolfx `jma_eew` and `jma_eqlist` routes and presents
+  JMA-issued information. The CENC and provincial routes named in the original
+  prompt below are not enabled in the submitted Apple clients or relay.
+- This release has no Critical Alerts entitlement and makes no closed-app,
+  locked-device, mute-switch, Focus-bypass, delivery-time, or countdown
+  guarantee. Optional background delivery is an iPhone/iPad Time Sensitive
+  notification path; Watch, TV, Vision, and Mac Catalyst remain foreground-only.
 - A Release build registers notifications only with the user-approved public
   Cloudflare Workers endpoint `https://quakesignal-api.hopeso.workers.dev`.
   This exact `workers.dev` hostname is permitted in the store archive and
@@ -29,11 +36,15 @@
   Normal production D1 migration and Worker deployment occur only through the
   protected GitHub Actions workflow described in
   [`CLOUDFLARE_PRODUCTION.md`](CLOUDFLARE_PRODUCTION.md).
-- Expired App Attest challenges are deleted within five minutes. The key,
-  public verifier, receipt, and counter are deleted when the last associated
-  registration is removed or the daily 90-day purge runs; delivery-failure
-  token hashes are purged after 14 days. These integrity records are described
-  in [`PRIVACY.md`](PRIVACY.md) and are not product analytics.
+- App Attest challenges become invalid in no more than five minutes; expired
+  rows are removed by the next successful routine cleanup, which an operational
+  failure can delay. The key, public verifier, receipt, and counter are deleted
+  when the last associated registration is removed or when an old registration
+  and its orphaned integrity record are removed by the next successful daily
+  cleanup after 90-day eligibility. Delivery-failure token hashes become
+  eligible for deletion after 14 days and are removed by the next successful
+  routine cleanup. These integrity records are described in
+  [`PRIVACY.md`](PRIVACY.md) and are not product analytics.
 
 ---
 

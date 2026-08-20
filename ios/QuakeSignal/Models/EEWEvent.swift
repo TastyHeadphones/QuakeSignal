@@ -47,10 +47,6 @@ extension EEWEvent {
     var sourceLabelKey: LocalizedStringKey {
         switch sourceId {
         case "jma_eew", "jma_eqlist": return "quake.source.jma"
-        case "cenc_eew", "cenc_eqlist": return "quake.source.cenc"
-        case "sc_eew": return "quake.source.sc"
-        case "fj_eew": return "quake.source.fj"
-        case "cq_eew": return "quake.source.cq"
         default: return LocalizedStringKey(sourceId)
         }
     }
@@ -59,10 +55,6 @@ extension EEWEvent {
     var sourceLabelText: String {
         switch sourceId {
         case "jma_eew", "jma_eqlist": return String(localized: "quake.source.jma")
-        case "cenc_eew", "cenc_eqlist": return String(localized: "quake.source.cenc")
-        case "sc_eew": return String(localized: "quake.source.sc")
-        case "fj_eew": return String(localized: "quake.source.fj")
-        case "cq_eew": return String(localized: "quake.source.cq")
         default: return sourceId
         }
     }
@@ -88,19 +80,27 @@ extension EEWEvent {
 
     var coordinate: CLLocationCoordinate2D? {
         guard let latitude, let longitude else { return nil }
-        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        return CLLocationCoordinate2DIsValid(coordinate) ? coordinate : nil
     }
 
     func distanceKm(from coordinate: CLLocationCoordinate2D) -> Double? {
-        guard let latitude, let longitude else { return nil }
-        let eventLocation = CLLocation(latitude: latitude, longitude: longitude)
+        guard let eventCoordinate = self.coordinate,
+              CLLocationCoordinate2DIsValid(coordinate) else { return nil }
+        let eventLocation = CLLocation(
+            latitude: eventCoordinate.latitude,
+            longitude: eventCoordinate.longitude
+        )
         let fromLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
         return eventLocation.distance(from: fromLocation) / 1000.0
     }
 
     /// 8-point compass direction from `coordinate` to this event's epicenter, e.g. "NW".
     func compassDirection(from coordinate: CLLocationCoordinate2D) -> CompassDirection? {
-        guard let latitude, let longitude else { return nil }
+        guard let eventCoordinate = self.coordinate,
+              CLLocationCoordinate2DIsValid(coordinate) else { return nil }
+        let latitude = eventCoordinate.latitude
+        let longitude = eventCoordinate.longitude
         let lat1 = coordinate.latitude * .pi / 180
         let lat2 = latitude * .pi / 180
         let deltaLon = (longitude - coordinate.longitude) * .pi / 180

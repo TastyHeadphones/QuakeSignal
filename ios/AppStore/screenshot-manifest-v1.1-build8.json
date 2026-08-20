@@ -13,11 +13,11 @@
   },
   "rootDirectory": "screenshots-v1.1-build8",
   "captureEvidence": {
-    "sourceBaselineCommit": "9833b0a7ecd457439326b9f4190cda5dae8c5e20",
-    "artifactSha256": "b103617d61db61cbc68e13515d4aca6b90c1d9c8f68ecf13489ac6c2547b7246",
+    "sourceBaselineCommit": "64854d0c398c0377c464056751457c4943b4d714",
+    "artifactSha256": "740d603862c46f64f6802be9036bfb4d4be34c4dcddf70ee6ec213be1b463cf5",
     "capturedAtUtcRange": [
-      "2026-08-19T08:00:41Z",
-      "2026-08-19T08:39:39Z"
+      "2026-08-19T21:36:55Z",
+      "2026-08-19T22:01:08Z"
     ],
     "reviewer": null
   },

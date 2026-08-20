@@ -1,6 +1,11 @@
 import UIKit
 import UserNotifications
 
+struct ForegroundNotificationDelivery {
+    let payload: PushPayload
+    let shouldPresentEmergencyInApp: Bool
+}
+
 @Observable
 @MainActor
 final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
@@ -11,15 +16,16 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     private(set) var alertSetting: UNNotificationSetting = .notSupported
     private(set) var soundSetting: UNNotificationSetting = .notSupported
     private(set) var timeSensitiveSetting: UNNotificationSetting = .notSupported
+    private var isForegroundSceneActive = false
     var onNotificationTapped: ((PushPayload) -> Void)? {
         didSet { drainPendingTappedPayloads() }
     }
-    var onForegroundNotification: ((PushPayload) -> Void)? {
+    var onForegroundNotification: ((ForegroundNotificationDelivery) -> Void)? {
         didSet { drainPendingForegroundPayloads() }
     }
 
     private var pendingTappedPayloads: [PushPayload] = []
-    private var pendingForegroundPayloads: [PushPayload] = []
+    private var pendingForegroundPayloads: [ForegroundNotificationDelivery] = []
 
     private override init() { super.init() }
 
@@ -56,6 +62,13 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     func refreshAuthorizationStatus() {
         guard !ScreenshotAutomation.isEnabled else { return }
         Task { await refreshAuthorizationStatusAsync() }
+    }
+
+    /// RootView updates this synchronously with QuakeStore's lifecycle. The
+    /// value is sampled when each notification arrives and that exact decision
+    /// travels with buffered callbacks.
+    func setForegroundSceneActive(_ isActive: Bool) {
+        isForegroundSceneActive = isActive
     }
 
     private func refreshAuthorizationStatusAsync() async {
@@ -133,11 +146,11 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    private func deliverForeground(_ payload: PushPayload) {
+    private func deliverForeground(_ delivery: ForegroundNotificationDelivery) {
         if let onForegroundNotification {
-            onForegroundNotification(payload)
+            onForegroundNotification(delivery)
         } else {
-            pendingForegroundPayloads.append(payload)
+            pendingForegroundPayloads.append(delivery)
             pendingForegroundPayloads = Array(pendingForegroundPayloads.suffix(5))
         }
     }
@@ -166,14 +179,33 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
         let payload = PushPayload(userInfo: notification.request.content.userInfo)
-        await MainActor.run {
-            self.deliverForeground(payload)
+        let decision = await MainActor.run {
+            let decision = ForegroundNotificationPresentationPolicy.decision(
+                for: payload,
+                // Require both the scene callback and UIKit's receipt-time
+                // application state. During a Control/Notification Center or
+                // interruption transition, UIKit can become inactive before
+                // SwiftUI delivers scenePhase's onChange callback.
+                isSceneActive: self.isForegroundSceneActive &&
+                    UIApplication.shared.applicationState == .active
+            )
+            self.deliverForeground(ForegroundNotificationDelivery(
+                payload: payload,
+                shouldPresentEmergencyInApp: decision.shouldPresentEmergencyInApp
+            ))
+            return decision
         }
-        // Real event audio is played once by the shared foreground alert
-        // policy. A token test has no event ID and keeps the APNs sound.
-        return payload.compositeEventId == nil
-            ? [.banner, .sound, .list]
-            : [.list]
+
+        switch decision.systemPresentation {
+        case .alert:
+            // Token tests, unusable/mismatched snapshots, launch-buffered
+            // pushes, and real events received while the scene is inactive
+            // retain the APNs banner and sound.
+            return [.banner, .sound, .list]
+        case .listOnly:
+            // The active app owns the visible emergency UI and selected sound.
+            return [.list]
+        }
     }
 
     nonisolated func userNotificationCenter(

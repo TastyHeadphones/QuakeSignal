@@ -10,11 +10,11 @@
 
 # QuakeSignal
 
-### Earthquake reports, nearby alerts, and preparedness for iPhone, Chrome, macOS, and Windows.
+### Earthquake reports, nearby alerts, and preparedness across Apple platforms, Chrome, and Windows.
 
 [![iOS 17+](https://img.shields.io/badge/iOS-17%2B-0E63C4?logo=apple&logoColor=white)](ios/)
 [![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](ios/QuakeSignal/)
-[![Tauri 2](https://img.shields.io/badge/desktop-Tauri_2-24C8DB?logo=tauri&logoColor=white)](desktop/)
+[![Tauri 2](https://img.shields.io/badge/Windows-Tauri_2-24C8DB?logo=tauri&logoColor=white)](desktop/)
 [![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest_V3-4285F4?logo=googlechrome&logoColor=white)](extension/)
 [![Cloudflare Workers](https://img.shields.io/badge/backend-Cloudflare_Workers-F38020?logo=cloudflare&logoColor=white)](backend/cloudflare/)
 [![Languages](https://img.shields.io/badge/languages-English_·_日本語_·_简体中文-0A3D73)](#localization)
@@ -29,9 +29,9 @@
 [Code signing policy](#code-signing-policy) ·
 [Privacy policy](docs/PRIVACY.md)
 
-QuakeSignal turns aggregated public seismic data into focused native apps: an
-iOS experience with location-aware push alerts and preparedness guidance, plus
-a local-first macOS and Windows monitor with direct feeds and audible alarms.
+QuakeSignal presents public JMA earthquake information in focused native apps
+for iPhone, iPad, Apple Watch, Apple TV, Apple Vision Pro, and Mac Catalyst,
+plus separate Chrome and Windows clients.
 
 <br />
 
@@ -46,17 +46,18 @@ a local-first macOS and Windows monitor with direct feeds and audible alarms.
 </div>
 
 > [!IMPORTANT]
-> QuakeSignal is an independent, non-official app. Earthquake information comes from third-party aggregated sources and may be delayed, incomplete, revised, or inaccurate. Always follow official announcements and local emergency instructions.
+> QuakeSignal is an independent, non-official app. Apple build 1.1 presents JMA-issued information relayed through Wolfx and may be delayed, incomplete, revised, or inaccurate. Always follow official announcements and local emergency instructions.
 
 ## What it does
 
 | | Capability | Details |
 |---|---|---|
-| 📡 | Live earthquake data | Normalizes seven Wolfx feeds covering JMA, CENC, Sichuan, Fujian, and Chongqing data. |
+| 📡 | Live earthquake data | The submitted Apple release uses only the Wolfx `jma_eew` and `jma_eqlist` routes and presents JMA-issued information. |
 | 📍 | Nearby context | Frames events by a selected city or current location, with distance, direction, radius, and magnitude controls. |
 | ⚠️ | Clear alert states | Separates preliminary, updated, final, cancelled, and training messages so color is never the only signal. |
-| 🔔 | Background delivery | Uses APNs for notifications when the app is backgrounded, locked, or terminated. |
-| 🖥️ | Local-first desktop | Connects directly to upstream WebSockets, stores data locally, and can sound a native alarm from the tray—without the QuakeSignal backend. |
+| 🔔 | iPhone/iPad background delivery | Uses APNs for optional notifications when the iPhone or iPad app is backgrounded, locked, or terminated. Watch, TV, Vision, and Mac Catalyst remain foreground-only. |
+| 🖥️ | Native Mac app | Shares the SwiftUI Apple app, map, alert policy, and settings in a sandboxed Mac Catalyst target. |
+| 🪟 | Local-first Windows app | The separate Tauri client connects directly to upstream WebSockets, stores data locally, and can sound a native alarm from the tray. |
 | 🌐 | Chrome extension | Monitors the same direct feeds from Chrome, stores history locally, and supports browser notifications and an optional alarm sound. |
 | 🗺️ | Explore events | Includes a filterable list, epicenter map, event detail, and report-revision timeline. |
 | 🧰 | Offline preparedness | Provides drop-cover-hold-on guidance, situation-specific actions, an emergency checklist, and family check-in notes. |
@@ -75,14 +76,17 @@ Those notes cover tokens, components, onboarding, empty and error states, dark m
 
 ## Architecture
 
-iOS, macOS, and Windows fetch all earthquake data directly from Wolfx. Cloudflare has one narrowly scoped job: keep watching alerts while iOS is backgrounded or terminated and deliver matching APNs notifications.
+The submitted SwiftUI Apple apps read only the JMA EEW and earthquake-report
+routes directly from Wolfx. Cloudflare watches that same two-route inventory
+only to deliver matching APNs notifications while iPhone or iPad is
+backgrounded or terminated. The separately maintained Windows and Chrome
+clients are outside this Apple build-8 release boundary.
 
 ```mermaid
 flowchart LR
     subgraph Sources["Wolfx Open API"]
-        JMA["JMA feeds"]
-        CENC["CENC feeds"]
-        Regional["Sichuan · Fujian · Chongqing"]
+        JMA["JMA EEW + earthquake reports"]
+        Other["Other optional routes<br/>outside the Apple build-8 scope"]
     end
 
     subgraph Edge["Cloudflare free-tier backend"]
@@ -91,13 +95,13 @@ flowchart LR
         DB[("D1 subscriptions")]
     end
 
-    subgraph App["QuakeSignal · SwiftUI"]
+    subgraph App["QuakeSignal · SwiftUI Apple apps"]
         Foreground["Direct HTTP history<br/>+ direct WebSockets"]
         Background["APNs notifications"]
         Guide["Offline safety guide"]
     end
 
-    subgraph Desktop["QuakeSignal · Tauri desktop"]
+    subgraph Desktop["QuakeSignal · Tauri Windows client"]
         Direct["Direct WebSockets"]
         Local[("Local SQLite")]
         NativeAlarm["Native alarm + notification"]
@@ -109,20 +113,22 @@ flowchart LR
         BrowserAlarm["Notification + alarm"]
     end
 
-    Sources --> Foreground
-    Sources --> Watcher --> Filter
+    JMA --> Foreground
+    JMA --> Watcher --> Filter
     DB --> Filter --> Background
     Guide --- App
-    Sources --> Direct --> Local
+    JMA -. separate client .-> Direct --> Local
+    Other -. separate client .-> Direct
     Direct --> NativeAlarm
-    Sources --> BrowserDirect --> BrowserLocal
+    JMA -. separate client .-> BrowserDirect --> BrowserLocal
+    Other -. separate client .-> BrowserDirect
     BrowserDirect --> BrowserAlarm
 ```
 
 ### Repository map
 
-- [`ios/`](ios/) — native SwiftUI app for iOS 17+, built with Swift 6
-- [`desktop/`](desktop/) — local-first Tauri app for macOS and Windows, with direct feeds, SQLite, and native alarms
+- [`ios/`](ios/) — shared native SwiftUI app for iPhone, iPad, Watch, TV, Vision Pro, and Mac Catalyst, built with Swift 6
+- [`desktop/`](desktop/) — separately maintained Tauri client used for Windows; it is not the Mac App Store product for build 8
 - [`extension/`](extension/) — Manifest V3 Chrome extension with direct feeds, local history, browser notifications, and alarm sound
 - [`assets/app-icon.svg`](assets/app-icon.svg) — resolution-independent source for the design artifact's Epicenter ripples app icon
 - [`backend/cloudflare/`](backend/cloudflare/) — notification-only Worker, Durable Object watcher, D1 migration, APNs delivery, and smoke test
@@ -132,33 +138,14 @@ flowchart LR
 
 ## Installation on macOS
 
-There is no supported public macOS download or Homebrew cask yet. The current
-`v0.1.0` GitHub Release predates Developer ID signing and notarization, and
-`TastyHeadphones/tap` has not published a cask; do not install either one. Once
-a later GitHub Release identifies its universal DMG as Developer ID signed,
-notarized, stapled, and accompanied by `SHA256SUMS.txt`, download
-`QuakeSignal_<version>_universal.dmg`, open it, and drag **QuakeSignal** into
-your Applications folder. Homebrew is available only after that exact cask has
-been mirrored to the public tap:
+The supported Mac storefront route for version 1.1 is the sandboxed SwiftUI
+Mac Catalyst app on the shared QuakeSignal App Store record. It is not public
+until the signed build-8 archive, current screenshots, physical Mac QA, and App
+Review gates pass. Once released, install it only from the Mac App Store.
 
-```bash
-# Run only after the public tap contains a cask for that notarized release.
-brew tap TastyHeadphones/tap
-brew install --cask quakesignal
-```
-
-### Gatekeeper and notarization
-
-The protected macOS release job will sign the direct-download/Homebrew app with
-a **Developer ID Application** certificate, notarize it, and staple the ticket
-to its DMG. Use only releases that include `SHA256SUMS.txt` and identify the
-macOS artifact as notarized.
-
-Do **not** clear the quarantine attribute or bypass Gatekeeper. If macOS blocks
-a release built by this process, verify its checksum against `SHA256SUMS.txt`,
-keep the downloaded file, and report the release URL and macOS version in an
-issue. The legacy `v0.1.0` release is not a supported installation or cask
-source.
+The old Tauri `v0.1.0` GitHub release, direct-download DMG plan, and Homebrew
+cask are dormant and are not supported Mac installation routes for this
+release. Do not bypass Gatekeeper to install them.
 
 ## Installation on Windows
 
@@ -186,28 +173,17 @@ To also remove stored settings and event history, delete:
 
 ### macOS
 
-If you installed a future public Homebrew cask:
-
-```bash
-brew uninstall --cask quakesignal
-```
-
-Otherwise drag **QuakeSignal** from your Applications folder to the Trash.
-
-To also remove stored settings and event history, delete:
-
-```bash
-rm -rf ~/Library/Application\ Support/com.quakesignal.desktop
-```
-
-`brew uninstall --cask --zap quakesignal` removes the app and that directory in
-one step.
+Remove the Mac App Store app through Launchpad or move **QuakeSignal** from
+Applications to the Trash. Its sandbox belongs to bundle ID
+`com.quakesignal.app`; remove `~/Library/Containers/com.quakesignal.app/` only
+if you also intend to erase its settings and local state.
 
 ## Quick start
 
-### 1. Run the iOS app
+### 1. Run the SwiftUI Apple app
 
-Open [`ios/QuakeSignal.xcodeproj`](ios/QuakeSignal.xcodeproj) in Xcode, choose an iPhone Simulator, and run the `QuakeSignal` scheme.
+Open [`ios/QuakeSignal.xcodeproj`](ios/QuakeSignal.xcodeproj) in Xcode, choose an
+iPhone, iPad, or Mac Catalyst destination, and run the `QuakeSignal` scheme.
 
 Earthquake history and foreground updates go straight to Wolfx. The app uses
 Cloudflare only to register for notifications. A Release build uses the
@@ -224,9 +200,10 @@ checked-in source. The staging URL must be the protected, isolated
 never the approved production hostname. Push notifications require a physical
 device, an Apple Developer team, and staging APNs credentials.
 
-### 2. Run the desktop app
+### 2. Run the separate Tauri client
 
-The desktop edition connects directly to Wolfx and does not require either
+The Tauri client remains for Windows development and is not the build-8 Mac
+App Store route. It connects directly to Wolfx and does not require either
 backend:
 
 ```bash
@@ -261,17 +238,19 @@ npm run package
 
 The remote smoke test checks notification-watcher health, device-registration validation, and verifies that public earthquake history/detail/live-relay endpoints stay disabled.
 
-## iOS production-release prerequisites
+## Native Apple production-release prerequisites
 
-Before a public iOS release:
+Before a public Apple-platform release:
 
 - Verify the user-approved production Worker endpoint
   `https://quakesignal-api.hopeso.workers.dev`, its public Cloudflare TLS, and
   `/healthz`. A different `workers.dev` hostname is only for isolated
   Debug/staging service and must not be used as a Release fallback.
-- Enable App Attest for `com.quakesignal.app`, refresh the production
-  provisioning profile, and keep the production Worker in required App Attest
-  enforcement mode.
+- Confirm the registered `com.quakesignal.app` and Watch App IDs and their
+  reviewed capabilities, then onboard the single coordinated build-8 workflow
+  from Xcode desktop. Use Xcode Cloud automatic signing and leave every
+  `QUAKESIGNAL_*_PROFILE_NAME` override unset; verify the resulting signed
+  archives and embedded entitlements rather than supplying manual profiles.
 - Keep Debug and Simulator clients on a separate staging Worker with no shared
   production data or credentials. Provision it through the protected
   `cloudflare-staging` environment, then complete physical-device APNs/App Attest,
@@ -289,7 +268,7 @@ The user-approved production notification origin is
 It is a separate opt-in alert-delivery service:
 
 - Workers provides device registration, removal, test-alert, legal, and health endpoints.
-- A Durable Object maintains three upstream watcher sockets solely to detect push-worthy events.
+- A Durable Object maintains the two reviewed JMA watcher sockets solely to detect push-worthy events.
 - D1 stores notification subscriptions and internal deduplication state.
 - Cloudflare Queues bounds APNs fan-out, retries transient delivery failures, and retains failed work for operator review.
 - APNs uses token-based authentication stored as encrypted Worker secrets.
@@ -326,9 +305,9 @@ Push notification text is localized on-device with APNs `loc-key` values, so a s
 
 ## Safety and delivery limits
 
-- QuakeSignal aggregates data; it is not affiliated with JMA, CENC, Wolfx, or a government emergency agency.
+- QuakeSignal is independent from JMA, Wolfx, and government emergency agencies. The Apple release formats and presents JMA-issued information; it is not an official warning or forecast service.
 - Mobile push delivery is best-effort and depends on the upstream provider, network, Cloudflare, APNs, iOS settings, Focus modes, and device state.
-- The countdown is an estimate based on event time, distance, and a simplified S-wave velocity—not a seismological guarantee.
+- Magnitude and epicentral-distance settings are delivery filters only. QuakeSignal does not calculate a local-intensity or ground-motion-arrival forecast.
 - Critical Alerts require a separate entitlement granted by Apple. Without it, QuakeSignal uses standard or time-sensitive notifications.
 
 ## Code signing policy
@@ -342,10 +321,9 @@ Windows releases are built as MSIX packages by GitHub Actions and distributed
 through Microsoft Store. Microsoft signs the certified Store package; no
 Windows signing key or third-party signing service is used by this project.
 
-When a macOS direct-download release is published, it will include
-`SHA256SUMS.txt` and be Developer ID signed, notarized, and stapled. A separate
-sandboxed package can then be produced for the Mac App Store; it is never
-attached to the public GitHub Release.
+The Mac App Store product is the sandboxed SwiftUI Mac Catalyst target built
+and signed with the coordinated native Apple release. The older Tauri Mac
+record and direct-download plan remain dormant for version 1.1.
 
 ## License
 

@@ -8,6 +8,6 @@ builtProductModified=false
 nonWatchByteDiff=false
 nonWatchDiffEvidence=screenshot-evidence-v1.1-build8/non-watch.diff
 mainExecutableIdentical=true
-mainExecutableSha256=b103617d61db61cbc68e13515d4aca6b90c1d9c8f68ecf13489ac6c2547b7246
+mainExecutableSha256=740d603862c46f64f6802be9036bfb4d4be34c4dcddf70ee6ec213be1b463cf5
 distributionSigningUsed=false
 credentialsUsed=false
