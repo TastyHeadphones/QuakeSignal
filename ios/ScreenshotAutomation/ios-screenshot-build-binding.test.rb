@@ -44,8 +44,10 @@ class IOSScreenshotBuildBindingTest < Minitest::Test
     @build_ios_root.join("QuakeSignal/App").mkpath
     @build_ios_root.join("QuakeSignalShared").mkpath
     @build_ios_root.join("QuakeSignal.xcodeproj").mkpath
+    @build_ios_root.join("QuakeSignal.xcodeproj/project.xcworkspace").mkpath
     @build_ios_root.join("QuakeSignal/App/QuakeSignalApp.swift").binwrite("fixture source")
     @build_ios_root.join("QuakeSignal.xcodeproj/project.pbxproj").binwrite("transformed project\n")
+    QuakeSignalIOSScreenshotBuildSource.prepare_xcode_swiftpm_workspace_directories(@build_ios_root)
     input_sha = Digest::SHA256.hexdigest("fixture source")
     input_record = {
       "file" => "ios/QuakeSignal/App/QuakeSignalApp.swift",

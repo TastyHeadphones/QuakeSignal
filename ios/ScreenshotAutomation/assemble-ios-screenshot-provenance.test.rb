@@ -607,7 +607,7 @@ class IOSScreenshotProvenanceTest < Minitest::Test
     QuakeSignalIOSScreenshotProvenance.assemble(
       capture_root: capture_root,
       output: output,
-      repository_root: ROOT,
+      repository_root: @source_repository_root || ROOT,
       image_inspector: FakeImageInspector.new,
       result_inspector: FakeResultInspector.new,
     )
@@ -627,6 +627,22 @@ class IOSScreenshotProvenanceTest < Minitest::Test
       QuakeSignalScreenshotTestTempRoot.path.to_s,
     ) do |directory|
       temporary_root = Pathname.new(directory)
+      @source_repository_root = temporary_root.join("repository")
+      @source_repository_root.mkpath
+      source_archive = temporary_root.join("tracked-source.tar")
+      _archive_output, archive_error, archive_status = Open3.capture3(
+        "git", "-C", ROOT.to_s, "archive", "--format=tar", "-o", source_archive.to_s,
+        "HEAD", *QuakeSignalIOSScreenshotBuildSource::COPIED_INPUTS,
+        "ios/AppStore/screenshot-manifest-v1.1-build8.template.json",
+      )
+      raise "could not archive tracked provenance source fixture: #{archive_error}" unless archive_status.success?
+      _tar_output, tar_error, tar_status = Open3.capture3(
+        "tar", "-xf", source_archive.to_s, "-C", @source_repository_root.to_s,
+      )
+      raise "could not extract tracked provenance source fixture: #{tar_error}" unless tar_status.success?
+      source_archive.delete
+      @fixture_build_source_record = nil
+
       capture_root = temporary_root.join("capture")
       QuakeSignalIOSScreenshotProvenance::DIRECTORY_NAMES.each do |name|
         capture_root.join(name).mkpath
@@ -658,6 +674,9 @@ class IOSScreenshotProvenanceTest < Minitest::Test
         simulator_cleanup_record(lease_path: lease_path, absence_paths: absence_paths),
       )
       yield capture_root, capture_root.join("capture-provenance.json")
+    ensure
+      @source_repository_root = nil
+      @fixture_build_source_record = nil
     end
   end
 
@@ -992,24 +1011,25 @@ class IOSScreenshotProvenanceTest < Minitest::Test
   def build_source_record
     return Marshal.load(Marshal.dump(@fixture_build_source_record)) if @fixture_build_source_record
 
-    source_files = QuakeSignalIOSScreenshotBuildSource.plain_input_files(ROOT)
-    project_path = ROOT.join(QuakeSignalIOSScreenshotBuildSource::PROJECT_RELATIVE)
+    source_root = @source_repository_root || ROOT
+    source_files = QuakeSignalIOSScreenshotBuildSource.plain_input_files(source_root)
+    project_path = source_root.join(QuakeSignalIOSScreenshotBuildSource::PROJECT_RELATIVE)
     nonproject = source_files.reject { |file| file == project_path }
-    manifest = QuakeSignalIOSScreenshotBuildSource.content_manifest(nonproject, ROOT)
+    manifest = QuakeSignalIOSScreenshotBuildSource.content_manifest(nonproject, source_root)
     original = project_path.binread
     transformed, removed = QuakeSignalIOSScreenshotBuildSource.remove_watch_embedding_references(original)
     entries = [
       {
         "kind" => "directory",
         "path" => "ios",
-        "mode" => format("%04o", ROOT.join("ios").lstat.mode & 0o7777),
+        "mode" => format("%04o", source_root.join("ios").lstat.mode & 0o7777),
       },
     ]
     QuakeSignalIOSScreenshotBuildSource::COPIED_INPUTS.each do |relative|
       entries.concat(
         QuakeSignalIOSScreenshotBuildSource.snapshot_materialized_entry(
-          ROOT.join(relative),
-          ROOT,
+          source_root.join(relative),
+          source_root,
         ),
       )
     end
@@ -1019,6 +1039,15 @@ class IOSScreenshotProvenanceTest < Minitest::Test
     end
     project_entry["sha256"] = Digest::SHA256.hexdigest(transformed)
     project_entry["bytes"] = transformed.bytesize
+    entries.concat(
+      QuakeSignalIOSScreenshotBuildSource::XCODE_SWIFTPM_WORKSPACE_DIRECTORIES.map do |path|
+        {
+          "kind" => "directory",
+          "path" => path,
+          "mode" => QuakeSignalIOSScreenshotBuildSource::XCODE_SWIFTPM_WORKSPACE_DIRECTORY_MODE,
+        }
+      end,
+    )
     materialized_manifest =
       QuakeSignalIOSScreenshotBuildSource.build_materialized_manifest(entries)
     record = {
