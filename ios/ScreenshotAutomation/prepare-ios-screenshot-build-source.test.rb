@@ -22,12 +22,16 @@ class PrepareIOSScreenshotBuildSourceTest < Minitest::Test
     @temporary_root = Pathname.new(@temporary_directory)
     @repository = @temporary_root.join("repository")
     @repository.mkpath
-    QuakeSignalIOSScreenshotBuildSource::COPIED_INPUTS.each do |relative|
-      source = SOURCE_ROOT.join(relative)
-      destination = @repository.join(relative)
-      destination.dirname.mkpath
-      FileUtils.cp_r(source, destination)
-    end
+    fixture_archive = @temporary_root.join("tracked-ios-inputs.tar")
+    run!(
+      "git", "-C", SOURCE_ROOT.to_s, "archive", "--format=tar", "-o", fixture_archive.to_s,
+      "HEAD", *QuakeSignalIOSScreenshotBuildSource::COPIED_INPUTS,
+    )
+    run!("tar", "-xf", fixture_archive.to_s, "-C", @repository.to_s)
+    fixture_archive.delete
+    refute @repository.join(
+      "ios/QuakeSignal.xcodeproj/project.xcworkspace/xcuserdata",
+    ).exist?, "the fixture must contain only source-addressed tracked inputs"
     run!("git", "init", "-q", @repository.to_s)
     run!("git", "-C", @repository.to_s, "add", "ios")
     run!(
@@ -79,6 +83,84 @@ class PrepareIOSScreenshotBuildSourceTest < Minitest::Test
     end
     assert_equal 1, project_entries
     assert_equal manifest.fetch("fileCount") + manifest.fetch("directoryCount"), manifest.fetch("entryCount")
+    expected_workspace_entries = QuakeSignalIOSScreenshotBuildSource::XCODE_SWIFTPM_WORKSPACE_DIRECTORIES.map do |path|
+      {
+        "kind" => "directory",
+        "path" => path,
+        "mode" => QuakeSignalIOSScreenshotBuildSource::XCODE_SWIFTPM_WORKSPACE_DIRECTORY_MODE,
+      }
+    end
+    assert_equal expected_workspace_entries, manifest.fetch("entries").select { |entry|
+      entry.fetch("path").start_with?(
+        QuakeSignalIOSScreenshotBuildSource::XCODE_SWIFTPM_WORKSPACE_DIRECTORIES.first,
+      )
+    }
+  end
+
+  def test_exact_swiftpm_workspace_directory_chain_remains_fail_closed
+    prepare
+    workspace = @output.join("QuakeSignal.xcodeproj/project.xcworkspace/xcshareddata")
+    swiftpm = workspace.join("swiftpm")
+    configuration = swiftpm.join("configuration")
+
+    configuration.join("injected.json").write("{}\n")
+    assert_materialized_error(/inventory/)
+    configuration.join("injected.json").delete
+
+    workspace.join("unexpected").mkdir
+    assert_materialized_error(/inventory/)
+    workspace.join("unexpected").rmdir
+
+    configuration.chmod(0o777)
+    assert_materialized_error(/inventory/)
+    configuration.chmod(0o755)
+
+    configuration.rmdir
+    assert_materialized_error(/inventory/)
+    configuration.mkdir(0o755)
+
+    configuration.rmdir
+    configuration.make_symlink(@output.join("QuakeSignal"))
+    assert_materialized_error(/symlink or special/)
+    configuration.delete
+    configuration.mkdir(0o755)
+
+    assert_equal JSON.parse(@evidence.read).fetch("materializedBuildSource"),
+                 QuakeSignalIOSScreenshotBuildSource.materialized_source_manifest(@output)
+  end
+
+  def test_rejects_preexisting_swiftpm_workspace_content_in_archived_inputs
+    injected = @repository.join(
+      "ios/QuakeSignal.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/configuration/injected.json",
+    )
+    injected.dirname.mkpath
+    injected.write("{}\n")
+    run!("git", "-C", @repository.to_s, "add", injected.relative_path_from(@repository).to_s)
+    run!(
+      "git", "-C", @repository.to_s,
+      "-c", "user.name=QuakeSignal Test", "-c", "user.email=test@invalid.example",
+      "commit", "-qm", "inject workspace content",
+    )
+    @commit = run!("git", "-C", @repository.to_s, "rev-parse", "HEAD").strip
+
+    assert_error(/SwiftPM workspace path must be absent/) { prepare }
+    refute @output.exist?
+    refute @evidence.exist?
+  end
+
+  def test_rejects_ignored_xcuserdata_as_an_unarchived_working_input
+    relative = "ios/QuakeSignal.xcodeproj/project.xcworkspace/xcuserdata/operator.xcuserdatad/UserInterfaceState.xcuserstate"
+    @repository.join(".git/info/exclude").write("#{relative}\n")
+    ignored_state = @repository.join(relative)
+    ignored_state.dirname.mkpath
+    ignored_state.binwrite("ignored host UI state")
+    assert_empty run!(
+      "git", "-C", @repository.to_s, "status", "--porcelain=v1", "--untracked-files=all",
+    )
+
+    assert_error(/temporary main-product input inventory/) { prepare }
+    refute @output.exist?
+    refute @evidence.exist?
   end
 
   def test_writes_a_prebuild_snapshot_and_revalidates_the_live_materialized_tree

@@ -25,6 +25,12 @@ module QuakeSignalIOSScreenshotBuildSource
     ios/QuakeSignal.xcodeproj
     ios/QuakeSignalShared
   ].freeze
+  XCODE_SWIFTPM_WORKSPACE_DIRECTORIES = %w[
+    ios/QuakeSignal.xcodeproj/project.xcworkspace/xcshareddata
+    ios/QuakeSignal.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+    ios/QuakeSignal.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/configuration
+  ].freeze
+  XCODE_SWIFTPM_WORKSPACE_DIRECTORY_MODE = "0755"
   MATERIALIZED_SNAPSHOT_PHASES = %w[pre-build post-build].freeze
   MATERIALIZED_SNAPSHOT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S.%6NZ"
   EXPECTED_REMOVED_REFERENCES = [
@@ -113,6 +119,7 @@ module QuakeSignalIOSScreenshotBuildSource
       copied_manifest = content_manifest(copied_nonproject, stage)
       require_equal(copied_manifest.fetch("contentManifestSha256"), source_manifest.fetch("contentManifestSha256"),
                     "temporary main-product content manifest")
+      prepare_xcode_swiftpm_workspace_directories(staged_ios)
       materialized_manifest = materialized_source_manifest(staged_ios)
 
       record = {
@@ -364,6 +371,7 @@ module QuakeSignalIOSScreenshotBuildSource
     end
 
     materialized = validate_materialized_manifest(record.fetch("materializedBuildSource"))
+    validate_xcode_swiftpm_workspace_directories(materialized)
     materialized_files = materialized.fetch("entries").select { |entry| entry.fetch("kind") == "file" }
     project_entry = materialized_files.find { |entry| entry.fetch("path") == PROJECT_RELATIVE }
     unless project_entry && project_entry.fetch("sha256") == temporary_sha
@@ -382,6 +390,46 @@ module QuakeSignalIOSScreenshotBuildSource
     true
   rescue KeyError, TypeError => error
     raise Error, "invalid prepared build-source evidence: #{error.message}"
+  end
+
+  def prepare_xcode_swiftpm_workspace_directories(build_ios_root)
+    root = canonical_plain_directory(build_ios_root, "materialized iOS build source")
+    unless root.basename.to_s == "ios"
+      raise Error, "materialized iOS build source must end in /ios"
+    end
+
+    XCODE_SWIFTPM_WORKSPACE_DIRECTORIES.each do |relative|
+      path = root.dirname.join(relative)
+      if path.exist? || path.symlink?
+        raise Error, "prepared Xcode SwiftPM workspace path must be absent before creation: #{relative}"
+      end
+      canonical_plain_directory(path.dirname, "prepared Xcode SwiftPM workspace parent")
+      path.mkdir(0o755)
+      path.chmod(0o755)
+    end
+    true
+  rescue Errno::EEXIST, IOError, SystemCallError => error
+    raise Error, "could not prepare exact Xcode SwiftPM workspace directories: #{error.message}"
+  end
+
+  def validate_xcode_swiftpm_workspace_directories(manifest)
+    entries = manifest.fetch("entries")
+    first_path = XCODE_SWIFTPM_WORKSPACE_DIRECTORIES.first
+    subtree = entries.select do |entry|
+      path = entry.fetch("path")
+      path == first_path || path.start_with?("#{first_path}/")
+    end
+    expected = XCODE_SWIFTPM_WORKSPACE_DIRECTORIES.map do |path|
+      {
+        "kind" => "directory",
+        "path" => path,
+        "mode" => XCODE_SWIFTPM_WORKSPACE_DIRECTORY_MODE,
+      }
+    end
+    require_equal(subtree, expected, "prepared Xcode SwiftPM empty workspace directory chain")
+    true
+  rescue KeyError, TypeError => error
+    raise Error, "invalid prepared Xcode SwiftPM workspace evidence: #{error.message}"
   end
 
   def remove_watch_embedding_references(source)

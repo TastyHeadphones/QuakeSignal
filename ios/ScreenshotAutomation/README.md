@@ -85,6 +85,9 @@ Xcode Settings or Apple's `xcodebuild -downloadPlatform` command separately.
 Start from a clean, source-frozen checkout and use the checked-in generated
 project. If the project graph intentionally changed, regenerate and review it
 before freezing the capture commit; do not regenerate as part of capture.
+Use a new external worktree or clone that has never been opened interactively
+in Xcode: ignored per-user `xcuserdata` is deliberately rejected as an
+unarchived working input, even when ordinary Git status reports a clean tree.
 Every set command refuses a destination inside the repository and publishes a
 new output directory only after the full planned inventory validates.
 
@@ -105,6 +108,13 @@ Watch embedding/dependency references, retains the Watch target definition,
 and binds the built `QuakeSignal.app`, build settings/log/list, retained
 `.xcresult.zip`, installed app container, launch gates, native PNG, JPEG
 transformation, semantic evidence, and source bytes into each frame record.
+The prepared source also contains exactly three empty `0755` workspace
+directories at `project.xcworkspace/xcshareddata/swiftpm/configuration` and its
+two parents. Xcode 26.6 otherwise creates that empty chain during project
+listing and makes an unchanged source tree appear to drift. Binding the chain
+in the initial materialized-source manifest keeps project listing, building,
+and build-settings inspection stable; a missing path, different mode, symlink,
+file, or any other entry beneath `xcshareddata` still fails closed.
 The temporary source and build outputs never become release inputs.
 For every selector, the accepted package retains separate
 `semantic-evidence/<selector>-raw.json` and
