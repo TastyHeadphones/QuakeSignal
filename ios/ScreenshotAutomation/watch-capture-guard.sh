@@ -283,6 +283,9 @@ quakesignal_capture_validated_watch_screenshot() {
   local xcrun_executable="${QUAKESIGNAL_XCRUN_EXECUTABLE:-xcrun}"
   local candidate_parent=""
   local capture_status=0
+  local retry_reactivation_attempt=1
+  local retry_reactivation_max_attempts=2
+  local retry_reactivation_backoff_seconds=5
   local retry_reactivation_status=0
   local validator_status=0
   local spawned_pid=""
@@ -361,34 +364,50 @@ quakesignal_capture_validated_watch_screenshot() {
       return 73
     fi
     echo "Watch screenshot failed semantic validation; relaunching the exact frame for one bounded retry" >&2
-    quakesignal_defer_tracked_spawn_signals
-    SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1 \
-    SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_FRAME="$frame_selector" \
-    SIMCTL_CHILD_AppleLanguages="($locale)" \
-    SIMCTL_CHILD_AppleLocale="$apple_locale" \
-    SIMCTL_CHILD_TZ=UTC \
-      "$xcrun_executable" simctl launch --terminate-running-process \
-        "$simulator_id" "$bundle_id" \
-        --quakesignal-screenshot-automation \
-        "--quakesignal-screenshot-frame=$frame_selector" >/dev/null &
-    spawned_pid=$!
-    if [ "${QUAKESIGNAL_TEST_HOLD_PID_ASSIGNMENT:-0}" = "1" ]; then
-      sleep 1 || true
-    fi
-    watch_reactivation_pid="$spawned_pid"
-    quakesignal_restore_tracked_spawn_signals
+    retry_reactivation_attempt=1
+    while [ "$retry_reactivation_attempt" -le "$retry_reactivation_max_attempts" ]; do
+      echo "Watch exact-frame relaunch attempt ${retry_reactivation_attempt}/${retry_reactivation_max_attempts}"
+      quakesignal_defer_tracked_spawn_signals
+      SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1 \
+      SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_FRAME="$frame_selector" \
+      SIMCTL_CHILD_AppleLanguages="($locale)" \
+      SIMCTL_CHILD_AppleLocale="$apple_locale" \
+      SIMCTL_CHILD_TZ=UTC \
+        "$xcrun_executable" simctl launch --terminate-running-process \
+          "$simulator_id" "$bundle_id" \
+          --quakesignal-screenshot-automation \
+          "--quakesignal-screenshot-frame=$frame_selector" >/dev/null &
+      spawned_pid=$!
+      if [ "${QUAKESIGNAL_TEST_HOLD_PID_ASSIGNMENT:-0}" = "1" ]; then
+        sleep 1 || true
+      fi
+      watch_reactivation_pid="$spawned_pid"
+      quakesignal_restore_tracked_spawn_signals
 
-    retry_reactivation_status=0
-    if wait "$watch_reactivation_pid"; then
       retry_reactivation_status=0
-    else
-      retry_reactivation_status=$?
-    fi
-    watch_reactivation_pid=""
-    if [ "$retry_reactivation_status" -ne 0 ]; then
-      echo "error: could not relaunch the exact Watch frame for retry" >&2
-      return 70
-    fi
+      if wait "$watch_reactivation_pid"; then
+        retry_reactivation_status=0
+      else
+        retry_reactivation_status=$?
+      fi
+      watch_reactivation_pid=""
+      if [ "$retry_reactivation_status" -eq 0 ]; then
+        echo "Watch exact-frame relaunch attempt ${retry_reactivation_attempt}/${retry_reactivation_max_attempts} succeeded"
+        break
+      fi
+
+      echo "Watch exact-frame relaunch attempt ${retry_reactivation_attempt}/${retry_reactivation_max_attempts} failed with status $retry_reactivation_status" >&2
+      if [ "$retry_reactivation_attempt" -ge "$retry_reactivation_max_attempts" ]; then
+        echo "error: could not relaunch the exact Watch frame after $retry_reactivation_max_attempts attempts" >&2
+        return 70
+      fi
+      echo "Waiting ${retry_reactivation_backoff_seconds}s before the final exact-frame Watch relaunch attempt" >&2
+      if ! sleep "$retry_reactivation_backoff_seconds"; then
+        echo "error: Watch relaunch backoff was interrupted" >&2
+        return 70
+      fi
+      retry_reactivation_attempt=$((retry_reactivation_attempt + 1))
+    done
     if [ "$retry_settle_seconds" -gt 0 ] && ! sleep "$retry_settle_seconds"; then
       echo "error: Watch retry settling period was interrupted" >&2
       return 70

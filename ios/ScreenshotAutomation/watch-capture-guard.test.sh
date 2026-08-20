@@ -19,6 +19,7 @@ export QUAKESIGNAL_TEST_CAPTURE_PID_FILE="$test_root/capture.pid"
 export QUAKESIGNAL_TEST_CAPTURE_RELEASE_FILE=""
 export QUAKESIGNAL_TEST_REACTIVATION_DELAY=0
 export QUAKESIGNAL_TEST_REACTIVATION_STATUS=0
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES=""
 export QUAKESIGNAL_TEST_REACTIVATION_PID_FILE="$test_root/reactivation.pid"
 export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$test_root/reactivated"
 export QUAKESIGNAL_TEST_REACTIVATION_RELEASE_FILE=""
@@ -371,20 +372,99 @@ if [ -e "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" ]; then
   exit 1
 fi
 
-validated_relaunch_dir="$test_root/validated-relaunch-failure"
-mkdir "$validated_relaunch_dir"
+validated_relaunch_recovery_dir="$test_root/validated-relaunch-recovery"
+mkdir "$validated_relaunch_recovery_dir"
 export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="invalid|valid"
-export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_relaunch_dir/capture-count"
-export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_relaunch_dir/reactivated"
-export QUAKESIGNAL_TEST_REACTIVATION_STATUS=29
-expect_status 70 quakesignal_capture_validated_watch_screenshot \
-  fake-watch fake.bundle "$validated_relaunch_dir/candidate.png" en en_US \
-  watchos-headline 4 1 "$validated_relaunch_dir" 410 502 \
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_relaunch_recovery_dir/capture-count"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_relaunch_recovery_dir/reactivated"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES="4|0"
+expect_status 0 quakesignal_capture_validated_watch_screenshot \
+  fake-watch fake.bundle "$validated_relaunch_recovery_dir/candidate.png" en en_US \
+  watchos-headline 12 1 "$validated_relaunch_recovery_dir" 410 502 \
   "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 \
   "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
-export QUAKESIGNAL_TEST_REACTIVATION_STATUS=0
+assert_file_content "$QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE" 2 \
+  "relaunch-recovery capture count"
+assert_file_content "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" 2 \
+  "relaunch-recovery launch count"
+assert_file_content "$validated_relaunch_recovery_dir/rejected-watch-attempt-1.png" invalid \
+  "relaunch-recovery quarantined raster"
+assert_file_content "$validated_relaunch_recovery_dir/candidate.png" valid \
+  "relaunch-recovery accepted raster"
+
+validated_relaunch_failure_dir="$test_root/validated-relaunch-failure"
+mkdir "$validated_relaunch_failure_dir"
+export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="invalid|valid"
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_relaunch_failure_dir/capture-count"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_relaunch_failure_dir/reactivated"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES="4|4"
+expect_status 70 capture_and_publish_validated_watch "$validated_relaunch_failure_dir"
 assert_file_content "$QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE" 1 \
   "relaunch-failure capture count"
+assert_file_content "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" 2 \
+  "relaunch-failure launch count"
+assert_file_content "$validated_relaunch_failure_dir/rejected-watch-attempt-1.png" invalid \
+  "relaunch-failure quarantined raster"
+if [ -e "$validated_relaunch_failure_dir/candidate.png" ] || \
+    [ -e "$validated_relaunch_failure_dir/accepted-candidate.png" ]; then
+  echo "error: exhausted Watch relaunch attempts published a candidate" >&2
+  exit 1
+fi
+
+validated_backoff_signal_dir="$test_root/validated-backoff-signal"
+mkdir "$validated_backoff_signal_dir"
+backoff_signal_capture_pid_file="$validated_backoff_signal_dir/capture.pid"
+backoff_signal_reactivation_pid_file="$validated_backoff_signal_dir/reactivation.pid"
+export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="invalid|valid"
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_backoff_signal_dir/capture-count"
+export QUAKESIGNAL_TEST_CAPTURE_PID_FILE="$backoff_signal_capture_pid_file"
+export QUAKESIGNAL_TEST_REACTIVATION_PID_FILE="$backoff_signal_reactivation_pid_file"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_backoff_signal_dir/reactivated"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES="4|0"
+(
+  screenshot_pid=""
+  watch_reactivation_pid=""
+
+  backoff_signal_cleanup() {
+    quakesignal_stop_processes "$screenshot_pid" "$watch_reactivation_pid"
+  }
+  trap backoff_signal_cleanup EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  quakesignal_capture_validated_watch_screenshot \
+    fake-watch fake.bundle "$validated_backoff_signal_dir/candidate.png" en en_US \
+    watchos-headline 20 5 "$validated_backoff_signal_dir" 410 502 \
+    "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 \
+    "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+) &
+gated_test_supervisor_pid=$!
+wait_for_recorded_process_stopped "$backoff_signal_reactivation_pid_file" \
+  "semantic-retry backoff first relaunch"
+kill -TERM "$gated_test_supervisor_pid"
+backoff_signal_status=0
+if wait "$gated_test_supervisor_pid"; then
+  backoff_signal_status=0
+else
+  backoff_signal_status=$?
+fi
+gated_test_supervisor_pid=""
+if [ "$backoff_signal_status" -ne 143 ]; then
+  echo "error: TERM during Watch relaunch backoff expected 143, got $backoff_signal_status" >&2
+  exit 1
+fi
+assert_file_content "$QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE" 1 \
+  "backoff-signal capture count"
+assert_file_content "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" 1 \
+  "backoff-signal launch count"
+assert_recorded_process_stopped "$backoff_signal_capture_pid_file" \
+  "backoff-signal screenshot"
+assert_recorded_process_stopped "$backoff_signal_reactivation_pid_file" \
+  "backoff-signal relaunch"
+
+export QUAKESIGNAL_TEST_CAPTURE_PID_FILE="$test_root/capture.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_PID_FILE="$test_root/reactivation.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES=""
 
 validated_capture_failure_dir="$test_root/validated-capture-failure"
 mkdir "$validated_capture_failure_dir"

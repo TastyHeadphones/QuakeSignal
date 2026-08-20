@@ -57,7 +57,13 @@ when "launch"
   File.write(reactivation_marker, (reactivation_count + 1).to_s)
   wait_for_release.call("QUAKESIGNAL_TEST_REACTIVATION_RELEASE_FILE")
   delay = Integer(ENV.fetch("QUAKESIGNAL_TEST_REACTIVATION_DELAY"), 10)
-  status = Integer(ENV.fetch("QUAKESIGNAL_TEST_REACTIVATION_STATUS"), 10)
+  status_sequence = ENV.fetch("QUAKESIGNAL_TEST_REACTIVATION_STATUSES", "")
+  status = if status_sequence.empty?
+    Integer(ENV.fetch("QUAKESIGNAL_TEST_REACTIVATION_STATUS"), 10)
+  else
+    statuses = status_sequence.split("|", -1)
+    Integer(statuses.fetch([reactivation_count, statuses.length - 1].min), 10)
+  end
 else
   abort "unexpected xcrun stub mode: #{mode}"
 end

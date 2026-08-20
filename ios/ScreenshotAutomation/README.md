@@ -154,7 +154,11 @@ truncated-label, or stale-route capture is rejected.
 Because a foreground restart can race an
 already-pending CoreSimulator request, one rejected raster is quarantined in
 the temporary capture directory and the exact route receives one bounded
-retry. Validator argument/selector failures use status 64, semantic pixel
+capture retry. The exact-frame relaunch is itself attempted at most twice with
+the same dual-gated selector and a five-second backoff. A successful relaunch
+keeps the existing settle before the second and final capture; two failed
+launch attempts return operational status 70 without publishing a candidate.
+Validator argument/selector failures use status 64, semantic pixel
 rejections use status 65, and bitmap read/layout failures use status 70. Only
 status 65 is eligible for quarantine and retry; every other validator failure
 is returned as operational status 70 without relaunch. A second semantic
