@@ -155,12 +155,16 @@ jobs:
           bash -n ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
           bash -n ios/ScreenshotAutomation/watch-capture-guard.sh
           bash -n ios/ScreenshotAutomation/watch-capture-guard.test.sh
+          bash -n ios/ScreenshotAutomation/vision-map-capture-guard.sh
+          bash -n ios/ScreenshotAutomation/vision-map-capture-guard.test.sh
           /usr/bin/ruby -c ios/ScreenshotAutomation/platform-screenshot-plan.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/platform-screenshot-plan.test.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/validate-vision-map-content.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/validate-vision-map-content.test.rb
           /usr/bin/ruby -c .github/scripts/verify-native-apple-screenshot-candidates.rb
           /usr/bin/ruby -c .github/scripts/verify-native-apple-screenshot-candidates.test.rb
           /usr/bin/ruby ios/ScreenshotAutomation/platform-screenshot-plan.test.rb
@@ -168,6 +172,8 @@ jobs:
           bash ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
           bash ios/ScreenshotAutomation/watch-capture-guard.test.sh
           /usr/bin/ruby ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
+          bash ios/ScreenshotAutomation/vision-map-capture-guard.test.sh
+          /usr/bin/ruby ios/ScreenshotAutomation/validate-vision-map-content.test.rb
 
       - name: Test iOS release contract
         run: |

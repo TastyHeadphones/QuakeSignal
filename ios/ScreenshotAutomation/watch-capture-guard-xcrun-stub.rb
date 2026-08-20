@@ -7,7 +7,10 @@ end
 
 if ARGV.length == 4 && ARGV.fetch(0).end_with?(".bmp")
   abort "unexpected Watch frame selector" unless ARGV.fetch(3) == ENV.fetch("QUAKESIGNAL_TEST_EXPECTED_FRAME")
-  exit(File.binread(ARGV.fetch(0)) == "valid" ? 0 : 1)
+  payload = File.binread(ARGV.fetch(0))
+  exit 0 if payload == "valid"
+  exit 65 if payload == "invalid"
+  exit Integer(ENV.fetch("QUAKESIGNAL_TEST_VALIDATOR_OPERATIONAL_STATUS", "70"), 10)
 end
 
 mode = ARGV.fetch(1)
@@ -35,13 +38,23 @@ when "io"
   status = Integer(ENV.fetch("QUAKESIGNAL_TEST_CAPTURE_STATUS"), 10)
 when "launch"
   abort "restart must use --terminate-running-process" unless ARGV.fetch(2) == "--terminate-running-process"
-  if ENV["SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION"] == "1" &&
-      (expected_frame = ENV["QUAKESIGNAL_TEST_EXPECTED_FRAME"])
+  if (expected_frame = ENV["QUAKESIGNAL_TEST_EXPECTED_FRAME"])
+    abort "restart lost automation environment gate" unless
+      ENV["SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION"] == "1"
     abort "restart lost frame environment" unless ENV["SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_FRAME"] == expected_frame
-    abort "restart lost frame argument" unless ARGV.include?("--quakesignal-screenshot-frame=#{expected_frame}")
+    abort "restart lost automation argument gate" unless
+      ARGV.count("--quakesignal-screenshot-automation") == 1
+    abort "restart lost exact frame argument" unless
+      ARGV.count("--quakesignal-screenshot-frame=#{expected_frame}") == 1
   end
   File.write(ENV.fetch("QUAKESIGNAL_TEST_REACTIVATION_PID_FILE"), "#{Process.pid}\n")
-  File.write(ENV.fetch("QUAKESIGNAL_TEST_REACTIVATION_MARKER"), "restarted\n")
+  reactivation_marker = ENV.fetch("QUAKESIGNAL_TEST_REACTIVATION_MARKER")
+  reactivation_count = if File.exist?(reactivation_marker)
+    Integer(File.read(reactivation_marker), 10)
+  else
+    0
+  end
+  File.write(reactivation_marker, (reactivation_count + 1).to_s)
   wait_for_release.call("QUAKESIGNAL_TEST_REACTIVATION_RELEASE_FILE")
   delay = Integer(ENV.fetch("QUAKESIGNAL_TEST_REACTIVATION_DELAY"), 10)
   status = Integer(ENV.fetch("QUAKESIGNAL_TEST_REACTIVATION_STATUS"), 10)

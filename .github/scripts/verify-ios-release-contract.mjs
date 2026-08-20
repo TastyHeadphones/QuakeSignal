@@ -77,12 +77,44 @@ const contractFiles = {
     "backend/cloudflare/scripts/wait-for-worker-readiness.mjs",
     "backend/cloudflare/staging/wrangler.staging.template.json",
   ],
+  screenshotAutomationHelpers: [
+    "ios/ScreenshotAutomation/README.md",
+    "ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb",
+    "ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb",
+    "ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh",
+    "ios/ScreenshotAutomation/capture-platform-screenshot-set.sh",
+    "ios/ScreenshotAutomation/capture-platform-screenshot.sh",
+    "ios/ScreenshotAutomation/platform-screenshot-plan.rb",
+    "ios/ScreenshotAutomation/platform-screenshot-plan.test.rb",
+    "ios/ScreenshotAutomation/validate-vision-map-content.rb",
+    "ios/ScreenshotAutomation/validate-vision-map-content.test.rb",
+    "ios/ScreenshotAutomation/validate-watch-foreground-badge.rb",
+    "ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb",
+    "ios/ScreenshotAutomation/vision-map-capture-guard.sh",
+    "ios/ScreenshotAutomation/vision-map-capture-guard.test.sh",
+    "ios/ScreenshotAutomation/watch-capture-guard-xcrun-stub.rb",
+    "ios/ScreenshotAutomation/watch-capture-guard.sh",
+    "ios/ScreenshotAutomation/watch-capture-guard.test.sh",
+  ],
 };
 
 const REVIEWED_CI_SCRIPT_FILES = [
   ...contractFiles.xcodeCloudHooks,
   contractFiles.signedArtifactVerifier,
 ];
+
+const EXECUTABLE_SCREENSHOT_AUTOMATION_FILES = new Set([
+  "ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb",
+  "ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh",
+  "ios/ScreenshotAutomation/capture-platform-screenshot-set.sh",
+  "ios/ScreenshotAutomation/capture-platform-screenshot.sh",
+  "ios/ScreenshotAutomation/platform-screenshot-plan.rb",
+  "ios/ScreenshotAutomation/validate-vision-map-content.rb",
+  "ios/ScreenshotAutomation/validate-vision-map-content.test.rb",
+  "ios/ScreenshotAutomation/vision-map-capture-guard.sh",
+  "ios/ScreenshotAutomation/vision-map-capture-guard.test.sh",
+  "ios/ScreenshotAutomation/watch-capture-guard-xcrun-stub.rb",
+]);
 
 const REVIEWED_WORKFLOW_FILES = [
   ".github/workflows/apns-incident-disposition.yml",
@@ -257,17 +289,18 @@ const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:lZgHa3Y9qXK8lfLTbhAal
 const WORKFLOW_JOBS_FINGERPRINT = "sha256:w1wk-Rdn5g5H5Thg7DTzf8v4fiPKh8FcXavfOJTK4Vg";
 const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:gIdap293hpqUJ9U_gKOGiTsYupuumhNhDR3BileJEVI";
 const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:pyFXJBB9gZ7oyUQR5FTk2qRZe4TlhnJmc0HjteIYnLI";
-const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:HdP5PsAe4vXSh0x6N2lFipMQ5Z7ubvxbOMJOcX1kmEQ";
+const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:FGQRysAv30CEP7i26oNSEDNgRQ0rqwN0RemHhuSQEtg";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
-const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:sCQP2OVNBBV9p40zKF3anZ9DFMkLm2KN1CTX3HLBeU8";
+const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:ifhx7BqF24OrL3ctst1DGPN0RMA5fLi7yHYwP4b3XEY";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
-const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:pxATUV3rpMcmp9gcjyJrGnXjP-oFAHWaOL-hnS4tqG4";
+const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:4FgW80lRftGUdyj7HwsDSZg5SUhdKDBP3FqN4nRuLuQ";
 const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:ahwdsrqf-iMo_HiGEWdL0ZYZva7tWf-l37OnPyqbsdw";
+const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:gMhPRMws_F49elyvXz6997Nva76n8Oa-ggsO5hHUYV8";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:vtAIx8JZ4s9UUN07yItVzVx-po5bFVrgWPH5FV_zhXA";
 const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:gMGewYdsLKAr0RhPjPt_wb_voe9GfjH_-P7BCt8RsOU";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:GceU-YCe2ImeRQvCPsXNuVNPjeL1j7FX25n0r6LF_C4";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:i4PSY2OALWG-Q7uai3-EZcIx0wOKvScvbnNSwT9pEO8";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:SUfZvZsL_u3Feo65KXCUhwTbceUSjXOov-COh4wHJJA";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:wUnFO5sLklE1ez09dpWiJe8vhdj6vE2M25uTiDQ8WAc";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
 const REMOTE_SMOKE_COMMAND = [
@@ -1204,6 +1237,53 @@ async function readReviewedCiScriptInventory(root) {
   }));
 }
 
+async function readReviewedScreenshotAutomationInventory(root) {
+  const directory = resolve(root, "ios/ScreenshotAutomation");
+  const entries = (await readdir(directory, { withFileTypes: true }))
+    .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+  if (entries.some((entry) => !entry.isFile())) {
+    fail("ios/ScreenshotAutomation must contain only the exact reviewed regular files; directories and symlinks are forbidden.");
+  }
+  const expectedNames = contractFiles.screenshotAutomationHelpers
+    .map((relativePath) => relativePath.slice(relativePath.lastIndexOf("/") + 1))
+    .sort();
+  const actualNames = entries.map((entry) => entry.name);
+  if (!sameValue(actualNames, expectedNames)) {
+    fail(`ios/ScreenshotAutomation inventory must be exactly the reviewed set (received ${actualNames.join(", ")}).`);
+  }
+  return Promise.all(contractFiles.screenshotAutomationHelpers.map(async (relativePath) => {
+    const file = await lstat(resolve(root, relativePath));
+    if (!file.isFile()) fail(`${relativePath} must be a regular checked-in file.`);
+    return {
+      path: relativePath,
+      source: await readFile(resolve(root, relativePath), "utf8"),
+      mode: file.mode,
+    };
+  }));
+}
+
+function verifyScreenshotAutomationHelpers(files) {
+  const expectedPaths = contractFiles.screenshotAutomationHelpers;
+  if (!Array.isArray(files) || files.length !== expectedPaths.length) {
+    fail("native screenshot automation helper inventory is incomplete.");
+  }
+  const normalized = files.map(({ path, source, mode }, index) => {
+    if (path !== expectedPaths[index]) {
+      fail(`native screenshot automation helper ${index} must be ${expectedPaths[index]}.`);
+    }
+    const executable = (mode & 0o111) !== 0;
+    if (executable !== EXECUTABLE_SCREENSHOT_AUTOMATION_FILES.has(path)) {
+      fail(`${path} executable mode must match the reviewed native screenshot harness.`);
+    }
+    return { executable, path, source };
+  });
+  const fingerprint = workflowSequenceFingerprint(normalized);
+  if (fingerprint !== SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT) {
+    fail(`native screenshot automation helpers must match the reviewed fingerprint (received ${fingerprint}).`);
+  }
+  return fingerprint;
+}
+
 function verifyWorkflowDirectoryPolicy(workflowFiles) {
   const mobileReleaseFiles = new Set([
     contractFiles.iosWorkflow,
@@ -1677,6 +1757,7 @@ export async function verifyIOSReleaseContract({
     cloudflareWorkflow,
     releaseHooks,
     releaseCriticalHelpers,
+    screenshotAutomationHelpers,
     workflowFiles,
   ] = await Promise.all([
     readFile(path(contractFiles.project), "utf8"),
@@ -1704,6 +1785,7 @@ export async function verifyIOSReleaseContract({
       path: relativePath,
       source: await readReviewedRegularFile(root, relativePath),
     }))),
+    readReviewedScreenshotAutomationInventory(root),
     readReviewedWorkflowInventory(root),
   ]);
   const buildNumber = captureProjectBuildNumber(project);
@@ -1757,6 +1839,9 @@ export async function verifyIOSReleaseContract({
     contractFiles.releaseCriticalHelpers,
     RELEASE_CRITICAL_HELPERS_FINGERPRINT,
     "release-critical Worker helpers",
+  );
+  const screenshotAutomationHelpersFingerprint = verifyScreenshotAutomationHelpers(
+    screenshotAutomationHelpers,
   );
   verifyExportOptions(exportOptions);
   const workerVars = parseWorkerConfig(workerConfig);
@@ -1813,6 +1898,7 @@ export async function verifyIOSReleaseContract({
     xcodeSchemesFingerprint,
     platformCapabilitiesFingerprint,
     releaseCriticalHelpersFingerprint,
+    screenshotAutomationHelpersFingerprint,
     workerDependencyGraphFingerprint,
     workerDeploymentConfigFingerprint,
     xcodeCloudReleaseHooksFingerprint,

@@ -28,6 +28,37 @@ const xcodeCloudReleaseFiles = [
 const executableReleaseFiles = new Set(
   xcodeCloudReleaseFiles.filter((path) => path.endsWith(".sh") || path.endsWith(".py")),
 );
+const screenshotAutomationFiles = [
+  "ios/ScreenshotAutomation/README.md",
+  "ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb",
+  "ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb",
+  "ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh",
+  "ios/ScreenshotAutomation/capture-platform-screenshot-set.sh",
+  "ios/ScreenshotAutomation/capture-platform-screenshot.sh",
+  "ios/ScreenshotAutomation/platform-screenshot-plan.rb",
+  "ios/ScreenshotAutomation/platform-screenshot-plan.test.rb",
+  "ios/ScreenshotAutomation/validate-vision-map-content.rb",
+  "ios/ScreenshotAutomation/validate-vision-map-content.test.rb",
+  "ios/ScreenshotAutomation/validate-watch-foreground-badge.rb",
+  "ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb",
+  "ios/ScreenshotAutomation/vision-map-capture-guard.sh",
+  "ios/ScreenshotAutomation/vision-map-capture-guard.test.sh",
+  "ios/ScreenshotAutomation/watch-capture-guard-xcrun-stub.rb",
+  "ios/ScreenshotAutomation/watch-capture-guard.sh",
+  "ios/ScreenshotAutomation/watch-capture-guard.test.sh",
+];
+const executableScreenshotAutomationFiles = new Set([
+  "ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb",
+  "ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh",
+  "ios/ScreenshotAutomation/capture-platform-screenshot-set.sh",
+  "ios/ScreenshotAutomation/capture-platform-screenshot.sh",
+  "ios/ScreenshotAutomation/platform-screenshot-plan.rb",
+  "ios/ScreenshotAutomation/validate-vision-map-content.rb",
+  "ios/ScreenshotAutomation/validate-vision-map-content.test.rb",
+  "ios/ScreenshotAutomation/vision-map-capture-guard.sh",
+  "ios/ScreenshotAutomation/vision-map-capture-guard.test.sh",
+  "ios/ScreenshotAutomation/watch-capture-guard-xcrun-stub.rb",
+]);
 
 function fixtureFiles({
   buildNumber = "8",
@@ -338,11 +369,15 @@ async function writeFixture(options = {}) {
   for (const relativePath of xcodeCloudReleaseFiles) {
     files[relativePath] = await readFile(join(repositoryRoot, relativePath), "utf8");
   }
+  for (const relativePath of screenshotAutomationFiles) {
+    files[relativePath] = await readFile(join(repositoryRoot, relativePath), "utf8");
+  }
   for (const [relativePath, contents] of Object.entries(files)) {
     const path = join(root, relativePath);
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, contents, "utf8");
     if (executableReleaseFiles.has(relativePath)) await chmod(path, 0o755);
+    if (executableScreenshotAutomationFiles.has(relativePath)) await chmod(path, 0o755);
   }
   return root;
 }
@@ -487,6 +522,45 @@ test("fails closed when a release-critical Worker helper drifts", async (t) => {
     await assert.rejects(
       verifyIOSReleaseContract({ root }),
       /legal-page-contract\.mjs must be a regular checked-in file/i,
+    );
+  });
+});
+
+test("fails closed when the native screenshot automation inventory, bytes, or modes drift", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/ScreenshotAutomation/vision-map-capture-guard.sh");
+    await writeFile(path, `${await readFile(path, "utf8")}\n# unreviewed semantic bypass\n`, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /native screenshot automation helpers must match the reviewed fingerprint/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/ScreenshotAutomation/validate-vision-map-content.rb");
+    await chmod(path, 0o644);
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /validate-vision-map-content\.rb executable mode must match/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    await writeFile(
+      join(root, "ios/ScreenshotAutomation/unreviewed-capture-helper.sh"),
+      "#!/bin/bash\nexit 0\n",
+      "utf8",
+    );
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /ios\/ScreenshotAutomation inventory must be exactly the reviewed set/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/ScreenshotAutomation/validate-vision-map-content.rb");
+    await rm(path);
+    await symlink(join(repositoryRoot, "ios/ScreenshotAutomation/validate-vision-map-content.rb"), path);
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /ios\/ScreenshotAutomation must contain only the exact reviewed regular files/i,
     );
   });
 });
@@ -1532,8 +1606,28 @@ test("fails closed when build or release jobs reintroduce Simulator downloads", 
 test("fails closed when the credential-free screenshot harness checks drift", async (t) => {
   for (const [from, to] of [
     [
+      "          node .github/scripts/verify-ios-release-contract.mjs\n",
+      "          true # skipped reviewed screenshot helper fingerprint\n",
+    ],
+    [
       "          bash -n ios/ScreenshotAutomation/watch-capture-guard.sh\n",
       "          true # skipped Watch capture guard syntax check\n",
+    ],
+    [
+      "          bash -n ios/ScreenshotAutomation/vision-map-capture-guard.sh\n",
+      "          true # skipped Vision semantic capture guard syntax check\n",
+    ],
+    [
+      "          bash ios/ScreenshotAutomation/vision-map-capture-guard.test.sh\n",
+      "          true # skipped Vision semantic capture guard test\n",
+    ],
+    [
+      "          /usr/bin/ruby -c ios/ScreenshotAutomation/validate-vision-map-content.rb\n",
+      "          true # skipped Vision semantic validator syntax check\n",
+    ],
+    [
+      "          /usr/bin/ruby ios/ScreenshotAutomation/validate-vision-map-content.test.rb\n",
+      "          true # skipped Vision semantic validator test\n",
     ],
     [
       "          bash ios/ScreenshotAutomation/watch-capture-guard.test.sh\n",
@@ -1597,6 +1691,28 @@ test("fails closed when the credential-free screenshot harness checks drift", as
       await assert.rejects(
         verifyIOSReleaseContract({ root }),
         /native screenshot candidate workflow jobs must match the reviewed capture graph fingerprint/i,
+      );
+    });
+  }
+});
+
+test("fails closed when normal push and pull-request lint omits a Vision screenshot guard", async (t) => {
+  for (const command of [
+    "          bash -n ios/ScreenshotAutomation/vision-map-capture-guard.sh\n",
+    "          bash -n ios/ScreenshotAutomation/vision-map-capture-guard.test.sh\n",
+    "          /usr/bin/ruby -c ios/ScreenshotAutomation/validate-vision-map-content.rb\n",
+    "          /usr/bin/ruby -c ios/ScreenshotAutomation/validate-vision-map-content.test.rb\n",
+    "          bash ios/ScreenshotAutomation/vision-map-capture-guard.test.sh\n",
+    "          /usr/bin/ruby ios/ScreenshotAutomation/validate-vision-map-content.test.rb\n",
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/workflow-lint.yml");
+      const contents = await readFile(path, "utf8");
+      assert.ok(contents.includes(command), `workflow-lint fixture must contain ${command.trim()}`);
+      await writeFile(path, contents.replace(command, ""), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /complete workflow directory must match the reviewed parsed-content fingerprint/i,
       );
     });
   }

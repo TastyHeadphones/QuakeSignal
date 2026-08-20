@@ -463,8 +463,11 @@ export QUAKESIGNAL_TEST_REACTIVATION_RELEASE_FILE=""
 export QUAKESIGNAL_TEST_REACTIVATION_DELAY=0
 export QUAKESIGNAL_TEST_REACTIVATION_STATUS=143
 rm -f "$QUAKESIGNAL_TEST_REACTIVATION_PID_FILE"
-"$QUAKESIGNAL_XCRUN_EXECUTABLE" simctl launch --terminate-running-process \
-  fake-watch fake.bundle --quakesignal-screenshot-automation >/dev/null &
+SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1 \
+SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_FRAME=watchos-headline \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" simctl launch --terminate-running-process \
+    fake-watch fake.bundle --quakesignal-screenshot-automation \
+    --quakesignal-screenshot-frame=watchos-headline >/dev/null &
 helper_test_pid=$!
 wait_for_nonempty_file "$QUAKESIGNAL_TEST_REACTIVATION_PID_FILE" \
   "natural-sigterm reactivation PID"
@@ -480,8 +483,11 @@ export QUAKESIGNAL_TEST_REACTIVATION_RELEASE_FILE="$intentional_stop_release_fil
 rm -f \
   "$QUAKESIGNAL_TEST_REACTIVATION_PID_FILE" \
   "$intentional_stop_release_file"
-"$QUAKESIGNAL_XCRUN_EXECUTABLE" simctl launch --terminate-running-process \
-  fake-watch fake.bundle --quakesignal-screenshot-automation >/dev/null &
+SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1 \
+SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_FRAME=watchos-headline \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" simctl launch --terminate-running-process \
+    fake-watch fake.bundle --quakesignal-screenshot-automation \
+    --quakesignal-screenshot-frame=watchos-headline >/dev/null &
 helper_test_pid=$!
 wait_for_nonempty_file "$QUAKESIGNAL_TEST_REACTIVATION_PID_FILE" \
   "intentional-stop reactivation PID"
@@ -499,8 +505,11 @@ export QUAKESIGNAL_TEST_IGNORE_TERM=1
 rm -f \
   "$QUAKESIGNAL_TEST_REACTIVATION_PID_FILE" \
   "$stubborn_release_file"
-"$QUAKESIGNAL_XCRUN_EXECUTABLE" simctl launch --terminate-running-process \
-  fake-watch fake.bundle --quakesignal-screenshot-automation >/dev/null &
+SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1 \
+SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_FRAME=watchos-headline \
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" simctl launch --terminate-running-process \
+    fake-watch fake.bundle --quakesignal-screenshot-automation \
+    --quakesignal-screenshot-frame=watchos-headline >/dev/null &
 helper_test_pid=$!
 wait_for_nonempty_file "$QUAKESIGNAL_TEST_REACTIVATION_PID_FILE" \
   "stubborn reactivation PID"

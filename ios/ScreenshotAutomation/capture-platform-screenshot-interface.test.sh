@@ -174,7 +174,12 @@ dashboard = watch_source[/private var dashboard: some View \{.*?(?=\n    private
 abort "error: ordinary Watch dashboard is missing" unless dashboard
 unless dashboard.include?("WatchContextBadges") &&
        dashboard.include?("headline") &&
-       dashboard.match?(/NavigationLink\s*\{\s*reports\s*\}/m)
+       dashboard.match?(/NavigationLink\s*\{\s*reports\s*\}/m) &&
+       dashboard.include?(".id(WatchDashboardPage.headline)") &&
+       dashboard.include?(".id(WatchDashboardPage.controls)") &&
+       dashboard.scan("minHeight: geometry.size.height").length == 2 &&
+       dashboard.include?(".scrollTargetBehavior(.paging)") &&
+       dashboard.match?(/\.navigationTitle\("app\.name"\)\s*\.navigationBarTitleDisplayMode\(\.inline\)/m)
   abort "error: ordinary Watch dashboard must show the compact headline and expose the shared reports destination"
 end
 
@@ -187,18 +192,56 @@ headline_card = extract_view.call(watch_source, "WatchHeadlineCard")
 unless headline_card.match?(/Text\(event\.hypocenter\).*?\.lineLimit\(2\)/m) &&
        headline_card.include?('date.formatted(date: .numeric, time: .shortened)') &&
        headline_card.match?(/NavigationLink\s*\{\s*WatchEventDetailView\(event: event\)/m) &&
-       headline_card.include?('.buttonStyle(.plain)')
-  abort "error: shared Watch headline card must retain location/date and open the production detail view"
+       headline_card.include?('.buttonStyle(.plain)') &&
+       headline_card.include?("@FocusState private var isFocused: Bool") &&
+       headline_card.include?(".focused($isFocused)") &&
+       headline_card.include?("isFocused ? .black : .white") &&
+       headline_card.include?("isFocused ? Color.black.opacity(0.72) : Color.white.opacity(0.72)") &&
+       headline_card.include?("Color(white: 0.16)") &&
+       !headline_card.include?('Color("CardColor")')
+  abort "error: shared Watch headline card must retain readable focus-aware location/date and open production detail"
 end
 
 recent = extract_view.call(watch_source, "WatchReportsView")
-unless recent.include?("Button(action: onRefresh)") &&
-       recent.include?('Label("platform.historical.reports"') &&
-       recent.include?("ForEach(events.prefix(8))") &&
-       recent.match?(/NavigationLink\s*\{\s*WatchEventDetailView\(event: event\)/m) &&
+unless recent.include?("Array(events.prefix(2))") &&
+       recent.include?("Array(events.dropFirst(2).prefix(6))") &&
+       recent.include?("ForEach(firstPageEvents)") &&
+       recent.include?("ForEach(remainingEvents)") &&
        recent.include?("ScrollView") &&
-       recent.include?('.navigationTitle("app.name")')
-  abort "error: shared production Watch reports view must retain refresh, history, navigation, and accessibility scrolling"
+       recent.scan("minHeight: geometry.size.height").length == 2 &&
+       recent.include?(".id(WatchReportsPage.first)") &&
+       recent.include?(".id(WatchReportsPage.remaining)") &&
+       recent.include?(".scrollTargetBehavior(.paging)") &&
+       recent.match?(/\.navigationTitle\("app\.name"\)\s*\.navigationBarTitleDisplayMode\(\.inline\)/m)
+  abort "error: shared production Watch reports must page an exact complete 2-row first viewport before remaining reports"
+end
+
+reports_header = extract_view.call(watch_source, "WatchReportsHeader")
+unless reports_header.include?("Button(action: onRefresh)") &&
+       reports_header.include?('Label("platform.historical.reports"') &&
+       reports_header.include?('Image(systemName: "arrow.clockwise")') &&
+       reports_header.include?('.accessibilityLabel(Text("platform.refresh"))') &&
+       !reports_header.include?('Label("platform.refresh", systemImage: "arrow.clockwise")')
+  abort "error: Watch reports header must keep an icon-only localized accessible refresh control"
+end
+
+report_link = extract_view.call(watch_source, "WatchReportLink")
+unless report_link.include?("@FocusState private var isFocused: Bool") &&
+       report_link.match?(/NavigationLink\s*\{\s*WatchEventDetailView\(event: event\)/m) &&
+       report_link.include?("WatchCompactEventRow(event: event, isFocused: isFocused)") &&
+       report_link.include?(".focused($isFocused)") &&
+       report_link.include?(".buttonStyle(.plain)")
+  abort "error: every production Watch report link must bind real focus state to the shared detail destination"
+end
+
+report_row = extract_view.call(watch_source, "WatchCompactEventRow")
+unless report_row.include?("let isFocused: Bool") &&
+       report_row.include?("isFocused ? .black : .white") &&
+       report_row.include?("isFocused ? Color.black.opacity(0.72) : Color.white.opacity(0.72)") &&
+       report_row.include?("Color(white: 0.16)") &&
+       report_row.include?('date.formatted(date: .omitted, time: .shortened)') &&
+       !report_row.include?('Color("CardColor")')
+  abort "error: production Watch report rows must keep location/status/source/date readable in both focus states"
 end
 
 detail_declarations = watch_source.scan(/private struct WatchEventDetailView: View/).length
@@ -268,6 +311,95 @@ end
   abort "error: native #{operation} must remain bound to the exact selected simulator UUID" unless
     source.match?(pattern)
 end
+
+unless source.include?('source "$script_dir/vision-map-capture-guard.sh"') &&
+       source.include?('vision_map_settle_seconds=25') &&
+       source.match?(/if \[ "\$platform" = "visionos" \] && \[ "\$frame_selector" = "visionos-map" \]; then\s*initial_settle_seconds="\$vision_map_settle_seconds"/m) &&
+       source.match?(/elif \[ "\$platform" = "visionos" \] && \[ "\$frame_selector" = "visionos-map" \]; then\s*vision_map_capture_status=0\s*quakesignal_capture_validated_vision_map/m) &&
+       source.include?('"$script_dir/validate-vision-map-content.rb"') &&
+       source.include?('exit "$vision_map_capture_status"')
+  abort "error: exact visionos-map capture must use the bounded semantic validator/retry before publication"
+end
+unless source.scan("quakesignal_capture_validated_vision_map").length == 1
+  abort "error: Vision semantic retry must remain exclusive to the exact map branch"
+end
+
+map_branch = source.index('elif [ "$platform" = "visionos" ] && [ "$frame_selector" = "visionos-map" ]; then')
+guard_call = source.index("quakesignal_capture_validated_vision_map", map_branch)
+status_check = source.index('if [ "$vision_map_capture_status" -ne 0 ]; then', guard_call)
+failure_exit = source.index('exit "$vision_map_capture_status"', status_check)
+pixel_inspection = source.index('pixel_width="$(sips -g pixelWidth "$candidate"', failure_exit)
+publication = source.index('mv "$candidate" "$output"', pixel_inspection)
+provenance = source.index('if [ -n "$provenance_output" ]; then', publication)
+unless [map_branch, guard_call, status_check, failure_exit, pixel_inspection, publication, provenance].all? &&
+       map_branch < guard_call && guard_call < status_check && status_check < failure_exit &&
+       failure_exit < pixel_inspection && pixel_inspection < publication && publication < provenance
+  abort "error: Vision map semantic failure must exit before pixel inspection, publication, and provenance"
+end
 RUBY
+
+# Execute the real set publisher around a deterministic capture stub. Two
+# earlier frames enter its private payload, then the exact map selector fails
+# semantically. The set must clean that payload and never run aggregation or
+# atomically move any partial output into the caller-visible destination.
+atomic_repo="$test_root/atomic-repo"
+atomic_script_dir="$atomic_repo/ios/ScreenshotAutomation"
+atomic_output="$test_root/atomic-vision-output"
+atomic_trace="$test_root/atomic-capture-trace"
+atomic_aggregate_marker="$test_root/atomic-aggregate-ran"
+mkdir -p "$atomic_script_dir"
+cp "$script_dir/capture-platform-screenshot-set.sh" \
+  "$atomic_script_dir/capture-platform-screenshot-set.sh"
+/usr/bin/ruby - "$atomic_script_dir" <<'RUBY'
+script_dir = ARGV.fetch(0)
+File.write(File.join(script_dir, "platform-screenshot-plan.rb"), <<~'PLAN')
+  abort "unexpected atomic plan request" unless ARGV == ["visionos", "--tsv"]
+  puts [
+    "visionos-home\ten-US/01-home.png\t3840\t2160",
+    "visionos-emergency-history\ten-US/02-emergency-history.png\t3840\t2160",
+    "visionos-map\ten-US/03-map.png\t3840\t2160"
+  ]
+PLAN
+File.write(File.join(script_dir, "capture-platform-screenshot.sh"), <<~'CAPTURE')
+  #!/bin/bash
+  set -euo pipefail
+  platform="$1"
+  selector="$2"
+  output="$3"
+  [ "$platform" = "visionos" ]
+  printf '%s\n' "$selector" >> "$QUAKESIGNAL_TEST_CAPTURE_TRACE"
+  if [ "$selector" = "visionos-map" ]; then
+    exit 65
+  fi
+  mkdir -p "$(dirname "$output")" "$(dirname "$QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT")"
+  printf 'private-candidate\n' > "$output"
+  printf '{}\n' > "$QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT"
+CAPTURE
+File.write(File.join(script_dir, "assemble-platform-screenshot-provenance.rb"), <<~'ASSEMBLE')
+  File.write(ENV.fetch("QUAKESIGNAL_TEST_AGGREGATE_MARKER"), "ran\n")
+ASSEMBLE
+File.chmod(0o755, File.join(script_dir, "capture-platform-screenshot.sh"))
+RUBY
+
+expect_status 65 env \
+  QUAKESIGNAL_TEST_CAPTURE_TRACE="$atomic_trace" \
+  QUAKESIGNAL_TEST_AGGREGATE_MARKER="$atomic_aggregate_marker" \
+  "$atomic_script_dir/capture-platform-screenshot-set.sh" \
+    visionos "$atomic_output"
+
+expected_atomic_trace=$'visionos-home\nvisionos-emergency-history\nvisionos-map'
+if [ ! -f "$atomic_trace" ] || [ "$(<"$atomic_trace")" != "$expected_atomic_trace" ]; then
+  echo "error: atomic set fixture did not reach the exact map failure after two private frames" >&2
+  exit 1
+fi
+if [ -e "$atomic_output" ] || [ -L "$atomic_output" ] ||
+    [ -e "$atomic_aggregate_marker" ] || [ -L "$atomic_aggregate_marker" ]; then
+  echo "error: semantic map rejection published a partial set or provenance aggregate" >&2
+  exit 1
+fi
+if find "$test_root" -maxdepth 1 -name '.quakesignal-visionos-set.*' -print -quit | grep -q .; then
+  echo "error: semantic map rejection left the set's private payload behind" >&2
+  exit 1
+fi
 
 echo "Platform screenshot interface tests passed"

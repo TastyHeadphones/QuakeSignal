@@ -99,6 +99,25 @@ The lower-level command writes a sidecar only when
 `QUAKESIGNAL_SCREENSHOT_PROVENANCE_OUTPUT` names a new absolute JSON path
 outside the repository.
 
+## Vision map readiness protection
+
+MapKit readiness is nondeterministic even after the Vision process becomes
+launchable. The exact `visionos-map` selector therefore receives a 25-second
+bounded initial settle. After native capture, `sips` creates a temporary BMP
+copy solely for semantic inspection; the original 4K PNG is never converted,
+resized, or modified. The validator samples the central app-panel region and
+requires all of the reviewed map signals: luma variance, quantized color
+diversity, saturated pixels, and blue/cyan map content, plus bright content or
+meaningful edges. A uniform gray launch placeholder fails even though its PNG
+dimensions and opacity are valid.
+
+Only semantic status 65 triggers recovery. The rejected raster is quarantined
+inside the disposable capture directory, the exact dual-gated `visionos-map`
+route is relaunched, and one further 25-second settle/capture/validation is
+allowed. Operational validator, conversion, launch, or path failures never
+retry. A second semantic rejection is also quarantined and aborts the atomic
+set before provenance or artifact publication.
+
 ## Watch foreground protection
 
 For watchOS the harness also creates and boots a disposable paired iPhone
@@ -130,6 +149,8 @@ process supervision, selector preservation, and badge validation:
 bash ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
 bash ios/ScreenshotAutomation/watch-capture-guard.test.sh
 /usr/bin/ruby ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
+bash ios/ScreenshotAutomation/vision-map-capture-guard.test.sh
+/usr/bin/ruby ios/ScreenshotAutomation/validate-vision-map-content.test.rb
 ```
 
 ## Provenance and CI artifacts

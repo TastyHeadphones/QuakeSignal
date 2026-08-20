@@ -51,6 +51,7 @@ script_dir="$(cd "$(dirname "$0")" && pwd -P)"
 ios_root="$(cd "$script_dir/.." && pwd -P)"
 repo_root="$(cd "$ios_root/.." && pwd -P)"
 source "$script_dir/watch-capture-guard.sh"
+source "$script_dir/vision-map-capture-guard.sh"
 
 if [[ "$requested_output" != /* ]] || [[ "$requested_output" != *.png ]]; then
   echo "error: output must be an absolute .png path" >&2
@@ -360,8 +361,15 @@ launch_fixture_app() {
 launch_fixture_app "$frame_selector" --terminate-running-process
 
 # SwiftUI needs a short, bounded settling period after the process becomes
-# launchable. The fixture does not issue network or permission requests.
-sleep 5
+# launchable. MapKit can commit a gray launch placeholder well after the other
+# deterministic Vision routes are ready, so the map receives its own reviewed
+# bound before semantic validation.
+initial_settle_seconds=5
+vision_map_settle_seconds=25
+if [ "$platform" = "visionos" ] && [ "$frame_selector" = "visionos-map" ]; then
+  initial_settle_seconds="$vision_map_settle_seconds"
+fi
+sleep "$initial_settle_seconds"
 
 candidate="$temporary_root/$platform-$locale.png"
 # Simulator's black device mask preserves native pixels while avoiding a
@@ -380,6 +388,18 @@ if [ "$platform" = "watchos" ]; then
   if [ "$watch_capture_status" -ne 0 ]; then
     echo "error: Watch screenshot capture/validation failed with status $watch_capture_status" >&2
     exit "$watch_capture_status"
+  fi
+elif [ "$platform" = "visionos" ] && [ "$frame_selector" = "visionos-map" ]; then
+  vision_map_capture_status=0
+  quakesignal_capture_validated_vision_map \
+    "$simulator_id" "$bundle_id" "$candidate" "$locale" "$apple_locale" \
+    "$frame_selector" "$temporary_root" "$expected_width" "$expected_height" \
+    "$script_dir/validate-vision-map-content.rb" \
+    "$vision_map_settle_seconds" sips /usr/bin/ruby || \
+    vision_map_capture_status=$?
+  if [ "$vision_map_capture_status" -ne 0 ]; then
+    echo "error: Vision map screenshot capture/validation failed with status $vision_map_capture_status" >&2
+    exit "$vision_map_capture_status"
   fi
 else
   xcrun simctl io "$simulator_id" screenshot --type=png --mask=black "$candidate"
