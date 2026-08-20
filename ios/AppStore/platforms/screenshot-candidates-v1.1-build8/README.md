@@ -2,9 +2,9 @@
 
 These three directories are byte-for-byte copies of the successful artifacts
 from GitHub Actions run
-[`32287156910`](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/32287156910),
+[`32347549322`](https://github.com/TastyHeadphones/QuakeSignal/actions/runs/32347549322),
 captured from source commit
-`fca25e9ee7719259debbbb218cc5e9d35f18fe83`.
+`b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2`.
 
 They contain 3 tvOS, 3 watchOS, and 5 visionOS Debug Simulator PNGs plus the
 complete per-frame, aggregate, runtime, and candidate metadata emitted by the

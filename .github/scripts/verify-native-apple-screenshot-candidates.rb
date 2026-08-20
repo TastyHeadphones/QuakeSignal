@@ -3,7 +3,7 @@
 
 # Fail-closed validation for the source-frozen, explicitly unapproved tvOS,
 # watchOS, and visionOS Debug Simulator screenshot candidates captured by
-# GitHub Actions run 32287156910. These files are review inputs only: passing
+# GitHub Actions run 32347549322. These files are review inputs only: passing
 # this validator does not approve an upload or turn the captures into signed
 # Release-binary evidence.
 
@@ -154,10 +154,10 @@ end
 class NativeAppleScreenshotCandidateValidator
   CANDIDATE_ROOT = "ios/AppStore/platforms/screenshot-candidates-v1.1-build8"
   README_NAME = "README.md"
-  README_SHA256 = "b952d5097557b853c343b8c54180b8363538c812671a2a573d62784a3c6d321e"
+  README_SHA256 = "540abb1b547f3dba2f25f6cea5c8ec3fb2c2ffc6e6e62876f71a817942bc66c8"
   RECEIPT_NAME = "capture-run-receipt.json"
-  SOURCE_COMMIT = "fca25e9ee7719259debbbb218cc5e9d35f18fe83"
-  WORKFLOW_RUN_ID = 32_287_156_910
+  SOURCE_COMMIT = "b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2"
+  WORKFLOW_RUN_ID = 32_347_549_322
   WORKFLOW_RUN_URL = "https://github.com/TastyHeadphones/QuakeSignal/actions/runs/#{WORKFLOW_RUN_ID}"
   APPROVAL_REQUIRED =
     "Named visual review and runbook-required signed Release parity comparison"
@@ -197,44 +197,44 @@ class NativeAppleScreenshotCandidateValidator
     "tvos" => {
       "platform" => "tvos",
       "directory" => "UNAPPROVED-debug-simulator-tvos-#{SOURCE_COMMIT}",
-      "artifactId" => 9_378_322_291,
+      "artifactId" => 9_398_937_649,
       "archiveDigest" =>
-        "sha256:af384d92eb48f3b1ecea0fb10b1155c1e1ba165b1cbc1c7337d0bf680b572333",
-      "archiveSizeInBytes" => 4_503_647,
-      "extractedSizeInBytes" => 4_525_874,
+        "sha256:a5604a94bf359334a5d825a05b6408d496e7263f22c1471c0f256b53760966a9",
+      "archiveSizeInBytes" => 4_585_918,
+      "extractedSizeInBytes" => 4_605_389,
       "fileCount" => 9,
       "contentManifestSha256" =>
-        "87d9c958c81bba580a2b3451928b4d875817460349a58fc31470a975823f7db9",
-      "createdAtUtc" => "2026-08-19T18:32:08Z",
-      "remoteExpiresAtUtc" => "2026-08-26T18:32:05Z",
+        "a8b866dcf92b298d5fe20f9c5d8beaedd3644f9fc45a18a02e22f0159476b1b2",
+      "createdAtUtc" => "2026-08-20T08:22:52Z",
+      "remoteExpiresAtUtc" => "2026-08-27T08:22:50Z",
     },
     "watchos" => {
       "platform" => "watchos",
       "directory" => "UNAPPROVED-debug-simulator-watchos-#{SOURCE_COMMIT}",
-      "artifactId" => 9_379_269_018,
+      "artifactId" => 9_399_327_711,
       "archiveDigest" =>
-        "sha256:cb6bbd5d723f5338beb724c84618f3cdf77a04206ea7a7b814f1f0530e7bdc6e",
-      "archiveSizeInBytes" => 112_455,
-      "extractedSizeInBytes" => 120_848,
+        "sha256:1386f53354886351968bea4f3241d7990139451805ba8e58b1f6cbb17891b94c",
+      "archiveSizeInBytes" => 109_069,
+      "extractedSizeInBytes" => 118_202,
       "fileCount" => 9,
       "contentManifestSha256" =>
-        "105e9a1237f81b944d153a0ab2d1c5d5f6e3d640319ea321e1e9fc8995e28521",
-      "createdAtUtc" => "2026-08-19T18:59:32Z",
-      "remoteExpiresAtUtc" => "2026-08-26T18:59:30Z",
+        "f54c54be54c060571f6bba2056b699a1f258f570b4551ceb9a4d5e5dbf47c971",
+      "createdAtUtc" => "2026-08-20T08:35:52Z",
+      "remoteExpiresAtUtc" => "2026-08-27T08:35:50Z",
     },
     "visionos" => {
       "platform" => "visionos",
       "directory" => "UNAPPROVED-debug-simulator-visionos-#{SOURCE_COMMIT}",
-      "artifactId" => 9_379_441_361,
+      "artifactId" => 9_399_957_564,
       "archiveDigest" =>
-        "sha256:1bced6014a79855af3837b1eafdc801df86f79a0e0c9151001fd61967589208e",
-      "archiveSizeInBytes" => 27_181_682,
-      "extractedSizeInBytes" => 27_211_818,
+        "sha256:f465d28edb0bb5a7f297c2f5d053869b2de31f2ac012826c6607c9b0bbe4b9a8",
+      "archiveSizeInBytes" => 27_182_959,
+      "extractedSizeInBytes" => 27_213_097,
       "fileCount" => 13,
       "contentManifestSha256" =>
-        "5ce3ff08a8c5619b5f84c62a237b20fce94701a71d70d9ba3c85b36d49f57065",
-      "createdAtUtc" => "2026-08-19T19:04:31Z",
-      "remoteExpiresAtUtc" => "2026-08-26T19:04:28Z",
+        "fa8a048581756a6aeeb4a5dd1f228c73b7887fcb8beb2079fbb04629555ca340",
+      "createdAtUtc" => "2026-08-20T08:56:53Z",
+      "remoteExpiresAtUtc" => "2026-08-27T08:56:49Z",
     },
   }.freeze
 
@@ -393,14 +393,14 @@ class NativeAppleScreenshotCandidateValidator
       workflow.fetch("createdAtUtc"), "receipt workflowRun.createdAtUtc"
     )
     require_equal(
-      workflow.fetch("createdAtUtc"), "2026-08-19T18:24:26Z",
+      workflow.fetch("createdAtUtc"), "2026-08-20T08:11:05Z",
       "receipt workflowRun.createdAtUtc",
     )
     run_completed = strict_utc_time(
       workflow.fetch("completedAtUtc"), "receipt workflowRun.completedAtUtc"
     )
     require_equal(
-      workflow.fetch("completedAtUtc"), "2026-08-19T19:04:39Z",
+      workflow.fetch("completedAtUtc"), "2026-08-20T08:57:00Z",
       "receipt workflowRun.completedAtUtc",
     )
     unless run_completed > run_created
@@ -414,7 +414,7 @@ class NativeAppleScreenshotCandidateValidator
       preservation.fetch("verifiedAtUtc"), "receipt archivePreservation.verifiedAtUtc"
     )
     require_equal(
-      preservation.fetch("verifiedAtUtc"), "2026-08-19T19:29:11Z",
+      preservation.fetch("verifiedAtUtc"), "2026-08-20T09:11:25Z",
       "receipt archivePreservation.verifiedAtUtc",
     )
     require_equal(

@@ -60,11 +60,11 @@ Each platform directory contains:
   in place would invalidate their provenance.
 
 The complete source-frozen Debug Simulator packages from successful workflow
-run `32287156910` are preserved under
+run `32347549322` are preserved under
 `screenshot-candidates-v1.1-build8/`. They contain all 3 Apple TV, 3 Apple
 Watch, and 5 Apple Vision Pro PNGs, per-frame evidence, aggregate provenance,
 runtime inventory, and schema-3 candidate metadata. Every package is bound to
-commit `fca25e9ee7719259debbbb218cc5e9d35f18fe83` and remains explicitly
+commit `b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2` and remains explicitly
 unapproved (`uploadApproved: false`, `reviewer: null`, and no signed Release
 evidence). The capture-run receipt retains the short-lived GitHub artifact IDs
 and archive digests; the checked-in validator proves the full local hash chain.

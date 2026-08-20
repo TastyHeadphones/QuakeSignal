@@ -117,8 +117,8 @@ No current iPhone, iPad, Apple TV, Apple Vision Pro, or Apple Watch screenshot
 asset is approved for a build-8 App Store upload.
 
 The exact native candidates captured from commit
-`fca25e9ee7719259debbbb218cc5e9d35f18fe83` by successful workflow run
-`32287156910` are preserved under
+`b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2` by successful workflow run
+`32347549322` are preserved under
 `screenshot-candidates-v1.1-build8/`. The directory contains three exact
 `UNAPPROVED-debug-simulator-*` packages plus `capture-run-receipt.json`. The
 packages collectively contain 3 Apple TV, 3 Apple Watch, and 5 Apple Vision

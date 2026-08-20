@@ -141,17 +141,17 @@ class NativeAppleScreenshotCandidateValidatorTest < Minitest::Test
       [/receipt repository/, lambda { |json| json["repository"] = "someone/else" }],
       [/receipt workflowFile/, lambda { |json| json["workflowFile"] = "other.yml" }],
       [/workflowRun\.id/, lambda { |json| json.fetch("workflowRun")["id"] += 1 }],
-      [/workflowRun\.id/, lambda { |json| json.fetch("workflowRun")["id"] = 32_287_156_910.0 }],
+      [/workflowRun\.id/, lambda { |json| json.fetch("workflowRun")["id"] = 32_347_549_322.0 }],
       [/workflowRun\.attempt/, lambda { |json| json.fetch("workflowRun")["attempt"] = 2 }],
       [/workflowRun\.createdAtUtc/, lambda do |json|
-        json.fetch("workflowRun")["createdAtUtc"] = "2026-08-19T18:24:26+00:00"
+        json.fetch("workflowRun")["createdAtUtc"] = "2026-08-20T08:11:05+00:00"
       end],
       [/archivesCheckedIntoRepository/, lambda do |json|
         json.fetch("archivePreservation")["archivesCheckedIntoRepository"] = true
       end],
       [/contentManifestAlgorithm/, lambda { |json| json["contentManifestAlgorithm"] = "sha256" }],
       [/artifactId/, lambda { |json| json.fetch("artifacts").first["artifactId"] += 1 }],
-      [/artifactId/, lambda { |json| json.fetch("artifacts").first["artifactId"] = 9_378_322_291.0 }],
+      [/artifactId/, lambda { |json| json.fetch("artifacts").first["artifactId"] = 9_398_937_649.0 }],
       [/archiveDigest/, lambda do |json|
         json.fetch("artifacts").first["archiveDigest"] = "sha256:#{'0' * 64}"
       end],
@@ -159,7 +159,7 @@ class NativeAppleScreenshotCandidateValidatorTest < Minitest::Test
         json.fetch("artifacts").first["archiveSizeInBytes"] += 1
       end],
       [/archiveSizeInBytes/, lambda do |json|
-        json.fetch("artifacts").first["archiveSizeInBytes"] = 4_503_647.0
+        json.fetch("artifacts").first["archiveSizeInBytes"] = 4_585_918.0
       end],
       [/extractedSizeInBytes/, lambda do |json|
         json.fetch("artifacts").first["extractedSizeInBytes"] += 1
@@ -305,7 +305,7 @@ class NativeAppleScreenshotCandidateValidatorTest < Minitest::Test
     sidecar = sidecar_path("watchos", 0)
     originals = [aggregate, metadata, sidecar].to_h { |path| [path, path.binread] }
 
-    invalid_time = "2026-08-19T18:41:33+00:00"
+    invalid_time = "2026-08-20T08:24:06+00:00"
     mutate_json(sidecar) { |json| json["capturedAtUtc"] = invalid_time }
     mutate_json(aggregate) { |json| json.fetch("frames").first["capturedAtUtc"] = invalid_time }
     rebuild_outer_hashes("watchos")

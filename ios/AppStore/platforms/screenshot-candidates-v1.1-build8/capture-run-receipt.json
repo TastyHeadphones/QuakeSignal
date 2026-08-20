@@ -6,58 +6,58 @@
   "reviewer": null,
   "repository": "TastyHeadphones/QuakeSignal",
   "workflowFile": ".github/workflows/apple-platform-screenshots.yml",
-  "sourceCommit": "fca25e9ee7719259debbbb218cc5e9d35f18fe83",
+  "sourceCommit": "b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2",
   "contentManifestAlgorithm": "sha256 of sorted UTF-8 records: <file-sha256><two spaces><relative-path><newline>",
   "workflowRun": {
-    "id": 32287156910,
+    "id": 32347549322,
     "attempt": 1,
-    "url": "https://github.com/TastyHeadphones/QuakeSignal/actions/runs/32287156910",
+    "url": "https://github.com/TastyHeadphones/QuakeSignal/actions/runs/32347549322",
     "event": "workflow_dispatch",
     "conclusion": "success",
-    "createdAtUtc": "2026-08-19T18:24:26Z",
-    "completedAtUtc": "2026-08-19T19:04:39Z"
+    "createdAtUtc": "2026-08-20T08:11:05Z",
+    "completedAtUtc": "2026-08-20T08:57:00Z"
   },
   "archivePreservation": {
-    "verifiedAtUtc": "2026-08-19T19:29:11Z",
+    "verifiedAtUtc": "2026-08-20T09:11:25Z",
     "verification": "Each downloaded ZIP SHA-256 matched the GitHub artifact digest and unzip integrity testing passed",
     "archivesCheckedIntoRepository": false
   },
   "artifacts": [
     {
       "platform": "tvos",
-      "directory": "UNAPPROVED-debug-simulator-tvos-fca25e9ee7719259debbbb218cc5e9d35f18fe83",
-      "artifactId": 9378322291,
-      "archiveDigest": "sha256:af384d92eb48f3b1ecea0fb10b1155c1e1ba165b1cbc1c7337d0bf680b572333",
-      "archiveSizeInBytes": 4503647,
-      "extractedSizeInBytes": 4525874,
+      "directory": "UNAPPROVED-debug-simulator-tvos-b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2",
+      "artifactId": 9398937649,
+      "archiveDigest": "sha256:a5604a94bf359334a5d825a05b6408d496e7263f22c1471c0f256b53760966a9",
+      "archiveSizeInBytes": 4585918,
+      "extractedSizeInBytes": 4605389,
       "fileCount": 9,
-      "contentManifestSha256": "87d9c958c81bba580a2b3451928b4d875817460349a58fc31470a975823f7db9",
-      "createdAtUtc": "2026-08-19T18:32:08Z",
-      "remoteExpiresAtUtc": "2026-08-26T18:32:05Z"
+      "contentManifestSha256": "a8b866dcf92b298d5fe20f9c5d8beaedd3644f9fc45a18a02e22f0159476b1b2",
+      "createdAtUtc": "2026-08-20T08:22:52Z",
+      "remoteExpiresAtUtc": "2026-08-27T08:22:50Z"
     },
     {
       "platform": "watchos",
-      "directory": "UNAPPROVED-debug-simulator-watchos-fca25e9ee7719259debbbb218cc5e9d35f18fe83",
-      "artifactId": 9379269018,
-      "archiveDigest": "sha256:cb6bbd5d723f5338beb724c84618f3cdf77a04206ea7a7b814f1f0530e7bdc6e",
-      "archiveSizeInBytes": 112455,
-      "extractedSizeInBytes": 120848,
+      "directory": "UNAPPROVED-debug-simulator-watchos-b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2",
+      "artifactId": 9399327711,
+      "archiveDigest": "sha256:1386f53354886351968bea4f3241d7990139451805ba8e58b1f6cbb17891b94c",
+      "archiveSizeInBytes": 109069,
+      "extractedSizeInBytes": 118202,
       "fileCount": 9,
-      "contentManifestSha256": "105e9a1237f81b944d153a0ab2d1c5d5f6e3d640319ea321e1e9fc8995e28521",
-      "createdAtUtc": "2026-08-19T18:59:32Z",
-      "remoteExpiresAtUtc": "2026-08-26T18:59:30Z"
+      "contentManifestSha256": "f54c54be54c060571f6bba2056b699a1f258f570b4551ceb9a4d5e5dbf47c971",
+      "createdAtUtc": "2026-08-20T08:35:52Z",
+      "remoteExpiresAtUtc": "2026-08-27T08:35:50Z"
     },
     {
       "platform": "visionos",
-      "directory": "UNAPPROVED-debug-simulator-visionos-fca25e9ee7719259debbbb218cc5e9d35f18fe83",
-      "artifactId": 9379441361,
-      "archiveDigest": "sha256:1bced6014a79855af3837b1eafdc801df86f79a0e0c9151001fd61967589208e",
-      "archiveSizeInBytes": 27181682,
-      "extractedSizeInBytes": 27211818,
+      "directory": "UNAPPROVED-debug-simulator-visionos-b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2",
+      "artifactId": 9399957564,
+      "archiveDigest": "sha256:f465d28edb0bb5a7f297c2f5d053869b2de31f2ac012826c6607c9b0bbe4b9a8",
+      "archiveSizeInBytes": 27182959,
+      "extractedSizeInBytes": 27213097,
       "fileCount": 13,
-      "contentManifestSha256": "5ce3ff08a8c5619b5f84c62a237b20fce94701a71d70d9ba3c85b36d49f57065",
-      "createdAtUtc": "2026-08-19T19:04:31Z",
-      "remoteExpiresAtUtc": "2026-08-26T19:04:28Z"
+      "contentManifestSha256": "fa8a048581756a6aeeb4a5dd1f228c73b7887fcb8beb2079fbb04629555ca340",
+      "createdAtUtc": "2026-08-20T08:56:53Z",
+      "remoteExpiresAtUtc": "2026-08-27T08:56:49Z"
     }
   ]
 }

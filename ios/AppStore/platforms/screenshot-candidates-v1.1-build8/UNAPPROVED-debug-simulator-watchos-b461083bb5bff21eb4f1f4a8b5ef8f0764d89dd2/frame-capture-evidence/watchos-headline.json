@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "status": "unapproved-debug-simulator-capture-evidence",
+  "uploadApproved": false,
+  "platform": "watchos",
+  "locale": "en",
+  "captureSelector": "watchos-headline",
+  "plannedFile": "en-US/01-headline.png",
+  "screenshotFile": "01-headline.png",
+  "screenshotSha256": "aaa21849da0773133b205c0c957f1993a236a6cbe7715f3c9cb6c1e945833dd2",
+  "pixels": [
+    410,
+    502
+  ],
+  "capturedAtUtc": "2026-08-20T08:24:06Z",
+  "selectedSimulator": {
+    "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.watchOS-26-5",
+    "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra-2-49mm",
+    "deviceModel": "Apple Watch Ultra 2 (49mm)",
+    "udid": "4631F2DC-5884-4DC1-B45B-919FE40AA002"
+  }
+}
