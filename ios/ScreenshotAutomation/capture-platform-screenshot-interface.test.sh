@@ -179,6 +179,7 @@ unless dashboard.include?("WatchContextBadges") &&
        dashboard.include?(".id(WatchDashboardPage.controls)") &&
        dashboard.scan("minHeight: geometry.size.height").length == 2 &&
        dashboard.include?(".scrollTargetBehavior(.paging)") &&
+       dashboard.scan(".ignoresSafeArea(.container, edges: .bottom)").length == 1 &&
        dashboard.match?(/\.navigationTitle\("app\.name"\)\s*\.navigationBarTitleDisplayMode\(\.inline\)/m)
   abort "error: ordinary Watch dashboard must show the compact headline and expose the shared reports destination"
 end
@@ -212,6 +213,7 @@ unless recent.include?("Array(events.prefix(2))") &&
        recent.include?(".id(WatchReportsPage.first)") &&
        recent.include?(".id(WatchReportsPage.remaining)") &&
        recent.include?(".scrollTargetBehavior(.paging)") &&
+       recent.scan(".ignoresSafeArea(.container, edges: .bottom)").length == 1 &&
        recent.match?(/\.navigationTitle\("app\.name"\)\s*\.navigationBarTitleDisplayMode\(\.inline\)/m)
   abort "error: shared production Watch reports must page an exact complete 2-row first viewport before remaining reports"
 end
@@ -219,10 +221,18 @@ end
 reports_header = extract_view.call(watch_source, "WatchReportsHeader")
 unless reports_header.include?("Button(action: onRefresh)") &&
        reports_header.include?('Label("platform.historical.reports"') &&
-       reports_header.include?('Image(systemName: "arrow.clockwise")') &&
+       reports_header.include?("WatchRefreshControlLabel(isLoading: isLoading)") &&
+       reports_header.include?(".buttonStyle(.plain)") &&
        reports_header.include?('.accessibilityLabel(Text("platform.refresh"))') &&
        !reports_header.include?('Label("platform.refresh", systemImage: "arrow.clockwise")')
-  abort "error: Watch reports header must keep an icon-only localized accessible refresh control"
+  abort "error: Watch reports header must keep an icon-only localized accessible 44-point refresh control"
+end
+
+refresh_control = extract_view.call(watch_source, "WatchRefreshControlLabel")
+unless refresh_control.include?('Image(systemName: "arrow.clockwise")') &&
+       refresh_control.match?(/\.frame\(width: 44, height: 44\)\s*\.contentShape\(Rectangle\(\)\)/m) &&
+       refresh_control.include?("RoundedRectangle(cornerRadius: 12, style: .continuous)")
+  abort "error: Watch refresh label must own its complete 44-by-44-point visible hit region"
 end
 
 report_link = extract_view.call(watch_source, "WatchReportLink")

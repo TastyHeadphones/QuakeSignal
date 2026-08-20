@@ -133,12 +133,24 @@ validation copy is inspected in the reviewed frame-specific upper content
 band; dashboard/list use a text-sized marker while detail uses a filled banner
 with a disjoint density contract. The detail scan includes the full upper 45%
 so navigation safe-area changes cannot hide that fixed banner; rejection logs
-also report the full-frame orange count for diagnosis. The native PNG is never
-converted or modified. A clock-face, wrong-density, or stale-route capture is rejected.
+also report the full-frame orange count for diagnosis. Headline and recent-report
+pagers extend through the bottom container safe area so each page matches the
+complete visible Watch viewport. Their raster contracts reject next-page content
+in the bottom central band; recent reports additionally require the full orange
+foreground label to reach its reviewed rightmost extent. The icon-only refresh
+control has a 44-by-44-point accessible hit target so that label retains its
+production layout width.
+Event-detail bottom content remains outside those first-page checks. The native
+PNG is never converted or modified. A clock-face, wrong-density, clipped-page,
+truncated-label, or stale-route capture is rejected.
 Because a foreground restart can race an
 already-pending CoreSimulator request, one rejected raster is quarantined in
 the temporary capture directory and the exact route receives one bounded
-retry. A second rejection aborts the complete atomic set without an upload.
+retry. Validator argument/selector failures use status 64, semantic pixel
+rejections use status 65, and bitmap read/layout failures use status 70. Only
+status 65 is eligible for quarantine and retry; every other validator failure
+is returned as operational status 70 without relaunch. A second semantic
+rejection aborts the complete atomic set without an upload.
 
 Credential-free tests cover the exact plan, aggregate provenance, Watch
 process supervision, selector preservation, and badge validation:

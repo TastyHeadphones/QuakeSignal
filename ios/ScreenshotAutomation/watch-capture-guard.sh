@@ -284,6 +284,7 @@ quakesignal_capture_validated_watch_screenshot() {
   local candidate_parent=""
   local capture_status=0
   local retry_reactivation_status=0
+  local validator_status=0
   local spawned_pid=""
   local watch_capture_attempt=1
   local watch_capture_max_attempts=2
@@ -334,9 +335,16 @@ quakesignal_capture_validated_watch_screenshot() {
       echo "error: could not create the temporary Watch validation bitmap" >&2
       return 70
     fi
-    if "$ruby_executable" "$validator_path" \
-        "$watch_validation_bmp" "$expected_width" "$expected_height" "$frame_selector"; then
+    validator_status=0
+    "$ruby_executable" "$validator_path" \
+      "$watch_validation_bmp" "$expected_width" "$expected_height" "$frame_selector" || \
+      validator_status=$?
+    if [ "$validator_status" -eq 0 ]; then
       return 0
+    fi
+    if [ "$validator_status" -ne 65 ]; then
+      echo "error: Watch validator failed operationally with status $validator_status; refusing retry" >&2
+      return 70
     fi
     if [ "$watch_capture_attempt" -ge "$watch_capture_max_attempts" ]; then
       echo "error: Watch screenshot failed foreground validation after $watch_capture_max_attempts attempts" >&2

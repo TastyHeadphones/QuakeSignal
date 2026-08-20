@@ -25,6 +25,7 @@ export QUAKESIGNAL_TEST_REACTIVATION_RELEASE_FILE=""
 export QUAKESIGNAL_TEST_RELEASE_TIMEOUT=20
 export QUAKESIGNAL_TEST_IGNORE_TERM=0
 export QUAKESIGNAL_TEST_EXPECTED_FRAME=watchos-headline
+export QUAKESIGNAL_TEST_VALIDATOR_OPERATIONAL_STATUS=70
 
 cleanup() {
   quakesignal_stop_processes \
@@ -75,6 +76,22 @@ assert_file_content() {
     echo "error: $label did not contain the expected test payload" >&2
     exit 1
   fi
+}
+
+capture_and_publish_validated_watch() {
+  local directory="$1"
+  local capture_status=0
+
+  quakesignal_capture_validated_watch_screenshot \
+    fake-watch fake.bundle "$directory/candidate.png" en en_US \
+    watchos-headline 4 1 "$directory" 410 502 \
+    "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 \
+    "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby || \
+    capture_status=$?
+  if [ "$capture_status" -ne 0 ]; then
+    return "$capture_status"
+  fi
+  mv "$directory/candidate.png" "$directory/accepted-candidate.png"
 }
 
 wait_for_nonempty_file() {
@@ -273,6 +290,39 @@ if [ ! -s "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" ]; then
   echo "error: rejected Watch raster did not trigger an exact-frame relaunch" >&2
   exit 1
 fi
+
+validated_validator_70_dir="$test_root/validated-validator-70"
+mkdir "$validated_validator_70_dir"
+export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="operational|valid"
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_validator_70_dir/capture-count"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_validator_70_dir/reactivated"
+export QUAKESIGNAL_TEST_VALIDATOR_OPERATIONAL_STATUS=70
+expect_status 70 capture_and_publish_validated_watch "$validated_validator_70_dir"
+assert_file_content "$QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE" 1 \
+  "validator-70 capture count"
+if [ -e "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" ] || \
+    [ -e "$validated_validator_70_dir/rejected-watch-attempt-1.png" ] || \
+    [ -e "$validated_validator_70_dir/accepted-candidate.png" ]; then
+  echo "error: Watch validator status 70 retried, quarantined, or published its candidate" >&2
+  exit 1
+fi
+
+validated_validator_64_dir="$test_root/validated-validator-64"
+mkdir "$validated_validator_64_dir"
+export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="operational|valid"
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$validated_validator_64_dir/capture-count"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$validated_validator_64_dir/reactivated"
+export QUAKESIGNAL_TEST_VALIDATOR_OPERATIONAL_STATUS=64
+expect_status 70 capture_and_publish_validated_watch "$validated_validator_64_dir"
+assert_file_content "$QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE" 1 \
+  "validator-64 capture count"
+if [ -e "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" ] || \
+    [ -e "$validated_validator_64_dir/rejected-watch-attempt-1.png" ] || \
+    [ -e "$validated_validator_64_dir/accepted-candidate.png" ]; then
+  echo "error: Watch validator status 64 retried, quarantined, or published its candidate" >&2
+  exit 1
+fi
+export QUAKESIGNAL_TEST_VALIDATOR_OPERATIONAL_STATUS=70
 
 validated_reject_dir="$test_root/validated-reject-reject"
 mkdir "$validated_reject_dir"

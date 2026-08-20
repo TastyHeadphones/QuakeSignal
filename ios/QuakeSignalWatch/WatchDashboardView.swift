@@ -100,6 +100,7 @@ struct WatchDashboardView: View {
             }
             .scrollTargetBehavior(.paging)
         }
+        .ignoresSafeArea(.container, edges: .bottom)
         .navigationTitle("app.name")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -263,6 +264,7 @@ private struct WatchReportsView: View {
             }
             .scrollTargetBehavior(.paging)
         }
+        .ignoresSafeArea(.container, edges: .bottom)
         .navigationTitle("app.name")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -290,15 +292,9 @@ private struct WatchReportsHeader: View {
                 Spacer(minLength: 2)
 
                 Button(action: onRefresh) {
-                    if isLoading {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.caption.weight(.semibold))
-                    }
+                    WatchRefreshControlLabel(isLoading: isLoading)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
+                .buttonStyle(.plain)
                 .disabled(isLoading)
                 .accessibilityLabel(Text("platform.refresh"))
             }
@@ -313,6 +309,27 @@ private struct WatchReportsHeader: View {
                     .font(.caption.weight(.semibold))
             }
         }
+    }
+}
+
+private struct WatchRefreshControlLabel: View {
+    let isLoading: Bool
+
+    var body: some View {
+        Group {
+            if isLoading {
+                ProgressView()
+            } else {
+                Image(systemName: "arrow.clockwise")
+                    .font(.caption.weight(.semibold))
+            }
+        }
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
+        .background(
+            Color.white.opacity(0.12),
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
     }
 }
 
