@@ -169,8 +169,13 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
         require "json"
         require "pathname"
         test_file, destination_string = ARGV
-        ARGV.replace(["--name", "/__no_fixture_tests__/" ])
+        ARGV.replace(["--name", "test_realistic_verifier_fixture_sentinel"])
         require test_file
+        class AppleScreenshotReleaseSetAssemblerFixtureSentinelTest < Minitest::Test
+          def test_realistic_verifier_fixture_sentinel
+            assert true
+          end
+        end
         destination = Pathname.new(destination_string)
         helper = AppleScreenshotReleaseSetAssemblerTest.new("fixture")
         begin

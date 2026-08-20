@@ -2144,6 +2144,66 @@ test("fails closed when the native Apple screenshot harness is assigned to a non
   });
 });
 
+test("fails closed when the normal lint runner's pinned Go toolchain is missing or drifts", async (t) => {
+  const setupGo = `      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.24.13"
+          cache: false
+
+`;
+  const runActionlint = `      # Pin the actionlint module version so syntax and expression validation
+      # does not depend on a floating GitHub Action implementation.
+      - name: Run actionlint
+        run: |
+          set -euo pipefail
+          go version
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 .github/workflows/*.yml
+
+`;
+  const mutations = [
+    {
+      label: "removed setup step",
+      mutate: (contents) => contents.replace(setupGo, ""),
+      error: /workflow-lint pinned Go setup step must appear exactly once \(found 0\)/i,
+    },
+    {
+      label: "floating setup action",
+      mutate: (contents) => contents.replace(
+        "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
+        "actions/setup-go@v6",
+      ),
+      error: /workflow-lint pinned Go setup step\.uses must be exactly/i,
+    },
+    {
+      label: "drifted Go version",
+      mutate: (contents) => contents.replace('go-version: "1.24.13"', 'go-version: "1.25.0"'),
+      error: /workflow-lint pinned Go setup step\.with must be exactly/i,
+    },
+    {
+      label: "enabled setup cache",
+      mutate: (contents) => contents.replace("          cache: false\n", "          cache: true\n"),
+      error: /workflow-lint pinned Go setup step\.with must be exactly/i,
+    },
+    {
+      label: "setup after actionlint",
+      mutate: (contents) => contents.replace(`${setupGo}${runActionlint}`, `${runActionlint}${setupGo}`),
+      error: /workflow-lint pinned Go setup step must run before actionlint/i,
+    },
+  ];
+
+  for (const { label, mutate, error } of mutations) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/workflow-lint.yml");
+      const contents = await readFile(path, "utf8");
+      const mutated = mutate(contents);
+      assert.notEqual(mutated, contents, `workflow-lint fixture must support ${label} mutation`);
+      await writeFile(path, mutated, "utf8");
+      await assert.rejects(verifyIOSReleaseContract({ root }), error);
+    });
+  }
+});
+
 test("fails closed when normal push and pull-request lint omits the Mac Catalyst screenshot harness", async (t) => {
   for (const command of [
     "      - \"ios/QuakeSignal/**\"\n",

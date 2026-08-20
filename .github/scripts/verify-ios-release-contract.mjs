@@ -403,13 +403,13 @@ const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNB
 const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:JNEQMrC6ERPFz0noPzgFH0GL-wfKSEWMChfGib5wm54";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
 const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:KWWQdqZwo-iFcqhKlcIhuezMY8ntSKDnCRHOP1S3n1s";
-const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:LSJxwHZ8TyOrYBaAmGiaKArv3QQ8M7l68lUCLXo6rrM";
+const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:8EQKMBOl9E4S3crmbhjbcP9FeiMyA2FkB_sJG0hyyhs";
 const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:IrzNeaBXEZB1ZU04lsg6oaLXcb0YnsYfyiqs4qaJePE";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:vtAIx8JZ4s9UUN07yItVzVx-po5bFVrgWPH5FV_zhXA";
 const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:FziznhIyMsrK3XG4hiulKdGrLslyBQ0GnhkgxKYdK5c";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:mtUuqJUX0BQ1DZIEPUb5X5BsDZND5Unmk1zPjmFsFUc";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:HESnZFREbiQL6warJktaqMjXtKXHkJpgSd9MsM-4oao";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:lnd9N7p5XIGOmJKiVlR-eYrYE2N_YorMMiQZpn17kpY";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:S839YTs6JkvIiueNjDjzgoZ-Lx4sZt-jCXAz0GL7a8A";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:gNHr13EktFUXs0KiPpLYbdaL3I7IApzP4PQjaDmX2Gk";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -1530,6 +1530,30 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
       const actionlintJob = record(jobs.actionlint, "workflow-lint actionlint job");
       if (actionlintJob["runs-on"] !== "macos-latest") {
         fail("the workflow-lint native Apple screenshot harness must run on macos-latest.");
+      }
+      if (!Array.isArray(actionlintJob.steps)) {
+        fail("workflow-lint actionlint job steps must be a sequence.");
+      }
+      const setupGo = stepByName(
+        actionlintJob.steps,
+        "Set up Go",
+        "workflow-lint pinned Go setup step",
+      );
+      exactRecord(setupGo, {
+        name: "Set up Go",
+        uses: "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
+        with: {
+          "go-version": "1.24.13",
+          cache: false,
+        },
+      }, "workflow-lint pinned Go setup step");
+      const runActionlint = stepByName(
+        actionlintJob.steps,
+        "Run actionlint",
+        "workflow-lint actionlint execution step",
+      );
+      if (actionlintJob.steps.indexOf(setupGo) >= actionlintJob.steps.indexOf(runActionlint)) {
+        fail("workflow-lint pinned Go setup step must run before actionlint.");
       }
     }
     const trigger = workflow.on ?? workflow.true;

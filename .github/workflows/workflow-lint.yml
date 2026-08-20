@@ -122,9 +122,16 @@ jobs:
         with:
           node-version: 22
 
-      # GitHub-hosted macOS runners include Go. Pin the actionlint module
-      # version so workflow syntax and expression validation is reproducible
-      # and does not depend on a floating GitHub Action implementation.
+      # The installed tools on GitHub-hosted macOS images can change. Pin both
+      # the setup action and toolchain so actionlint has a reproducible Go host.
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.24.13"
+          cache: false
+
+      # Pin the actionlint module version so syntax and expression validation
+      # does not depend on a floating GitHub Action implementation.
       - name: Run actionlint
         run: |
           set -euo pipefail
