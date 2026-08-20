@@ -228,7 +228,7 @@ private struct WatchReportsView: View {
         GeometryReader { geometry in
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 3) {
                         WatchReportsHeader(
                             isHistorical: isHistorical,
                             isLoading: isLoading,
@@ -281,33 +281,32 @@ private struct WatchReportsHeader: View {
     let onRefresh: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 5) {
+        HStack(alignment: .center, spacing: 5) {
+            VStack(alignment: .leading, spacing: 4) {
                 Label("platform.foreground.badge", systemImage: "eye")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Color("CautionColor"))
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
 
-                Spacer(minLength: 2)
-
-                Button(action: onRefresh) {
-                    WatchRefreshControlLabel(isLoading: isLoading)
+                if isHistorical {
+                    Label("platform.historical.reports", systemImage: "clock.arrow.circlepath")
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                } else {
+                    Text("home.section.recent")
+                        .font(.caption.weight(.semibold))
                 }
-                .buttonStyle(.plain)
-                .disabled(isLoading)
-                .accessibilityLabel(Text("platform.refresh"))
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            if isHistorical {
-                Label("platform.historical.reports", systemImage: "clock.arrow.circlepath")
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-            } else {
-                Text("home.section.recent")
-                    .font(.caption.weight(.semibold))
+            Button(action: onRefresh) {
+                WatchRefreshControlLabel(isLoading: isLoading)
             }
+            .buttonStyle(.plain)
+            .disabled(isLoading)
+            .accessibilityLabel(Text("platform.refresh"))
         }
     }
 }
@@ -372,9 +371,10 @@ private struct WatchCompactEventRow: View {
                 .frame(width: 34)
             VStack(alignment: .leading, spacing: 1) {
                 Text(event.hypocenter)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(primaryTextColor)
-                    .lineLimit(1)
+                    .lineLimit(2, reservesSpace: true)
+                    .minimumScaleFactor(0.82)
                 HStack(spacing: 5) {
                     Text(event.reportStatus.labelKey)
                     Text(event.sourceLabelKey)
@@ -392,7 +392,7 @@ private struct WatchCompactEventRow: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             cardBackgroundColor,

@@ -141,7 +141,10 @@ band to contain the complete second-row tail, but require the final three-fifths
 at the physical screen edge to remain clean; they also require the full orange
 foreground label to reach its reviewed rightmost extent. The icon-only refresh
 control has a 44-by-44-point accessible hit target so that label retains its
-production layout width.
+production layout width. Both context labels share that single 44-point header
+row beside the control. Report locations use a compact reserved two-line title
+so both complete hypocenter names and their status/source/time metadata remain
+visible in the first two production rows without entering the final review band.
 Event-detail bottom content remains outside those first-page checks. The native
 PNG is never converted or modified. A clock-face, wrong-density, clipped-page,
 truncated-label, or stale-route capture is rejected.

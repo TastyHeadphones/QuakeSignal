@@ -206,6 +206,7 @@ end
 recent = extract_view.call(watch_source, "WatchReportsView")
 unless recent.include?("Array(events.prefix(2))") &&
        recent.include?("Array(events.dropFirst(2).prefix(6))") &&
+       recent.match?(/VStack\(alignment: \.leading, spacing: 3\).*?WatchReportsHeader.*?ForEach\(firstPageEvents\)/m) &&
        recent.include?("ForEach(firstPageEvents)") &&
        recent.include?("ForEach(remainingEvents)") &&
        recent.include?("ScrollView") &&
@@ -219,7 +220,7 @@ unless recent.include?("Array(events.prefix(2))") &&
 end
 
 reports_header = extract_view.call(watch_source, "WatchReportsHeader")
-unless reports_header.include?("Button(action: onRefresh)") &&
+unless reports_header.match?(/var body: some View \{\s*HStack\(alignment: \.center, spacing: 5\) \{\s*VStack\(alignment: \.leading, spacing: 4\).*?Label\("platform\.foreground\.badge".*?Label\("platform\.historical\.reports".*?\.frame\(maxWidth: \.infinity, alignment: \.leading\).*?Button\(action: onRefresh\)/m) &&
        reports_header.include?('Label("platform.historical.reports"') &&
        reports_header.include?("WatchRefreshControlLabel(isLoading: isLoading)") &&
        reports_header.include?(".buttonStyle(.plain)") &&
@@ -249,9 +250,11 @@ unless report_row.include?("let isFocused: Bool") &&
        report_row.include?("isFocused ? .black : .white") &&
        report_row.include?("isFocused ? Color.black.opacity(0.72) : Color.white.opacity(0.72)") &&
        report_row.include?("Color(white: 0.16)") &&
+       report_row.match?(/Text\(event\.hypocenter\).*?\.font\(\.caption2\.weight\(\.semibold\)\).*?\.lineLimit\(2, reservesSpace: true\).*?\.minimumScaleFactor\(0\.82\)/m) &&
+       report_row.include?(".padding(.vertical, 2)") &&
        report_row.include?('date.formatted(date: .omitted, time: .shortened)') &&
        !report_row.include?('Color("CardColor")')
-  abort "error: production Watch report rows must keep location/status/source/date readable in both focus states"
+  abort "error: production Watch report rows must keep complete two-line locations and metadata readable in both focus states"
 end
 
 detail_declarations = watch_source.scan(/private struct WatchEventDetailView: View/).length
