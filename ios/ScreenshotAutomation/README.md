@@ -130,6 +130,13 @@ screenshot. While that request is pending, the harness restarts QuakeSignal in
 the foreground every 45 seconds with the same dual-gated frame selector. The
 screenshot and restart children share a five-minute hard deadline and are both
 stopped with bounded TERM-to-KILL cleanup on timeout or interruption.
+Before settling or requesting that first screenshot, the initial exact-frame
+launch uses the same tracked helper as semantic recovery: at most two launch
+attempts with the identical environment-plus-argument selector gates and a
+five-second backoff. One transient launch failure may recover; two failures
+return operational status 70 before any candidate or provenance can be
+published. INT/TERM during either tracked launch or its backoff preserves the
+caller trap's 130/143 status and likewise cannot publish an artifact.
 
 Each Watch frame contains the orange foreground-only badge. A temporary BMP
 validation copy is inspected in the reviewed frame-specific upper content
@@ -154,10 +161,9 @@ truncated-label, or stale-route capture is rejected.
 Because a foreground restart can race an
 already-pending CoreSimulator request, one rejected raster is quarantined in
 the temporary capture directory and the exact route receives one bounded
-capture retry. The exact-frame relaunch is itself attempted at most twice with
-the same dual-gated selector and a five-second backoff. A successful relaunch
-keeps the existing settle before the second and final capture; two failed
-launch attempts return operational status 70 without publishing a candidate.
+capture retry. That semantic recovery reuses the initial launch's shared
+two-attempt, five-second-backoff helper, and a successful relaunch keeps the
+existing settle before the second and final capture.
 Validator argument/selector failures use status 64, semantic pixel
 rejections use status 65, and bitmap read/layout failures use status 70. Only
 status 65 is eligible for quarantine and retry; every other validator failure

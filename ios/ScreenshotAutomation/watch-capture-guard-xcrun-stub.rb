@@ -64,6 +64,8 @@ when "launch"
     statuses = status_sequence.split("|", -1)
     Integer(statuses.fetch([reactivation_count, statuses.length - 1].min), 10)
   end
+  launch_status_trace = ENV.fetch("QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE", "")
+  File.open(launch_status_trace, "a") { |file| file.puts(status) } unless launch_status_trace.empty?
 else
   abort "unexpected xcrun stub mode: #{mode}"
 end

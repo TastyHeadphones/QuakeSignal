@@ -358,7 +358,18 @@ launch_fixture_app() {
     "--quakesignal-screenshot-frame=$selected_frame"
 }
 
-launch_fixture_app "$frame_selector" --terminate-running-process
+if [ "$platform" = "watchos" ]; then
+  watch_initial_launch_status=0
+  quakesignal_launch_exact_watch_frame \
+    "$simulator_id" "$bundle_id" "$locale" "$apple_locale" \
+    "$frame_selector" || watch_initial_launch_status=$?
+  if [ "$watch_initial_launch_status" -ne 0 ]; then
+    echo "error: initial exact-frame Watch launch failed with status $watch_initial_launch_status" >&2
+    exit "$watch_initial_launch_status"
+  fi
+else
+  launch_fixture_app "$frame_selector" --terminate-running-process
+fi
 
 # SwiftUI needs a short, bounded settling period after the process becomes
 # launchable. visionOS can keep its gray launch card visible beyond that short

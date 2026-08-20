@@ -299,8 +299,11 @@ unless tv_reports.include?("LazyVGrid") &&
 end
 RUBY
 
-ruby - "$script_dir/capture-platform-screenshot.sh" <<'RUBY'
+ruby - \
+  "$script_dir/capture-platform-screenshot.sh" \
+  "$script_dir/watch-capture-guard.sh" <<'RUBY'
 source = File.read(ARGV.fetch(0))
+watch_guard = File.read(ARGV.fetch(1))
 
 build_destination_assignments = source.lines.grep(/^build_destination=/).map(&:chomp)
 unless build_destination_assignments == ['build_destination="generic/platform=$destination_platform"']
@@ -323,6 +326,52 @@ end
 }.each do |operation, pattern|
   abort "error: native #{operation} must remain bound to the exact selected simulator UUID" unless
     source.match?(pattern)
+end
+
+watch_launch_helper = watch_guard[/^quakesignal_launch_exact_watch_frame\(\) \{.*?^\}/m]
+unless watch_launch_helper &&
+       watch_launch_helper.include?('local launch_max_attempts=2') &&
+       watch_launch_helper.include?('local launch_backoff_seconds=5') &&
+       watch_launch_helper.include?('SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_AUTOMATION=1') &&
+       watch_launch_helper.include?('SIMCTL_CHILD_QUAKESIGNAL_SCREENSHOT_FRAME="$frame_selector"') &&
+       watch_launch_helper.include?('--quakesignal-screenshot-automation') &&
+       watch_launch_helper.include?('"--quakesignal-screenshot-frame=$frame_selector"') &&
+       watch_launch_helper.include?('simctl launch --terminate-running-process') &&
+       watch_launch_helper.include?('return 70') &&
+       watch_launch_helper.scan('simctl launch').length == 1
+  abort "error: shared Watch launch helper must preserve two exact dual-gated attempts, five-second backoff, and operational status 70"
+end
+unless watch_guard.scan(/\bquakesignal_launch_exact_watch_frame\b/).length == 2
+  abort "error: semantic Watch retry must reuse the one shared exact-frame launch helper"
+end
+unless source.scan(/\bquakesignal_launch_exact_watch_frame\b/).length == 1
+  abort "error: initial Watch launch must call the shared exact-frame helper exactly once"
+end
+
+launch_fixture_definition = source.index('launch_fixture_app() {')
+watch_initial_branch = source.index('if [ "$platform" = "watchos" ]; then', launch_fixture_definition)
+watch_initial_call = source.index('quakesignal_launch_exact_watch_frame', watch_initial_branch)
+watch_initial_status_check = source.index('if [ "$watch_initial_launch_status" -ne 0 ]; then', watch_initial_call)
+watch_initial_failure_exit = source.index('exit "$watch_initial_launch_status"', watch_initial_status_check)
+initial_settle = source.index('sleep "$initial_settle_seconds"', watch_initial_failure_exit)
+candidate_assignment = source.index('candidate="$temporary_root/$platform-$locale.png"', initial_settle)
+watch_capture = source.index('quakesignal_capture_validated_watch_screenshot', candidate_assignment)
+pixel_inspection = source.index('pixel_width="$(sips -g pixelWidth "$candidate"', watch_capture)
+publication = source.index('mv "$candidate" "$output"', pixel_inspection)
+provenance = source.index('if [ -n "$provenance_output" ]; then', publication)
+unless [launch_fixture_definition, watch_initial_branch, watch_initial_call,
+        watch_initial_status_check, watch_initial_failure_exit, initial_settle,
+        candidate_assignment, watch_capture, pixel_inspection, publication,
+        provenance].all? &&
+       launch_fixture_definition < watch_initial_branch &&
+       watch_initial_branch < watch_initial_call &&
+       watch_initial_call < watch_initial_status_check &&
+       watch_initial_status_check < watch_initial_failure_exit &&
+       watch_initial_failure_exit < initial_settle &&
+       initial_settle < candidate_assignment && candidate_assignment < watch_capture &&
+       watch_capture < pixel_inspection && pixel_inspection < publication &&
+       publication < provenance
+  abort "error: failed initial Watch launch must exit before settle, capture, inspection, publication, and provenance"
 end
 
 unless source.include?('source "$script_dir/vision-map-capture-guard.sh"') &&

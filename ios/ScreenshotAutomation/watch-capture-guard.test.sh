@@ -20,6 +20,7 @@ export QUAKESIGNAL_TEST_CAPTURE_RELEASE_FILE=""
 export QUAKESIGNAL_TEST_REACTIVATION_DELAY=0
 export QUAKESIGNAL_TEST_REACTIVATION_STATUS=0
 export QUAKESIGNAL_TEST_REACTIVATION_STATUSES=""
+export QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE=""
 export QUAKESIGNAL_TEST_REACTIVATION_PID_FILE="$test_root/reactivation.pid"
 export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$test_root/reactivated"
 export QUAKESIGNAL_TEST_REACTIVATION_RELEASE_FILE=""
@@ -93,6 +94,19 @@ capture_and_publish_validated_watch() {
     return "$capture_status"
   fi
   mv "$directory/candidate.png" "$directory/accepted-candidate.png"
+}
+
+launch_and_publish_initial_watch() {
+  local directory="$1"
+  local launch_status=0
+
+  quakesignal_launch_exact_watch_frame \
+    fake-watch fake.bundle en en_US watchos-headline || launch_status=$?
+  if [ "$launch_status" -ne 0 ]; then
+    return "$launch_status"
+  fi
+  printf 'accepted\n' > "$directory/accepted-candidate.png"
+  printf '{}\n' > "$directory/capture-provenance.json"
 }
 
 wait_for_nonempty_file() {
@@ -222,6 +236,93 @@ if [ -e "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" ]; then
   echo "error: quick Watch capture performed an unnecessary restart" >&2
   exit 1
 fi
+
+# The first exact-frame Watch launch uses the same bounded helper as semantic
+# recovery. A transient FBS code 4 recovers once; two code-4 failures map to
+# operational status 70 before capture/publication; TERM during the backoff
+# preserves signal status and also publishes nothing.
+initial_launch_recovery_dir="$test_root/initial-launch-recovery"
+mkdir "$initial_launch_recovery_dir"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$initial_launch_recovery_dir/launched"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES="4|0"
+export QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE="$initial_launch_recovery_dir/statuses"
+expect_status 0 launch_and_publish_initial_watch "$initial_launch_recovery_dir"
+assert_file_content "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" 2 \
+  "initial launch recovery count"
+assert_file_content "$QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE" $'4\n0' \
+  "initial launch recovery statuses"
+assert_file_content "$initial_launch_recovery_dir/accepted-candidate.png" accepted \
+  "initial launch recovery candidate"
+assert_file_content "$initial_launch_recovery_dir/capture-provenance.json" '{}' \
+  "initial launch recovery provenance"
+
+initial_launch_failure_dir="$test_root/initial-launch-failure"
+mkdir "$initial_launch_failure_dir"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$initial_launch_failure_dir/launched"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES="4|4"
+export QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE="$initial_launch_failure_dir/statuses"
+expect_status 70 launch_and_publish_initial_watch "$initial_launch_failure_dir"
+assert_file_content "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" 2 \
+  "initial launch failure count"
+assert_file_content "$QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE" $'4\n4' \
+  "initial launch failure statuses"
+if [ -e "$initial_launch_failure_dir/accepted-candidate.png" ] || \
+    [ -e "$initial_launch_failure_dir/capture-provenance.json" ]; then
+  echo "error: exhausted initial Watch launch published a candidate or provenance" >&2
+  exit 1
+fi
+
+initial_launch_signal_dir="$test_root/initial-launch-signal"
+mkdir "$initial_launch_signal_dir"
+initial_launch_signal_pid_file="$initial_launch_signal_dir/launch.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_PID_FILE="$initial_launch_signal_pid_file"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$initial_launch_signal_dir/launched"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES="4|0"
+export QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE="$initial_launch_signal_dir/statuses"
+(
+  screenshot_pid=""
+  watch_reactivation_pid=""
+
+  initial_launch_signal_cleanup() {
+    quakesignal_stop_processes "$screenshot_pid" "$watch_reactivation_pid"
+  }
+  trap initial_launch_signal_cleanup EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  launch_and_publish_initial_watch "$initial_launch_signal_dir"
+) &
+gated_test_supervisor_pid=$!
+wait_for_recorded_process_stopped "$initial_launch_signal_pid_file" \
+  "initial Watch launch before backoff"
+kill -TERM "$gated_test_supervisor_pid"
+initial_launch_signal_status=0
+if wait "$gated_test_supervisor_pid"; then
+  initial_launch_signal_status=0
+else
+  initial_launch_signal_status=$?
+fi
+gated_test_supervisor_pid=""
+if [ "$initial_launch_signal_status" -ne 143 ]; then
+  echo "error: TERM during initial Watch launch backoff expected 143, got $initial_launch_signal_status" >&2
+  exit 1
+fi
+assert_file_content "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" 1 \
+  "initial launch signal count"
+assert_file_content "$QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE" 4 \
+  "initial launch signal status"
+assert_recorded_process_stopped "$initial_launch_signal_pid_file" \
+  "initial Watch launch signal"
+if [ -e "$initial_launch_signal_dir/accepted-candidate.png" ] || \
+    [ -e "$initial_launch_signal_dir/capture-provenance.json" ]; then
+  echo "error: interrupted initial Watch launch published a candidate or provenance" >&2
+  exit 1
+fi
+
+export QUAKESIGNAL_TEST_REACTIVATION_PID_FILE="$test_root/reactivation.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$test_root/reactivated"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES=""
+export QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE=""
 
 # Exercise the complete semantic retry orchestration with the same xcrun stub
 # used by the process-supervisor tests. The stub also acts as sips and as the
