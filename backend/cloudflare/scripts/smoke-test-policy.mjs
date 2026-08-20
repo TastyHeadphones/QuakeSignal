@@ -2,13 +2,8 @@ import assert from "node:assert/strict";
 
 export const APP_ATTEST_POLICY_FORMAT = "quakesignal-app-attest-policy/v2";
 export const REQUIRED_WOLFX_SOURCES = [
-  "cenc_eew",
-  "cenc_eqlist",
-  "cq_eew",
-  "fj_eew",
   "jma_eew",
   "jma_eqlist",
-  "sc_eew",
 ];
 
 const APP_ATTEST_POLICY_FINGERPRINT_PATTERN = /^sha256:[A-Za-z0-9_-]{43}$/;
@@ -124,7 +119,7 @@ export function assertReadyWolfxSourceHealth(upstream) {
   assert.equal(
     hasReadyWolfxSourceHealth(upstream),
     true,
-    "production health must expose all seven fresh Wolfx sources on an allowed transport",
+    "production health must expose exactly the two approved JMA sources as fresh on an allowed transport",
   );
 }
 

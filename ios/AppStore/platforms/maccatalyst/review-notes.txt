@@ -1,0 +1,33 @@
+QuakeSignal for Mac is the Swift-native Mac Catalyst build from the shared
+QuakeSignal target, Apple ID 6800642443, and bundle ID
+com.quakesignal.app. It is not the separate Tauri product and it is not the
+iPhone/iPad binary offered through Designed for iPad on Mac.
+
+No account, sign-in, payment, demo account, notification permission, or review
+credential is required. For a permission-free route, skip location access,
+choose a listed city, and review Home, Reports, Map, Guide, and Settings. The
+Mac app uses a native resizable window and local app sandbox.
+
+Build 8 reads only Wolfx feed identifiers jma_eew and jma_eqlist. CENC,
+Sichuan, Fujian, and Chongqing feeds are disabled. QuakeSignal formats and
+normalizes JMA-issued factual information; magnitude and distance controls
+filter presentation only and do not calculate predicted local intensity or
+ground-motion arrival time.
+
+This Mac Catalyst route is foreground/local-only. It does not independently
+register for APNs or App Attest and does not provide background emergency-alert
+delivery. While the app is open, a fresh qualifying JMA warning can take over
+the window and use the selected System, Urgent, or Japanese Voice presentation
+sound. Closing or backgrounding the app stops monitoring and alert audio; this
+is not an Apple Critical Alert and does not claim to bypass system sound or
+Focus controls.
+
+Source: Japan Meteorological Agency (JMA), relayed through Wolfx and
+normalized/edited by QuakeSignal. QuakeSignal is independent and non-official;
+the information can be delayed, incomplete, revised, or inaccurate. Always
+follow official local emergency guidance.
+
+The five planned screenshots use native 2560 × 1600 pixels from a
+1280 × 800-point Retina window and are not yet approved or uploaded. Review
+only screenshots captured from the exact signed build-8 source and accepted
+after signed-Release parity, privacy, and named visual review.

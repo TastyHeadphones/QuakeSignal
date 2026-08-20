@@ -31,9 +31,9 @@ WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev"
 VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open."
 MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
 APP_ATTEST_FINGERPRINT = "sha256:wQ7bfMyEJST5ySIwLM1Q6HwT4DtbRPR3vanIG-kXCkQ"
-XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:bGqEsXA2YyJdqAp6W6XSXzAlPcuSobcNVKPmB8HjOUc"
+XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:FPPp_gIATLoIgEwcBZj9tufNpZtlB8qw9dm3ZhacE0k"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
-PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:D1hsnhe9WHJ9GImzbs0y7sgKD388EuRAPFobSQxvaMs"
+PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:KWWQdqZwo-iFcqhKlcIhuezMY8ntSKDnCRHOP1S3n1s"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
 MAX_RESPONSE_BYTES = 1024 * 1024
 READINESS_TIMEOUT_SECONDS = 180.0
@@ -51,6 +51,11 @@ TARGETS = {
     "QuakeSignal": {"platform": "iOS", "verifier": "ios", "bundle": "com.quakesignal.app"},
     "QuakeSignalTV": {"platform": "tvOS", "verifier": "tvos", "bundle": "com.quakesignal.app"},
     "QuakeSignalVision": {"platform": "visionOS", "verifier": "visionos", "bundle": "com.quakesignal.app"},
+}
+MAC_CATALYST_TARGET = {
+    "platform": "macOS",
+    "verifier": "maccatalyst",
+    "bundle": "com.quakesignal.app",
 }
 DOCUMENTED_PRODUCT_PLATFORMS = frozenset({"iOS", "macOS", "tvOS", "watchOS"})
 REVIEWED_ROUTES = [
@@ -71,11 +76,15 @@ XCODE_SCHEME_PATHS = (
     "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/QuakeSignalWatch.xcscheme",
 )
 PLATFORM_CAPABILITY_POLICY_PATHS = (
+    "ios/QuakeSignal/App/AppDelegate.swift",
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
     "ios/QuakeSignal/Features/Detail/QuakeDetailView.swift",
     "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
     "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
     "ios/QuakeSignal/Features/Root/RootView.swift",
+    "ios/QuakeSignal/Features/List/QuakeListView.swift",
+    "ios/QuakeSignal/Features/Home/QuakeRowView.swift",
+    "ios/QuakeSignal/Features/Settings/SourceDisclaimerView.swift",
     "ios/QuakeSignal/Features/Settings/SettingsView.swift",
     "ios/QuakeSignal/Models/EEWEvent.swift",
     "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
@@ -83,28 +92,54 @@ PLATFORM_CAPABILITY_POLICY_PATHS = (
     "ios/QuakeSignal/Networking/WolfxClient.swift",
     "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
     "ios/QuakeSignal/Notifications/NotificationManager.swift",
+    "ios/QuakeSignal/Notifications/PushPayload.swift",
     "ios/QuakeSignal/State/AlertPolicy.swift",
+    "ios/QuakeSignal/State/AppSettings.swift",
     "ios/QuakeSignal/State/LocationManager.swift",
     "ios/QuakeSignal/State/QuakeStore.swift",
+    "ios/QuakeSignalShared/AlertSoundPreference.swift",
     "ios/QuakeSignalShared/ForegroundQuakeStore.swift",
     "ios/QuakeSignalShared/ScreenshotAutomation.swift",
+    "ios/QuakeSignalShared/WatchAlertPreferenceBridge.swift",
+    "ios/QuakeSignalShared/WatchForegroundEmergencyPolicy.swift",
+    "ios/QuakeSignalTV/TVAlertPreferences.swift",
+    "ios/QuakeSignalTV/TVAlertSoundSettingsView.swift",
     "ios/QuakeSignalTV/TVDashboardView.swift",
+    "ios/QuakeSignalTV/TVEmergencyAlertView.swift",
+    "ios/QuakeSignalTV/TVEmergencyMonitor.swift",
+    "ios/QuakeSignalTV/TVEmergencyPresentationPolicy.swift",
+    "ios/QuakeSignalTV/TVUserInitiatedAlertAudio.swift",
+    "ios/QuakeSignalTV/Supporting/PrivacyInfo.xcprivacy",
+    "ios/QuakeSignalWatch/QuakeSignalWatchApp.swift",
     "ios/QuakeSignalWatch/WatchDashboardView.swift",
+    "ios/QuakeSignalWatch/WatchEmergencyAlertAudio.swift",
+    "ios/QuakeSignalWatch/WatchForegroundEmergencyMonitor.swift",
+    "ios/QuakeSignalWatch/Supporting/PrivacyInfo.xcprivacy",
     "ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy",
     "ios/QuakeSignal/Resources/en.lproj/Localizable.strings",
     "ios/QuakeSignal/Resources/ja.lproj/Localizable.strings",
     "ios/QuakeSignal/Resources/zh-Hans.lproj/Localizable.strings",
     "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy",
 )
-VISION_PRIVACY_MANIFEST_PATH = "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy"
+FOREGROUND_PRIVACY_MANIFEST_PATHS = (
+    "ios/QuakeSignalTV/Supporting/PrivacyInfo.xcprivacy",
+    "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy",
+    "ios/QuakeSignalWatch/Supporting/PrivacyInfo.xcprivacy",
+)
 RELEASE_ENTITLEMENT_PATHS = (
     "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements",
+    "ios/QuakeSignal/Supporting/QuakeSignal-Catalyst.entitlements",
     "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements",
 )
 RELEASE_ALERT_ENTITLEMENTS = {
     "aps-environment": "production",
     "com.apple.developer.devicecheck.appattest-environment": "production",
     "com.apple.developer.usernotifications.time-sensitive": True,
+}
+RELEASE_CATALYST_ENTITLEMENTS = {
+    "com.apple.security.app-sandbox": True,
+    "com.apple.security.network.client": True,
+    "com.apple.security.personal-information.location": True,
 }
 RELEASE_TARGET_NAMES = (
     "QuakeSignal",
@@ -120,46 +155,59 @@ ARCHIVE_SCHEME_NAMES = (
     "QuakeSignalWatch",
 )
 REQUIRED_WOLFX_SOURCES = (
-    "cenc_eew",
-    "cenc_eqlist",
-    "cq_eew",
-    "fj_eew",
     "jma_eew",
     "jma_eqlist",
-    "sc_eew",
 )
 LEGAL_PAGE_CONTRACTS = (
     {
         "path": "/privacy",
         "title": "Privacy Policy",
-        "effectiveDate": "19 August 2026",
+        "effectiveDate": "20 August 2026",
         "requiredText": (
             "Only the app when running on an iPhone or iPad can register",
             "embedded Apple Watch companion and Apple TV app",
-            "Apple Vision Pro, Mac Catalyst, and Designed for iPad on Mac",
-            "separate native Windows/macOS desktop app and Chrome extension",
+            "encrypted WebSocket and HTTPS connections while open",
+            "selected alert presentation mode locally",
+            "Apple Vision Pro and Mac Catalyst",
+            "separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 8), and Chrome extension",
             "optional family contact name and telephone number stay in local app storage",
             "erase both Family Check-In fields and uncheck each selected preparedness-kit item",
             "Apple Maps and system Location Services",
             "opening this public page sends ordinary web-request metadata to Cloudflare",
             "do not provide background emergency alerts",
             "a public support issue cannot privately identify or delete that unreachable registration",
-            "after it has not been refreshed for 90 days",
+            "An old registration becomes eligible for deletion after it has not been refreshed for 90 days",
+            "event rows and their revision history become eligible for deletion after 89 days",
+            "training-test claim becomes eligible for deletion after 14 days",
+            "App Attest challenge becomes invalid in no more than five minutes",
+            "delivery-failure token hashes become eligible for deletion after 14 days",
+            "next successful daily cleanup",
+            "operational cleanup failure can delay deletion",
+            "watches only the jma_eew and jma_eqlist Wolfx feeds",
+            "does not create an earthquake forecast or predict local intensity or arrival time",
         ),
     },
     {
         "path": "/support",
         "title": "Support",
-        "effectiveDate": "19 August 2026",
+        "effectiveDate": "20 August 2026",
         "requiredText": (
             "iPhone and iPad alerts",
             "embedded Apple Watch companion and Apple TV app",
-            "Apple Vision Pro, Mac Catalyst, and Designed for iPad on Mac",
-            "separate native Windows/macOS desktop app and Chrome extension",
+            "native Watch warning haptic",
+            "System is visual-only on Apple TV",
+            "custom Apple TV audio requires an explicit Siri Remote action",
+            "Apple Vision Pro and Mac Catalyst",
+            "separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 8), and Chrome extension",
             "do not independently use the QuakeSignal notification relay",
             "Registration removal after a reset",
             "support cannot identify the old registration from a public issue",
+            "becomes eligible for deletion after it has not been refreshed for 90 days",
+            "next successful daily cleanup",
+            "operational cleanup failure can delay deletion",
             "Never include an APNs device token",
+            "selected JMA feed type",
+            "do not predict local intensity or arrival time",
         ),
     },
     {
@@ -352,11 +400,18 @@ def verify_context(
         fail("CI_PROJECT_FILE_PATH does not belong to the verified primary repository checkout.")
 
     scheme = environment.get("CI_XCODE_SCHEME", "")
-    target = TARGETS.get(scheme)
-    if target is None:
-        fail("CI_XCODE_SCHEME must be QuakeSignal, QuakeSignalTV, or QuakeSignalVision; Watch is embedded only.")
-    exact(environment, "CI_BUNDLE_ID", str(target["bundle"]))
     reported_platform = environment.get("CI_PRODUCT_PLATFORM", "")
+    target = (
+        MAC_CATALYST_TARGET
+        if scheme == "QuakeSignal" and reported_platform == "macOS"
+        else TARGETS.get(scheme)
+    )
+    if target is None:
+        fail(
+            "CI_XCODE_SCHEME must be QuakeSignal for iOS or Mac Catalyst, "
+            "QuakeSignalTV, or QuakeSignalVision; Watch is embedded only."
+        )
+    exact(environment, "CI_BUNDLE_ID", str(target["bundle"]))
     if target["verifier"] == "visionos":
         if not reported_platform:
             fail("CI_PRODUCT_PLATFORM must be present for the Vision archive action.")
@@ -744,19 +799,34 @@ def verify_shared_scheme_sources(sources: Mapping[str, str]) -> None:
 
 
 def verify_release_entitlements(entitlements: Any, label: str) -> None:
-    expected = RELEASE_ALERT_ENTITLEMENTS if "QuakeSignal-Release" in label else {}
+    if label.endswith("QuakeSignal-Release.entitlements"):
+        expected = RELEASE_ALERT_ENTITLEMENTS
+    elif label.endswith("QuakeSignal-Catalyst.entitlements"):
+        expected = RELEASE_CATALYST_ENTITLEMENTS
+    else:
+        expected = {}
     if entitlements != expected:
-        capability = "production alert" if expected else "foreground-only"
+        capability = (
+            "production alert"
+            if expected == RELEASE_ALERT_ENTITLEMENTS
+            else "sandboxed foreground-only Catalyst"
+            if expected == RELEASE_CATALYST_ENTITLEMENTS
+            else "foreground-only"
+        )
         fail(f"{label} must contain exactly the reviewed {capability} entitlements.")
 
 
 def verify_platform_capabilities_sources(sources: Mapping[str, str]) -> None:
     if sorted(sources) != sorted(PLATFORM_CAPABILITY_POLICY_PATHS):
         fail("foreground-only platform capability source inventory is incomplete or expanded.")
-    verify_vision_privacy_manifest(
-        sources[VISION_PRIVACY_MANIFEST_PATH],
-        VISION_PRIVACY_MANIFEST_PATH,
-    )
+    verify_jma_only_source_contract(sources)
+    verify_foreground_push_presentation_contract(sources)
+    verify_foreground_emergency_parity_contract(sources)
+    for privacy_manifest_path in FOREGROUND_PRIVACY_MANIFEST_PATHS:
+        verify_vision_privacy_manifest(
+            sources[privacy_manifest_path],
+            privacy_manifest_path,
+        )
     fingerprint = reviewed_content_fingerprint([
         {"path": relative_path, "source": sources[relative_path]}
         for relative_path in PLATFORM_CAPABILITY_POLICY_PATHS
@@ -766,6 +836,207 @@ def verify_platform_capabilities_sources(sources: Mapping[str, str]) -> None:
             f"platform capability policy fingerprint {fingerprint} does not match "
             f"{PLATFORM_CAPABILITIES_FINGERPRINT}."
         )
+
+
+def verify_jma_only_source_contract(sources: Mapping[str, str]) -> None:
+    required_paths = {
+        "ios/QuakeSignal/Features/List/QuakeListView.swift",
+        "ios/QuakeSignal/Features/Settings/SourceDisclaimerView.swift",
+        "ios/QuakeSignal/Networking/LiveSocketClient.swift",
+        "ios/QuakeSignal/Networking/WolfxClient.swift",
+        "ios/QuakeSignal/Notifications/PushPayload.swift",
+        "ios/QuakeSignal/State/AppSettings.swift",
+    }
+    if not required_paths.issubset(sources):
+        fail("JMA-only Apple source inventory is incomplete.")
+
+    forbidden = (
+        "all_eew",
+        "cenc_eew",
+        "cenc_eqlist",
+        "cq_eew",
+        "fj_eew",
+        "sc_eew",
+        "query_cenceew",
+        "query_cenceqlist",
+        "query_cqeew",
+        "query_fjeew",
+        "query_sceew",
+    )
+    combined = "\n".join(sources.values())
+    found = [token for token in forbidden if token in combined]
+    if found:
+        fail(f"Apple release sources contain disabled non-JMA feed surface: {', '.join(found)}.")
+
+    client = sources["ios/QuakeSignal/Networking/WolfxClient.swift"]
+    socket = sources["ios/QuakeSignal/Networking/LiveSocketClient.swift"]
+    settings = sources["ios/QuakeSignal/State/AppSettings.swift"]
+    if client.count('static let sources = ["jma_eew", "jma_eqlist"]') != 1:
+        fail("WolfxClient.sources must be exactly jma_eew and jma_eqlist.")
+    for marker, count in (
+        ('.source("jma_eew")', 2),
+        ('.source("jma_eqlist")', 2),
+        ('return ["query_jmaeew"]', 1),
+        ('return ["query_jmaeqlist"]', 1),
+    ):
+        if socket.count(marker) != count:
+            fail(f"direct JMA WebSocket contract is missing exact marker {marker!r}.")
+    socket_readiness_markers = (
+        ('WolfxNormalizer.validatedEvents(source: source, data: data)', 1),
+        ('object["type"] as? String == source', 1),
+        ('case .keepAlive:\n            return wasReady', 1),
+        ('case .events:\n            return true', 1),
+        ('case .invalid:\n            return false', 1),
+        ('readyRoutes.removeAll()', 1),
+        ('readyRoutes.remove(route)', 4),
+        ('let nextState = readyRoutes.count == Self.routes.count', 1),
+    )
+    for marker, count in socket_readiness_markers:
+        if socket.count(marker) != count:
+            fail(
+                "direct JMA WebSocket readiness must require both routes to deliver "
+                f"fully validated, source-matching data; missing exact marker {marker!r}."
+            )
+    if "WolfxNormalizer.events(" in socket:
+        fail("direct JMA WebSocket ingestion must not use the permissive normalizer.")
+    for marker in (
+        'let serial = positiveInteger(value["Serial"])',
+        "serial: serial,",
+    ):
+        if client.count(marker) != 1:
+            fail(
+                "JMA EEW validation must require the raw Serial field and preserve "
+                f"its exact value; missing marker {marker!r}."
+            )
+    if settings.count("static let allSources = WolfxClient.sources") != 1:
+        fail("AppSettings must derive its selectable sources from WolfxClient.sources.")
+
+
+def verify_foreground_push_presentation_contract(sources: Mapping[str, str]) -> None:
+    payload = sources["ios/QuakeSignal/Notifications/PushPayload.swift"]
+    policy = sources["ios/QuakeSignal/State/AlertPolicy.swift"]
+    manager = sources["ios/QuakeSignal/Notifications/NotificationManager.swift"]
+
+    payload_markers = (
+        'Self.nonEmptyString(userInfo["sourceId"]).flatMap {',
+        "WolfxClient.sources.contains($0) ? $0 : nil",
+        "Self.isStructurallyUsable(",
+        "event.sourceId == sourceID,",
+        "event.eventId == eventID,",
+        'event.id == "\\(sourceID):\\(eventID)",',
+        "event.serial >= 0,",
+        "event.originDate != nil,",
+        "event.reportDate != nil,",
+        "event.coordinate != nil,",
+        "var hasUsableMatchingEventSnapshot: Bool",
+    )
+    for marker in payload_markers:
+        if payload.count(marker) != 1:
+            fail(
+                "foreground push snapshots must be structurally usable and exactly "
+                f"match their reviewed JMA source/event envelope; missing marker {marker!r}."
+            )
+    if policy.count(
+        "guard payload.hasUsableMatchingEventSnapshot, isSceneActive else {"
+    ) != 1:
+        fail(
+            "foreground APNs presentation may be suppressed only for an immediately "
+            "usable matching snapshot in an active scene."
+        )
+    for marker in (
+        "ForegroundNotificationPresentationPolicy.decision(\n                for: payload,",
+        "return [.banner, .sound, .list]",
+        "return [.list]",
+    ):
+        if manager.count(marker) != 1:
+            fail(
+                "foreground notification delivery must preserve the system banner and sound "
+                f"unless the app owns a validated snapshot; missing marker {marker!r}."
+            )
+
+
+def verify_foreground_emergency_parity_contract(sources: Mapping[str, str]) -> None:
+    required_paths = {
+        "ios/QuakeSignal/App/AppDelegate.swift",
+        "ios/QuakeSignal/State/AppSettings.swift",
+        "ios/QuakeSignalShared/AlertSoundPreference.swift",
+        "ios/QuakeSignalShared/WatchAlertPreferenceBridge.swift",
+        "ios/QuakeSignalShared/WatchForegroundEmergencyPolicy.swift",
+        "ios/QuakeSignalTV/TVDashboardView.swift",
+        "ios/QuakeSignalTV/TVAlertPreferences.swift",
+        "ios/QuakeSignalTV/TVEmergencyMonitor.swift",
+        "ios/QuakeSignalTV/TVEmergencyPresentationPolicy.swift",
+        "ios/QuakeSignalTV/TVUserInitiatedAlertAudio.swift",
+        "ios/QuakeSignalWatch/QuakeSignalWatchApp.swift",
+        "ios/QuakeSignalWatch/WatchDashboardView.swift",
+        "ios/QuakeSignalWatch/WatchEmergencyAlertAudio.swift",
+        "ios/QuakeSignalWatch/WatchForegroundEmergencyMonitor.swift",
+    }
+    if not required_paths.issubset(sources):
+        fail("foreground Watch/TV emergency source inventory is incomplete.")
+
+    app_delegate = sources["ios/QuakeSignal/App/AppDelegate.swift"]
+    settings = sources["ios/QuakeSignal/State/AppSettings.swift"]
+    bridge = sources["ios/QuakeSignalShared/WatchAlertPreferenceBridge.swift"]
+    watch_policy = sources["ios/QuakeSignalShared/WatchForegroundEmergencyPolicy.swift"]
+    watch_app = sources["ios/QuakeSignalWatch/QuakeSignalWatchApp.swift"]
+    watch_dashboard = sources["ios/QuakeSignalWatch/WatchDashboardView.swift"]
+    watch_audio = sources["ios/QuakeSignalWatch/WatchEmergencyAlertAudio.swift"]
+    watch_monitor = sources["ios/QuakeSignalWatch/WatchForegroundEmergencyMonitor.swift"]
+    tv_dashboard = sources["ios/QuakeSignalTV/TVDashboardView.swift"]
+    tv_preferences = sources["ios/QuakeSignalTV/TVAlertPreferences.swift"]
+    tv_monitor = sources["ios/QuakeSignalTV/TVEmergencyMonitor.swift"]
+    tv_policy = sources["ios/QuakeSignalTV/TVEmergencyPresentationPolicy.swift"]
+    tv_audio = sources["ios/QuakeSignalTV/TVUserInitiatedAlertAudio.swift"]
+
+    for source, marker in (
+        (app_delegate, "WatchAlertPreferenceBridge.activatePhone(current: AppSettings.shared.alertSound)"),
+        (settings, "WatchAlertPreferenceBridge.synchronizeFromPhone(alertSound)"),
+        (bridge, "CFGetTypeID(number) == CFNumberGetTypeID()"),
+        (bridge, "!CFNumberIsFloatType(number)"),
+        (bridge, "Set(applicationContext.keys) == [schemaVersionKey, alertSoundKey]"),
+        (watch_app, "guard !ScreenshotAutomation.isEnabled else { return }"),
+        (watch_app, "WatchAlertPreferenceBridge.activateWatch()"),
+        (watch_dashboard, ".sensoryFeedback(.warning, trigger: emergencyFeedbackTrigger)"),
+        (watch_dashboard, "WatchEmergencyAlertAudio.shared.playCustomSound(for: selectedAlertSound)"),
+        (watch_monitor, "self?.ingest(events, isBackfill: isBackfill)"),
+        (watch_monitor, "self.ingest(snapshot.events, isBackfill: true)"),
+        (watch_monitor, "hadLocalHistoryBeforeBatch: locallyKnownEventIDs.contains(event.id)"),
+        (watch_policy, "guard !(isBackfill && !hadLocalHistoryBeforeBatch) else"),
+        (watch_policy, "if isTerminal(previous) && !isTerminal(incoming)"),
+        (watch_audio, "private var playbackCompletionTask: Task<Void, Never>?"),
+        (watch_audio, "private func finishCompletedPlayback()"),
+        (tv_dashboard, "let shouldMonitor = scenePhase == .active && !ScreenshotAutomation.isEnabled"),
+        (tv_dashboard, ".accessibilityHidden(emergencyMonitor.presentedWarning != nil)"),
+        (tv_monitor, "self?.ingest(events, isBackfill: isBackfill)"),
+        (tv_monitor, "self.ingest(snapshot.events, isBackfill: true)"),
+        (tv_monitor, "hadLocalHistoryBeforeBatch: locallyKnownEventIDs.contains(event.id)"),
+        (tv_policy, "guard !(isBackfill && !hadLocalHistoryBeforeBatch) else"),
+        (tv_policy, "if previous.isTerminal && !incoming.isTerminal"),
+        (tv_preferences, "static func permitsAutomaticWarningPlayback"),
+        (tv_audio, "private var playbackCompletionTask: Task<Void, Never>?"),
+        (tv_audio, "func playUserInitiated("),
+    ):
+        if source.count(marker) != 1:
+            fail(
+                "foreground Watch/TV emergency policy lost a reviewed lifecycle, "
+                f"baseline, preference, feedback, or cleanup boundary: {marker!r}."
+            )
+
+    if not re.search(
+        r"static func permitsAutomaticWarningPlayback\([^)]*\).*?\{\s*false\s*\}",
+        tv_preferences,
+        re.DOTALL,
+    ):
+        fail("Apple TV warning ingestion must never start alert audio automatically.")
+    for forbidden in (
+        "TVUserInitiatedAlertAudio",
+        "AVAudioPlayer",
+        "playUserInitiated",
+        "AudioServicesPlay",
+    ):
+        if forbidden in tv_monitor:
+            fail("Apple TV warning ingestion must remain visual-only and Remote-driven.")
 
 
 def verify_vision_privacy_manifest(source: str, label: str) -> None:
@@ -832,6 +1103,11 @@ def verify_info_plist_contract(
     elif "QUAKESIGNAL_API_BASE_URL" in plist or "QUAKESIGNAL_APP_ATTEST_MODE" in plist:
         fail(f"{relative} must not embed Worker or App Attest configuration.")
     if (
+        relative == "ios/QuakeSignal/Supporting/Info.plist"
+        and plist.get("LSApplicationCategoryType") != "public.app-category.weather"
+    ):
+        fail(f"{relative} must declare the reviewed native Mac Weather category.")
+    if (
         relative == "ios/QuakeSignalVision/Supporting/Info.plist"
         and plist.get("NSLocationWhenInUseUsageDescription") != VISION_LOCATION_USAGE_DESCRIPTION
     ):
@@ -856,6 +1132,11 @@ def verify_bounded_source_contract(repository_root: Path) -> None:
         "PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app",
         "PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app.watchkitapp",
         "DEVELOPMENT_TEAM: 5TT564H883",
+        "SUPPORTS_MACCATALYST: YES",
+        "SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO",
+        '"ENABLE_APP_SANDBOX[sdk=macosx*]": YES',
+        '"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": QuakeSignal/Supporting/QuakeSignal-Catalyst.entitlements',
+        '"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]": $(QUAKESIGNAL_CATALYST_PROFILE_NAME)',
     ):
         if required not in project:
             fail(f"ios/project.yml is missing reviewed value {required!r}.")

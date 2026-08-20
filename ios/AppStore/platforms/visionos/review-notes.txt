@@ -8,10 +8,16 @@ Location is optional. This target does not request notification permission.
 Apple's current visionOS provisioning-capability table does not include Push
 Notifications or Time Sensitive Notifications. The Release target therefore
 has no APNs, App Attest, Time Sensitive, Critical Alerts, or background
-emergency-alert path. While the app is open, live feed updates can present a
-qualifying warning in the app and play the selected local alert sound. Closing
-or backgrounding the app stops that foreground monitoring. Simulator
-screenshots do not prove this runtime behavior.
+emergency-alert path. While the app is open, a qualifying JMA-issued update can
+be presented in the app and play the selected local alert sound. Closing or
+backgrounding the app stops that foreground monitoring. Simulator screenshots
+do not prove this runtime behavior.
+
+Build 8 reads only Wolfx feed identifiers jma_eew and jma_eqlist. CENC,
+Sichuan, Fujian, and Chongqing feeds are disabled. QuakeSignal may format,
+localize, filter, and normalize JMA-issued facts, but does not calculate a new
+local-intensity or ground-motion-arrival forecast and does not issue an
+official government warning.
 
 The alert-sound picker includes system sound, an original urgent tone, and an
 original synthesized Japanese safety voice. The voice is not a J-Alert or JMA
@@ -23,6 +29,7 @@ notes alone. The release owner must assess the final Apple Vision Pro build;
 source inspection shows a windowed interface and no intentional virtual-camera
 movement.
 
-QuakeSignal is independent and non-official. Wolfx-aggregated information can
-be delayed, incomplete, revised, or inaccurate. Always follow official local
-emergency guidance.
+Source: Japan Meteorological Agency (JMA), relayed through Wolfx and
+normalized/edited by QuakeSignal. QuakeSignal is independent and non-official;
+the information can be delayed, incomplete, revised, or inaccurate. Always
+follow official local emergency guidance.

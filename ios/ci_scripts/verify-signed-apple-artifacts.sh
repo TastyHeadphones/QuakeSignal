@@ -7,7 +7,7 @@ unset CDPATH DEVELOPER_DIR SDKROOT TOOLCHAINS
 usage() {
   cat >&2 <<'USAGE'
 Usage: verify-signed-apple-artifacts.sh \
-  --platform <ios|tvos|visionos> \
+  --platform <ios|maccatalyst|tvos|visionos> \
   --archive <path.xcarchive> \
   --exported <path.ipa|path.zip|export-directory|path.app|path.xcarchive> \
   --build-number <CFBundleVersion> \
@@ -48,7 +48,7 @@ done
 for value in "$platform" "$archive" "$exported" "$build_number" "$marketing_version" "$team_id" "$archive_signing"; do
   [ -n "$value" ] || usage
 done
-case "$platform" in ios|tvos|visionos) ;; *) usage ;; esac
+case "$platform" in ios|maccatalyst|tvos|visionos) ;; *) usage ;; esac
 case "$archive_signing" in strict-distribution|structure-only) ;; *) usage ;; esac
 [[ "$build_number" =~ ^[1-9][0-9]*$ ]] || usage
 [[ "$marketing_version" =~ ^[0-9]+([.][0-9]+){1,2}$ ]] || usage
@@ -76,6 +76,7 @@ expected_application_id="$team_id.$expected_bundle_id"
 urgent_audio_sha256="9b8e5b3220bf6534a23b0266f3b7e0cb45516e27659d10ac75fc008abdefbfb8"
 japanese_voice_sha256="142c9d6fc382246f327dd37d4fe110f225f8d7a0819e9f861374c0bb74bbe3a6"
 audio_attribution_sha256="7dc20bb7f27f9a86e0b98c4efc2a41c7aea22410cb35643243d01cb9a76e140c"
+zero_collection_privacy_manifest_sha256="a331d51864743ebe4e00dd22360b4a538b6b3ac26a6b3eb54094e60a36959a12"
 case "$platform" in
   ios)
     expected_profile_platform="iOS"
@@ -83,13 +84,41 @@ case "$platform" in
     requires_alert_entitlements=true
     requires_embedded_watch=true
     requires_local_alert_audio=true
+    requires_zero_collection_privacy_manifest=false
+    requires_worker_configuration=true
+    uses_mac_bundle_layout=false
+    application_identifier_key=application-identifier
+    profile_relative_path=embedded.mobileprovision
+    info_relative_path=Info.plist
+    resources_relative_path=.
+    ;;
+  maccatalyst)
+    expected_profile_platform="OSX"
+    expected_device_families=(2)
+    requires_alert_entitlements=false
+    requires_embedded_watch=false
+    requires_local_alert_audio=true
+    requires_zero_collection_privacy_manifest=false
+    requires_worker_configuration=true
+    uses_mac_bundle_layout=true
+    application_identifier_key=com.apple.application-identifier
+    profile_relative_path=Contents/embedded.provisionprofile
+    info_relative_path=Contents/Info.plist
+    resources_relative_path=Contents/Resources
     ;;
   tvos)
     expected_profile_platform="tvOS"
     expected_device_families=(3)
     requires_alert_entitlements=false
     requires_embedded_watch=false
-    requires_local_alert_audio=false
+    requires_local_alert_audio=true
+    requires_zero_collection_privacy_manifest=true
+    requires_worker_configuration=false
+    uses_mac_bundle_layout=false
+    application_identifier_key=application-identifier
+    profile_relative_path=embedded.mobileprovision
+    info_relative_path=Info.plist
+    resources_relative_path=.
     ;;
   visionos)
     expected_profile_platform="visionOS"
@@ -97,6 +126,13 @@ case "$platform" in
     requires_alert_entitlements=false
     requires_embedded_watch=false
     requires_local_alert_audio=true
+    requires_zero_collection_privacy_manifest=true
+    requires_worker_configuration=false
+    uses_mac_bundle_layout=false
+    application_identifier_key=application-identifier
+    profile_relative_path=embedded.mobileprovision
+    info_relative_path=Info.plist
+    resources_relative_path=.
     ;;
 esac
 
@@ -137,17 +173,27 @@ verify_local_alert_audio_resources() {
   local app="$2"
 
   assert_regular_file_sha256 \
-    "$app/quakesignal_urgent.caf" \
+    "$app/$resources_relative_path/quakesignal_urgent.caf" \
     "$urgent_audio_sha256" \
     "$label urgent alert audio"
   assert_regular_file_sha256 \
-    "$app/quakesignal_japanese_voice.caf" \
+    "$app/$resources_relative_path/quakesignal_japanese_voice.caf" \
     "$japanese_voice_sha256" \
     "$label Japanese Safety Voice audio"
   assert_regular_file_sha256 \
-    "$app/ATTRIBUTION.md" \
+    "$app/$resources_relative_path/ATTRIBUTION.md" \
     "$audio_attribution_sha256" \
     "$label alert-audio attribution"
+}
+
+verify_zero_collection_privacy_manifest() {
+  local label="$1"
+  local app="$2"
+
+  assert_regular_file_sha256 \
+    "$app/$resources_relative_path/PrivacyInfo.xcprivacy" \
+    "$zero_collection_privacy_manifest_sha256" \
+    "$label zero-collection privacy manifest"
 }
 
 assert_plist_value() {
@@ -221,6 +267,33 @@ assert_plist_absent() {
   local label="$3"
   if /usr/libexec/PlistBuddy -c "Print :$key" "$plist" >/dev/null 2>&1; then
     error "$label unexpectedly contains foreground-only capability $key"
+    return 1
+  fi
+}
+
+assert_profile_identifier() {
+  local plist="$1"
+  local expected="$2"
+  local label="$3"
+  local found=0
+  local key
+  local actual
+
+  # Mac profiles have used both spellings across Xcode generations. Accept
+  # either spelling, but reject every present mismatch and require at least one.
+  for key in \
+    Entitlements:com.apple.application-identifier \
+    Entitlements:application-identifier; do
+    if actual="$(/usr/libexec/PlistBuddy -c "Print :$key" "$plist" 2>/dev/null)"; then
+      found=1
+      if [ "$actual" != "$expected" ]; then
+        error "$label has unexpected $key value $actual"
+        return 1
+      fi
+    fi
+  done
+  if [ "$found" -ne 1 ]; then
+    error "$label is missing an application-identifier entitlement"
     return 1
   fi
 }
@@ -329,30 +402,42 @@ assert_app_store_profile() {
   local label="$2"
   assert_plist_key_absent "$profile_plist" ProvisionedDevices "$label"
   assert_plist_key_absent "$profile_plist" ProvisionsAllDevices "$label"
-  assert_plist_value "$profile_plist" Entitlements:get-task-allow false "$label"
-  assert_plist_value "$profile_plist" Entitlements:beta-reports-active true "$label"
+  if [ "$uses_mac_bundle_layout" = false ]; then
+    assert_plist_value "$profile_plist" Entitlements:get-task-allow false "$label"
+    assert_plist_value "$profile_plist" Entitlements:beta-reports-active true "$label"
+  fi
 }
 
 verify_host_structure() {
   local label="$1"
   local app="$2"
+  local info="$app/$info_relative_path"
 
   [ -d "$app" ] || { error "$label app bundle is missing"; return 1; }
-  [ -f "$app/Info.plist" ] || { error "$label Info.plist is missing"; return 1; }
-  plutil -lint "$app/Info.plist" >/dev/null
-  assert_plist_value "$app/Info.plist" CFBundleIdentifier "$expected_bundle_id" "$label Info.plist"
-  assert_plist_value "$app/Info.plist" CFBundleShortVersionString "$marketing_version" "$label Info.plist"
-  assert_plist_value "$app/Info.plist" CFBundleVersion "$build_number" "$label Info.plist"
-  assert_plist_array_exact "$app/Info.plist" UIDeviceFamily "$label Info.plist" "${expected_device_families[@]}"
-  if [ "$requires_alert_entitlements" = true ]; then
-    assert_plist_value "$app/Info.plist" QUAKESIGNAL_API_BASE_URL "https://quakesignal-api.hopeso.workers.dev" "$label Info.plist"
-    assert_plist_value "$app/Info.plist" QUAKESIGNAL_APP_ATTEST_MODE production "$label Info.plist"
+  [ -f "$info" ] || { error "$label Info.plist is missing"; return 1; }
+  plutil -lint "$info" >/dev/null
+  assert_plist_value "$info" CFBundleIdentifier "$expected_bundle_id" "$label Info.plist"
+  assert_plist_value "$info" CFBundleShortVersionString "$marketing_version" "$label Info.plist"
+  assert_plist_value "$info" CFBundleVersion "$build_number" "$label Info.plist"
+  assert_plist_array_exact "$info" UIDeviceFamily "$label Info.plist" "${expected_device_families[@]}"
+  if [ "$uses_mac_bundle_layout" = true ]; then
+    assert_plist_array_exact "$info" CFBundleSupportedPlatforms "$label Info.plist" MacOSX
+    assert_plist_value "$info" LSMinimumSystemVersion 14.0 "$label Info.plist"
+    assert_plist_value "$info" LSApplicationCategoryType public.app-category.weather "$label Info.plist"
+    assert_plist_key_absent "$info" LSRequiresIPhoneOS "$label Info.plist"
+  fi
+  if [ "$requires_worker_configuration" = true ]; then
+    assert_plist_value "$info" QUAKESIGNAL_API_BASE_URL "https://quakesignal-api.hopeso.workers.dev" "$label Info.plist"
+    assert_plist_value "$info" QUAKESIGNAL_APP_ATTEST_MODE production "$label Info.plist"
   else
-    assert_plist_key_absent "$app/Info.plist" QUAKESIGNAL_API_BASE_URL "$label Info.plist"
-    assert_plist_key_absent "$app/Info.plist" QUAKESIGNAL_APP_ATTEST_MODE "$label Info.plist"
+    assert_plist_key_absent "$info" QUAKESIGNAL_API_BASE_URL "$label Info.plist"
+    assert_plist_key_absent "$info" QUAKESIGNAL_APP_ATTEST_MODE "$label Info.plist"
   fi
   if [ "$requires_local_alert_audio" = true ]; then
     verify_local_alert_audio_resources "$label" "$app"
+  fi
+  if [ "$requires_zero_collection_privacy_manifest" = true ]; then
+    verify_zero_collection_privacy_manifest "$label" "$app"
   fi
 }
 
@@ -360,7 +445,7 @@ verify_host_app() {
   local label="$1"
   local app="$2"
   local entitlements="$verification_dir/$label-entitlements.plist"
-  local profile="$app/embedded.mobileprovision"
+  local profile="$app/$profile_relative_path"
   local profile_plist="$verification_dir/$label-profile.plist"
 
   verify_host_structure "$label" "$app"
@@ -369,10 +454,12 @@ verify_host_app() {
 
   "$codesign_tool" -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
   plutil -lint "$entitlements" >/dev/null
-  assert_plist_value "$entitlements" application-identifier "$expected_application_id" "$label signed entitlements"
+  assert_plist_value "$entitlements" "$application_identifier_key" "$expected_application_id" "$label signed entitlements"
   assert_plist_value "$entitlements" com.apple.developer.team-identifier "$team_id" "$label signed entitlements"
-  assert_plist_value "$entitlements" get-task-allow false "$label signed entitlements"
-  assert_plist_value "$entitlements" beta-reports-active true "$label signed entitlements"
+  if [ "$uses_mac_bundle_layout" = false ]; then
+    assert_plist_value "$entitlements" get-task-allow false "$label signed entitlements"
+    assert_plist_value "$entitlements" beta-reports-active true "$label signed entitlements"
+  fi
 
   decode_profile "$profile" "$profile_plist" "$label provisioning profile"
   assert_signing_certificate_in_profile "$app" "$profile_plist" "$label"
@@ -381,7 +468,11 @@ verify_host_app() {
   fi
   assert_plist_value "$profile_plist" ApplicationIdentifierPrefix:0 "$team_id" "$label provisioning profile"
   assert_plist_value "$profile_plist" TeamIdentifier:0 "$team_id" "$label provisioning profile"
-  assert_plist_value "$profile_plist" Entitlements:application-identifier "$expected_application_id" "$label provisioning profile"
+  if [ "$uses_mac_bundle_layout" = true ]; then
+    assert_profile_identifier "$profile_plist" "$expected_application_id" "$label provisioning profile"
+  else
+    assert_plist_value "$profile_plist" Entitlements:application-identifier "$expected_application_id" "$label provisioning profile"
+  fi
   assert_plist_value "$profile_plist" Entitlements:com.apple.developer.team-identifier "$team_id" "$label provisioning profile"
   assert_profile_platform "$profile_plist" "$label provisioning profile"
   assert_app_store_profile "$profile_plist" "$label provisioning profile"
@@ -398,13 +489,32 @@ verify_host_app() {
       assert_plist_absent "$entitlements" "$capability" "$label signed entitlements"
     done
   fi
-  local allowed_entitlement_keys=(
-    application-identifier
-    beta-reports-active
-    com.apple.developer.team-identifier
-    get-task-allow
-    keychain-access-groups
-  )
+  local allowed_entitlement_keys
+  if [ "$uses_mac_bundle_layout" = true ]; then
+    assert_plist_value "$entitlements" com.apple.security.app-sandbox true "$label signed entitlements"
+    assert_plist_value "$entitlements" com.apple.security.network.client true "$label signed entitlements"
+    assert_plist_value "$entitlements" com.apple.security.personal-information.location true "$label signed entitlements"
+    allowed_entitlement_keys=(
+      application-identifier
+      beta-reports-active
+      com.apple.application-identifier
+      com.apple.developer.team-identifier
+      com.apple.security.app-sandbox
+      com.apple.security.get-task-allow
+      com.apple.security.network.client
+      com.apple.security.personal-information.location
+      get-task-allow
+      keychain-access-groups
+    )
+  else
+    allowed_entitlement_keys=(
+      application-identifier
+      beta-reports-active
+      com.apple.developer.team-identifier
+      get-task-allow
+      keychain-access-groups
+    )
+  fi
   if [ "$requires_alert_entitlements" = true ]; then
     allowed_entitlement_keys+=(
       aps-environment
@@ -434,6 +544,11 @@ verify_watch_structure() {
   assert_plist_array_exact "$app/Info.plist" UIDeviceFamily "$label Info.plist" 4
   assert_plist_key_absent "$app/Info.plist" QUAKESIGNAL_API_BASE_URL "$label Info.plist"
   assert_plist_key_absent "$app/Info.plist" QUAKESIGNAL_APP_ATTEST_MODE "$label Info.plist"
+  verify_local_alert_audio_resources "$label" "$app"
+  assert_regular_file_sha256 \
+    "$app/PrivacyInfo.xcprivacy" \
+    "$zero_collection_privacy_manifest_sha256" \
+    "$label zero-collection privacy manifest"
 }
 
 verify_watch_app() {
@@ -534,22 +649,25 @@ elif [ -d "$exported" ]; then
   if [[ "$exported" == *.app ]]; then
     exported_app="$exported"
   else
+    exported_direct_apps=("$exported"/*.app)
     exported_apps=("$exported"/Payload/*.app)
     exported_ipas=("$exported"/*.ipa)
     exported_archive_apps=("$exported"/Products/Applications/*.app)
-    if [ "${#exported_apps[@]}" -eq 1 ] && [ "${#exported_ipas[@]}" -eq 0 ] && [ "${#exported_archive_apps[@]}" -eq 0 ]; then
+    if [ "${#exported_direct_apps[@]}" -eq 1 ] && [ "${#exported_apps[@]}" -eq 0 ] && [ "${#exported_ipas[@]}" -eq 0 ] && [ "${#exported_archive_apps[@]}" -eq 0 ]; then
+      exported_app="${exported_direct_apps[0]}"
+    elif [ "${#exported_direct_apps[@]}" -eq 0 ] && [ "${#exported_apps[@]}" -eq 1 ] && [ "${#exported_ipas[@]}" -eq 0 ] && [ "${#exported_archive_apps[@]}" -eq 0 ]; then
       exported_app="${exported_apps[0]}"
-    elif [ "${#exported_apps[@]}" -eq 0 ] && [ "${#exported_ipas[@]}" -eq 1 ] && [ "${#exported_archive_apps[@]}" -eq 0 ]; then
+    elif [ "${#exported_direct_apps[@]}" -eq 0 ] && [ "${#exported_apps[@]}" -eq 0 ] && [ "${#exported_ipas[@]}" -eq 1 ] && [ "${#exported_archive_apps[@]}" -eq 0 ]; then
       exported_root="$verification_dir/exported"
       mkdir -p "$exported_root"
       ditto -x -k "${exported_ipas[0]}" "$exported_root"
       exported_apps=("$exported_root"/Payload/*.app)
       [ "${#exported_apps[@]}" -eq 1 ] || { error "Expected exactly one app in ${exported_ipas[0]}"; exit 1; }
       exported_app="${exported_apps[0]}"
-    elif [ "${#exported_apps[@]}" -eq 0 ] && [ "${#exported_ipas[@]}" -eq 0 ] && [ "${#exported_archive_apps[@]}" -eq 1 ]; then
+    elif [ "${#exported_direct_apps[@]}" -eq 0 ] && [ "${#exported_apps[@]}" -eq 0 ] && [ "${#exported_ipas[@]}" -eq 0 ] && [ "${#exported_archive_apps[@]}" -eq 1 ]; then
       exported_app="${exported_archive_apps[0]}"
     else
-      error "Expected exactly one unambiguous Payload app, IPA, or xcarchive application below exported directory $exported"
+      error "Expected exactly one unambiguous direct app, Payload app, IPA, or xcarchive application below exported directory $exported"
       exit 1
     fi
   fi

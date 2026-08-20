@@ -22,6 +22,7 @@ requested_output="$2"
 script_dir="$(cd "$(dirname "$0")" && pwd -P)"
 ios_root="$(cd "$script_dir/.." && pwd -P)"
 repo_root="$(cd "$ios_root/.." && pwd -P)"
+debug_local_override="$repo_root/ios/QuakeSignal/Supporting/Debug.local.xcconfig"
 
 case "$platform" in
   tvos|watchos|visionos) ;;
@@ -54,6 +55,28 @@ esac
 if [ -e "$output" ] || [ -L "$output" ]; then
   echo "error: refusing to overwrite existing artifact directory: $output" >&2
   exit 73
+fi
+
+source_commit="$(git -C "$repo_root" rev-parse --verify 'HEAD^{commit}')"
+if [[ ! "$source_commit" =~ ^[0-9a-f]{40}$ ]] || \
+   [ -n "$(git -C "$repo_root" status --porcelain=v1 --untracked-files=all)" ]; then
+  echo "error: native Apple screenshot sets require an exact clean source commit" >&2
+  exit 65
+fi
+if [ -e "$debug_local_override" ] || [ -L "$debug_local_override" ]; then
+  echo "error: ignored Debug.local.xcconfig is forbidden for exact screenshot sets" >&2
+  exit 65
+fi
+plan_json="$(/usr/bin/ruby "$script_dir/platform-screenshot-plan.rb" "$platform" --json)"
+plan_manifest_file="$(/usr/bin/ruby -rjson -e 'puts JSON.parse(STDIN.read).fetch("manifestFile")' <<<"$plan_json")"
+plan_manifest_sha256="$(/usr/bin/ruby -rjson -e 'puts JSON.parse(STDIN.read).fetch("manifestSha256")' <<<"$plan_json")"
+commit_plan_sha256="$(git -C "$repo_root" show "$source_commit:$plan_manifest_file" | shasum -a 256 | awk '{ print $1 }')" || {
+  echo "error: native screenshot plan is unavailable at the source commit" >&2
+  exit 65
+}
+if [ "$commit_plan_sha256" != "$plan_manifest_sha256" ]; then
+  echo "error: native screenshot plan is not frozen at the source commit" >&2
+  exit 65
 fi
 
 temporary_root="$(mktemp -d "$output_parent/.quakesignal-$platform-set.XXXXXX")"
@@ -93,6 +116,49 @@ done < "$plan_tsv"
 /usr/bin/ruby "$script_dir/assemble-platform-screenshot-provenance.rb" \
   "$platform" "$payload" "$payload/capture-provenance.json"
 test -s "$payload/capture-provenance.json"
+
+source_address="$payload/source-address.json"
+export NATIVE_CAPTURE_PLATFORM="$platform"
+export NATIVE_CAPTURE_SOURCE_COMMIT="$source_commit"
+export NATIVE_CAPTURE_PLAN_FILE="$plan_manifest_file"
+export NATIVE_CAPTURE_PLAN_SHA="$plan_manifest_sha256"
+export NATIVE_CAPTURE_XCODE_VERSION="$(xcodebuild -version | tr '\n' ';' | sed 's/;$//')"
+export NATIVE_CAPTURE_OPERATING_SYSTEM="$(sw_vers -productVersion) ($(sw_vers -buildVersion))"
+/usr/bin/ruby -rjson -e '
+  record = {
+    "schemaVersion" => 1,
+    "status" => "unapproved-source-addressed-native-capture-evidence",
+    "uploadApproved" => false,
+    "reviewer" => nil,
+    "platform" => ENV.fetch("NATIVE_CAPTURE_PLATFORM"),
+    "source" => {
+      "commit" => ENV.fetch("NATIVE_CAPTURE_SOURCE_COMMIT"),
+      "treeState" => "clean",
+      "debugLocalOverridePresent" => false,
+    },
+    "planManifest" => {
+      "file" => ENV.fetch("NATIVE_CAPTURE_PLAN_FILE"),
+      "sha256" => ENV.fetch("NATIVE_CAPTURE_PLAN_SHA"),
+    },
+    "host" => {
+      "xcodeVersion" => ENV.fetch("NATIVE_CAPTURE_XCODE_VERSION"),
+      "operatingSystem" => ENV.fetch("NATIVE_CAPTURE_OPERATING_SYSTEM"),
+    },
+  }
+  File.write(ARGV.fetch(0), JSON.pretty_generate(record) + "\n", mode: "wx")
+' "$source_address"
+/usr/bin/ruby "$script_dir/seal-screenshot-capture-package.rb" \
+  "$platform" "$source_commit" "$payload" "$payload/capture-package-manifest.json"
+
+if [ "$(git -C "$repo_root" rev-parse --verify 'HEAD^{commit}')" != "$source_commit" ] || \
+   [ -n "$(git -C "$repo_root" status --porcelain=v1 --untracked-files=all)" ]; then
+  echo "error: source commit/tree changed during native screenshot capture" >&2
+  exit 65
+fi
+if [ -e "$debug_local_override" ] || [ -L "$debug_local_override" ]; then
+  echo "error: ignored Debug.local.xcconfig appeared during native screenshot capture" >&2
+  exit 65
+fi
 
 if [ -e "$output" ] || [ -L "$output" ]; then
   echo "error: artifact directory appeared during capture; refusing to overwrite: $output" >&2

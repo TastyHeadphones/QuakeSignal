@@ -19,6 +19,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - name: iPhone and iPad
+            key: ios-ipados
+            download_platform: iOS
           - name: Apple TV
             key: tvos
             download_platform: tvOS
@@ -34,9 +37,19 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Validate credential-free harness
+        env:
+          QUAKESIGNAL_TEST_TEMP_ROOT: ${{ runner.temp }}
+          RUNNER_TEMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
         run: |
           set -euo pipefail
           node .github/scripts/verify-ios-release-contract.mjs
+          bash -n ios/ScreenshotAutomation/capture-ios-screenshot.sh
+          bash -n ios/ScreenshotAutomation/capture-ios-screenshot-set.sh
+          bash -n ios/ScreenshotAutomation/ios-screenshot-capture-interface.test.sh
+          bash -n ios/ScreenshotAutomation/ios-screenshot-content-validator.test.sh
+          bash -n ios/ScreenshotAutomation/screenshot-process-guard.sh
+          bash -n ios/ScreenshotAutomation/screenshot-process-guard.test.sh
           bash -n ios/ScreenshotAutomation/capture-platform-screenshot.sh
           bash -n ios/ScreenshotAutomation/capture-platform-screenshot-set.sh
           bash -n ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
@@ -44,6 +57,27 @@ jobs:
           bash -n ios/ScreenshotAutomation/watch-capture-guard.test.sh
           bash -n ios/ScreenshotAutomation/vision-map-capture-guard.sh
           bash -n ios/ScreenshotAutomation/vision-map-capture-guard.test.sh
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-ios-screenshot-provenance.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-ios-screenshot-provenance.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-build-binding.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-build-binding.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-plan.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-plan.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-simulator-lease.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-swift-inputs.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/safe-zip-tree.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/safe-zip-tree.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/screenshot-test-temp-root.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/seal-screenshot-capture-package.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/seal-screenshot-capture-package.test.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/platform-screenshot-plan.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/platform-screenshot-plan.test.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb
@@ -52,6 +86,21 @@ jobs:
           /usr/bin/ruby -c ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/validate-vision-map-content.rb
           /usr/bin/ruby -c ios/ScreenshotAutomation/validate-vision-map-content.test.rb
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/ios-screenshot-content-validator.swift
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/ios-screenshot-content-validator-fixture.swift
+          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-plan.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-build-binding.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/safe-zip-tree.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/seal-screenshot-capture-package.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/assemble-ios-screenshot-provenance.test.rb
+          bash ios/ScreenshotAutomation/ios-screenshot-capture-interface.test.sh
+          bash ios/ScreenshotAutomation/ios-screenshot-content-validator.test.sh
+          bash ios/ScreenshotAutomation/screenshot-process-guard.test.sh
           /usr/bin/ruby ios/ScreenshotAutomation/platform-screenshot-plan.test.rb
           /usr/bin/ruby ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb
           bash ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
@@ -59,6 +108,24 @@ jobs:
           /usr/bin/ruby ios/ScreenshotAutomation/validate-watch-foreground-badge.test.rb
           bash ios/ScreenshotAutomation/vision-map-capture-guard.test.sh
           /usr/bin/ruby ios/ScreenshotAutomation/validate-vision-map-content.test.rb
+          test -f ios/ScreenshotAutomation/safe-zip-tree.rb
+          test -f ios/ScreenshotAutomation/screenshot-process-guard.sh
+          test -f ios/ScreenshotAutomation/screenshot-test-temp-root.rb
+          test -x ios/ScreenshotAutomation/capture-ios-screenshot.sh
+          test -x ios/ScreenshotAutomation/capture-ios-screenshot-set.sh
+          test -x ios/ScreenshotAutomation/ios-screenshot-capture-interface.test.sh
+          test -x ios/ScreenshotAutomation/ios-screenshot-content-validator.test.sh
+          test -x ios/ScreenshotAutomation/ios-screenshot-plan.rb
+          test -x ios/ScreenshotAutomation/ios-screenshot-simulator-lease.rb
+          test -x ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb
+          test -x ios/ScreenshotAutomation/ios-screenshot-swift-inputs.rb
+          test -x ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb
+          test -x ios/ScreenshotAutomation/ios-screenshot-build-binding.rb
+          test -x ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.rb
+          test -x ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.rb
+          test -x ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.rb
+          test -x ios/ScreenshotAutomation/safe-zip-tree.test.rb
+          test -x ios/ScreenshotAutomation/seal-screenshot-capture-package.rb
           test -x ios/ScreenshotAutomation/capture-platform-screenshot.sh
           test -x ios/ScreenshotAutomation/capture-platform-screenshot-set.sh
           test -x ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
@@ -116,9 +183,21 @@ jobs:
         run: |
           set -euo pipefail
           artifact_dir="$RUNNER_TEMP/quakesignal-screenshot-candidates/$PLATFORM_KEY"
-          export QUAKESIGNAL_SCREENSHOT_DERIVED_DATA="$RUNNER_TEMP/quakesignal-screenshot-derived-data/$PLATFORM_KEY"
-          ios/ScreenshotAutomation/capture-platform-screenshot-set.sh \
-            "$PLATFORM_KEY" "$artifact_dir"
+          mkdir -p "$(dirname "$artifact_dir")"
+          case "$PLATFORM_KEY" in
+            ios-ipados)
+              bash ios/ScreenshotAutomation/capture-ios-screenshot-set.sh "$artifact_dir"
+              ;;
+            tvos|visionos|watchos)
+              export QUAKESIGNAL_SCREENSHOT_DERIVED_DATA="$RUNNER_TEMP/quakesignal-screenshot-derived-data/$PLATFORM_KEY"
+              ios/ScreenshotAutomation/capture-platform-screenshot-set.sh \
+                "$PLATFORM_KEY" "$artifact_dir"
+              ;;
+            *)
+              echo "::error::Unsupported screenshot platform key: $PLATFORM_KEY"
+              exit 64
+              ;;
+          esac
           test -s "$artifact_dir/capture-provenance.json"
           post_capture_sha="$(git rev-parse --verify HEAD)"
           if [ "$post_capture_sha" != "$GITHUB_SHA" ]; then
@@ -136,10 +215,9 @@ jobs:
             echo "::error::Ignored Debug.local.xcconfig appeared during source-frozen capture"
             exit 1
           fi
-          xcrun simctl list runtimes available > "$artifact_dir/simulator-runtimes.txt"
           echo "CANDIDATE_DIR=$artifact_dir" >> "$GITHUB_ENV"
 
-      - name: Attach explicit non-release provenance
+      - name: Attach metadata, reseal, and archive exact candidate
         env:
           PLATFORM_KEY: ${{ matrix.key }}
         run: |
@@ -148,49 +226,131 @@ jobs:
           export WORKFLOW_RUN="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           XCODE_VERSION="$(xcodebuild -version | tr '\n' ' ')"
           export XCODE_VERSION
-          /usr/bin/ruby -rjson -rdigest -e '
-            directory = ENV.fetch("CANDIDATE_DIR")
+          /usr/bin/ruby -Iios/ScreenshotAutomation -rseal-screenshot-capture-package -e '
+            QuakeSignalScreenshotCapturePackageSeal.validate(
+              platform: ENV.fetch("PLATFORM_KEY"),
+              source_commit: ENV.fetch("SOURCE_COMMIT"),
+              capture_root: ENV.fetch("CANDIDATE_DIR")
+            )
+          '
+          manifest="$CANDIDATE_DIR/capture-package-manifest.json"
+          if [ ! -f "$manifest" ] || [ -L "$manifest" ]; then
+            echo "::error::Initial capture seal is not a plain file"
+            exit 1
+          fi
+          rm -- "$manifest"
+          if [ -e "$manifest" ] || [ -L "$manifest" ]; then
+            echo "::error::Initial capture seal could not be removed before metadata attachment"
+            exit 1
+          fi
+          runtime_inventory="$CANDIDATE_DIR/simulator-runtimes.txt"
+          if [ -e "$runtime_inventory" ] || [ -L "$runtime_inventory" ]; then
+            echo "::error::Refusing to overwrite existing runtime inventory"
+            exit 1
+          fi
+          xcrun simctl list runtimes available > "$runtime_inventory"
+          /usr/bin/ruby -rjson -rdigest -rpathname -e '
+            class DuplicateRejectingHash < Hash
+              def []=(key, value)
+                abort "duplicate JSON object key in capture provenance: #{key.inspect}" if key?(key)
+                super
+              end
+            end
+
+            requested_directory = Pathname.new(ENV.fetch("CANDIDATE_DIR"))
+            directory = requested_directory.realpath
+            abort "candidate directory is not canonical" unless requested_directory.absolute? &&
+              requested_directory.to_s == directory.to_s && directory.directory? && !directory.symlink?
             platform = ENV.fetch("PLATFORM_KEY")
-            evidence_path = File.join(directory, "capture-provenance.json")
-            evidence = JSON.parse(File.read(evidence_path))
+            plain_file = lambda do |relative|
+              abort "unsafe candidate-relative path" unless relative.is_a?(String) &&
+                !relative.empty? && !relative.start_with?("/") &&
+                Pathname.new(relative).cleanpath.to_s == relative &&
+                relative.split("/").none? { |component| component == "." || component == ".." }
+              path = directory.join(relative)
+              stat = path.lstat
+              abort "candidate evidence is not a plain file: #{relative}" unless stat.file? &&
+                !path.symlink? && path.realpath.to_s.start_with?("#{directory}#{File::SEPARATOR}")
+              path
+            end
+            evidence_path = plain_file.call("capture-provenance.json")
+            evidence_source = evidence_path.binread
+            evidence = JSON.parse(
+              evidence_source,
+              object_class: DuplicateRejectingHash,
+              allow_duplicate_key: false
+            )
             source_commit = ENV.fetch("SOURCE_COMMIT")
             abort "source commit is not a full lowercase SHA-1" unless source_commit.match?(/\A[0-9a-f]{40}\z/)
-            unless evidence.fetch("schemaVersion") == 2 &&
-                evidence.fetch("status") == "unapproved-debug-simulator-capture-set-evidence" &&
-                evidence.fetch("uploadApproved") == false &&
-                evidence.fetch("releaseBinaryEvidence").nil? &&
-                evidence.fetch("reviewer").nil?
-              abort "capture-set provenance is not explicitly unapproved schema version 2 evidence"
-            end
-            expected_counts = { "tvos" => 3, "visionos" => 5, "watchos" => 3 }
             expected_selectors = {
+              "ios-ipados" => [
+                "ios-iphone-6.5-home",
+                "ios-iphone-6.5-reports",
+                "ios-iphone-6.5-map",
+                "ios-iphone-6.5-guide",
+                "ios-iphone-6.5-alert-preferences",
+                "ios-ipad-13-home",
+                "ios-ipad-13-reports",
+                "ios-ipad-13-map",
+                "ios-ipad-13-guide",
+                "ios-ipad-13-alert-preferences"
+              ],
               "tvos" => %w[tvos-dashboard tvos-recent-reports tvos-event-detail],
               "visionos" => %w[visionos-home visionos-reports visionos-map visionos-guide visionos-alert-preferences],
               "watchos" => %w[watchos-headline watchos-recent-reports watchos-event-detail]
             }
+            expected_status = platform == "ios-ipados" ?
+              "unapproved-debug-ios-ipados-capture-set-evidence" :
+              "unapproved-debug-simulator-capture-set-evidence"
+            expected_schema = platform == "ios-ipados" ? 1 : 2
+            unless evidence.fetch("schemaVersion") == expected_schema &&
+                evidence.fetch("status") == expected_status &&
+                evidence.fetch("uploadApproved") == false &&
+                evidence.fetch("releaseBinaryEvidence").nil? &&
+                evidence.fetch("reviewer").nil?
+              abort "capture-set provenance is not the exact explicitly unapproved evidence schema"
+            end
             unless evidence.fetch("platform") == platform &&
                 evidence.fetch("locale") == "en-US" &&
                 evidence.fetch("fixture") == "finalized-historical-reports"
               abort "capture-set provenance does not match the selected platform and fixture"
             end
+            if platform == "ios-ipados"
+              source = evidence.fetch("source")
+              unless source.fetch("commit") == source_commit &&
+                  source.fetch("treeState") == "clean" &&
+                  source.fetch("debugLocalOverridePresent") == false
+                abort "iOS/iPadOS capture source does not match the clean workflow revision"
+              end
+            end
             frames = evidence.fetch("frames")
-            unless frames.is_a?(Array) && frames.length == expected_counts.fetch(platform)
+            unless frames.is_a?(Array) && frames.length == expected_selectors.fetch(platform).length
               abort "capture-set provenance does not contain the exact planned frame count"
             end
             unless frames.map { |frame| frame.fetch("captureSelector") } == expected_selectors.fetch(platform)
               abort "capture-set provenance selectors do not match the exact ordered plan"
             end
             normalized_frames = frames.map do |frame|
-              screenshot = File.join(directory, frame.fetch("file"))
-              abort "capture-set screenshot is missing" unless File.file?(screenshot)
+              screenshot = plain_file.call(frame.fetch("file"))
               screenshot_sha256 = Digest::SHA256.file(screenshot).hexdigest
               abort "capture-set screenshot hash mismatch" unless frame.fetch("sha256") == screenshot_sha256
-              frame_evidence = File.join(directory, frame.fetch("captureEvidenceFile"))
-              abort "per-frame capture evidence is missing" unless File.file?(frame_evidence)
-              unless frame.fetch("captureEvidenceSha256") == Digest::SHA256.file(frame_evidence).hexdigest
+              evidence_file_key = platform == "ios-ipados" ? "frameCaptureEvidenceFile" : "captureEvidenceFile"
+              evidence_sha_key = platform == "ios-ipados" ? "frameCaptureEvidenceSha256" : "captureEvidenceSha256"
+              frame_evidence = plain_file.call(frame.fetch(evidence_file_key))
+              unless frame.fetch(evidence_sha_key) == Digest::SHA256.file(frame_evidence).hexdigest
                 abort "per-frame capture evidence hash mismatch"
               end
-              selected_simulator = frame.fetch("selectedSimulator")
+              selected_simulator = if platform == "ios-ipados"
+                                     environment = frame.fetch("captureEnvironment")
+                                     {
+                                       "runtimeIdentifier" => environment.fetch("runtimeIdentifier"),
+                                       "deviceTypeIdentifier" => environment.fetch("deviceTypeIdentifier"),
+                                       "deviceModel" => environment.fetch("deviceModel"),
+                                       "udid" => environment.fetch("deviceIdentifier")
+                                     }
+                                   else
+                                     frame.fetch("selectedSimulator")
+                                   end
               %w[runtimeIdentifier deviceTypeIdentifier deviceModel udid].each do |key|
                 value = selected_simulator.fetch(key)
                 abort "capture provenance selectedSimulator.#{key} is empty" unless value.is_a?(String) && !value.empty?
@@ -201,15 +361,16 @@ jobs:
                 screen: frame.fetch("screen"),
                 screenshotSha256: screenshot_sha256,
                 pixels: frame.fetch("pixels"),
-                capturedAtUtc: frame.fetch("capturedAtUtc"),
+                capturedAtUtc: platform == "ios-ipados" ?
+                  frame.fetch("captureWindowUtc").fetch("completedAt") : frame.fetch("capturedAtUtc"),
                 selectedSimulator: {
                   runtimeIdentifier: selected_simulator.fetch("runtimeIdentifier"),
                   deviceTypeIdentifier: selected_simulator.fetch("deviceTypeIdentifier"),
                   deviceModel: selected_simulator.fetch("deviceModel"),
                   udid: selected_simulator.fetch("udid")
                 },
-                captureEvidenceFile: frame.fetch("captureEvidenceFile"),
-                captureEvidenceSha256: frame.fetch("captureEvidenceSha256")
+                captureEvidenceFile: frame.fetch(evidence_file_key),
+                captureEvidenceSha256: frame.fetch(evidence_sha_key)
               }
             end
             metadata = {
@@ -227,21 +388,88 @@ jobs:
               captureWindowUtc: evidence.fetch("captureWindowUtc"),
               frames: normalized_frames,
               captureEvidenceFile: File.basename(evidence_path),
-              captureEvidenceSha256: Digest::SHA256.file(evidence_path).hexdigest,
+              captureEvidenceSha256: Digest::SHA256.hexdigest(evidence_source),
               xcodeVersion: ENV.fetch("XCODE_VERSION"),
               workflowRun: ENV.fetch("WORKFLOW_RUN"),
               approvalRequired: "Named visual review and runbook-required signed Release parity comparison"
             }
-            File.write(
-              File.join(directory, "candidate-metadata.json"),
-              JSON.pretty_generate(metadata) + "\n"
+            directory.join("candidate-metadata.json").write(
+              JSON.pretty_generate(metadata) + "\n",
+              mode: "wx"
             )
           '
+          /usr/bin/ruby ios/ScreenshotAutomation/seal-screenshot-capture-package.rb \
+            "$PLATFORM_KEY" "$SOURCE_COMMIT" "$CANDIDATE_DIR" "$manifest"
+          /usr/bin/ruby -Iios/ScreenshotAutomation -rseal-screenshot-capture-package -e '
+            QuakeSignalScreenshotCapturePackageSeal.validate(
+              platform: ENV.fetch("PLATFORM_KEY"),
+              source_commit: ENV.fetch("SOURCE_COMMIT"),
+              capture_root: ENV.fetch("CANDIDATE_DIR")
+            )
+          '
+          candidate_zip="${CANDIDATE_DIR}.zip"
+          if [ -e "$candidate_zip" ] || [ -L "$candidate_zip" ]; then
+            echo "::error::Refusing to overwrite candidate ZIP: $candidate_zip"
+            exit 1
+          fi
+          /usr/bin/ditto -c -k --norsrc --keepParent "$CANDIDATE_DIR" "$candidate_zip"
+          /usr/bin/ruby -rpathname -r./.github/scripts/assemble-apple-screenshot-release-set -e '
+            root = Pathname.new(ENV.fetch("CANDIDATE_DIR")).realpath
+            archive = Pathname.new(ARGV.fetch(0)).realpath
+            AppleScreenshotReleaseSetAssembler.allocate.send(
+              :validate_zip_archive_equivalence!,
+              artifact_path: archive,
+              capture_path: root,
+              platform: ENV.fetch("PLATFORM_KEY")
+            )
+          ' "$candidate_zip"
+          echo "CANDIDATE_ZIP=$candidate_zip" >> "$GITHUB_ENV"
+
+      - name: Prove exact source and sealed bytes immediately before upload
+        env:
+          PLATFORM_KEY: ${{ matrix.key }}
+        run: |
+          set -euo pipefail
+          /usr/bin/ruby -Iios/ScreenshotAutomation -rseal-screenshot-capture-package -e '
+            QuakeSignalScreenshotCapturePackageSeal.validate(
+              platform: ENV.fetch("PLATFORM_KEY"),
+              source_commit: ENV.fetch("GITHUB_SHA"),
+              capture_root: ENV.fetch("CANDIDATE_DIR")
+            )
+          '
+          /usr/bin/ruby -rpathname -r./.github/scripts/assemble-apple-screenshot-release-set -e '
+            root = Pathname.new(ENV.fetch("CANDIDATE_DIR")).realpath
+            archive = Pathname.new(ENV.fetch("CANDIDATE_ZIP")).realpath
+            AppleScreenshotReleaseSetAssembler.allocate.send(
+              :validate_zip_archive_equivalence!,
+              artifact_path: archive,
+              capture_path: root,
+              platform: ENV.fetch("PLATFORM_KEY")
+            )
+          '
+          final_sha="$(git rev-parse --verify HEAD)"
+          if [ "$final_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::Checked-out HEAD $final_sha changed from workflow source $GITHUB_SHA before upload"
+            exit 1
+          fi
+          final_status="$(git status --porcelain=v1 --untracked-files=all)"
+          if [ -n "$final_status" ]; then
+            printf '%s\n' "$final_status"
+            echo "::error::Repository must have zero tracked or untracked changes immediately before upload"
+            exit 1
+          fi
+          debug_local_override="ios/QuakeSignal/Supporting/Debug.local.xcconfig"
+          if [ -e "$debug_local_override" ] || [ -L "$debug_local_override" ]; then
+            echo "::error::Ignored Debug.local.xcconfig appeared before screenshot artifact upload"
+            exit 1
+          fi
 
       - name: Upload short-lived unapproved candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: UNAPPROVED-debug-simulator-${{ matrix.key }}-${{ github.sha }}
-          path: ${{ env.CANDIDATE_DIR }}
+          path: |
+            ${{ env.CANDIDATE_DIR }}
+            ${{ env.CANDIDATE_ZIP }}
           if-no-files-found: error
           retention-days: 7

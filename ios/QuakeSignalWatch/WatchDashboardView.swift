@@ -3,8 +3,12 @@ import SwiftUI
 
 struct WatchDashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(WatchAlertPreferenceContext.watchDefaultsKey)
+    private var alertSoundRawValue = AlertSoundPreference.system.rawValue
     @State private var store = ForegroundQuakeStore()
+    @State private var emergencyMonitor = WatchForegroundEmergencyMonitor()
     @State private var manualRefreshLifecycle = ForegroundManualRefreshLifecycle()
+    @State private var emergencyFeedbackTrigger = 0
 
     var body: some View {
         NavigationStack {
@@ -24,6 +28,9 @@ struct WatchDashboardView: View {
             }
         }
         .task(id: scenePhase) {
+            emergencyMonitor.setSceneActive(
+                scenePhase == .active && !ScreenshotAutomation.isEnabled
+            )
             guard scenePhase == .active else { return }
             await store.monitorWhileActive(limit: 12)
         }
@@ -32,12 +39,39 @@ struct WatchDashboardView: View {
             await store.refresh(limit: 12)
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase != .active else { return }
-            manualRefreshLifecycle.cancelPendingRefresh()
+            if phase == .active {
+                emergencyMonitor.setSceneActive(!ScreenshotAutomation.isEnabled)
+            } else {
+                manualRefreshLifecycle.cancelPendingRefresh()
+                emergencyMonitor.setSceneActive(false)
+                WatchEmergencyAlertAudio.shared.stop()
+            }
+        }
+        .onChange(of: emergencyMonitor.presentedWarning?.id) { _, warningID in
+            guard warningID != nil else {
+                WatchEmergencyAlertAudio.shared.stop()
+                return
+            }
+            emergencyFeedbackTrigger &+= 1
+            WatchEmergencyAlertAudio.shared.playCustomSound(for: selectedAlertSound)
         }
         .onDisappear {
             manualRefreshLifecycle.cancelPendingRefresh()
+            emergencyMonitor.setSceneActive(false)
+            WatchEmergencyAlertAudio.shared.stop()
         }
+        .fullScreenCover(item: presentedEmergencyBinding) { presentation in
+            NavigationStack {
+                WatchEmergencyAlertView(
+                    presentation: presentation,
+                    onDismiss: {
+                        emergencyMonitor.dismissPresentedWarning()
+                        WatchEmergencyAlertAudio.shared.stop()
+                    }
+                )
+            }
+        }
+        .sensoryFeedback(.warning, trigger: emergencyFeedbackTrigger)
     }
 
     private var dashboard: some View {
@@ -59,6 +93,8 @@ struct WatchDashboardView: View {
                         Text("platform.watch.foregroundOnly.short")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+
+                        WatchAlertSoundStatus(preference: selectedAlertSound)
 
                         Button {
                             manualRefreshLifecycle.requestRefresh(isSceneActive: scenePhase == .active)
@@ -115,6 +151,21 @@ struct WatchDashboardView: View {
         }
     }
 
+    private var selectedAlertSound: AlertSoundPreference {
+        AlertSoundPreference(rawValue: alertSoundRawValue) ?? .system
+    }
+
+    private var presentedEmergencyBinding: Binding<WatchForegroundEmergencyPresentation?> {
+        Binding(
+            get: { emergencyMonitor.presentedWarning },
+            set: { presentation in
+                if presentation == nil {
+                    emergencyMonitor.dismissPresentedWarning()
+                }
+            }
+        )
+    }
+
     @ViewBuilder
     private var headline: some View {
         if let event = store.headlineEvent {
@@ -167,7 +218,10 @@ private struct WatchHeadlineCard: View {
     }
 
     private var cardBackgroundColor: Color {
-        isFocused ? .white : Color(white: 0.16)
+        if isFocused { return .white }
+        return event.isActiveWarning
+            ? Color(red: 0.55, green: 0.03, blue: 0.06)
+            : Color(white: 0.16)
     }
 
     var body: some View {
@@ -175,6 +229,13 @@ private struct WatchHeadlineCard: View {
             WatchEventDetailView(event: event)
         } label: {
             VStack(alignment: .leading, spacing: 3) {
+                if event.isActiveWarning {
+                    Label("alert.badge.new", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(primaryTextColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(event.magnitudeText)
                         .font(.system(size: 32, weight: .bold, design: .rounded))
@@ -207,6 +268,32 @@ private struct WatchHeadlineCard: View {
         }
         .focused($isFocused)
         .buttonStyle(.plain)
+        .accessibilityHint(event.isActiveWarning ? Text("alert.action.now") : Text("detail.title"))
+    }
+}
+
+private struct WatchAlertSoundStatus: View {
+    let preference: AlertSoundPreference
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: preference.systemImage)
+                .foregroundStyle(Color("BrandColor"))
+                .frame(width: 24)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("settings.alertSound.title")
+                    .font(.caption.weight(.semibold))
+                Text(LocalizedStringKey(preference.titleKey))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("platform.watch.alertSound.changeOnPhone")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -480,6 +567,112 @@ private struct WatchEventDetailView: View {
                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)
             )
             .accessibilityIdentifier("watch-event-detail-foreground-badge")
+    }
+}
+
+private struct WatchEmergencyAlertView: View {
+    let presentation: WatchForegroundEmergencyPresentation
+    let onDismiss: () -> Void
+
+    private var event: EEWEvent { presentation.event }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 9) {
+                emergencyHeader
+
+                Label("alert.action.now", systemImage: "shield.fill")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("M\(event.magnitudeText)")
+                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                        .accessibilityLabel(
+                            Text("\(String(localized: "alert.magnitudeLabel")) \(event.magnitudeText)")
+                        )
+
+                    Spacer(minLength: 2)
+
+                    if let maxIntensity = event.maxIntensity {
+                        Text(L("quake.intensity.label", maxIntensity))
+                            .font(.caption.weight(.semibold))
+                            .minimumScaleFactor(0.75)
+                    }
+                }
+                .foregroundStyle(.white)
+
+                Text(event.hypocenter)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    safetyStep("alert.step.drop", systemImage: "arrow.down.circle.fill")
+                    safetyStep("alert.step.cover", systemImage: "shield.lefthalf.filled")
+                    safetyStep("alert.step.holdOn", systemImage: "hand.raised.fill")
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 12))
+
+                Text("platform.watch.emergency.foregroundOnly")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.82))
+
+                NavigationLink {
+                    WatchEventDetailView(event: event)
+                } label: {
+                    Label("alert.viewDetails", systemImage: "info.circle")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .tint(.white)
+
+                Button(action: onDismiss) {
+                    Text("alert.dismiss")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.white)
+                .foregroundStyle(.red)
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 12)
+        }
+        .containerBackground(
+            LinearGradient(
+                colors: [
+                    Color(red: 0.58, green: 0.02, blue: 0.06),
+                    Color(red: 0.28, green: 0.01, blue: 0.03),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            ),
+            for: .navigation
+        )
+        .navigationTitle("app.name")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var emergencyHeader: some View {
+        Label(
+            presentation.isUpdate ? "alert.badge.updated" : "alert.badge.new",
+            systemImage: "exclamationmark.triangle.fill"
+        )
+        .font(.caption.weight(.heavy))
+        .foregroundStyle(.white)
+        .lineLimit(2)
+        .minimumScaleFactor(0.76)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private func safetyStep(_ key: LocalizedStringKey, systemImage: String) -> some View {
+        Label(key, systemImage: systemImage)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white)
     }
 }
 

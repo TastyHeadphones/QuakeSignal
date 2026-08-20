@@ -3,7 +3,13 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "$0")" && pwd -P)"
-test_root="$(mktemp -d "${TMPDIR:-/tmp}/quakesignal-platform-interface-test.XXXXXX")"
+test_temp_root="${QUAKESIGNAL_TEST_TEMP_ROOT:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}}"
+if [ ! -d "$test_temp_root" ] || [ -L "$test_temp_root" ]; then
+  echo "error: screenshot test temp root must be an existing plain directory" >&2
+  exit 64
+fi
+test_temp_root="$(cd "$test_temp_root" && pwd -P)"
+test_root="$(mktemp -d "$test_temp_root/quakesignal-platform-interface-test.XXXXXX")"
 
 cleanup() {
   rm -rf "$test_root"
@@ -47,6 +53,23 @@ mkdir "$test_root/existing-set"
 expect_status 73 "$script_dir/capture-platform-screenshot-set.sh" \
   tvos "$test_root/existing-set"
 
+stub_bin="$test_root/bin"
+mkdir "$stub_bin"
+printf '%s\n' \
+  '#!/bin/bash' \
+  'case " $* " in' \
+  '  *" rev-parse "*) printf "%040d\n" 0 ;;' \
+  '  *" status "*) printf " M ios/QuakeSignalShared/ScreenshotAutomation.swift\n" ;;' \
+  '  *) exit 1 ;;' \
+  'esac' >"$stub_bin/git"
+chmod +x "$stub_bin/git"
+expect_status 65 env PATH="$stub_bin:$PATH" \
+  "$script_dir/capture-platform-screenshot-set.sh" tvos "$test_root/dirty-set"
+if [ -e "$test_root/dirty-set" ]; then
+  echo "error: dirty-source refusal published a native capture set" >&2
+  exit 1
+fi
+
 ln -s "$test_root/missing-single-target.png" "$test_root/dangling-single.png"
 expect_status 73 "$script_dir/capture-platform-screenshot.sh" \
   tvos tvos-dashboard "$test_root/dangling-single.png"
@@ -78,6 +101,16 @@ if find "$test_root" -type f -name '*.png' -print -quit | grep -q .; then
   echo "error: rejected interface input emitted a screenshot" >&2
   exit 1
 fi
+
+/usr/bin/ruby -e '
+  source = File.read(ARGV.fetch(0))
+  abort "native set lost clean-source pre/post checks" unless
+    source.scan(%r{git -C "\$repo_root" status --porcelain=v1 --untracked-files=all}).length == 2
+  abort "native set lost Debug.local pre/post checks" unless
+    source.scan(%r{\[ -e "\$debug_local_override" \] \|\| \[ -L "\$debug_local_override" \]}).length == 2
+  abort "native set lost source-commit plan binding" unless
+    source.include?(%q[git -C "$repo_root" show "$source_commit:$plan_manifest_file"])
+' "$script_dir/capture-platform-screenshot-set.sh"
 
 # Both foreground-only detail screens share a `%@` localization template.
 # Passing a Double directly to that object placeholder crashes Foundation's
@@ -415,14 +448,25 @@ cp "$script_dir/capture-platform-screenshot-set.sh" \
 /usr/bin/ruby - "$atomic_script_dir" <<'RUBY'
 script_dir = ARGV.fetch(0)
 File.write(File.join(script_dir, "platform-screenshot-plan.rb"), <<~'PLAN')
-  abort "unexpected atomic plan request" unless ARGV == ["visionos", "--tsv"]
-  puts [
-    "visionos-home\ten-US/01-home.png\t3840\t2160",
-    "visionos-reports\ten-US/02-reports.png\t3840\t2160",
-    "visionos-map\ten-US/03-map.png\t3840\t2160",
-    "visionos-guide\ten-US/04-guide.png\t3840\t2160",
-    "visionos-alert-preferences\ten-US/05-alert-preferences.png\t3840\t2160"
-  ]
+  require "digest"
+  require "json"
+  case ARGV
+  when ["visionos", "--json"]
+    puts JSON.generate(
+      "manifestFile" => "ios/AppStore/platforms/visionos/atomic-plan.json",
+      "manifestSha256" => Digest::SHA256.hexdigest("atomic plan\n")
+    )
+  when ["visionos", "--tsv"]
+    puts [
+      "visionos-home\ten-US/01-home.png\t3840\t2160",
+      "visionos-reports\ten-US/02-reports.png\t3840\t2160",
+      "visionos-map\ten-US/03-map.png\t3840\t2160",
+      "visionos-guide\ten-US/04-guide.png\t3840\t2160",
+      "visionos-alert-preferences\ten-US/05-alert-preferences.png\t3840\t2160"
+    ]
+  else
+    abort "unexpected atomic plan request"
+  end
 PLAN
 File.write(File.join(script_dir, "capture-platform-screenshot.sh"), <<~'CAPTURE')
   #!/bin/bash
@@ -445,7 +489,20 @@ ASSEMBLE
 File.chmod(0o755, File.join(script_dir, "capture-platform-screenshot.sh"))
 RUBY
 
+atomic_bin="$test_root/atomic-bin"
+mkdir "$atomic_bin"
+printf '%s\n' \
+  '#!/bin/bash' \
+  'case " $* " in' \
+  '  *" rev-parse "*) printf "%040d\n" 0 ;;' \
+  '  *" status "*) exit 0 ;;' \
+  '  *" show "*) printf "atomic plan\n" ;;' \
+  '  *) exit 1 ;;' \
+  'esac' >"$atomic_bin/git"
+chmod +x "$atomic_bin/git"
+
 expect_status 65 env \
+  PATH="$atomic_bin:$PATH" \
   QUAKESIGNAL_TEST_CAPTURE_TRACE="$atomic_trace" \
   QUAKESIGNAL_TEST_AGGREGATE_MARKER="$atomic_aggregate_marker" \
   "$atomic_script_dir/capture-platform-screenshot-set.sh" \

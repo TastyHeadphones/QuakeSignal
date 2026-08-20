@@ -1,1 +1,1 @@
-earthquake,seismic,alerts,JMA,CENC,map,magnitude,preparedness,safety
+earthquake,seismic,alerts,JMA,map,magnitude,preparedness,safety,tsunami

@@ -1,9 +1,8 @@
 import CoreLocation
 
-/// A curated, hardcoded list rather than a geocoding API call -- keeps the
-/// app's only network dependency as the QuakeSignal backend, and this list
-/// only needs to cover China (CENC + Sichuan/Fujian/Chongqing bureaus) and
-/// Japan (JMA), which is exactly what Wolfx relays.
+/// A curated, hardcoded list avoids adding a geocoding network dependency.
+/// These nearby reference cities support the user's epicentral-distance filter;
+/// they do not define or expand the build-8 JMA-only source inventory.
 struct City: Identifiable, Hashable, Codable {
     let id: String
     let nameZh: String
@@ -26,7 +25,7 @@ struct City: Identifiable, Hashable, Codable {
 
 enum CityDirectory {
     static let all: [City] = [
-        // Municipalities & major China cities (CENC nationwide + faster SC/FJ/CQ bureau coverage where applicable)
+        // Municipalities and major nearby reference cities for distance filtering.
         City(id: "beijing", nameZh: "北京市", nameJa: "北京", nameEn: "Beijing", latitude: 39.9042, longitude: 116.4074),
         City(id: "shanghai", nameZh: "上海市", nameJa: "上海", nameEn: "Shanghai", latitude: 31.2304, longitude: 121.4737),
         City(id: "tianjin", nameZh: "天津市", nameJa: "天津", nameEn: "Tianjin", latitude: 39.3434, longitude: 117.3616),

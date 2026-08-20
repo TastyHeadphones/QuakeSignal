@@ -2,7 +2,7 @@ DRAFT — RELEASE-OWNER/LEGAL APPROVAL REQUIRED BEFORE PORTAL ENTRY
 
 QuakeSignal for Apple TV has no account, advertising, analytics, tracking, purchases, or background notification registration.
 
-While the dashboard is open, it requests public recent earthquake information directly from the Wolfx Open API over encrypted HTTPS. QuakeSignal does not send a location, device token, alert preference, account identifier, or usage event from the Apple TV app to infrastructure operated by QuakeSignal. Current report state is held in app memory for the open session. The Apple TV app does not use APNs or App Attest.
+While the dashboard is open, it requests public recent earthquake information directly from the Wolfx Open API over encrypted WebSocket and HTTPS connections. QuakeSignal does not send a location, device token, alert preference, account identifier, or usage event from the Apple TV app to infrastructure operated by QuakeSignal. Current report state is held in app memory for the open session. The selected System, Urgent, or Japanese Voice presentation mode is stored locally on the Apple TV and is not uploaded. The Apple TV app does not use APNs or App Attest.
 
 Wolfx and ordinary network providers may receive standard connection metadata, such as an IP address, when the app requests public data. QuakeSignal does not sell personal data or use this connection for advertising or profiling.
 

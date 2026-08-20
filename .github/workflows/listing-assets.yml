@@ -6,7 +6,9 @@ on:
       - main
       - "codex/**"
     paths:
+      - "assets/app-icon.svg"
       - "ios/AppStore/**"
+      - "ios/ScreenshotAutomation/**"
       - "ios/QuakeSignal/**"
       - "ios/QuakeSignalShared/**"
       - "ios/QuakeSignalTV/**"
@@ -19,14 +21,23 @@ on:
       - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
       - "desktop/AppStore/**"
       - ".github/scripts/verify-store-assets.rb"
+      - ".github/scripts/verify-store-assets.test.rb"
       - ".github/scripts/verify-ios-screenshot-candidates.rb"
       - ".github/scripts/verify-ios-screenshot-candidates.test.rb"
       - ".github/scripts/verify-native-apple-screenshot-candidates.rb"
       - ".github/scripts/verify-native-apple-screenshot-candidates.test.rb"
+      - ".github/scripts/verify-apple-screenshot-release-set.rb"
+      - ".github/scripts/verify-apple-screenshot-release-set.test.rb"
+      - ".github/scripts/verify-ios-release-contract.mjs"
+      - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - ".github/workflows/apple-platform-screenshots.yml"
       - ".github/workflows/listing-assets.yml"
+      - ".github/workflows/workflow-lint.yml"
   pull_request:
     paths:
+      - "assets/app-icon.svg"
       - "ios/AppStore/**"
+      - "ios/ScreenshotAutomation/**"
       - "ios/QuakeSignal/**"
       - "ios/QuakeSignalShared/**"
       - "ios/QuakeSignalTV/**"
@@ -39,11 +50,18 @@ on:
       - "ios/QuakeSignal.xcodeproj/xcshareddata/xcschemes/**"
       - "desktop/AppStore/**"
       - ".github/scripts/verify-store-assets.rb"
+      - ".github/scripts/verify-store-assets.test.rb"
       - ".github/scripts/verify-ios-screenshot-candidates.rb"
       - ".github/scripts/verify-ios-screenshot-candidates.test.rb"
       - ".github/scripts/verify-native-apple-screenshot-candidates.rb"
       - ".github/scripts/verify-native-apple-screenshot-candidates.test.rb"
+      - ".github/scripts/verify-apple-screenshot-release-set.rb"
+      - ".github/scripts/verify-apple-screenshot-release-set.test.rb"
+      - ".github/scripts/verify-ios-release-contract.mjs"
+      - ".github/scripts/verify-ios-release-contract.test.mjs"
+      - ".github/workflows/apple-platform-screenshots.yml"
       - ".github/workflows/listing-assets.yml"
+      - ".github/workflows/workflow-lint.yml"
   workflow_dispatch:
 
 permissions:
@@ -63,14 +81,23 @@ jobs:
       - name: Validate listing assets
         run: ruby .github/scripts/verify-store-assets.rb
 
-      - name: Test iOS screenshot candidate validator
+      - name: Test listing asset validator
+        run: ruby .github/scripts/verify-store-assets.test.rb
+
+      - name: Test historical iOS screenshot validator
         run: ruby .github/scripts/verify-ios-screenshot-candidates.test.rb
 
-      - name: Validate optional iOS screenshot candidates
+      - name: Validate historical iOS screenshot bytes
         run: ruby .github/scripts/verify-ios-screenshot-candidates.rb
 
-      - name: Test native Apple screenshot candidate validator
+      - name: Test historical native Apple screenshot validator
         run: ruby .github/scripts/verify-native-apple-screenshot-candidates.test.rb
 
-      - name: Validate native Apple screenshot candidates
+      - name: Validate historical native Apple screenshot bytes
         run: ruby .github/scripts/verify-native-apple-screenshot-candidates.rb
+
+      - name: Test source-addressed Apple screenshot release set
+        run: ruby .github/scripts/verify-apple-screenshot-release-set.test.rb
+
+      - name: Validate source-addressed Apple screenshot release set
+        run: ruby .github/scripts/verify-apple-screenshot-release-set.rb

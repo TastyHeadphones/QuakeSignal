@@ -1,4 +1,7 @@
 import SwiftUI
+#if DEBUG && targetEnvironment(macCatalyst)
+import UIKit
+#endif
 
 private enum RootTab: Hashable {
     case home
@@ -20,12 +23,14 @@ struct RootView: View {
     @State private var selectedTab: RootTab
 
     init() {
-        let initialTab: RootTab = switch ScreenshotAutomation.selectedFrame {
-        case .visionReports: .reports
-        case .visionMap: .map
-        case .visionGuide: .guide
-        case .visionAlertPreferences: .settings
-        default: .home
+        let initialTab: RootTab = switch ScreenshotAutomation.rootDestination(
+            for: ScreenshotAutomation.selectedFrame
+        ) {
+        case .home: .home
+        case .reports: .reports
+        case .map: .map
+        case .guide: .guide
+        case .settings: .settings
         }
         _selectedTab = State(initialValue: initialTab)
     }
@@ -56,6 +61,11 @@ struct RootView: View {
             } else {
                 OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)
             }
+        }
+        .background {
+#if DEBUG && targetEnvironment(macCatalyst)
+            CatalystScreenshotGeometryProbe()
+#endif
         }
         .fullScreenCover(item: $store.presentedAlert) { alert in
             switch alert.mode {
@@ -179,14 +189,14 @@ struct RootView: View {
         }
     }
 
-    /// A tapped push only carries eventId/sourceId/reason (see PushPayload).
-    /// Resolve it from memory or refresh directly from Wolfx; Cloudflare never
-    /// serves earthquake data.
+    /// Prefer the compact, structurally validated push snapshot. Legacy or
+    /// unusable payloads resolve from memory or refresh directly from Wolfx;
+    /// Cloudflare never serves earthquake data.
     private func handleTap(_ payload: PushPayload) async {
         guard let compositeId = payload.compositeEventId else { return }
         let reason = AlertPresentationReason(wireValue: payload.reason)
 
-        if let snapshot = payload.eventSnapshot, snapshot.id == compositeId {
+        if let snapshot = payload.eventSnapshot {
             store.ingestTapped(event: snapshot, reason: reason)
             return
         }
@@ -208,7 +218,7 @@ struct RootView: View {
         let payload = delivery.payload
         guard let compositeId = payload.compositeEventId else { return }
         let reason = AlertPresentationReason(wireValue: payload.reason)
-        if let snapshot = payload.eventSnapshot, snapshot.id == compositeId {
+        if let snapshot = payload.eventSnapshot {
             store.ingestForegroundNotification(
                 event: snapshot,
                 reason: reason,
@@ -234,6 +244,259 @@ struct RootView: View {
         }
     }
 }
+
+#if DEBUG && targetEnvironment(macCatalyst)
+/// Resolves the scene from a UIView hosted by this exact RootView. Looking at
+/// `UIApplication.connectedScenes.first` can resize a different window when
+/// state restoration or another scene is present.
+private struct CatalystScreenshotGeometryProbe: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> ProbeView {
+        let view = ProbeView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        view.onWindowChanged = { [weak coordinator = context.coordinator] window in
+            coordinator?.attach(to: window, probe: view)
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: ProbeView, context: Context) {
+        context.coordinator.attach(to: uiView.window, probe: uiView)
+    }
+
+    static func dismantleUIView(_ uiView: ProbeView, coordinator: Coordinator) {
+        coordinator.cancel()
+        uiView.onWindowChanged = nil
+    }
+
+    final class ProbeView: UIView {
+        var onWindowChanged: ((UIWindow?) -> Void)?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            onWindowChanged?(window)
+        }
+    }
+
+    @MainActor
+    final class Coordinator {
+        private weak var attachedWindow: UIWindow?
+        private var geometryTask: Task<Void, Never>?
+        private var finished = false
+
+        func attach(to window: UIWindow?, probe: ProbeView) {
+            guard !finished,
+                  geometryTask == nil,
+                  let window,
+                  attachedWindow !== window,
+                  let windowScene = window.windowScene,
+                  let evidenceRootPath = ScreenshotAutomation.macCaptureEvidenceRootPath(
+                      screenshotAutomationEnabled: ScreenshotAutomation.isEnabled,
+                      selectedFrame: ScreenshotAutomation.selectedFrame,
+                      environment: ProcessInfo.processInfo.environment
+                  ),
+                  let selectedFrame = ScreenshotAutomation.selectedFrame,
+                  let targetFrame = ScreenshotAutomation.macCaptureTargetSystemFrame(
+                      screenshotAutomationEnabled: ScreenshotAutomation.isEnabled,
+                      selectedFrame: ScreenshotAutomation.selectedFrame,
+                      currentSystemFrame: windowScene.effectiveGeometry.systemFrame
+                  ) else {
+                return
+            }
+
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: evidenceRootPath, isDirectory: &isDirectory),
+                  isDirectory.boolValue else {
+                return
+            }
+
+            let evidenceURL = URL(fileURLWithPath: evidenceRootPath, isDirectory: true)
+                .appendingPathComponent("geometry-\(ProcessInfo.processInfo.processIdentifier).json")
+
+            attachedWindow = window
+            probe.isAccessibilityElement = false
+            probe.accessibilityIdentifier = nil
+            probe.accessibilityLabel = nil
+
+            windowScene.requestGeometryUpdate(
+                UIWindowScene.GeometryPreferences.Mac(systemFrame: targetFrame)
+            ) { [weak self, weak probe] error in
+                Task { @MainActor in
+                    self?.fail(
+                        probe: probe,
+                        evidenceURL: evidenceURL,
+                        selectedFrame: selectedFrame,
+                        reason: "geometry request failed: \(error.localizedDescription)"
+                    )
+                }
+            }
+
+            geometryTask = Task { @MainActor [weak self, weak window, weak probe, weak windowScene] in
+                var previousFrame: CGRect?
+                var stableObservationCount = 0
+
+                // Eight seconds is intentionally bounded. Capture tooling must
+                // observe the atomic ready evidence or fail without image bytes.
+                for _ in 0..<80 {
+                    guard !Task.isCancelled else { return }
+                    try? await Task.sleep(for: .milliseconds(100))
+                    guard let self,
+                          let window,
+                          let probe,
+                          let windowScene,
+                          window.windowScene === windowScene else {
+                        self?.fail(
+                            probe: probe,
+                            evidenceURL: evidenceURL,
+                            selectedFrame: selectedFrame,
+                            reason: "window scene changed before geometry stabilized"
+                        )
+                        return
+                    }
+
+                    let currentFrame = windowScene.effectiveGeometry.systemFrame
+                    if ScreenshotAutomation.macCaptureGeometryIsStable(
+                        systemFrame: currentFrame,
+                        previousSystemFrame: previousFrame,
+                        backingScale: window.screen.scale
+                    ) {
+                        stableObservationCount += 1
+                    } else {
+                        stableObservationCount = 0
+                    }
+                    previousFrame = currentFrame
+
+                    if stableObservationCount >= 3 {
+                        self.markReady(
+                            probe: probe,
+                            evidenceURL: evidenceURL,
+                            selectedFrame: selectedFrame,
+                            systemFrame: currentFrame,
+                            scale: window.screen.scale
+                        )
+                        return
+                    }
+                }
+
+                self?.fail(
+                    probe: probe,
+                    evidenceURL: evidenceURL,
+                    selectedFrame: selectedFrame,
+                    reason: "geometry did not stabilize at 1280x800 points and 2x"
+                )
+            }
+        }
+
+        func cancel() {
+            geometryTask?.cancel()
+            geometryTask = nil
+        }
+
+        private func markReady(
+            probe: ProbeView,
+            evidenceURL: URL,
+            selectedFrame: ScreenshotAutomation.Frame,
+            systemFrame: CGRect,
+            scale: CGFloat
+        ) {
+            guard !finished else { return }
+            do {
+                try writeGeometryEvidence(
+                    status: "ready",
+                    reason: nil,
+                    evidenceURL: evidenceURL,
+                    selectedFrame: selectedFrame,
+                    systemFrame: systemFrame,
+                    scale: scale
+                )
+            } catch {
+                fail(
+                    probe: probe,
+                    evidenceURL: evidenceURL,
+                    selectedFrame: selectedFrame,
+                    reason: "could not publish geometry evidence: \(error.localizedDescription)"
+                )
+                return
+            }
+            finished = true
+            geometryTask = nil
+            probe.isAccessibilityElement = true
+            probe.accessibilityIdentifier = ScreenshotAutomation.macCaptureReadyAccessibilityIdentifier
+            probe.accessibilityLabel = "QuakeSignal Catalyst screenshot geometry ready"
+            probe.accessibilityValue = "\(Int(systemFrame.width)) by \(Int(systemFrame.height)) points at \(Int(scale))x"
+            print("CATALYST_SCREENSHOT_GEOMETRY_READY frame=\(systemFrame) scale=\(scale)")
+        }
+
+        private func fail(
+            probe: ProbeView?,
+            evidenceURL: URL,
+            selectedFrame: ScreenshotAutomation.Frame,
+            reason: String
+        ) {
+            guard !finished else { return }
+            finished = true
+            geometryTask?.cancel()
+            geometryTask = nil
+            try? writeGeometryEvidence(
+                status: "failed",
+                reason: reason,
+                evidenceURL: evidenceURL,
+                selectedFrame: selectedFrame,
+                systemFrame: attachedWindow?.windowScene?.effectiveGeometry.systemFrame ?? .zero,
+                scale: attachedWindow?.screen.scale ?? 0
+            )
+            probe?.isAccessibilityElement = true
+            probe?.accessibilityIdentifier = ScreenshotAutomation.macCaptureFailedAccessibilityIdentifier
+            probe?.accessibilityLabel = "QuakeSignal Catalyst screenshot geometry failed"
+            probe?.accessibilityValue = reason
+            print("CATALYST_SCREENSHOT_GEOMETRY_FAILED \(reason)")
+        }
+
+        private func writeGeometryEvidence(
+            status: String,
+            reason: String?,
+            evidenceURL: URL,
+            selectedFrame: ScreenshotAutomation.Frame,
+            systemFrame: CGRect,
+            scale: CGFloat
+        ) throws {
+            let record: [String: Any] = [
+                "schemaVersion": 1,
+                "status": status,
+                "reason": reason as Any,
+                "processId": ProcessInfo.processInfo.processIdentifier,
+                "captureSelector": selectedFrame.rawValue,
+                "logicalFrame": [
+                    "x": systemFrame.minX,
+                    "y": systemFrame.minY,
+                    "width": systemFrame.width,
+                    "height": systemFrame.height,
+                ],
+                "backingScale": scale,
+                "recordedAtUtc": ISO8601DateFormatter().string(from: Date()),
+            ]
+            let data = try JSONSerialization.data(
+                withJSONObject: record,
+                options: [.prettyPrinted, .sortedKeys]
+            )
+            let temporaryURL = evidenceURL.deletingLastPathComponent().appendingPathComponent(
+                ".\(evidenceURL.lastPathComponent).\(UUID().uuidString).tmp"
+            )
+            try data.write(to: temporaryURL, options: .withoutOverwriting)
+            do {
+                try FileManager.default.moveItem(at: temporaryURL, to: evidenceURL)
+            } catch {
+                try? FileManager.default.removeItem(at: temporaryURL)
+                throw error
+            }
+        }
+    }
+}
+#endif
 
 private struct NotificationEventDetailCover: View {
     let event: EEWEvent

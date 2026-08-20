@@ -255,6 +255,10 @@ jobs:
             key: ios
             scheme: QuakeSignal
             destination: generic/platform=iOS
+          - name: Mac Catalyst
+            key: maccatalyst
+            scheme: QuakeSignal
+            destination: generic/platform=macOS,variant=Mac Catalyst
           - name: tvOS
             key: tvos
             scheme: QuakeSignalTV

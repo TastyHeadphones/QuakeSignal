@@ -21,6 +21,14 @@ Rust tests before packaging and refuses a tag whose version differs from
 
 ## macOS
 
+> **Dormant for Apple release 1.1 build 8.** The sole current Mac storefront
+> product is the shared SwiftUI Mac Catalyst target (`com.quakesignal.app`),
+> to be built with automatic signing by the coordinated Xcode Cloud workflow.
+> No Xcode Cloud signed build `8` exists yet. The
+> Tauri direct/Homebrew and separate Tauri Mac App Store lanes documented
+> below are retained only for a possible later release and must not be run,
+> uploaded, or substituted for the Catalyst build in this release.
+
 macOS has two deliberately separate distribution lanes in
 [`.github/workflows/desktop-release.yml`](../.github/workflows/desktop-release.yml).
 The direct/Homebrew lane publishes from a protected version tag; an explicit

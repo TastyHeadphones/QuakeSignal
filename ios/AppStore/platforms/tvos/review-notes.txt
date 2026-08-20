@@ -3,15 +3,37 @@ It requires no account, sign-in, payment, location permission, notification
 permission, demo account, or reviewer credential.
 
 Open the app to load recent reports. Use the Siri Remote to focus the Refresh
-button, move through recent reports, and open an event detail. The upstream
-Wolfx feeds may temporarily return no reports or partial source availability;
-this is an expected network state rather than a credential gate.
+button, move through recent reports, open an event detail, and open Alert Sound.
+The Alert Sound screen offers System Default, QuakeSignal Urgent Tone, and
+Japanese Safety Voice. System Default is visual-only on tvOS. Either custom
+sound starts only after the reviewer presses Preview or Play with the Siri
+Remote; the app never starts audio automatically. Japanese Safety Voice uses
+HTS Voice “Mei” by Nagoya Institute of Technology under CC BY 3.0 and is not a
+J-Alert or JMA recording. The upstream Wolfx JMA feeds may temporarily return
+no reports or partial availability; this is an expected network state rather
+than a credential gate.
+
+Build 8 reads only Wolfx feed identifiers jma_eew and jma_eqlist. CENC,
+Sichuan, Fujian, and Chongqing feeds are disabled. QuakeSignal formats and
+normalizes JMA-issued factual information for display; it does not calculate a
+new local-intensity or ground-motion-arrival forecast.
 
 This tvOS target intentionally has no APNs, App Attest, Time Sensitive or
-Critical Alerts entitlement, alert audio, or background delivery. It refreshes
-only while the dashboard is active and must not be reviewed as a background
-emergency-alert service.
+Critical Alerts entitlement, automatic alert audio, or background delivery.
+While the scene is active it uses validated foreground WebSocket updates with
+conservative HTTPS recovery. After the session establishes its current-state
+baseline, a new or monotonic updated fresh JMA warning can present a full-screen
+visual safety view. Retained/backfilled warnings do not impersonate a new live
+alert. Monitoring and user-started playback stop when the scene becomes
+inactive. It must not be reviewed as a background emergency-alert service.
 
-QuakeSignal is independent and non-official. Wolfx-aggregated information can
-be delayed, incomplete, revised, or inaccurate. The UI directs customers to
-follow official local emergency guidance.
+The three App Store screenshot frames deliberately remain benign dashboard,
+report-list, and finalized-detail views. They do not demonstrate automatic
+audio or a fabricated live emergency. The Alert Sound screen, focus containment,
+Remote-only playback, and scene-deactivation stop behavior require signed-build
+review on Apple TV hardware before submission.
+
+Source: Japan Meteorological Agency (JMA), relayed through Wolfx and
+normalized/edited by QuakeSignal. QuakeSignal is independent and non-official;
+the information can be delayed, incomplete, revised, or inaccurate. The UI
+directs customers to follow official local emergency guidance.

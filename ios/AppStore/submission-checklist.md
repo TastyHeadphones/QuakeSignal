@@ -28,12 +28,14 @@ value.
 - [ ] Open the existing iOS record (Apple ID `6800642443`) and verify its
   current portal state; do not create a duplicate record or a Universal Purchase
   claim for the distinct macOS bundle ID.
-- [ ] Record the release owner's choice between Mac Catalyst and Designed for
-  iPad on Mac, including the reviewed portal mapping, profiles, Mac QA,
-  screenshots, and availability consequences. Do not mutate either record or
-  present both as simultaneous public variants until that choice is explicit.
+- [x] Record the release owner's Mac route: SwiftUI Mac Catalyst in shared
+  Apple ID `6800642443`, with Designed for iPad on Mac disabled and the Tauri
+  record left unused. See `release-owner-decisions-2026-08-20.md`.
+- [ ] Complete Mac Catalyst automatic signing, Mac QA, exact screenshots,
+  metadata, signed-Release parity, availability, and named approval.
 - [ ] Verify the English name, category, bundle ID, SKU, version, copyright,
-  and current build against `submission-answers.md` and the signed archive.
+  exact `en-US/subtitle.txt`, and current build against
+  `submission-answers.md` and the signed archive.
 - [ ] Enter an accountable UniSphereco LLC App Review contact name, email, and
   phone number.
 - [ ] Copy the exact current `review-notes.txt` content only after checking it
@@ -45,12 +47,17 @@ value.
 - [ ] Freeze `screenshot-provenance-v1.1.json`, verify all 30 hashes, and
   preserve it as historical build-7 evidence. Do not relabel those 30 images as
   build 8. Validate the separate ten-file English build-8 Debug Simulator
-  candidate manifest, build-input evidence, and hashes; then separately obtain
-  named visual approval and signed public-Release parity before any upload.
-- [ ] Complete the Apple Watch, tvOS, and visionOS metadata, screenshot, icon,
-  profile, and platform-QA gates in `platforms/` before submitting those
-  experiences. tvOS, visionOS, and Watch must remain foreground-only in every
-  claim.
+  candidate manifest, build-input evidence, and hashes as historical capture
+  evidence only. It predates the current source. Recapture the exact final
+  build-8 commit, then separately obtain named visual approval and signed
+  public-Release parity before any upload.
+- [ ] Complete the Apple Watch, tvOS, visionOS, and Mac Catalyst metadata,
+  screenshot, icon, signing, and platform-QA gates in `platforms/` before
+  submitting those experiences. tvOS, visionOS, Watch, and Mac Catalyst must
+  remain foreground-only in every independent-notification claim.
+- [ ] Record named visual approval for the exact Watch icon digest pinned by
+  `verify-store-assets.rb`; do not infer approval from catalog validity or from
+  its deliberate reuse of the canonical iOS signal artwork.
 - [ ] Complete the required visionOS App Motion answer from final-platform QA;
   do not infer the portal selection from source inspection alone.
 
@@ -63,19 +70,22 @@ value.
   and product-page content.
 - [ ] Complete Export Compliance for the final signed archive with the
   responsible legal/release owner.
-- [ ] **Content Rights — PENDING / SUBMISSION BLOCKER:** send the ready-to-send
-  request in `docs/WOLFX_PERMISSION_REQUEST.md`, obtain and retain an
-  affirmative written Wolfx reply covering the exact Apple platforms,
-  persistent normalized-event/client-local storage, developer-operated relay,
-  App Store territories, attribution, restrictions, duration, and termination.
-  Confirm that Wolfx has authority over every underlying feed, or obtain and
-  review every separately required source permission. Record the complete
-  evidence in `content-rights-evidence.md`. The request draft, published terms,
-  a source-permission referral without the permission itself, or a prior portal
-  selection is not permission. Do not complete Apple's rights certification or
-  submit any platform before the complete written evidence exists.
-  The 2026-08-20 read-only audit still observed **Yes** in the portal; that
-  contradictory value does not satisfy this item and must not be relied on.
+- [x] Record the release owner's published-terms Content Rights basis and
+  decision not to send the Wolfx request in `content-rights-evidence.md` and
+  `release-owner-decisions-2026-08-20.md`.
+- [x] Record build 8's exact source inventory as `jma_eew` and `jma_eqlist`,
+  with CENC, Sichuan, Fujian, and Chongqing feeds disabled in submitted Apple
+  clients and relay policy. Record the official-source review supporting that
+  narrowing and the implemented 89-day relay event/revision cleanup cutoff.
+- [ ] At submission time, recheck the current Wolfx Terms of Service, Open API
+  document version, JMA website terms, Public Data License 1.0, any specific
+  notices, exact signed/deployed two-source inventory, direct client/relay
+  routes, JMA attribution and normalized/edited statement, no-resale/no-public-
+  feed behavior, next-successful-daily-cleanup behavior, non-predictive relay behavior, and intended
+  territories. Retain **Yes** only for that reviewed JMA-only scope; do not
+  claim that open source grants third-party rights, that a private Wolfx
+  license exists, or that QuakeSignal issues an official forecast or warning.
+  If Apple or a source asks for more, pause and narrow or obtain it.
 
 ## Final submission decision
 

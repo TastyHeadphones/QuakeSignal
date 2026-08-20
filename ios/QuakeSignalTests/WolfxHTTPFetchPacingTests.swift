@@ -21,11 +21,12 @@ final class WolfxHTTPFetchPacingTests: XCTestCase {
     }
 
     func testSnapshotRequestsAreSpacedWithinWolfxPublicLimit() {
+        XCTAssertEqual(WolfxClient.sources, ["jma_eew", "jma_eqlist"])
         XCTAssertEqual(WolfxHTTPFetchPacing.delayNanoseconds(forSourceIndex: 0), 0)
         XCTAssertGreaterThanOrEqual(WolfxHTTPFetchPacing.requestIntervalNanoseconds, 500_000_000)
         XCTAssertEqual(
             WolfxHTTPFetchPacing.delayNanoseconds(forSourceIndex: WolfxClient.sources.count - 1),
-            3_600_000_000
+            600_000_000
         )
     }
 
@@ -36,8 +37,8 @@ final class WolfxHTTPFetchPacingTests: XCTestCase {
 
         let result = WolfxSnapshotFetchResult.aggregate(
             batches: [[older], [newer, report]],
-            failedSources: ["cenc_eqlist"],
-            successfulSourceCount: 6,
+            failedSources: ["jma_eqlist"],
+            successfulSourceCount: 1,
             limit: 50
         )
 
@@ -46,7 +47,7 @@ final class WolfxHTTPFetchPacingTests: XCTestCase {
         XCTAssertEqual(result.events.last?.serial, 2)
         XCTAssertEqual(
             result.statusDescription,
-            "Updated from 6 of 7 Wolfx sources; unavailable: cenc_eqlist."
+            "Updated from 1 of 2 Wolfx sources; unavailable: jma_eqlist."
         )
     }
 

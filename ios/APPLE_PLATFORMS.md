@@ -11,14 +11,25 @@ QuakeSignal has four shared Xcode schemes generated from `project.yml`:
 
 The TV and Watch targets share `ForegroundQuakeStore`, `EEWEvent`,
 `IntensityScale`, `WolfxClient`, localization files, and color assets. They do
-not compile the iOS notification, App Attest, device-registration, or alert
-audio modules.
+not compile the iOS notification, App Attest, or device-registration modules.
+The Watch target bundles only the two reviewed short custom sounds and mirrors
+the iPhone's selected sound with WatchConnectivity; this preference bridge is
+not an earthquake-event or background-notification route.
 
 ## Generate and verify
 
 Install the iOS, tvOS, watchOS, and visionOS platform components for the active
 Xcode before running the full matrix. The iOS scheme embeds the Watch app, so
 the watchOS component is also required when building or testing that scheme.
+
+For a release-frozen regeneration, first close Xcode and use the exact XcodeGen
+2.46.0 GitHub release archive pinned by `.github/workflows/ios.yml` (archive
+SHA-256 `4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806`).
+Do not substitute an arbitrary package-manager binary that merely reports the
+same version. Xcode 26.6 can rewrite an open Watch scheme immediately after the
+generator exits, so keep Xcode closed until the generated project and schemes
+have passed the repository diff gate. The command below assumes that pinned
+binary is first in `PATH`.
 
 ```sh
 cd ios
@@ -53,19 +64,22 @@ xcodebuild -project QuakeSignal.xcodeproj -scheme QuakeSignalWatch \
 ```
 
 Use an installed simulator name instead of `iPhone 17 Pro` when that runtime is
-not present. App Store archives use target-scoped profile names so a host
-profile cannot accidentally sign the embedded Watch app:
+not present. The primary App Store route is the coordinated Xcode Cloud
+workflow with automatic signing. Leave every `QUAKESIGNAL_*_PROFILE_NAME`
+variable absent so Xcode Cloud can resolve an Apple-managed profile for each
+archive action, including the embedded Watch app.
 
-- `QUAKESIGNAL_IOS_PROFILE_NAME`
-- `QUAKESIGNAL_CATALYST_PROFILE_NAME`
-- `QUAKESIGNAL_VISION_PROFILE_NAME`
-- `QUAKESIGNAL_TV_PROFILE_NAME`
-- `QUAKESIGNAL_WATCH_PROFILE_NAME`
+The separately protected GitHub archive workflow is a manual fallback. Only
+that fallback uses the target-scoped `QUAKESIGNAL_IOS_PROFILE_NAME`,
+`QUAKESIGNAL_CATALYST_PROFILE_NAME`, `QUAKESIGNAL_VISION_PROFILE_NAME`,
+`QUAKESIGNAL_TV_PROFILE_NAME`, and `QUAKESIGNAL_WATCH_PROFILE_NAME` values to
+prevent a host profile from signing the wrong target.
 
 TV, Watch, and Vision intentionally carry no alert entitlements. Catalyst uses
-the empty `QuakeSignal-Catalyst.entitlements`; Vision's referenced entitlement
-files are likewise empty. Only the iPhone/iPad target uses the protected App
-Attest + APNs registration path.
+`QuakeSignal-Catalyst.entitlements` for App Sandbox, outbound network access,
+and foreground location only; Vision's referenced entitlement files are empty.
+Only the iPhone/iPad target uses the protected App Attest + APNs registration
+path.
 
 ## Distribution assets
 

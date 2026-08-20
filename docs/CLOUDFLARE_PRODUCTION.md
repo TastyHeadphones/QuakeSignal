@@ -347,13 +347,16 @@ When the monitor alerts:
   subscriptions on their retention deadline as well. Preserve a registration
   refreshed after the APNs invalidation timestamp; never delete for
   `BadDeviceToken` alone.
-- Expired App Attest challenges are deleted within five minutes. When the last
+- App Attest challenges become invalid within five minutes, and their expired
+  rows are removed by the next successful routine cleanup. When the last
   associated registration is removed, the opaque key ID, public verifier,
-  receipt, and counter are deleted; the daily 90-day stale-registration purge
-  performs the same cleanup. A production-training claim contains only the
-  opaque App Attest key ID plus UTC timestamps (never a device token, proof, or
-  request body) and is purged after 14 days. Delivery-failure token hashes are
-  also purged after 14 days.
+  receipt, and counter are deleted; registrations become eligible for the same
+  cleanup after they have not been refreshed for 90 days. A production-training
+  claim contains only the opaque App Attest key ID plus UTC timestamps (never a
+  device token, proof, or request body). It and delivery-failure token hashes
+  become eligible for deletion after 14 days and are removed by the next
+  successful routine cleanup. An operational cleanup failure can delay any of
+  these routine deletions.
 - App Attest keys can rotate after reinstall or device restore. Only a fresh
   production attestation that carries the exact APNs token may rebind that
   single token and retire its old key record. Assertions and tokenless deletes

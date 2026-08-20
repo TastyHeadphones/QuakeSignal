@@ -163,18 +163,81 @@ create_fixture() {
   local archive_app="$fixture/Archive.xcarchive/Products/Applications/QuakeSignal.app"
   local exported_app="$fixture/export/Payload/QuakeSignal.app"
   create_app "$archive_app" com.quakesignal.app "$profile_platform" "$alerts" 'Host Profile'
-  if [ "$fixture_platform" = ios ] || [ "$fixture_platform" = visionos ]; then
+  if [ "$fixture_platform" = ios ] || [ "$fixture_platform" = tvos ] || [ "$fixture_platform" = visionos ]; then
     cp "$repository_root/ios/QuakeSignal/Resources/Audio/quakesignal_urgent.caf" "$archive_app/"
     cp "$repository_root/ios/QuakeSignal/Resources/Audio/quakesignal_japanese_voice.caf" "$archive_app/"
     cp "$repository_root/ios/QuakeSignal/Resources/Audio/ATTRIBUTION.md" "$archive_app/"
+  fi
+  if [ "$fixture_platform" = tvos ] || [ "$fixture_platform" = visionos ]; then
+    cp "$repository_root/ios/QuakeSignalTV/Supporting/PrivacyInfo.xcprivacy" "$archive_app/PrivacyInfo.xcprivacy"
   fi
   mkdir -p "$(dirname "$exported_app")"
   cp -R "$archive_app" "$exported_app"
   if [ "$fixture_platform" = ios ]; then
     create_app "$archive_app/Watch/QuakeSignalWatch.app" com.quakesignal.app.watchkitapp watchOS false 'Watch Profile' com.quakesignal.app
+    cp "$repository_root/ios/QuakeSignal/Resources/Audio/quakesignal_urgent.caf" "$archive_app/Watch/QuakeSignalWatch.app/"
+    cp "$repository_root/ios/QuakeSignal/Resources/Audio/quakesignal_japanese_voice.caf" "$archive_app/Watch/QuakeSignalWatch.app/"
+    cp "$repository_root/ios/QuakeSignal/Resources/Audio/ATTRIBUTION.md" "$archive_app/Watch/QuakeSignalWatch.app/"
+    cp "$repository_root/ios/QuakeSignalWatch/Supporting/PrivacyInfo.xcprivacy" "$archive_app/Watch/QuakeSignalWatch.app/PrivacyInfo.xcprivacy"
     mkdir -p "$exported_app/Watch"
     cp -R "$archive_app/Watch/QuakeSignalWatch.app" "$exported_app/Watch/QuakeSignalWatch.app"
   fi
+}
+
+create_mac_catalyst_app() {
+  local app="$1"
+  local profile_name="$2"
+  mkdir -p "$app/Contents/Resources"
+  {
+    printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0"><dict>'
+    printf '%s\n' \
+      '<key>CFBundleIdentifier</key><string>com.quakesignal.app</string>' \
+      '<key>CFBundleShortVersionString</key><string>1.1</string>' \
+      '<key>CFBundleVersion</key><string>8</string>' \
+      '<key>CFBundleSupportedPlatforms</key><array><string>MacOSX</string></array>' \
+      '<key>LSMinimumSystemVersion</key><string>14.0</string>' \
+      '<key>LSApplicationCategoryType</key><string>public.app-category.weather</string>' \
+      '<key>UIDeviceFamily</key><array><integer>2</integer></array>' \
+      '<key>QUAKESIGNAL_API_BASE_URL</key><string>https://quakesignal-api.hopeso.workers.dev</string>' \
+      '<key>QUAKESIGNAL_APP_ATTEST_MODE</key><string>production</string>'
+    printf '%s\n' '</dict></plist>'
+  } > "$app/Contents/Info.plist"
+  {
+    printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0"><dict>'
+    printf '<key>com.apple.application-identifier</key><string>%s.com.quakesignal.app</string>\n' "$team"
+    printf '<key>com.apple.developer.team-identifier</key><string>%s</string>\n' "$team"
+    printf '%s\n' \
+      '<key>com.apple.security.app-sandbox</key><true/>' \
+      '<key>com.apple.security.network.client</key><true/>' \
+      '<key>com.apple.security.personal-information.location</key><true/>'
+    printf '%s\n' '</dict></plist>'
+  } > "$app/.test-entitlements.plist"
+  {
+    printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0"><dict>'
+    printf '<key>Name</key><string>%s</string>\n' "$profile_name"
+    printf '<key>ApplicationIdentifierPrefix</key><array><string>%s</string></array>\n' "$team"
+    printf '<key>TeamIdentifier</key><array><string>%s</string></array>\n' "$team"
+    printf '%s\n' '<key>Platform</key><array><string>OSX</string></array>' '<key>DeveloperCertificates</key><array><data>Zml4dHVyZS1sZWFmLWNlcnQ=</data></array>' '<key>Entitlements</key><dict>'
+    printf '<key>com.apple.application-identifier</key><string>%s.com.quakesignal.app</string>\n' "$team"
+    printf '<key>com.apple.developer.team-identifier</key><string>%s</string>\n' "$team"
+    printf '%s\n' '</dict></dict></plist>'
+  } > "$app/Contents/embedded.provisionprofile"
+  printf '%s\n' "$team" > "$app/.test-team"
+  printf '%s\n' 'Apple Distribution: QuakeSignal Fixture' > "$app/.test-authority"
+  printf '%s' 'fixture-leaf-cert' > "$app/.test-signing-certificate"
+  cp "$repository_root/ios/QuakeSignal/Resources/Audio/quakesignal_urgent.caf" "$app/Contents/Resources/"
+  cp "$repository_root/ios/QuakeSignal/Resources/Audio/quakesignal_japanese_voice.caf" "$app/Contents/Resources/"
+  cp "$repository_root/ios/QuakeSignal/Resources/Audio/ATTRIBUTION.md" "$app/Contents/Resources/"
+}
+
+create_mac_catalyst_fixture() {
+  local fixture="$1"
+  rm -rf "$fixture"
+  local archive_app="$fixture/Archive.xcarchive/Products/Applications/QuakeSignal.app"
+  local exported_app="$fixture/export/QuakeSignal.app"
+  create_mac_catalyst_app "$archive_app" 'Catalyst Profile'
+  mkdir -p "$(dirname "$exported_app")"
+  cp -R "$archive_app" "$exported_app"
 }
 
 run_verifier_mode() {
@@ -196,6 +259,37 @@ run_verifier_mode() {
 
 run_verifier() {
   run_verifier_mode "$1" "$2" strict-distribution
+}
+
+run_catalyst_verifier_mode() {
+  local fixture="$1"
+  local archive_mode="$2"
+  "$verifier" \
+    --platform maccatalyst \
+    --archive "$fixture/Archive.xcarchive" \
+    --exported "$fixture/export/QuakeSignal.app" \
+    --build-number 8 \
+    --marketing-version 1.1 \
+    --team-id "$team" \
+    --archive-signing "$archive_mode" \
+    --host-profile-name 'Catalyst Profile'
+}
+
+run_catalyst_verifier() {
+  run_catalyst_verifier_mode "$1" strict-distribution
+}
+
+run_catalyst_export_directory_verifier() {
+  local fixture="$1"
+  "$verifier" \
+    --platform maccatalyst \
+    --archive "$fixture/Archive.xcarchive" \
+    --exported "$fixture/export" \
+    --build-number 8 \
+    --marketing-version 1.1 \
+    --team-id "$team" \
+    --archive-signing strict-distribution \
+    --host-profile-name 'Catalyst Profile'
 }
 
 expect_failure() {
@@ -240,7 +334,7 @@ run_verifier_mode "$ios_fixture" ios strict-distribution "$ios_fixture/apple-sig
 cp -R "$ios_fixture/Archive.xcarchive" "$ios_fixture/AppleSignedExport.xcarchive"
 run_verifier_mode "$ios_fixture" ios strict-distribution "$ios_fixture/AppleSignedExport.xcarchive"
 cp "$ios_exported_archive" "$ios_fixture/export/Unexpected.ipa"
-expect_failure ambiguous-export 'unambiguous Payload app, IPA, or xcarchive' run_verifier "$ios_fixture" ios
+expect_failure ambiguous-export 'unambiguous direct app, Payload app, IPA, or xcarchive' run_verifier "$ios_fixture" ios
 
 create_fixture "$ios_fixture" ios iOS true
 printf '%s\n' 'Apple Development: QuakeSignal Fixture' > "$ios_fixture/Archive.xcarchive/Products/Applications/QuakeSignal.app/.test-authority"
@@ -267,6 +361,14 @@ create_fixture "$ios_fixture" ios iOS true
 
 /usr/libexec/PlistBuddy -c 'Delete :WKApplication' "$ios_fixture/export/Payload/QuakeSignal.app/Watch/QuakeSignalWatch.app/Info.plist"
 expect_failure watch-marker 'WKApplication' run_verifier "$ios_fixture" ios
+create_fixture "$ios_fixture" ios iOS true
+
+rm "$ios_fixture/export/Payload/QuakeSignal.app/Watch/QuakeSignalWatch.app/quakesignal_japanese_voice.caf"
+expect_failure watch-missing-japanese-voice 'Japanese Safety Voice audio.*missing' run_verifier "$ios_fixture" ios
+create_fixture "$ios_fixture" ios iOS true
+
+rm "$ios_fixture/export/Payload/QuakeSignal.app/Watch/QuakeSignalWatch.app/PrivacyInfo.xcprivacy"
+expect_failure watch-missing-privacy-manifest 'zero-collection privacy manifest.*missing' run_verifier "$ios_fixture" ios
 create_fixture "$ios_fixture" ios iOS true
 
 /usr/libexec/PlistBuddy -c 'Set :Entitlements:beta-reports-active false' "$ios_fixture/export/Payload/QuakeSignal.app/embedded.mobileprovision"
@@ -310,9 +412,40 @@ create_fixture "$ios_fixture" ios iOS true
 printf '%s\n' 'ABCDEFGHIJ' > "$ios_fixture/export/Payload/QuakeSignal.app/.test-team"
 expect_failure wrong-team 'not signed for Apple team' run_verifier "$ios_fixture" ios
 
+catalyst_fixture="$test_root/maccatalyst"
+create_mac_catalyst_fixture "$catalyst_fixture"
+run_catalyst_verifier "$catalyst_fixture"
+run_catalyst_export_directory_verifier "$catalyst_fixture"
+
+/usr/libexec/PlistBuddy -c 'Set :com.apple.security.app-sandbox false' "$catalyst_fixture/export/QuakeSignal.app/.test-entitlements.plist"
+expect_failure catalyst-sandbox 'app-sandbox.*false' run_catalyst_verifier "$catalyst_fixture"
+create_mac_catalyst_fixture "$catalyst_fixture"
+
+/usr/libexec/PlistBuddy -c 'Delete :com.apple.security.personal-information.location' "$catalyst_fixture/export/QuakeSignal.app/.test-entitlements.plist"
+expect_failure catalyst-location-entitlement 'personal-information.location' run_catalyst_verifier "$catalyst_fixture"
+create_mac_catalyst_fixture "$catalyst_fixture"
+
+/usr/libexec/PlistBuddy -c 'Set :LSApplicationCategoryType public.app-category.utilities' "$catalyst_fixture/export/QuakeSignal.app/Contents/Info.plist"
+expect_failure catalyst-category 'LSApplicationCategoryType.*utilities' run_catalyst_verifier "$catalyst_fixture"
+create_mac_catalyst_fixture "$catalyst_fixture"
+
+/usr/libexec/PlistBuddy -c 'Set :Platform:0 iOS' "$catalyst_fixture/export/QuakeSignal.app/Contents/embedded.provisionprofile"
+expect_failure catalyst-profile-platform 'required value OSX' run_catalyst_verifier "$catalyst_fixture"
+create_mac_catalyst_fixture "$catalyst_fixture"
+
+rm "$catalyst_fixture/Archive.xcarchive/Products/Applications/QuakeSignal.app/Contents/embedded.provisionprofile"
+printf '%s\n' 'Apple Development: QuakeSignal Fixture' > "$catalyst_fixture/Archive.xcarchive/Products/Applications/QuakeSignal.app/.test-authority"
+run_catalyst_verifier_mode "$catalyst_fixture" structure-only
+
 tvos_fixture="$test_root/tvos"
 create_fixture "$tvos_fixture" tvos tvOS false
 run_verifier "$tvos_fixture" tvos
+rm "$tvos_fixture/export/Payload/QuakeSignal.app/PrivacyInfo.xcprivacy"
+expect_failure tvos-missing-privacy-manifest 'zero-collection privacy manifest.*missing' run_verifier "$tvos_fixture" tvos
+create_fixture "$tvos_fixture" tvos tvOS false
+rm "$tvos_fixture/export/Payload/QuakeSignal.app/quakesignal_urgent.caf"
+expect_failure tvos-missing-urgent-audio 'urgent alert audio.*missing' run_verifier "$tvos_fixture" tvos
+create_fixture "$tvos_fixture" tvos tvOS false
 for profile in \
   "$tvos_fixture/Archive.xcarchive/Products/Applications/QuakeSignal.app/embedded.mobileprovision" \
   "$tvos_fixture/export/Payload/QuakeSignal.app/embedded.mobileprovision"; do
@@ -328,6 +461,10 @@ expect_failure tvos-capability 'foreground-only capability aps-environment' run_
 vision_fixture="$test_root/visionos"
 create_fixture "$vision_fixture" visionos xrOS false
 run_verifier "$vision_fixture" visionos
+
+rm "$vision_fixture/export/Payload/QuakeSignal.app/PrivacyInfo.xcprivacy"
+expect_failure vision-missing-privacy-manifest 'zero-collection privacy manifest.*missing' run_verifier "$vision_fixture" visionos
+create_fixture "$vision_fixture" visionos xrOS false
 
 rm "$vision_fixture/export/Payload/QuakeSignal.app/quakesignal_japanese_voice.caf"
 expect_failure vision-missing-japanese-voice 'Japanese Safety Voice audio.*missing' run_verifier "$vision_fixture" visionos

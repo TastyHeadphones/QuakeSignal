@@ -10,11 +10,11 @@
 
 # 震息 · QuakeSignal
 
-### iPhone・Chrome・macOS・Windows 向けの地震情報、周辺警報、そして防災ガイド。
+### Apple 各プラットフォーム・Chrome・Windows 向けの地震情報、周辺警報、防災ガイド。
 
 [![iOS 17+](https://img.shields.io/badge/iOS-17%2B-0E63C4?logo=apple&logoColor=white)](ios/)
 [![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](ios/QuakeSignal/)
-[![Tauri 2](https://img.shields.io/badge/desktop-Tauri_2-24C8DB?logo=tauri&logoColor=white)](desktop/)
+[![Tauri 2](https://img.shields.io/badge/Windows-Tauri_2-24C8DB?logo=tauri&logoColor=white)](desktop/)
 [![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest_V3-4285F4?logo=googlechrome&logoColor=white)](extension/)
 [![MIT License](https://img.shields.io/badge/license-MIT-30B14F)](LICENSE)
 [![コード署名ポリシー](https://img.shields.io/badge/code_signing-policy-6E56CF)](docs/SIGNING.md)
@@ -30,29 +30,31 @@
 </div>
 
 > [!IMPORTANT]
-> QuakeSignal は独立した非公式アプリです。地震情報は第三者が集約したデータに
-> 基づいており、遅延・欠落・訂正・不正確が生じる場合があります。必ず公式発表と
-> 地域の緊急指示に従ってください。
+> QuakeSignal は独立した非公式アプリです。Apple 向け build 1.1 は、Wolfx が中継する
+> 気象庁発表の情報を表示します。遅延・欠落・訂正・誤差が生じる場合があるため、
+> 必ず公式発表と地域の緊急指示に従ってください。
 
 ## できること
 
 | | 機能 | 内容 |
 |---|---|---|
-| 📡 | リアルタイム地震データ | JMA・CENC・四川・福建・重慶をカバーする Wolfx の7系統のフィードを正規化。 |
+| 📡 | リアルタイム地震データ | 提出する Apple 版では Wolfx の `jma_eew` と `jma_eqlist` のみを使用し、気象庁発表の情報を表示。 |
 | 📍 | 周辺の状況 | 選択した都市または現在地を基準に、距離・方角・半径・マグニチュードで絞り込み。 |
 | ⚠️ | 明確な警報状態 | 速報・更新・最終報・キャンセル・訓練を区別し、色だけに頼らない表示。 |
-| 🖥️ | ローカルファーストのデスクトップ | 上流の WebSocket に直接接続し、データは端末内に保存。QuakeSignal のバックエンドなしでトレイからネイティブ警報を鳴らせます。 |
+| 🖥️ | ネイティブ Mac アプリ | SwiftUI の Apple アプリ、地図、警報ポリシー、設定を共有する sandbox 化された Mac Catalyst 版。 |
+| 🪟 | Windows アプリ | 別系統の Tauri クライアント。上流 WebSocket に直接接続し、データを端末内に保存。 |
 | 🌐 | Chrome 拡張 | 同じ直接接続のフィードをブラウザで監視し、履歴を端末内に保存。通知と警報音に対応。 |
 | ♿ | アクセシビリティ対応 | Dynamic Type、VoiceOver に配慮したラベル、44pt のタップ領域、高コントラスト表示に対応。 |
 
 ## アーキテクチャ
 
-iOS・macOS・Windows は地震データをすべて Wolfx から直接取得します。Cloudflare の
-役割は一つだけです。iOS がバックグラウンドまたは終了中でも警報を監視し、条件に
-合う通知を APNs で配信します。
+提出する SwiftUI Apple アプリは、Wolfx の気象庁 EEW・地震情報の2経路だけを直接
+取得します。Cloudflare は同じ2経路だけを監視し、iPhone/iPad がバックグラウンド
+または終了中のときに条件に合う通知を APNs で配信します。別系統の Windows と
+Chrome クライアントは Apple build 8 のリリース境界外です。
 
-- [`ios/`](ios/) —— iOS 17+ 向けのネイティブ SwiftUI アプリ（Swift 6）
-- [`desktop/`](desktop/) —— macOS / Windows 向けのローカルファースト Tauri アプリ
+- [`ios/`](ios/) —— iPhone・iPad・Watch・TV・Vision Pro・Mac Catalyst で共有するネイティブ SwiftUI アプリ（Swift 6）
+- [`desktop/`](desktop/) —— Windows 用に別途保守する Tauri クライアント。build 8 の Mac App Store 製品ではありません
 - [`extension/`](extension/) —— Manifest V3 の Chrome 拡張
 - [`backend/cloudflare/`](backend/cloudflare/) —— 通知専用の Worker と D1
 - [`docs/WOLFX_API.md`](docs/WOLFX_API.md) —— 実レスポンスで検証した上流フィールド仕様
@@ -60,30 +62,14 @@ iOS・macOS・Windows は地震データをすべて Wolfx から直接取得し
 
 ## macOS へのインストール
 
-現在、サポート対象の公開 macOS ダウンロード版および Homebrew cask はありません。
-現行の GitHub Release `v0.1.0` は Developer ID 署名と公証より前のものであり、
-`TastyHeadphones/tap` には公開 cask もありません。どちらもインストールしないでください。
-後続の GitHub Release に Developer ID 署名・公証・staple 済みの universal DMG と
-`SHA256SUMS.txt` が示された後、`QuakeSignal_<バージョン>_universal.dmg` をダウンロードして
-開き、**QuakeSignal** をアプリケーションフォルダにドラッグします。Homebrew は、その
-同じ公証済みリリースの cask が公開 tap に反映された後にのみ使用できます:
+バージョン 1.1 の Mac 配布経路は、共通の QuakeSignal App Store レコードで提供する
+sandbox 化された SwiftUI Mac Catalyst アプリです。署名済み build 8、現行スクリーン
+ショット、Mac 実機 QA、App Review の各ゲートを通過するまでは公開されません。公開後は
+Mac App Store からのみインストールしてください。
 
-```bash
-# 公開 tap に対象の公証済みリリース用 cask がある場合にのみ実行します。
-brew tap TastyHeadphones/tap
-brew install --cask quakesignal
-```
-
-### Gatekeeper と公証
-
-保護された macOS リリースジョブは、直接配布/Homebrew 用アプリを **Developer ID
-Application** 証明書で署名し、公証後に DMG へチケットを staple します。
-`SHA256SUMS.txt` があり、macOS 成果物が公証済みと示されるリリースだけを使用してください。
-
-隔離属性の削除や Gatekeeper の回避は行わないでください。この手順で作成されたリリースが
-macOS によりブロックされた場合は、`SHA256SUMS.txt` と照合し、ダウンロードファイルを
-保持したままリリース URL と macOS バージョンを issue で報告してください。旧 `v0.1.0`
-リリースはサポート対象のインストール元または cask のソースではありません。
+旧 Tauri `v0.1.0` の GitHub Release、直接配布 DMG、Homebrew cask は休止中であり、
+このリリースのサポート対象 Mac インストール経路ではありません。Gatekeeper を回避して
+インストールしないでください。
 
 ## Windows へのインストール
 
@@ -110,32 +96,21 @@ QuakeSignal はアプリ本体の場所と専用のデータディレクトリ�
 
 ### macOS
 
-将来の公開 Homebrew cask から導入した場合:
-
-```bash
-brew uninstall --cask quakesignal
-```
-
-それ以外の場合は、アプリケーションフォルダの **QuakeSignal** をゴミ箱に移動します。
-
-設定と履歴も削除する場合は、次を削除してください。
-
-```bash
-rm -rf ~/Library/Application\ Support/com.quakesignal.desktop
-```
-
-`brew uninstall --cask --zap quakesignal` を使えば、アプリと上記ディレクトリを
-まとめて削除できます。
+Launchpad から削除するか、アプリケーションフォルダの **QuakeSignal** をゴミ箱へ
+移動します。Mac App Store 版の sandbox は bundle ID `com.quakesignal.app` に属します。
+設定とローカル状態も消去する場合に限り、`~/Library/Containers/com.quakesignal.app/`
+を削除してください。
 
 ## クイックスタート
 
-**iOS** —— `ios/QuakeSignal.xcodeproj` を Xcode で開き、シミュレータを選んで
-`QuakeSignal` スキームを実行します。地震データは Wolfx から直接取得し、
+**SwiftUI Apple アプリ** —— `ios/QuakeSignal.xcodeproj` を Xcode で開き、iPhone、
+iPad、または Mac Catalyst の destination を選んで `QuakeSignal` スキームを実行します。
+地震データは Wolfx から直接取得し、
 Cloudflare は通知登録にのみ使用します。プッシュ通知には実機、Apple Developer
 チーム、APNs 認証情報が必要です。
 
-**デスクトップ** —— デスクトップ版は Wolfx に直接接続し、どちらのバックエンドも
-必要としません。
+**別系統の Tauri クライアント** —— Windows 開発用に残しており、build 8 の Mac App
+Store 経路ではありません。Wolfx に直接接続し、どちらのバックエンドも必要としません。
 
 ```bash
 cd desktop
@@ -146,16 +121,18 @@ npm run tauri dev
 **Chrome** —— `chrome://extensions` でデベロッパーモードを有効にし、
 **パッケージ化されていない拡張機能を読み込む**から `extension/` を選択します。
 
-## iOS 本番リリースの前提条件
+## Apple 各プラットフォームの本番リリース前提条件
 
-公開 iOS リリースの前に、次を完了してください。
+Apple 各プラットフォームを公開する前に、次を完了してください。
 
 - ユーザー承認済みの本番 Cloudflare Workers endpoint
   `https://quakesignal-api.hopeso.workers.dev`、その公開 TLS、および `/healthz` を
   確認します。別の `workers.dev` hostname は隔離された Debug/staging 用だけであり、
   Release の代替には使いません。
-- `com.quakesignal.app` で App Attest を有効にし、本番用 provisioning profile を
-  更新して、本番 Worker の App Attest 必須モードを維持します。
+- 登録済みの `com.quakesignal.app` と Watch App ID、および審査済み capability を確認し、
+  Xcode デスクトップから単一の build-8 Xcode Cloud workflow を初回設定します。
+  Xcode Cloud の自動署名を使い、`QUAKESIGNAL_*_PROFILE_NAME` override はすべて未設定に
+  します。手動 profile ではなく、生成された署名済み archive と entitlement を検証します。
 - Debug と Simulator は本番データや認証情報を共有しない別の staging Worker を使います。
   実機で APNs/App Attest、登録・削除・トークン更新を確認し、その後ユーザー承認済みの
   本番 endpoint に対する TestFlight APNs テストを完了してから reviewer の承認を受けます。
@@ -191,10 +168,9 @@ Windows リリースは GitHub Actions で MSIX パッケージとしてビル�
 Store を通じて配布されます。認定済みの Store パッケージは Microsoft が署名し、
 このプロジェクトで Windows 用の署名鍵や第三者の署名サービスは使用しません。
 
-macOS の直接配布版が公開される場合は、`SHA256SUMS.txt` を含み、Developer ID で
-署名・公証・staple されたものになります。Mac App Store 用の sandbox 化された
-パッケージはその後に別の非公開 Actions artifact として作成でき、公開 GitHub
-Release には添付されません。
+Mac App Store 製品は、ネイティブ Apple リリースと一体で build・署名する sandbox 化
+された SwiftUI Mac Catalyst target です。旧 Tauri Mac レコードと直接配布計画は
+バージョン 1.1 では休止します。
 
 ## ライセンス
 

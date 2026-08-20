@@ -37,10 +37,10 @@ struct ForegroundNotificationPresentationDecision: Equatable {
 
 enum ForegroundNotificationPresentationPolicy {
     static func decision(
-        hasEventID: Bool,
+        for payload: PushPayload,
         isSceneActive: Bool
     ) -> ForegroundNotificationPresentationDecision {
-        guard hasEventID, isSceneActive else {
+        guard payload.hasUsableMatchingEventSnapshot, isSceneActive else {
             return ForegroundNotificationPresentationDecision(
                 systemPresentation: .alert,
                 shouldPresentEmergencyInApp: false

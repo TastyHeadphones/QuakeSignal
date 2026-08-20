@@ -46,7 +46,12 @@ This checklist creates no approval by itself.
 - [ ] Verify focus appearance and Siri Remote navigation on Apple TV hardware
   or the matching simulator runtime.
 - [ ] Ensure the visible copy says foreground only and no screenshot implies a
-  background alert, notification, alert sound, App Attest, or location feature.
+  background alert, notification, automatic alert sound, App Attest, or
+  location feature.
+- [ ] Exercise the Alert Sound screen, focus containment, all three choices,
+  explicit-Remote-only custom playback, and inactive-scene stop behavior on the
+  signed Apple TV build. The fixed three-frame store set intentionally does not
+  market a fabricated live warning or imply automatic audio.
 - [x] Preserve the Apple TV plan and retain the separate candidate metadata,
   aggregate/per-frame evidence, runtime inventory, and PNG SHA-256 values.
 
@@ -82,17 +87,64 @@ This checklist creates no approval by itself.
 - [x] Preserve the Apple Watch plan and retain the separate candidate metadata,
   aggregate/per-frame evidence, runtime inventory, and PNG SHA-256 values.
 
-## Historical build-7 evidence and current build-8 candidate
+## Source-addressed final-set integration
 
-The existing `../../screenshot-manifest-v1.1.json`,
-`../../screenshot-provenance-v1.1.json`, and 30 images truthfully record a
+- [ ] Leave every historical path byte-for-byte unchanged. The locked catalog
+  is `../screenshot-set-index-v1.1-build8.json`; its normal pending state is
+  `activeReleaseSet: null`.
+- [ ] Capture all 26 frames from one frozen 40-character commit: 10 iPhone/iPad,
+  3 Apple TV, 3 Apple Watch, 5 Apple Vision Pro, and 5 Mac Catalyst. Do not
+  activate a partial package or combine commits.
+- [ ] Integrate the packages only below
+  `../screenshot-release-sets-v1.1-build8/<source-commit>/`. Each platform
+  directory contains `package-provenance.json`, its exact planned frame paths,
+  and all recorded `evidence/` files. `release-set.json` hashes every package
+  byte and remains `source-frozen-unapproved` with `uploadApproved: false`.
+- [ ] Archive the exact Debug capture artifact as the provenance
+  `artifactFile`, bind its actual bytes to `artifactSha256`, and retain at
+  least one separate nonempty capture-evidence file. A digest string without
+  the archived artifact bytes is not evidence.
+- [ ] Confirm all 26 frame SHA-256 values are distinct and none equals a locked
+  historical screenshot SHA-256. Renaming, relabelling, resizing metadata, or
+  recomputing outer manifests must never turn an old/collapsed frame into a
+  final-set frame.
+- [ ] Point `activeReleaseSet` at the exact source directory and manifest only
+  after all 26 frames exist. The validator binds each plan both to its current
+  bytes and the same bytes at the source commit, and retains the full native
+  product-source guard, including tracked, untracked, ignored, and
+  `Debug.local.xcconfig` drift checks.
+- [ ] After named full-size review and signed public-Release comparison for
+  every platform, add the separate hashed `release-approval.json`. Record each
+  signed artifact hash and signed-build source commit; every signed-build
+  commit must be product-source equivalent to the screenshot source commit.
+  Each platform parity-review time must be at or after that platform's capture
+  completion, and the overall named-review time must be at or after every
+  capture completion and parity review.
+- [ ] Run both modes. The first locks historical evidence and may report the
+  active set pending. The second must fail until the complete exact-commit set
+  and separate named signed-parity approval are present:
+
+  ```sh
+  ruby .github/scripts/verify-apple-screenshot-release-set.rb
+  ruby .github/scripts/verify-store-assets.rb \
+    --require-build8-screenshot-release-ready \
+    --expected-source-commit=<40-character-source-commit>
+  ```
+
+## Historical build-7 and superseded build-8 candidate evidence
+
+The existing `../screenshot-manifest-v1.1.json`,
+`../screenshot-provenance-v1.1.json`, and 30 images truthfully record a
 build-7 simulator capture. Do not relabel or upload them as build-8 screenshots.
-The current `../../screenshot-manifest-v1.1-build8.json`,
-`../../screenshot-provenance-v1.1-build8.json`, and ten files under
-`../../screenshots-v1.1-build8/en-US/` truthfully record a source-frozen Debug
+The preserved `../screenshot-manifest-v1.1-build8.json`,
+`../screenshot-provenance-v1.1-build8.json`, and ten files under
+`../screenshots-v1.1-build8/en-US/` truthfully record a source-frozen Debug
 Simulator candidate. It remains unsigned, unapproved, and reviewer-null; its
-existence is not permission to upload. The
-`../../screenshot-manifest-v1.1-build8.template.json` file remains planning
+existence is not permission to upload. It is now historical because the
+JMA-only and Mac Catalyst source changes postdate its capture; the final
+build-8 commit requires a complete recapture rather than a provenance rewrite.
+The
+`../screenshot-manifest-v1.1-build8.template.json` file remains planning
 history, not evidence.
 
 The build-8 recapture sequence is:
@@ -125,4 +177,6 @@ packages collectively contain 3 Apple TV, 3 Apple Watch, and 5 Apple Vision
 Pro frames. Their source, plan, runtime, dimensions, opacity, per-frame hashes,
 aggregate provenance, and unapproved status must pass
 `.github/scripts/verify-native-apple-screenshot-candidates.rb`; this still does
-not supply a signed Release comparison or named upload approval.
+not supply current-source evidence, a signed Release comparison, or named
+upload approval. Preserve the packages as historical evidence and recapture
+all native selectors at the final build-8 commit.

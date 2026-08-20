@@ -1,24 +1,49 @@
-# Native platform screenshot harness
+# Apple screenshot automation harness
 
-This harness captures real Simulator output for the tvOS, watchOS, and
-visionOS targets. It does not generate, resize, decorate, commit, upload, or
-approve screenshots. The checked-in plans require these exact English (U.S.)
-inventories:
+This directory contains the source-addressed Debug capture harnesses for all
+five Apple listing platforms. They capture real Simulator or native-window
+output; they do not fabricate, decorate, commit, upload, or approve a frame.
+The checked-in plans require these exact English (U.S.) inventories:
 
 | Platform | Planned frames | Native pixels |
 | --- | ---: | --- |
+| iPhone 6.5-inch | 5: home, reports, map, guide, alert sound | `1242x2688` |
+| iPad 13-inch | 5: home, reports, map, guide, alert sound | `2064x2752` |
 | Apple TV | 3: dashboard, recent reports, event detail | `1920x1080` |
 | Apple Vision Pro | 5: home, reports, map, guide, alert sound | `3840x2160` |
 | Apple Watch | 3: headline, recent reports, event detail | `410x502` |
+| Mac Catalyst | 5: home, reports, map, guide, alert sound | `2560x1600` |
 
-`platform-screenshot-plan.rb` validates those 3/5/3 inventories directly
-against the platform manifests. A removed, reordered, renamed, pre-approved,
-pre-hashed, wrong-size, or unknown frame fails before Simulator launch.
+`ios-screenshot-plan.rb`, `platform-screenshot-plan.rb`, and
+`maccatalyst-screenshot-plan.rb` validate the 10/3/5/3/5 inventories directly
+against their platform manifests. A removed, reordered, renamed,
+pre-approved, pre-hashed, wrong-size, or unknown frame fails before capture.
+
+The ten exact iOS/iPadOS selectors are:
+
+```text
+ios-iphone-6.5-home
+ios-iphone-6.5-reports
+ios-iphone-6.5-map
+ios-iphone-6.5-guide
+ios-iphone-6.5-alert-preferences
+ios-ipad-13-home
+ios-ipad-13-reports
+ios-ipad-13-map
+ios-ipad-13-guide
+ios-ipad-13-alert-preferences
+```
+
+The five exact Mac Catalyst selectors are `maccatalyst-home`,
+`maccatalyst-reports`, `maccatalyst-map`, `maccatalyst-guide`, and
+`maccatalyst-alert-preferences`.
 
 ## Fail-closed app routing
 
-The app-side fixture and frame routes are available only in a Debug Simulator
-build. Activation requires all of the following to agree:
+The app-side fixture and frame routes are available only to the gated Debug
+capture configuration: Simulator builds for iOS/iPadOS, tvOS, watchOS, and
+visionOS, or the native Mac Catalyst capture process. Activation requires all
+of the following to agree:
 
 - `--quakesignal-screenshot-automation`
 - `QUAKESIGNAL_SCREENSHOT_AUTOMATION=1`
@@ -37,11 +62,15 @@ move genuine focus/scroll state instead of drawing a marketing composite.
 
 Apple's current screenshot specification accepts:
 
+- iPhone: this plan selects the `1242x2688` 6.5-inch portrait class.
+- iPad: this plan selects the `2064x2752` 13-inch portrait class.
 - Apple TV: `1920x1080` or `3840x2160`; this plan selects `1920x1080`.
 - Apple Vision Pro: exactly `3840x2160`.
 - Apple Watch: several device classes, but this plan selects exactly `410x502`
   from Apple Watch Ultra 2 / Ultra. The harness no longer falls back to a
   different Watch class because that would contradict every planned frame.
+- Mac Catalyst: this plan captures the exact committed native content area at
+  `2560x1600`; it never substitutes a desktop screenshot or resized raster.
 
 Source: [Apple screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/).
 
@@ -56,14 +85,61 @@ Xcode Settings or Apple's `xcodebuild -downloadPlatform` command separately.
 Start from a clean, source-frozen checkout and use the checked-in generated
 project. If the project graph intentionally changed, regenerate and review it
 before freezing the capture commit; do not regenerate as part of capture.
-Capture into a new directory outside the repository, with temporary data and
-the reusable unsigned build cache on a disk with adequate space:
+Every set command refuses a destination inside the repository and publishes a
+new output directory only after the full planned inventory validates.
+
+For the exact ten-frame iOS/iPadOS set, create only the destination parent and
+let the harness build once in fresh temporary DerivedData, use exactly one
+iPhone 11 Pro Max plus one iPad Pro 13-inch (M4), and capture all ten routes:
 
 ```sh
-TMPDIR=/Volumes/RC20 \
-QUAKESIGNAL_SCREENSHOT_DERIVED_DATA=/Volumes/RC20/QuakeSignalScreenshotDerived/tvos \
+capture_parent="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/QuakeSignalScreenshotCandidates"
+mkdir -p "$capture_parent"
+bash ios/ScreenshotAutomation/capture-ios-screenshot-set.sh \
+  "$capture_parent/ios-ipados"
+```
+
+The iOS build is unsigned and credential-free. It materializes the exact Git
+commit into a temporary build source, removes only the two reviewed main-target
+Watch embedding/dependency references, retains the Watch target definition,
+and binds the built `QuakeSignal.app`, build settings/log/list, retained
+`.xcresult.zip`, installed app container, launch gates, native PNG, JPEG
+transformation, semantic evidence, and source bytes into each frame record.
+The temporary source and build outputs never become release inputs.
+For every selector, the accepted package retains separate
+`semantic-evidence/<selector>-raw.json` and
+`semantic-evidence/<selector>-final.json` reports. When the one allowed
+semantic retry is used, it also retains the rejected first attempt as
+`semantic-rejections/<selector>-attempt-1.json` and the exact paired
+`semantic-rejections/<selector>-attempt-1.png` raster.
+
+Mac Catalyst uses the native Swift/AppKit window capture path. Run it on an
+interactive macOS host where the app window can be observed and captured:
+
+```sh
+capture_parent="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/QuakeSignalScreenshotCandidates"
+mkdir -p "$capture_parent"
+QUAKESIGNAL_CATALYST_SCREENSHOT_DERIVED_DATA="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/QuakeSignalScreenshotDerived/maccatalyst" \
+  bash ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh \
+    "$capture_parent/maccatalyst"
+```
+
+Each accepted Catalyst semantic record binds its OCR and pixel metrics to the
+exact final PNG SHA-256 and image format. If the single allowed retry is used,
+the package also retains and hash-binds the rejected JSON/PNG pair at
+`semantic-rejections/<selector>-attempt-1.{json,png}`; the aggregate rejects a
+missing pair, a stale semantic record, or swapped image bytes.
+
+For tvOS, visionOS, and watchOS, capture into a new directory outside the
+repository, with temporary data and the reusable unsigned build cache on a
+disk with adequate space:
+
+```sh
+capture_parent="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/QuakeSignalScreenshotCandidates"
+mkdir -p "$capture_parent"
+QUAKESIGNAL_SCREENSHOT_DERIVED_DATA="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/QuakeSignalScreenshotDerived/tvos" \
   ios/ScreenshotAutomation/capture-platform-screenshot-set.sh \
-    tvos /Volumes/RC20/QuakeSignalScreenshotCandidates/tvos
+    tvos "$capture_parent/tvos"
 ```
 
 Run the same set command with `visionos` or `watchos` and a distinct, new
@@ -91,8 +167,10 @@ For a diagnostic single frame, call the lower-level command with an exact
 selector and absolute PNG path:
 
 ```sh
+debug_parent="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/QuakeSignalScreenshotDebug"
+mkdir -p "$debug_parent"
 ios/ScreenshotAutomation/capture-platform-screenshot.sh \
-  tvos tvos-event-detail /Volumes/RC20/QuakeSignalScreenshotDebug/tv-detail.png
+  tvos tvos-event-detail "$debug_parent/tv-detail.png"
 ```
 
 The lower-level command writes a sidecar only when
@@ -170,10 +248,30 @@ status 65 is eligible for quarantine and retry; every other validator failure
 is returned as operational status 70 without relaunch. A second semantic
 rejection aborts the complete atomic set without an upload.
 
-Credential-free tests cover the exact plan, aggregate provenance, Watch
-process supervision, selector preservation, and badge validation:
+Credential-free tests cover the exact plans, build/source binding, aggregate
+provenance, atomic interfaces, semantic validation, process supervision,
+selector preservation, package sealing, and native-window evidence:
 
 ```sh
+/usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-plan.test.rb
+/usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb
+/usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb
+/usr/bin/ruby ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.test.rb
+/usr/bin/ruby ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.test.rb
+/usr/bin/ruby ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.test.rb
+/usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-build-binding.test.rb
+/usr/bin/ruby ios/ScreenshotAutomation/assemble-ios-screenshot-provenance.test.rb
+/usr/bin/ruby ios/ScreenshotAutomation/seal-screenshot-capture-package.test.rb
+/usr/bin/ruby ios/ScreenshotAutomation/safe-zip-tree.test.rb
+bash ios/ScreenshotAutomation/ios-screenshot-capture-interface.test.sh
+bash ios/ScreenshotAutomation/ios-screenshot-content-validator.test.sh
+bash ios/ScreenshotAutomation/screenshot-process-guard.test.sh
+/usr/bin/ruby ios/ScreenshotAutomation/maccatalyst-screenshot-plan.test.rb
+/usr/bin/ruby ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.test.rb
+bash ios/ScreenshotAutomation/maccatalyst-capture-interface.test.sh
+bash ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.test.sh
+bash ios/ScreenshotAutomation/maccatalyst-content-validator.test.sh
+bash ios/ScreenshotAutomation/maccatalyst-process-guard.test.sh
 /usr/bin/ruby ios/ScreenshotAutomation/platform-screenshot-plan.test.rb
 /usr/bin/ruby ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb
 bash ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh
@@ -183,22 +281,65 @@ bash ios/ScreenshotAutomation/vision-map-capture-guard.test.sh
 /usr/bin/ruby ios/ScreenshotAutomation/validate-vision-map-content.test.rb
 ```
 
+These tests place temporary fixtures under `QUAKESIGNAL_TEST_TEMP_ROOT` when
+set, then `RUNNER_TEMP`, `TMPDIR`, or the platform temporary directory. CI sets
+the first three names to the runner-owned temporary directory, so no checkout
+or machine-specific volume path is used for test scratch data.
+
 ## Provenance and CI artifacts
 
-`capture-provenance.json` is schema-2 aggregate evidence. It binds the exact
-plan-manifest hash and every planned filename to the untouched PNG hash,
-dimensions, capture time, exact runtime, device type/model, disposable UDID,
-and per-frame evidence hash. It is always marked
-`unapproved-debug-simulator-capture-set-evidence`, with
+Each `capture-provenance.json` binds the exact plan-manifest hash and every
+planned filename to its original capture, dimensions, capture time, runtime or
+host, device/window identity, source/build evidence, and per-frame hashes. Its
+platform-specific schema is always explicitly unapproved, with
 `uploadApproved: false`, `reviewer: null`, and no signed Release evidence.
 
 `.github/workflows/apple-platform-screenshots.yml` runs one credential-free
-matrix job per platform, captures all 3/5/3 frames, verifies the aggregate,
-and adds schema-3 `candidate-metadata.json` plus a runtime inventory. It proves
+matrix job for iOS/iPadOS, tvOS, visionOS, and watchOS. It captures the exact
+10/3/5/3 sets, verifies the first atomic seal, temporarily removes only that
+manifest, adds `candidate-metadata.json` plus the runtime inventory, creates a
+new final seal, and validates it. It then creates a conventional
+`ditto -c -k --norsrc --keepParent` ZIP outside the raw capture root and proves
+the ZIP file inventory and bytes equal the sealed directory before uploading
+both together. No later step writes into the raw root. The workflow also proves
 that checked-out `HEAD` equals `GITHUB_SHA` and that the repository has zero
-tracked or untracked changes immediately before and after the complete set
-capture. The short-lived artifact name remains explicitly `UNAPPROVED`. No
-workflow step has signing or App Store Connect credentials.
+tracked or untracked changes immediately before and after capture. Artifact
+names remain explicitly `UNAPPROVED`; no step has signing or App Store Connect
+credentials. Mac Catalyst stays on the interactive native-window path above.
+
+## Sealed archive and release-set handoff
+
+Treat a successful set directory as immutable. If an operator must attach
+metadata, delete only its existing `capture-package-manifest.json`, add all
+metadata first, then run the seal helper once more. After that final seal, make
+no further writes in the raw root. Create an independent conventional archive:
+
+```sh
+/usr/bin/ditto -c -k --norsrc --keepParent \
+  "$IOS_CAPTURE_ROOT" "$IOS_CAPTURE_ZIP"
+```
+
+Use a distinct raw-root/ZIP pair for each of `ios-ipados`, `tvos`, `watchos`,
+`visionos`, and `maccatalyst`, all from the same full source commit. The final
+assembler requires all five pairs, all 26 byte-distinct frames, an output at
+the canonical source-addressed repository path, and a separate new index
+candidate outside the repository:
+
+```sh
+/usr/bin/ruby .github/scripts/assemble-apple-screenshot-release-set.rb \
+  "$SOURCE_COMMIT" \
+  "$PWD/ios/AppStore/screenshot-release-sets-v1.1-build8/$SOURCE_COMMIT" \
+  "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/QuakeSignalScreenshotCandidates/index-candidate.json" \
+  "$IOS_CAPTURE_ROOT" "$IOS_CAPTURE_ZIP" \
+  "$TVOS_CAPTURE_ROOT" "$TVOS_CAPTURE_ZIP" \
+  "$WATCHOS_CAPTURE_ROOT" "$WATCHOS_CAPTURE_ZIP" \
+  "$VISIONOS_CAPTURE_ROOT" "$VISIONOS_CAPTURE_ZIP" \
+  "$MACCATALYST_CAPTURE_ROOT" "$MACCATALYST_CAPTURE_ZIP"
+```
+
+The assembler creates only an unapproved release-set candidate. It never
+overwrites the checked-in index and does not supply named review or signed
+Release parity evidence.
 
 A named reviewer must compare every candidate to the source-frozen UI and
 approve it. Where the release runbook requires binary parity evidence, compare

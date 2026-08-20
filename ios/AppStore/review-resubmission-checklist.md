@@ -7,31 +7,41 @@ Rights gate for version `1.1 (8)` or any newly added Apple platform.
 
 ## Content Rights gate for every current submission
 
-- [x] Prepared the ready-to-send request in
-  `docs/WOLFX_PERMISSION_REQUEST.md`.
-- [ ] Send the request from a UniSphereco LLC-controlled mailbox and retain the
-  sent message and headers in the approved private release record.
-- [ ] Receive and retain an affirmative written Wolfx reply covering the exact
-  Apple platforms, persistent normalized-event/client-local storage,
-  developer-operated notification relay, App Store territories, attribution,
-  restrictions, duration, and termination intended for release.
-- [ ] Confirm that Wolfx expressly has authority to permit every underlying
-  feed, or obtain and retain an affirmative separate permission from every
-  source rights holder that Wolfx identifies as outside its authority.
-- [ ] Have an accountable reviewer record the reply's scope, attribution,
-  restrictions, duration, termination, underlying-source authority or separate
-  permissions, evidence reference, and review date in
-  `content-rights-evidence.md`.
-- [ ] Apply and verify any product, attribution, relay, caching, territory, or
-  distribution changes required by the reply.
-- [ ] Only after the preceding items are complete, reconcile and complete the
-  Apple Content Rights certification for each submission.
+- [x] Retain the release owner's 20 August 2026 decision not to send the Wolfx
+  request and not to represent that a private written license exists.
+- [x] Review the current Wolfx Terms of Service, Open API documentation, JMA
+  website terms, Public Data License 1.0, JMA forecasting guidance, and exact
+  QuakeSignal product use in `content-rights-evidence.md`.
+- [x] Confirm the reviewed release remains free, attributed, independent and
+  non-official; uses factual documented fields; does not reproduce Wolfx
+  documentation, logos, or JMA `OriginalText`; and exposes no public secondary
+  earthquake feed or resale/paywall.
+- [x] Narrow build 8 to exactly `jma_eew` and `jma_eqlist`; disable
+  `cenc_eew`, `cenc_eqlist`, `sc_eew`, `fj_eew`, and `cq_eew` in submitted
+  Apple clients and relay policy and remove their current release claims.
+- [x] Record the official CENC, Sichuan, Fujian, and Chongqing sources reviewed
+  and the reason those feeds are excluded from build 8.
+- [x] Enforce and document the relay's 89-day normalized-event and
+  event-revision cleanup cutoff, ordered daily cleanup, and possible
+  operational delay.
+- [x] Record that radius and magnitude are delivery filters only: build 8 does
+  not calculate predicted local intensity or ground-motion arrival and does
+  not present a QuakeSignal-authored official warning.
+- [ ] At action time, recheck the published terms/document versions, enabled
+  sources, direct client/relay routes, product behavior, JMA attribution and
+  edited-content notice, 89-day-cutoff cleanup, and intended App Store territories.
+- [ ] If Apple requests authorization beyond the published terms, or Wolfx/an
+  upstream source objects or changes its terms, pause the affected source or
+  territories and narrow the release or obtain additional authorization.
+- [ ] Have the release owner reconcile the Apple Content Rights answer only for
+  the exact reviewed scope; do not claim that open-source licensing alone grants
+  third-party rights.
 
-**Current result: PENDING / SUBMISSION BLOCKER.** No affirmative written Wolfx
-reply or separately required source permission is retained in the release
-record. Published terms, public API documentation, an internal material-scope
-rationale, a referral to another source without its permission, or a prior
-affirmative portal selection must not be substituted for the required evidence.
+**Current result: JMA-ONLY PUBLISHED-TERMS MAPPING RECORDED.** Written Wolfx
+outreach is not required by the release-owner decision. Content Rights still
+requires final signed-artifact/deployed-relay verification, action-time terms
+and territory review, portal reconciliation, and accountable release approval;
+the previously observed portal **Yes** is not evidence by itself.
 
 ## Historical 1.0 (6) review evidence
 
@@ -59,8 +69,8 @@ Historical attachment:
 
 The recording showed launch, permission prompts, onboarding, live data, event
 details, List, Map, Guide, Settings, and Sources & Disclaimer. It did not prove
-TestFlight signing, physical-device APNs delivery, App Attest behavior, Wolfx
-permission, or the version `1.1 (8)` release state.
+TestFlight signing, physical-device APNs delivery, App Attest behavior, the
+current published-terms mapping, or the version `1.1 (8)` release state.
 
 The historical submission later displayed **Waiting for Review** with manual
 release and submission ID `295fd2ba-11c4-4dc9-945b-2bf6a9fc7bbe`. Preserve
@@ -72,8 +82,10 @@ actions, or portal state as current release evidence.
 - [ ] Complete every gate in `submission-checklist.md` and
   `release-v1.1-checklist.md` using the final signed build and current portal
   state.
-- [ ] Confirm that `content-rights-evidence.md` contains the reviewed written
-  permission described above.
+- [ ] Complete, recheck, and confirm the published-terms content-rights mapping
+  described above against the final signed JMA-only sources, deployed 89-day
+  cutoff and next-successful-daily-cleanup behavior, disclosed operational
+  delay, non-predictive relay behavior, attribution, scope, and territories.
 - [ ] Obtain explicit action-time release-owner approval only after all
   required gates are complete.
 - [ ] Only then attach and submit the intended platform build for App Review.

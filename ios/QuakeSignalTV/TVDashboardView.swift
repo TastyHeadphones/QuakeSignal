@@ -5,19 +5,48 @@ struct TVDashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var store = ForegroundQuakeStore()
     @State private var manualRefreshLifecycle = ForegroundManualRefreshLifecycle()
+    @State private var emergencyMonitor = TVEmergencyMonitor()
+    @State private var alertPreferences = TVAlertPreferences()
+    @State private var alertAudio = TVUserInitiatedAlertAudio()
 
     var body: some View {
-        NavigationStack {
-            if ScreenshotAutomation.selectedFrame == .tvEventDetail,
-               let event = store.headlineEvent {
-                TVEventDetailView(event: event)
-            } else if ScreenshotAutomation.selectedFrame == .tvRecentReports {
-                recentReportsDestination
-            } else {
-                dashboard
+        ZStack {
+            NavigationStack {
+                if ScreenshotAutomation.selectedFrame == .tvEventDetail,
+                   let event = store.headlineEvent {
+                    TVEventDetailView(event: event)
+                } else if ScreenshotAutomation.selectedFrame == .tvRecentReports {
+                    recentReportsDestination
+                } else {
+                    dashboard
+                }
+            }
+            .disabled(emergencyMonitor.presentedWarning != nil)
+            .accessibilityHidden(emergencyMonitor.presentedWarning != nil)
+
+            if let warning = emergencyMonitor.presentedWarning {
+                TVEmergencyAlertView(
+                    warning: warning,
+                    selectedSound: alertPreferences.alertSound,
+                    playUserInitiated: alertAudio.playUserInitiated,
+                    stopPlayback: alertAudio.stop,
+                    onDismiss: emergencyMonitor.dismissPresentedWarning
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                .zIndex(1)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: emergencyMonitor.presentedWarning?.id)
+        .onChange(of: emergencyMonitor.presentedWarning?.id) { _, warningID in
+            // A user-started preview must not bleed into a subsequently received
+            // warning and look like automatic alert playback.
+            if warningID != nil {
+                alertAudio.stop()
             }
         }
         .task(id: scenePhase) {
+            let shouldMonitor = scenePhase == .active && !ScreenshotAutomation.isEnabled
+            emergencyMonitor.setSceneActive(shouldMonitor)
             guard scenePhase == .active else { return }
             await store.monitorWhileActive()
         }
@@ -26,11 +55,18 @@ struct TVDashboardView: View {
             await store.refresh()
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase != .active else { return }
-            manualRefreshLifecycle.cancelPendingRefresh()
+            if phase == .active {
+                emergencyMonitor.setSceneActive(!ScreenshotAutomation.isEnabled)
+            } else {
+                manualRefreshLifecycle.cancelPendingRefresh()
+                emergencyMonitor.setSceneActive(false)
+                alertAudio.stop()
+            }
         }
         .onDisappear {
             manualRefreshLifecycle.cancelPendingRefresh()
+            emergencyMonitor.setSceneActive(false)
+            alertAudio.stop()
         }
     }
 
@@ -89,21 +125,39 @@ struct TVDashboardView: View {
 
             Spacer()
 
-            Button {
-                manualRefreshLifecycle.requestRefresh(isSceneActive: scenePhase == .active)
-            } label: {
-                if store.isLoading {
-                    ProgressView()
-                        .frame(minWidth: 160)
-                } else {
-                    Label("platform.refresh", systemImage: "arrow.clockwise")
-                        .frame(minWidth: 160)
+            HStack(spacing: 16) {
+                NavigationLink {
+                    soundPreferencesDestination
+                } label: {
+                    Label("settings.alertSound.title", systemImage: "speaker.wave.2.fill")
+                        .frame(minWidth: 210)
                 }
+                .buttonStyle(.bordered)
+
+                Button {
+                    manualRefreshLifecycle.requestRefresh(isSceneActive: scenePhase == .active)
+                } label: {
+                    if store.isLoading {
+                        ProgressView()
+                            .frame(minWidth: 160)
+                    } else {
+                        Label("platform.refresh", systemImage: "arrow.clockwise")
+                            .frame(minWidth: 160)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color("CautionColor"))
+                .disabled(store.isLoading)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Color("CautionColor"))
-            .disabled(store.isLoading)
         }
+    }
+
+    private var soundPreferencesDestination: some View {
+        TVAlertSoundSettingsView(
+            preferences: alertPreferences,
+            playUserInitiated: alertAudio.playUserInitiated,
+            stopPlayback: alertAudio.stop
+        )
     }
 
     @ViewBuilder

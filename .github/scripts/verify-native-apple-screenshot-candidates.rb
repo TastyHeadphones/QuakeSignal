@@ -1,11 +1,11 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Fail-closed validation for the source-frozen, explicitly unapproved tvOS,
-# watchOS, and visionOS Debug Simulator screenshot candidates captured by
-# GitHub Actions run 32347549322. These files are review inputs only: passing
-# this validator does not approve an upload or turn the captures into signed
-# Release-binary evidence.
+# Fail-closed integrity validation for the preserved, explicitly unapproved
+# tvOS, watchOS, and visionOS Debug Simulator candidates captured by GitHub
+# Actions run 32347549322. These historical files are permanently ineligible
+# for upload. Current-source eligibility is separately enforced by
+# verify-apple-screenshot-release-set.rb.
 
 require "digest"
 require "json"
@@ -136,6 +136,41 @@ class NativeAppleScreenshotSourceGuard
   rescue Errno::ENOENT => error
     raise NativeAppleScreenshotCandidateValidationError,
           "git source validation is unavailable: #{error.message}"
+  end
+
+  private
+
+  def run_git!(*arguments, failure:)
+    output, error_output, status = Open3.capture3("git", "-C", @root.to_s, *arguments)
+    return [output, error_output] if status.success?
+
+    detail = error_output.strip
+    detail = output.strip if detail.empty?
+    suffix = detail.empty? ? "" : ": #{detail}"
+    raise NativeAppleScreenshotCandidateValidationError, "#{failure}#{suffix}"
+  end
+end
+
+class NativeAppleScreenshotHistoricalCommitGuard
+  def initialize(root)
+    @root = Pathname.new(root).realpath
+  end
+
+  def validate!(source_commit)
+    top_level, = run_git!("rev-parse", "--show-toplevel", failure: "repository root is unavailable")
+    unless Pathname.new(top_level.strip).realpath == @root
+      raise NativeAppleScreenshotCandidateValidationError,
+            "historical screenshot validator must run against the repository top level"
+    end
+    run_git!(
+      "cat-file", "-e", "#{source_commit}^{commit}",
+      failure: "historical screenshot source commit is unavailable",
+    )
+    run_git!(
+      "merge-base", "--is-ancestor", source_commit, "HEAD",
+      failure: "historical screenshot source commit is not an ancestor of HEAD",
+    )
+    true
   end
 
   private
@@ -297,7 +332,11 @@ class NativeAppleScreenshotCandidateValidator
   end
 
   def validate!
-    NativeAppleScreenshotSourceGuard.new(@root).validate!(SOURCE_COMMIT) if @verify_git
+    # Historical integrity and current-source eligibility are deliberately
+    # distinct. The full NativeAppleScreenshotSourceGuard remains unchanged and
+    # mandatory for an active release set; this old package only proves that its
+    # recorded commit exists and that every preserved byte still matches.
+    NativeAppleScreenshotHistoricalCommitGuard.new(@root).validate!(SOURCE_COMMIT) if @verify_git
     ensure_candidate_ancestors!
     validate_root_inventory!
 
@@ -900,7 +939,7 @@ if $PROGRAM_NAME == __FILE__
       root: repository_root,
       verify_git: true,
     ).validate!
-    puts "Validated 3 unapproved native Apple screenshot candidate packages " \
+    puts "Validated 3 historical unapproved native Apple screenshot packages " \
          "(11 opaque PNGs) from #{NativeAppleScreenshotCandidateValidator::SOURCE_COMMIT}."
   rescue NativeAppleScreenshotCandidateValidationError => error
     warn "error: #{error.message}"

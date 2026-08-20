@@ -18,14 +18,19 @@ const contractFiles = {
   ],
   releaseEntitlements: [
     "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements",
+    "ios/QuakeSignal/Supporting/QuakeSignal-Catalyst.entitlements",
     "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements",
   ],
   platformCapabilityPolicy: [
+    "ios/QuakeSignal/App/AppDelegate.swift",
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
     "ios/QuakeSignal/Features/Detail/QuakeDetailView.swift",
     "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
     "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
     "ios/QuakeSignal/Features/Root/RootView.swift",
+    "ios/QuakeSignal/Features/List/QuakeListView.swift",
+    "ios/QuakeSignal/Features/Home/QuakeRowView.swift",
+    "ios/QuakeSignal/Features/Settings/SourceDisclaimerView.swift",
     "ios/QuakeSignal/Features/Settings/SettingsView.swift",
     "ios/QuakeSignal/Models/EEWEvent.swift",
     "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
@@ -33,13 +38,29 @@ const contractFiles = {
     "ios/QuakeSignal/Networking/WolfxClient.swift",
     "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
     "ios/QuakeSignal/Notifications/NotificationManager.swift",
+    "ios/QuakeSignal/Notifications/PushPayload.swift",
     "ios/QuakeSignal/State/AlertPolicy.swift",
+    "ios/QuakeSignal/State/AppSettings.swift",
     "ios/QuakeSignal/State/LocationManager.swift",
     "ios/QuakeSignal/State/QuakeStore.swift",
+    "ios/QuakeSignalShared/AlertSoundPreference.swift",
     "ios/QuakeSignalShared/ForegroundQuakeStore.swift",
     "ios/QuakeSignalShared/ScreenshotAutomation.swift",
+    "ios/QuakeSignalShared/WatchAlertPreferenceBridge.swift",
+    "ios/QuakeSignalShared/WatchForegroundEmergencyPolicy.swift",
+    "ios/QuakeSignalTV/TVAlertPreferences.swift",
+    "ios/QuakeSignalTV/TVAlertSoundSettingsView.swift",
     "ios/QuakeSignalTV/TVDashboardView.swift",
+    "ios/QuakeSignalTV/TVEmergencyAlertView.swift",
+    "ios/QuakeSignalTV/TVEmergencyMonitor.swift",
+    "ios/QuakeSignalTV/TVEmergencyPresentationPolicy.swift",
+    "ios/QuakeSignalTV/TVUserInitiatedAlertAudio.swift",
+    "ios/QuakeSignalTV/Supporting/PrivacyInfo.xcprivacy",
+    "ios/QuakeSignalWatch/QuakeSignalWatchApp.swift",
     "ios/QuakeSignalWatch/WatchDashboardView.swift",
+    "ios/QuakeSignalWatch/WatchEmergencyAlertAudio.swift",
+    "ios/QuakeSignalWatch/WatchForegroundEmergencyMonitor.swift",
+    "ios/QuakeSignalWatch/Supporting/PrivacyInfo.xcprivacy",
     "ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy",
     "ios/QuakeSignal/Resources/en.lproj/Localizable.strings",
     "ios/QuakeSignal/Resources/ja.lproj/Localizable.strings",
@@ -59,6 +80,7 @@ const contractFiles = {
   iosWorkflow: ".github/workflows/ios.yml",
   platformWorkflow: ".github/workflows/apple-platforms.yml",
   screenshotWorkflow: ".github/workflows/apple-platform-screenshots.yml",
+  macCatalystScreenshotPlan: "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build8.json",
   cloudflareWorkflow: ".github/workflows/cloudflare.yml",
   signedArtifactVerifier: "ios/ci_scripts/verify-signed-apple-artifacts.sh",
   xcodeCloudHooks: [
@@ -68,6 +90,10 @@ const contractFiles = {
     "ios/ci_scripts/xcode-cloud-release-guard.py",
   ],
   releaseCriticalHelpers: [
+    ".github/scripts/assemble-apple-screenshot-release-set.rb",
+    ".github/scripts/assemble-apple-screenshot-release-set.test.rb",
+    ".github/scripts/verify-apple-screenshot-release-set.rb",
+    ".github/scripts/verify-apple-screenshot-release-set.test.rb",
     "backend/cloudflare/scripts/legal-page-contract.mjs",
     "backend/cloudflare/scripts/render-staging-config.mjs",
     "backend/cloudflare/scripts/smoke-test-policy.mjs",
@@ -76,16 +102,64 @@ const contractFiles = {
     "backend/cloudflare/scripts/verify-production-gates.mjs",
     "backend/cloudflare/scripts/wait-for-worker-readiness.mjs",
     "backend/cloudflare/staging/wrangler.staging.template.json",
+    "ios/AppStore/README.md",
+    "ios/AppStore/screenshot-manifest-v1.1-build8.template.json",
   ],
   screenshotAutomationHelpers: [
     "ios/ScreenshotAutomation/README.md",
+    "ios/ScreenshotAutomation/assemble-ios-screenshot-provenance.rb",
+    "ios/ScreenshotAutomation/assemble-ios-screenshot-provenance.test.rb",
+    "ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.rb",
+    "ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.test.rb",
     "ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb",
     "ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb",
+    "ios/ScreenshotAutomation/capture-ios-screenshot-set.sh",
+    "ios/ScreenshotAutomation/capture-ios-screenshot.sh",
+    "ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh",
+    "ios/ScreenshotAutomation/capture-maccatalyst-screenshot.sh",
     "ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh",
     "ios/ScreenshotAutomation/capture-platform-screenshot-set.sh",
     "ios/ScreenshotAutomation/capture-platform-screenshot.sh",
+    "ios/ScreenshotAutomation/ios-screenshot-build-binding.rb",
+    "ios/ScreenshotAutomation/ios-screenshot-build-binding.test.rb",
+    "ios/ScreenshotAutomation/ios-screenshot-capture-interface.test.sh",
+    "ios/ScreenshotAutomation/ios-screenshot-content-validator-fixture.swift",
+    "ios/ScreenshotAutomation/ios-screenshot-content-validator.swift",
+    "ios/ScreenshotAutomation/ios-screenshot-content-validator.test.sh",
+    "ios/ScreenshotAutomation/ios-screenshot-plan.rb",
+    "ios/ScreenshotAutomation/ios-screenshot-plan.test.rb",
+    "ios/ScreenshotAutomation/ios-screenshot-simulator-lease.rb",
+    "ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb",
+    "ios/ScreenshotAutomation/ios-screenshot-swift-inputs.rb",
+    "ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb",
+    "ios/ScreenshotAutomation/maccatalyst-capture-interface.test.sh",
+    "ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.sh",
+    "ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.test.sh",
+    "ios/ScreenshotAutomation/maccatalyst-capture-window.swift",
+    "ios/ScreenshotAutomation/maccatalyst-content-validator-fixture.swift",
+    "ios/ScreenshotAutomation/maccatalyst-content-validator.test.sh",
+    "ios/ScreenshotAutomation/maccatalyst-flatten-png.swift",
+    "ios/ScreenshotAutomation/maccatalyst-process-guard.sh",
+    "ios/ScreenshotAutomation/maccatalyst-process-guard.test.sh",
+    "ios/ScreenshotAutomation/maccatalyst-screenshot-plan.rb",
+    "ios/ScreenshotAutomation/maccatalyst-screenshot-plan.test.rb",
+    "ios/ScreenshotAutomation/maccatalyst-validate-content.swift",
+    "ios/ScreenshotAutomation/maccatalyst-window-evidence.swift",
+    "ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.rb",
+    "ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.test.rb",
     "ios/ScreenshotAutomation/platform-screenshot-plan.rb",
     "ios/ScreenshotAutomation/platform-screenshot-plan.test.rb",
+    "ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.rb",
+    "ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.test.rb",
+    "ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.rb",
+    "ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.test.rb",
+    "ios/ScreenshotAutomation/safe-zip-tree.rb",
+    "ios/ScreenshotAutomation/safe-zip-tree.test.rb",
+    "ios/ScreenshotAutomation/screenshot-process-guard.sh",
+    "ios/ScreenshotAutomation/screenshot-process-guard.test.sh",
+    "ios/ScreenshotAutomation/screenshot-test-temp-root.rb",
+    "ios/ScreenshotAutomation/seal-screenshot-capture-package.rb",
+    "ios/ScreenshotAutomation/seal-screenshot-capture-package.test.rb",
     "ios/ScreenshotAutomation/validate-vision-map-content.rb",
     "ios/ScreenshotAutomation/validate-vision-map-content.test.rb",
     "ios/ScreenshotAutomation/validate-watch-foreground-badge.rb",
@@ -104,11 +178,36 @@ const REVIEWED_CI_SCRIPT_FILES = [
 ];
 
 const EXECUTABLE_SCREENSHOT_AUTOMATION_FILES = new Set([
+  "ios/ScreenshotAutomation/capture-ios-screenshot-set.sh",
+  "ios/ScreenshotAutomation/capture-ios-screenshot.sh",
+  "ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.rb",
+  "ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.test.rb",
   "ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb",
+  "ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh",
+  "ios/ScreenshotAutomation/capture-maccatalyst-screenshot.sh",
   "ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh",
   "ios/ScreenshotAutomation/capture-platform-screenshot-set.sh",
   "ios/ScreenshotAutomation/capture-platform-screenshot.sh",
+  "ios/ScreenshotAutomation/ios-screenshot-build-binding.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-capture-interface.test.sh",
+  "ios/ScreenshotAutomation/ios-screenshot-content-validator.test.sh",
+  "ios/ScreenshotAutomation/ios-screenshot-plan.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-simulator-lease.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-swift-inputs.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb",
+  "ios/ScreenshotAutomation/maccatalyst-capture-interface.test.sh",
+  "ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.test.sh",
+  "ios/ScreenshotAutomation/maccatalyst-content-validator.test.sh",
+  "ios/ScreenshotAutomation/maccatalyst-process-guard.test.sh",
+  "ios/ScreenshotAutomation/maccatalyst-screenshot-plan.rb",
+  "ios/ScreenshotAutomation/maccatalyst-screenshot-plan.test.rb",
+  "ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.rb",
   "ios/ScreenshotAutomation/platform-screenshot-plan.rb",
+  "ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.rb",
+  "ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.rb",
+  "ios/ScreenshotAutomation/safe-zip-tree.test.rb",
+  "ios/ScreenshotAutomation/seal-screenshot-capture-package.rb",
   "ios/ScreenshotAutomation/validate-vision-map-content.rb",
   "ios/ScreenshotAutomation/validate-vision-map-content.test.rb",
   "ios/ScreenshotAutomation/vision-map-capture-guard.sh",
@@ -135,7 +234,11 @@ const REVIEWED_WORKFLOW_FILES = [
 
 const APPROVED_WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev";
 const VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open.";
-const VISION_PRIVACY_MANIFEST_PATH = "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy";
+const FOREGROUND_PRIVACY_MANIFEST_PATHS = [
+  "ios/QuakeSignalTV/Supporting/PrivacyInfo.xcprivacy",
+  "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy",
+  "ios/QuakeSignalWatch/Supporting/PrivacyInfo.xcprivacy",
+];
 const VISION_PRIVACY_MANIFEST_XML = [
   '<plist version="1.0"><dict>',
   "<key>NSPrivacyTracking</key><false/>",
@@ -156,6 +259,11 @@ const RELEASE_ALERT_ENTITLEMENTS = {
   "aps-environment": "production",
   "com.apple.developer.devicecheck.appattest-environment": "production",
   "com.apple.developer.usernotifications.time-sensitive": true,
+};
+const RELEASE_CATALYST_ENTITLEMENTS = {
+  "com.apple.security.app-sandbox": true,
+  "com.apple.security.network.client": true,
+  "com.apple.security.personal-information.location": true,
 };
 const RELEASE_TARGET_NAMES = [
   "QuakeSignal",
@@ -231,6 +339,7 @@ const TESTFLIGHT_JOB_HEADER = {
 const GENERIC_BUILD_MATRIX = {
   include: [
     { name: "iOS/iPadOS", key: "ios", scheme: "QuakeSignal", destination: "generic/platform=iOS" },
+    { name: "Mac Catalyst", key: "maccatalyst", scheme: "QuakeSignal", destination: "generic/platform=macOS,variant=Mac Catalyst" },
     { name: "tvOS", key: "tvos", scheme: "QuakeSignalTV", destination: "generic/platform=tvOS" },
     { name: "visionOS", key: "visionos", scheme: "QuakeSignalVision", destination: "generic/platform=visionOS" },
     { name: "watchOS", key: "watchos", scheme: "QuakeSignalWatch", destination: "generic/platform=watchOS" },
@@ -286,21 +395,22 @@ const CLOUDFLARE_DEPLOY_PRODUCTION_HEADER = {
 // edited signing/upload action fails before release automation can use
 // credentials.
 const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:lZgHa3Y9qXK8lfLTbhAalD25fVRHZ8EXHg-vsOvNSTs";
-const WORKFLOW_JOBS_FINGERPRINT = "sha256:w1wk-Rdn5g5H5Thg7DTzf8v4fiPKh8FcXavfOJTK4Vg";
+const WORKFLOW_JOBS_FINGERPRINT = "sha256:5498q5lbi5Yom3Sn4_Z-CWhkfathWmEmju9dNMTTJHY";
 const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:gIdap293hpqUJ9U_gKOGiTsYupuumhNhDR3BileJEVI";
 const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:pyFXJBB9gZ7oyUQR5FTk2qRZe4TlhnJmc0HjteIYnLI";
-const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:FGQRysAv30CEP7i26oNSEDNgRQ0rqwN0RemHhuSQEtg";
+const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:1OSObm6_ZnZHbLL7WQR38dWTgK4iR6pr-J5gbFY6y0E";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
-const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:Ti2ZNRSQHJ-aqvdaggkHdK6W-vp0aSX-GthAPy_zm1w";
+const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:JNEQMrC6ERPFz0noPzgFH0GL-wfKSEWMChfGib5wm54";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
-const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:D1hsnhe9WHJ9GImzbs0y7sgKD388EuRAPFobSQxvaMs";
-const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:ahwdsrqf-iMo_HiGEWdL0ZYZva7tWf-l37OnPyqbsdw";
-const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:Q9PUCtBTRbfUk4INjHK4yCv5Axciwro-aOaOOihtohU";
+const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:KWWQdqZwo-iFcqhKlcIhuezMY8ntSKDnCRHOP1S3n1s";
+const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:LSJxwHZ8TyOrYBaAmGiaKArv3QQ8M7l68lUCLXo6rrM";
+const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:IrzNeaBXEZB1ZU04lsg6oaLXcb0YnsYfyiqs4qaJePE";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:vtAIx8JZ4s9UUN07yItVzVx-po5bFVrgWPH5FV_zhXA";
-const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:gMGewYdsLKAr0RhPjPt_wb_voe9GfjH_-P7BCt8RsOU";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:SUfZvZsL_u3Feo65KXCUhwTbceUSjXOov-COh4wHJJA";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:wUnFO5sLklE1ez09dpWiJe8vhdj6vE2M25uTiDQ8WAc";
+const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:FziznhIyMsrK3XG4hiulKdGrLslyBQ0GnhkgxKYdK5c";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:mtUuqJUX0BQ1DZIEPUb5X5BsDZND5Unmk1zPjmFsFUc";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:HESnZFREbiQL6warJktaqMjXtKXHkJpgSd9MsM-4oao";
+const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:gNHr13EktFUXs0KiPpLYbdaL3I7IApzP4PQjaDmX2Gk";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
 const REMOTE_SMOKE_COMMAND = [
@@ -514,6 +624,24 @@ function verifyAppleProject(projectSource) {
     if (String(base.TARGETED_DEVICE_FAMILY) !== expected.family) {
       fail(`${name} TARGETED_DEVICE_FAMILY must be ${expected.family}.`);
     }
+    if (name === "QuakeSignal") {
+      if (String(base.SUPPORTS_MACCATALYST) !== "true" ||
+          String(base.DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER) !== "false" ||
+          String(base.SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD) !== "false" ||
+          String(base["ENABLE_APP_SANDBOX[sdk=macosx*]"]) !== "true") {
+        fail("QuakeSignal must expose Mac Catalyst, preserve its shared bundle ID, enable the Mac sandbox, and disable Designed for iPad on Mac.");
+      }
+      for (const [configuration, values] of Object.entries(record(settings.configs, "QuakeSignal config settings"))) {
+        if (!isRecord(values) ||
+            values["CODE_SIGN_ENTITLEMENTS[sdk=macosx*]"] !== "QuakeSignal/Supporting/QuakeSignal-Catalyst.entitlements") {
+          fail(`QuakeSignal ${configuration} must use the reviewed Mac Catalyst entitlements.`);
+        }
+        if ((configuration === "Release" || configuration === "InternalQA") &&
+            values["PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]"] !== "$(QUAKESIGNAL_CATALYST_PROFILE_NAME)") {
+          fail(`QuakeSignal ${configuration} must use the target-scoped Mac Catalyst provisioning profile.`);
+        }
+      }
+    }
     if (release.PROVISIONING_PROFILE_SPECIFIER !== expected.profileVariable) {
       fail(`${name} Release must use target-scoped ${expected.profileVariable} provisioning.`);
     }
@@ -661,6 +789,10 @@ function verifyInfoPlist(infoPlist, label, requiresWorkerConfiguration) {
              /<key>\s*QUAKESIGNAL_(?:API_BASE_URL|APP_ATTEST_MODE)\s*<\/key>/.test(effective)) {
     fail(`${label} is foreground-only and must not embed Worker or App Attest configuration.`);
   }
+  if (label === "ios/QuakeSignal/Supporting/Info.plist" &&
+      !/<key>\s*LSApplicationCategoryType\s*<\/key>\s*<string>\s*public\.app-category\.weather\s*<\/string>/.test(effective)) {
+    fail(`${label} must declare the reviewed native Mac Weather category.`);
+  }
   if (label === "ios/QuakeSignalVision/Supporting/Info.plist") {
     const description = [...effective.matchAll(
       /<key>\s*NSLocationWhenInUseUsageDescription\s*<\/key>\s*<string>\s*([^<]*)\s*<\/string>/g,
@@ -720,7 +852,11 @@ function verifyReleaseEntitlements(sources) {
   if (!Array.isArray(sources) || sources.length !== contractFiles.releaseEntitlements.length) {
     fail("checked-in Release entitlement inventory is incomplete.");
   }
-  const expectedEntitlements = [RELEASE_ALERT_ENTITLEMENTS, {}];
+  const expectedEntitlements = [
+    RELEASE_ALERT_ENTITLEMENTS,
+    RELEASE_CATALYST_ENTITLEMENTS,
+    {},
+  ];
   sources.forEach((source, index) => {
     const label = contractFiles.releaseEntitlements[index];
     exactRecord(
@@ -729,6 +865,84 @@ function verifyReleaseEntitlements(sources) {
       `${label} effective entitlements`,
     );
   });
+}
+
+function verifyMacCatalystScreenshotPlan(source) {
+  let manifest;
+  try {
+    manifest = JSON.parse(source);
+  } catch {
+    fail(`${contractFiles.macCatalystScreenshotPlan} must be valid JSON.`);
+  }
+  const expectedSelectors = [
+    "maccatalyst-home",
+    "maccatalyst-reports",
+    "maccatalyst-map",
+    "maccatalyst-guide",
+    "maccatalyst-alert-preferences",
+  ];
+  const document = record(manifest, "Mac Catalyst screenshot plan");
+  if (document.status !== "planned-unapproved") {
+    fail("Mac Catalyst screenshot plan must remain planned-unapproved until exact native captures pass signed-Release review.");
+  }
+  exactRecord(document.product, {
+    appleId: "6800642443",
+    platform: "macOS-maccatalyst",
+    marketingVersion: "1.1",
+    build: 8,
+    bundleIdentifier: "com.quakesignal.app",
+    scheme: "QuakeSignal",
+    destination: "platform=macOS,variant=Mac Catalyst",
+    designedForIPadOnMac: false,
+  }, "Mac Catalyst screenshot product");
+  const evidence = record(document.captureEvidence, "Mac Catalyst screenshot capture evidence");
+  if (evidence.sourceBaselineCommit !== null ||
+      evidence.debugArtifactSha256 !== null ||
+      evidence.signedReleaseArtifactSha256 !== null ||
+      evidence.capturedAtUtc !== null ||
+      evidence.reviewer !== null ||
+      evidence.signedReleaseParityApproved !== false ||
+      evidence.uploadApproved !== false) {
+    fail("Mac Catalyst screenshot plan must remain source-only, reviewer-null, and unapproved.");
+  }
+  if (!Array.isArray(document.frames) || document.frames.length !== expectedSelectors.length) {
+    fail("Mac Catalyst screenshot plan must contain exactly five reviewed frames.");
+  }
+  document.frames.forEach((frame, index) => {
+    const value = record(frame, `Mac Catalyst screenshot frame ${index + 1}`);
+    if (value.captureSelector !== expectedSelectors[index] ||
+        !sameValue(value.pixels, [2560, 1600]) ||
+        value.captureStatus !== "pending" ||
+        value.sha256 !== null) {
+      fail(`Mac Catalyst screenshot frame ${index + 1} must keep its exact selector, native 2560x1600 size, pending state, and null digest.`);
+    }
+  });
+  return verifyReviewedFileFingerprint(
+    [{ path: contractFiles.macCatalystScreenshotPlan, source }],
+    [contractFiles.macCatalystScreenshotPlan],
+    MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT,
+    "Mac Catalyst screenshot source-only plan",
+  );
+}
+
+function verifyMacCatalystScreenshotRouting(
+  rootSource,
+  settingsSource,
+  quakeRowSource,
+  screenshotAutomationSource,
+) {
+  if (!/ScreenshotAutomation\.rootDestination\(\s*for:\s*ScreenshotAutomation\.selectedFrame\s*\)/s.test(rootSource) ||
+      !/case\s+\.settings:\s*\.settings/.test(rootSource) ||
+      !/case\s+\.iPhone65AlertPreferences,\s*\.iPad13AlertPreferences,\s*\.visionAlertPreferences,\s*\.macAlertPreferences:\s*\.settings/s.test(screenshotAutomationSource)) {
+    fail("Mac Catalyst alert-preferences selector must route through the shared production Settings destination.");
+  }
+  if (!/if\s+ScreenshotAutomation\.isAlertPreferencesFrame\(\s*ScreenshotAutomation\.selectedFrame\s*\)\s*\{\s*AlertSoundSelectionView\(screenshotSelectedPreference:\s*\.japaneseVoice\)/s.test(settingsSource)) {
+    fail("Mac Catalyst alert-preferences selector must open the shared Japanese voice selection view.");
+  }
+  if (!/reportDate\?\.formatted\(date:\s*\.numeric,\s*time:\s*\.shortened\)/.test(quakeRowSource) ||
+      /reportDate\?\.formatted\(date:\s*\.omitted/.test(quakeRowSource)) {
+    fail("Mac Catalyst report rows must show a calendar date as well as time for historical fixtures.");
+  }
 }
 
 function verifyReviewedFileFingerprint(files, expectedPaths, expectedFingerprint, label) {
@@ -1311,6 +1525,13 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
   for (const { path: workflowPath, source } of workflowFiles) {
     const workflow = parseEffectiveWorkflow(source, `workflow ${workflowPath}`, workflowPath);
     parsedWorkflows.push({ path: workflowPath, workflow });
+    if (workflowPath === ".github/workflows/workflow-lint.yml") {
+      const jobs = record(workflow.jobs, "workflow-lint jobs");
+      const actionlintJob = record(jobs.actionlint, "workflow-lint actionlint job");
+      if (actionlintJob["runs-on"] !== "macos-latest") {
+        fail("the workflow-lint native Apple screenshot harness must run on macos-latest.");
+      }
+    }
     const trigger = workflow.on ?? workflow.true;
     if (
       trigger === "workflow_call" ||
@@ -1754,6 +1975,7 @@ export async function verifyIOSReleaseContract({
     iosWorkflow,
     platformWorkflow,
     screenshotWorkflow,
+    macCatalystScreenshotPlan,
     cloudflareWorkflow,
     releaseHooks,
     releaseCriticalHelpers,
@@ -1779,6 +2001,7 @@ export async function verifyIOSReleaseContract({
     readFile(path(contractFiles.iosWorkflow), "utf8"),
     readFile(path(contractFiles.platformWorkflow), "utf8"),
     readFile(path(contractFiles.screenshotWorkflow), "utf8"),
+    readFile(path(contractFiles.macCatalystScreenshotPlan), "utf8"),
     readFile(path(contractFiles.cloudflareWorkflow), "utf8"),
     readReviewedCiScriptInventory(root),
     Promise.all(contractFiles.releaseCriticalHelpers.map(async (relativePath) => ({
@@ -1814,9 +2037,17 @@ export async function verifyIOSReleaseContract({
   const platformCapabilitySources = Object.fromEntries(
     platformCapabilityPolicy.map(({ path, source }) => [path, source]),
   );
-  verifyVisionPrivacyManifest(
-    platformCapabilitySources[VISION_PRIVACY_MANIFEST_PATH],
-    VISION_PRIVACY_MANIFEST_PATH,
+  for (const privacyManifestPath of FOREGROUND_PRIVACY_MANIFEST_PATHS) {
+    verifyVisionPrivacyManifest(
+      platformCapabilitySources[privacyManifestPath],
+      privacyManifestPath,
+    );
+  }
+  verifyMacCatalystScreenshotRouting(
+    platformCapabilitySources["ios/QuakeSignal/Features/Root/RootView.swift"],
+    platformCapabilitySources["ios/QuakeSignal/Features/Settings/SettingsView.swift"],
+    platformCapabilitySources["ios/QuakeSignal/Features/Home/QuakeRowView.swift"],
+    platformCapabilitySources["ios/QuakeSignalShared/ScreenshotAutomation.swift"],
   );
   const platformCapabilitiesFingerprint = verifyReviewedFileFingerprint(
     platformCapabilityPolicy,
@@ -1842,6 +2073,9 @@ export async function verifyIOSReleaseContract({
   );
   const screenshotAutomationHelpersFingerprint = verifyScreenshotAutomationHelpers(
     screenshotAutomationHelpers,
+  );
+  const macCatalystScreenshotPlanFingerprint = verifyMacCatalystScreenshotPlan(
+    macCatalystScreenshotPlan,
   );
   verifyExportOptions(exportOptions);
   const workerVars = parseWorkerConfig(workerConfig);
@@ -1899,6 +2133,7 @@ export async function verifyIOSReleaseContract({
     platformCapabilitiesFingerprint,
     releaseCriticalHelpersFingerprint,
     screenshotAutomationHelpersFingerprint,
+    macCatalystScreenshotPlanFingerprint,
     workerDependencyGraphFingerprint,
     workerDeploymentConfigFingerprint,
     xcodeCloudReleaseHooksFingerprint,

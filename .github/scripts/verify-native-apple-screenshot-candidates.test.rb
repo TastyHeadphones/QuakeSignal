@@ -46,7 +46,7 @@ class NativeAppleScreenshotCandidateValidatorTest < Minitest::Test
       "native-apple-screenshot-candidates-test.",
       TEST_TEMP_PARENT.to_s,
     )
-    @root = Pathname.new(@temporary_directory)
+    @root = Pathname.new(@temporary_directory).realpath
     copy_candidate_fixture
     @inspector = FakeNativeAppleScreenshotInspector.new
   end
@@ -74,7 +74,7 @@ class NativeAppleScreenshotCandidateValidatorTest < Minitest::Test
     )
 
     assert status.success?, "CLI failed (#{status.exitstatus}):\n#{output}\n#{error_output}"
-    assert_match(/Validated 3 unapproved native Apple screenshot candidate packages/, output)
+    assert_match(/Validated 3 historical unapproved native Apple screenshot packages/, output)
     assert_equal "", error_output
   end
 

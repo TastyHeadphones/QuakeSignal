@@ -181,7 +181,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         let payload = PushPayload(userInfo: notification.request.content.userInfo)
         let decision = await MainActor.run {
             let decision = ForegroundNotificationPresentationPolicy.decision(
-                hasEventID: payload.compositeEventId != nil,
+                for: payload,
                 // Require both the scene callback and UIKit's receipt-time
                 // application state. During a Control/Notification Center or
                 // interruption transition, UIKit can become inactive before
@@ -198,8 +198,9 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
         switch decision.systemPresentation {
         case .alert:
-            // Token tests, launch-buffered pushes, and real events received
-            // while the scene is inactive retain the APNs banner and sound.
+            // Token tests, unusable/mismatched snapshots, launch-buffered
+            // pushes, and real events received while the scene is inactive
+            // retain the APNs banner and sound.
             return [.banner, .sound, .list]
         case .listOnly:
             // The active app owns the visible emergency UI and selected sound.

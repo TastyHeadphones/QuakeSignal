@@ -12,6 +12,7 @@ only after the listed evidence is complete. Use it together with
 | Field | Intended value / status | Evidence |
 | --- | --- | --- |
 | Name | `QuakeSignal` — approved English (U.S.) name | `README.md` |
+| Subtitle | `Earthquake Reports & Safety` — exact English (U.S.) draft, 27 characters | `en-US/subtitle.txt` |
 | Bundle ID | `com.quakesignal.app` | `ios/project.yml` |
 | SKU | `quakesignal-ios` | `README.md` |
 | Version | `1.1` | `ios/project.yml` |
@@ -41,6 +42,16 @@ private CA, an origin certificate, or an iOS client certificate.
 | Other Data (alert preferences and App Attest integrity record) | Yes | Yes | No | App Functionality | `ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy`, `docs/PRIVACY.md` |
 | Names, account data, contacts, advertising ID, analytics | No | N/A | No | N/A | `docs/PRIVACY.md` |
 
+Only an opted-in iPhone or iPad registration sends the three declared data
+categories to QuakeSignal-operated infrastructure. Watch, TV, Vision, and Mac
+Catalyst do not independently register or upload those values. Their direct
+Wolfx requests and public support/privacy-page loads expose ordinary connection
+metadata to the relevant network providers under those providers' policies;
+the final App Privacy questionnaire classification remains a release-owner and
+legal review item. The shared iOS/Catalyst product currently packages the
+conservative universal privacy manifest; Catalyst behavior itself follows the
+zero-registration scope documented above and in `docs/PRIVACY.md`.
+
 Before submission, the release owner must compare these entries with the
 current binary and App Privacy questionnaire wording. Do not choose “Data Not
 Collected” merely because the app has no account.
@@ -52,7 +63,7 @@ Collected” merely because the app has no account.
 | Demo account | Not required |
 | Sign-in required | No |
 | Review notes | `review-notes.txt` |
-| Contact name, email, phone | **PENDING**: release owner must enter an accountable UniSphereco LLC contact |
+| Contact name, email, phone | First/last name are present in the current portal draft; **PENDING**: release owner must enter and verify an accountable UniSphereco LLC phone number and email address |
 | Review route | Start the app, choose **Skip** for notification and location onboarding, then inspect Home, List, Map, Guide, and Settings; no account or review credential is required |
 | Notes for background/notification behavior | Optional notifications are best-effort. A public Release exposes an ordinary foreground Send Test Alert control only after authorization, opt-in registration, and an APNs token; it has no delayed background-training control |
 
@@ -60,12 +71,15 @@ Collected” merely because the app has no account.
 
 | Platform | Intended 1.1 (8) behavior | Portal / evidence status |
 | --- | --- | --- |
-| Apple Watch companion | Foreground-only compact dashboard embedded in the iOS upload; no independent APNs, App Attest, alert audio, or background emergency alerts | Three source-frozen `410 × 502` Debug Simulator candidates are retained and unapproved; **PENDING** signed host + Watch profile, paired-device QA, signed parity, named screenshot review, and shared iOS description/review approval |
-| tvOS | Foreground-only large-screen dashboard; no APNs, App Attest, alert audio, or background emergency alerts | Three source-frozen `1920 × 1080` Debug Simulator candidates are retained and unapproved. Portal has an empty `1.1` draft with no selected build or screenshots and a blank Apple TV Privacy Policy field; **PENDING** build 8, profile, platform QA, reviewed privacy text, metadata, signed parity, and named screenshot review |
-| visionOS | Full native windowed foreground app; no APNs, App Attest, Time Sensitive, Critical Alerts, or background emergency delivery. Qualifying live warnings may appear in-app and play the selected local sound only while the app is open. | Five source-frozen `3840 × 2160` Debug Simulator candidates are retained and unapproved. Portal has an empty `1.1` draft with no selected build or screenshots and App Motion displays **Set Up**; **PENDING** build 8, profile, platform QA, final App Motion answer, metadata, signed parity, and named screenshot review |
+| Apple Watch companion | JMA-only foreground compact dashboard embedded in the iOS upload; a fresh active warning can show protective guidance and the native Watch warning haptic, plus the custom sound mirrored from iPhone when selected. No independent APNs, App Attest, Time Sensitive/Critical Alerts, or background emergency delivery | The three retained `410 × 502` Debug Simulator images are historical evidence from an earlier source commit and are permanently non-uploadable for the current source. **PENDING** final-commit recapture, signed host + Watch profile, paired-device haptic/audio/mirroring QA, signed parity, named screenshot review, and shared iOS description/review approval |
+| tvOS | JMA-only foreground large-screen dashboard; reads `jma_eew` and `jma_eqlist` while open, with no APNs, App Attest, automatic alert audio, or background emergency alerts. System is visual-only; the Urgent and Japanese Voice sounds play only after an explicit Siri Remote action | The three retained `1920 × 1080` Debug Simulator images are historical evidence from an earlier source commit and are permanently non-uploadable for the current source. Portal has an empty `1.1` draft with no selected build or screenshots and a blank Apple TV Privacy Policy field; **PENDING** final-commit recapture, build 8, profile, platform QA, reviewed privacy text, metadata, signed parity, and named screenshot review |
+| visionOS | JMA-only full native windowed foreground app; no APNs, App Attest, Time Sensitive, Critical Alerts, or background emergency delivery. A qualifying JMA-issued update may appear in-app and play the selected local sound only while the app is open; QuakeSignal does not calculate a new local-intensity or arrival-time forecast. | The five retained `3840 × 2160` Debug Simulator images are historical evidence from an earlier source commit and are permanently non-uploadable for the current source. Portal has an empty `1.1` draft with no selected build or screenshots and App Motion displays **Set Up**; **PENDING** final-commit recapture, build 8, profile, platform QA, final App Motion answer, metadata, signed parity, and named screenshot review |
+| Mac Catalyst | JMA-only SwiftUI native Mac storefront build from the shared `QuakeSignal` target; foreground/local reports, map, guide, settings, and full-window fresh-warning presentation with the selected System, Urgent, or Japanese Voice sound. It has no independent APNs, App Attest, background-alert, or Critical Alert path, and stops monitoring/audio when inactive. | **SELECTED** as the sole Mac route in `release-owner-decisions-2026-08-20.md`; use shared Apple ID `6800642443`, disable Designed for iPad on Mac, and leave Tauri record `6800642853` unused. **PENDING** Xcode Cloud signed build 8, Mac QA, exact screenshots, metadata, signed parity, and named approval |
 
 Use `platforms/` for exact copy, review notes, immutable screenshot plans, and
-the separately retained unapproved candidate packages.
+the separately retained immutable historical candidate packages. Their own
+capture-time README text is part of the locked evidence and does not make those
+bytes current or uploadable.
 Use `app-store-connect-portal-audit-2026-08-19.md` as historical evidence and
 the latest `app-store-connect-portal-audit-2026-08-20.md` addendum for the
 current read-only contradictions and safe action order. Do not delete or
@@ -75,11 +89,11 @@ repurpose an existing draft from this worksheet.
 
 | App Store Connect area | Required decision/evidence | Current status |
 | --- | --- | --- |
-| Content Rights | Affirmative written Wolfx permission covering the exact Apple platforms, persistent normalized-event/client-local storage, developer-operated relay, territories, attribution, restrictions, duration, and termination, plus either Wolfx authority over every underlying feed or each separately required source permission | **PENDING / SUBMISSION BLOCKER** — `docs/WOLFX_PERMISSION_REQUEST.md` is a ready-to-send request draft only. No affirmative Wolfx reply or separately required source permission is retained in the release record. See `content-rights-evidence.md`; do not complete Apple's rights certification or submit any platform until the complete evidence is obtained and reviewed. |
-| Age Rating | Answer Apple's current questionnaire from the final public build/content | **PENDING** release-owner review |
-| Export Compliance | Answer Apple's current encryption/export questions for the final signed archive | **PENDING** legal/release-owner confirmation |
+| Content Rights | Current Wolfx Terms of Service and Open API documentation; JMA website terms and PDL 1.0; JMA's statutory relay-versus-new-forecast guidance; exact two-source scope; attribution/editing; no-resale/no-public-feed behavior; 89-day event/revision cutoff with next-successful-daily cleanup | **MAPPED FOR THE INTENDED JMA-ONLY BUILD 8; FINAL CHECK PENDING.** Only `jma_eew` and `jma_eqlist` are enabled; CENC/Sichuan/Fujian/Chongqing feeds are disabled. Notifications filter and relay normalized JMA-issued facts and do not calculate predicted local intensity or arrival time. The release owner decided not to send the Wolfx request. Operational cleanup failures can delay deletion. Final signed/deployed source proof, current-term/territory recheck, accountable review, and portal reconciliation remain pending. Do not claim open source grants rights or that a private Wolfx/JMA license or endorsement exists. |
+| Age Rating | Answer Apple's current questionnaire from the final public build/content | **PENDING** release-owner review. Current source has no UGC/chat, advertising, purchases, gambling, sexual content, drug content, or unrestricted browser; family check-in fields are local notes rather than messaging. Reconfirm against Apple's then-current questions. |
+| Export Compliance | Answer Apple's current encryption/export questions for the final signed archive | **PENDING** legal/release-owner confirmation. All four native platform Info.plists set `ITSAppUsesNonExemptEncryption=false`; the app uses system TLS plus CryptoKit/App Attest hashing and security, not a customer cryptography feature. Verify the signed archives and Apple's current wording before answering. |
 | Availability / pricing schedule | Select approved territories and distribution timing | **PENDING** release-owner decision |
 | Japanese / Simplified Chinese listing | Exact product-page names, availability, and trademark review | **PENDING**; keep English-only until approved |
-| Mac Catalyst or Designed for iPad on Mac | Release-owner choice, reviewed shared-record mapping, signing/profile implications, Mac QA, screenshots, metadata, and availability | **PENDING RELEASE-OWNER CHOICE** — make no portal mutation and do not present both as simultaneous public variants until recorded; the Tauri app remains in Apple ID `6800642853` |
-| Screenshots | Five 6.5-inch iPhone and five 13-inch iPad frames for each approved locale, recaptured from frozen build-8 source | **PARTIAL** — a source-frozen ten-image English Debug Simulator candidate is recorded with exact hashes and build evidence, but remains unsigned, unapproved, and reviewer-null. Named visual approval and signed public-Release parity are still **PENDING**. The existing 30-file provenance truthfully records build 7 and must not be relabeled or uploaded as build-8 evidence. |
+| Mac storefront | SwiftUI Mac Catalyst through the shared native record; no simultaneous Designed-for-iPad route; no Tauri package | **DECIDED — 2026-08-20** in `release-owner-decisions-2026-08-20.md`. Implementation, Xcode Cloud signing, Mac QA, screenshots, metadata, signed parity, availability, and named approval remain **PENDING**. |
+| Screenshots | Five 6.5-inch iPhone and five 13-inch iPad frames for each approved locale, recaptured from frozen build-8 source | **PENDING** — `screenshot-set-index-v1.1-build8.json` deliberately has `activeReleaseSet: null`, and no source-current ten-image iOS/iPad package exists. Every retained iOS/iPad set is historical and permanently non-uploadable for the current source. Final-commit recapture, exact source-addressed assembly, named visual approval, and signed public-Release parity are still required. |
 | Physical QA / launch | Complete TestFlight proof, production health/readiness proof, and App Attest launch promotion; terminal-DLQ monitoring remains an optional operational control | **PENDING** — see `docs/IOS_TESTFLIGHT_PHYSICAL_QA.md` and `docs/CLOUDFLARE_PRODUCTION.md` |

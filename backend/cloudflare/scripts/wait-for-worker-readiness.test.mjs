@@ -97,7 +97,7 @@ test("does not accept missing or non-Boolean APNs readiness", async () => {
   }
 });
 
-test("requires the exact fresh seven-source Wolfx inventory", async () => {
+test("requires the exact fresh JMA-only Wolfx inventory", async () => {
   const missingSource = readySources();
   delete missingSource.jma_eew;
   const mutations = [

@@ -8,7 +8,7 @@
     "marketingVersion": "1.1",
     "build": 8,
     "bundleIdentifier": "com.quakesignal.app",
-    "configuration": "Release"
+    "configuration": "Debug"
   },
   "rootDirectory": "screenshots-v1.1-build8",
   "captureEvidence": {
@@ -30,11 +30,16 @@
     "ipad-13": {"device": "iPad Pro 13-inch (M4)", "portraitPixels": [2064, 2752], "requiredFramesPerApprovedLocale": 5}
   },
   "frames": [
-    {"file": "01-home.jpg", "screen": "Home", "purpose": "Normal nearby report and service state", "captureStatus": "pending"},
-    {"file": "02-reports.jpg", "screen": "Reports", "purpose": "Filterable current and historical reports", "captureStatus": "pending"},
-    {"file": "03-map.jpg", "screen": "Map", "purpose": "Epicenter context, filters, and current-location control without a displayed private coordinate", "captureStatus": "pending"},
-    {"file": "04-guide.jpg", "screen": "Preparedness Guide", "purpose": "Offline safety guidance without personal notes", "captureStatus": "pending"},
-    {"file": "05-alert-preferences.jpg", "screen": "Alert Sound", "purpose": "Selectable sounds and full Japanese voice attribution/non-official disclosure", "captureStatus": "pending"}
+    {"captureSelector": "ios-iphone-6.5-home", "displayClass": "iphone-6.5", "file": "01-home.jpg", "screen": "Home", "purpose": "Normal nearby report and service state", "captureStatus": "pending"},
+    {"captureSelector": "ios-iphone-6.5-reports", "displayClass": "iphone-6.5", "file": "02-reports.jpg", "screen": "Reports", "purpose": "Filterable current and historical reports", "captureStatus": "pending"},
+    {"captureSelector": "ios-iphone-6.5-map", "displayClass": "iphone-6.5", "file": "03-map.jpg", "screen": "Map", "purpose": "Epicenter context, filters, and current-location control without a displayed private coordinate", "captureStatus": "pending"},
+    {"captureSelector": "ios-iphone-6.5-guide", "displayClass": "iphone-6.5", "file": "04-guide.jpg", "screen": "Preparedness Guide", "purpose": "Offline safety guidance without personal notes", "captureStatus": "pending"},
+    {"captureSelector": "ios-iphone-6.5-alert-preferences", "displayClass": "iphone-6.5", "file": "05-alert-preferences.jpg", "screen": "Alert Sound", "purpose": "Selectable sounds and full Japanese voice attribution/non-official disclosure", "captureStatus": "pending"},
+    {"captureSelector": "ios-ipad-13-home", "displayClass": "ipad-13", "file": "01-home.jpg", "screen": "Home", "purpose": "Normal nearby report and service state", "captureStatus": "pending"},
+    {"captureSelector": "ios-ipad-13-reports", "displayClass": "ipad-13", "file": "02-reports.jpg", "screen": "Reports", "purpose": "Filterable current and historical reports", "captureStatus": "pending"},
+    {"captureSelector": "ios-ipad-13-map", "displayClass": "ipad-13", "file": "03-map.jpg", "screen": "Map", "purpose": "Epicenter context, filters, and current-location control without a displayed private coordinate", "captureStatus": "pending"},
+    {"captureSelector": "ios-ipad-13-guide", "displayClass": "ipad-13", "file": "04-guide.jpg", "screen": "Preparedness Guide", "purpose": "Offline safety guidance without personal notes", "captureStatus": "pending"},
+    {"captureSelector": "ios-ipad-13-alert-preferences", "displayClass": "ipad-13", "file": "05-alert-preferences.jpg", "screen": "Alert Sound", "purpose": "Selectable sounds and full Japanese voice attribution/non-official disclosure", "captureStatus": "pending"}
   ],
   "requiredBeforeApproval": [
     "Generate an explicit file entry and SHA-256 for every captured file.",

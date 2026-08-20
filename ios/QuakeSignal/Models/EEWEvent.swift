@@ -47,10 +47,6 @@ extension EEWEvent {
     var sourceLabelKey: LocalizedStringKey {
         switch sourceId {
         case "jma_eew", "jma_eqlist": return "quake.source.jma"
-        case "cenc_eew", "cenc_eqlist": return "quake.source.cenc"
-        case "sc_eew": return "quake.source.sc"
-        case "fj_eew": return "quake.source.fj"
-        case "cq_eew": return "quake.source.cq"
         default: return LocalizedStringKey(sourceId)
         }
     }
@@ -59,10 +55,6 @@ extension EEWEvent {
     var sourceLabelText: String {
         switch sourceId {
         case "jma_eew", "jma_eqlist": return String(localized: "quake.source.jma")
-        case "cenc_eew", "cenc_eqlist": return String(localized: "quake.source.cenc")
-        case "sc_eew": return String(localized: "quake.source.sc")
-        case "fj_eew": return String(localized: "quake.source.fj")
-        case "cq_eew": return String(localized: "quake.source.cq")
         default: return sourceId
         }
     }

@@ -6,8 +6,8 @@
 /* Onboarding */
 "onboarding.title1" = "QuakeSignal へようこそ";
 "onboarding.body1" = "地震情報、近くの地震通知、防災ガイドをひとつのアプリにまとめました。";
-"onboarding.title2" = "第三者の集約データ";
-"onboarding.body2" = "Wolfx Open API の第三者データを整理して表示します。情報に遅延・更新・誤差が生じる場合があります。";
+"onboarding.title2" = "Wolfx経由の気象庁情報";
+"onboarding.body2" = "Wolfx Open APIが中継する気象庁の公開地震情報を、QuakeSignalが整理して表示します。情報に遅延・更新・誤差が生じる場合があります。";
 "onboarding.title3" = "通知を有効にする";
 "onboarding.body3" = "アプリがバックグラウンドのときも、条件に合う地震情報を受け取るには通知を許可してください。配信は保証されません。";
 "onboarding.continue" = "次へ";
@@ -27,10 +27,6 @@
 "quake.intensity.label" = "最大震度 %1$@";
 "quake.depth.label" = "深さ %1$@ km";
 "quake.source.jma" = "気象庁";
-"quake.source.cenc" = "中国地震台网中心";
-"quake.source.sc" = "四川省地震局";
-"quake.source.fj" = "福建省地震局";
-"quake.source.cq" = "重慶市地震局";
 
 /* Full-screen alert */
 "alert.badge.new" = "緊急地震速報";
@@ -67,11 +63,6 @@
 "settings.section.sources" = "警報の情報源";
 "settings.source.jma_eew" = "気象庁 — 緊急地震速報";
 "settings.source.jma_eqlist" = "気象庁 — 地震情報";
-"settings.source.cenc_eew" = "中国地震台网中心 — 緊急地震速報";
-"settings.source.cenc_eqlist" = "中国地震台网中心 — 地震情報";
-"settings.source.sc_eew" = "四川省地震局 — 緊急地震速報";
-"settings.source.fj_eew" = "福建省地震局 — 緊急地震速報";
-"settings.source.cq_eew" = "重慶市地震局 — 緊急地震速報";
 "settings.section.threshold" = "最小マグニチュード";
 "settings.section.notifications" = "通知";
 "settings.openNotificationSettings" = "通知設定を確認";
@@ -121,9 +112,9 @@
 "settings.section.about" = "このアプリについて";
 "settings.privacyPolicy" = "プライバシーポリシー";
 "settings.support" = "サポート";
-"settings.about.dataSource" = "地震データは気象庁・中国地震台网中心・各省地震局の情報を、Wolfx Open API経由で転送しています。";
+"settings.about.dataSource" = "地震データは、気象庁（JMA）の公開情報をWolfx Open API経由で取得しています。";
 "settings.about.version" = "バージョン %1$@";
-"settings.about.disclaimer" = "QuakeSignalは独立系アプリであり、気象庁・中国地震台网中心その他の政府機関とは関係ありません。";
+"settings.about.disclaimer" = "QuakeSignalは独立系アプリであり、気象庁その他の政府機関とは関係ありません。";
 
 /* Push notification loc-key pairs -- MUST stay in sync with
    backend/src/push/payload.ts LOC_KEYS. */
@@ -149,7 +140,7 @@
 "onboarding.title4" = "位置情報を選択";
 "onboarding.body4" = "都市を登録するか現在地を使うと、震息が地震までの距離をお知らせできます。";
 "onboarding.chooseLocation" = "位置情報を選択";
-"onboarding.disclaimer" = "震息は公式の警報プラットフォームではありません。情報は第三者の集約サービスによるもので、遅延や誤差が生じる場合があります。";
+"onboarding.disclaimer" = "震息は公式の警報プラットフォームではありません。Wolfx経由で気象庁発表の情報を表示するため、遅延や誤差が生じる場合があります。";
 
 /* ホーム */
 "home.status.normal" = "近くに地震情報はありません";
@@ -183,14 +174,13 @@
 "compass.nw" = "北西";
 
 /* 共通 */
-"shared.disclaimer" = "データは第三者の集約サービスに基づいています。正式な情報は公式発表をご確認ください。";
+"shared.disclaimer" = "気象庁の情報をWolfx経由で取得しています。必ず公式発表をご確認ください。";
 "quake.depth.label.plain" = "深さ";
 
 /* 全画面警報の再設計 */
 "alert.header.final" = "地震報告";
 "alert.header.cancelled" = "速報キャンセル";
 "alert.header.training" = "緊急地震速報（訓練）";
-"alert.countdown.label" = "主要動まで";
 "alert.step.drop" = "姿勢を低く";
 "alert.step.cover" = "頭を守る";
 "alert.step.holdOn" = "動かない";
@@ -269,11 +259,13 @@
 
 /* 情報源・免責事項 画面 */
 "disclaimer.badge" = "公式の警報プラットフォームではありません";
-"disclaimer.summary" = "データは第三者の集約サービスによるものです。正式な情報は公式発表をご確認ください。データには遅延・欠落・誤差が生じる場合があります。";
+"disclaimer.summary" = "気象庁の情報をWolfx経由で取得しています。正式な情報は公式発表をご確認ください。データには遅延・欠落・誤差が生じる場合があります。";
 "disclaimer.section.sources" = "データソース";
-"disclaimer.source.wolfx" = "Wolfx Open API（集約）";
-"disclaimer.source.cenc" = "中国地震台网中心 公開速報（集約）";
-"disclaimer.source.jma" = "気象庁 公開速報（集約）";
+"disclaimer.source.wolfx" = "Wolfx Open API（気象庁データの中継）";
+"disclaimer.source.jma" = "気象庁 公開地震情報";
+"disclaimer.source.jmaAttribution" = "出典：気象庁（JMA）。QuakeSignalが正規化・編集したもので、気象庁が作成または推薦したものではありません。公共データ利用規約1.0に基づき利用しています。";
+"disclaimer.source.jmaTerms" = "気象庁の利用規約・出典表示";
+"disclaimer.source.publicDataLicense" = "公共データ利用規約1.0";
 "disclaimer.notOfficial" = "震息は公式の政府地震警報プラットフォームではなく、公式情報の代わりにはなりません。";
 "disclaimer.mayBeDelayed" = "情報には遅延・欠落・誤差が生じる場合があります。必ず公式発表と地域の防災指示に従ってください。";
 "disclaimer.deliveryNotGuaranteed" = "通知の到達はOS、ネットワーク状況、端末設定に左右され、秒単位での到達を保証するものではありません。";
@@ -337,7 +329,20 @@
 "platform.historical.reports" = "過去の地震情報";
 "platform.tv.title" = "地震情報ダッシュボード";
 "platform.tv.foregroundOnly.detail" = "Apple TVでは、この画面を開いている間だけ地震情報を更新します。バックグラウンド通知の登録は行いません。";
-"platform.watch.foregroundOnly.detail" = "Watchアプリを開いて更新してください。安全なコンパニオン配信に対応するまでは、バックグラウンド通知はペアリングしたiPhoneで受信します。";
-"platform.watch.foregroundOnly.short" = "開いている間に更新。通知はペアリング中のiPhoneで受信します。";
+"platform.tv.alertSound.detail" = "Apple TVでの警告音の扱いを選択します。音声は自動再生されません。Siri Remoteで「試聴」または「再生」を選んだ場合のみ再生されます。";
+"platform.tv.alertSound.disclosure" = "Apple TVの警告はフォアグラウンドのみで、必ず画面上の安全案内を表示します。QuakeSignal緊急トーンと日本語安全案内は、「試聴」または「再生」を押した場合のみ再生されます。tvOSは通知音を鳴らさないため、「システム標準」は画面表示のみです。日本語音声には名古屋工業大学のHTS Voice「Mei」（CC BY 3.0）を使用しています。いずれもJアラートや気象庁の録音ではありません。";
+"platform.tv.alertSound.selected" = "選択中";
+"platform.tv.alertSound.notSelected" = "未選択";
+"platform.tv.alertSound.previewPlaying" = "試聴を再生中です。";
+"platform.tv.alertSound.previewUnavailable" = "選択したサウンドを再生できません。";
+"platform.tv.alertSound.system.detail" = "tvOSではシステム通知音は再生されません。この設定では、フォアグラウンド警告を画面表示のみで案内します。";
+"platform.tv.alertSound.system.visualOnly" = "Apple TVでは「システム標準」は画面表示のみです。";
+"platform.tv.alert.safetyTitle" = "今すぐ身を守ってください";
+"platform.tv.alert.playSelectedSound" = "選択したサウンドを再生";
+"platform.tv.alert.playSelectedSound.hint" = "Siri Remoteで押した後に、選択中のQuakeSignalサウンドを再生します。";
+"platform.watch.foregroundOnly.detail" = "Watchアプリを開いている間は、リアルタイムの警告と更新を受信できます。バックグラウンド通知はペアリング中のiPhoneで受信します。";
+"platform.watch.foregroundOnly.short" = "開いている間はリアルタイム警告。バックグラウンド通知はiPhoneで受信します。";
+"platform.watch.alertSound.changeOnPhone" = "ペアリング中のiPhoneの震息で音を選択します。「システム標準」ではWatchの警告触覚を使用し、カスタム音はこのアプリを開いている間にも再生します。";
+"platform.watch.emergency.foregroundOnly" = "気象庁の最新情報を開いている間に検出した警報です。配信は保証されません。地域の公式案内に従ってください。";
 "platform.refresh" = "更新";
 "platform.loading" = "地震情報を読み込み中…";

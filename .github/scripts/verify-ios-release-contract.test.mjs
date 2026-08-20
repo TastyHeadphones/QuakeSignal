@@ -30,13 +30,59 @@ const executableReleaseFiles = new Set(
 );
 const screenshotAutomationFiles = [
   "ios/ScreenshotAutomation/README.md",
+  "ios/ScreenshotAutomation/assemble-ios-screenshot-provenance.rb",
+  "ios/ScreenshotAutomation/assemble-ios-screenshot-provenance.test.rb",
+  "ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.rb",
+  "ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.test.rb",
   "ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb",
   "ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.test.rb",
+  "ios/ScreenshotAutomation/capture-ios-screenshot-set.sh",
+  "ios/ScreenshotAutomation/capture-ios-screenshot.sh",
+  "ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh",
+  "ios/ScreenshotAutomation/capture-maccatalyst-screenshot.sh",
   "ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh",
   "ios/ScreenshotAutomation/capture-platform-screenshot-set.sh",
   "ios/ScreenshotAutomation/capture-platform-screenshot.sh",
+  "ios/ScreenshotAutomation/ios-screenshot-build-binding.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-build-binding.test.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-capture-interface.test.sh",
+  "ios/ScreenshotAutomation/ios-screenshot-content-validator-fixture.swift",
+  "ios/ScreenshotAutomation/ios-screenshot-content-validator.swift",
+  "ios/ScreenshotAutomation/ios-screenshot-content-validator.test.sh",
+  "ios/ScreenshotAutomation/ios-screenshot-plan.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-plan.test.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-simulator-lease.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-swift-inputs.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb",
+  "ios/ScreenshotAutomation/maccatalyst-capture-interface.test.sh",
+  "ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.sh",
+  "ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.test.sh",
+  "ios/ScreenshotAutomation/maccatalyst-capture-window.swift",
+  "ios/ScreenshotAutomation/maccatalyst-content-validator-fixture.swift",
+  "ios/ScreenshotAutomation/maccatalyst-content-validator.test.sh",
+  "ios/ScreenshotAutomation/maccatalyst-flatten-png.swift",
+  "ios/ScreenshotAutomation/maccatalyst-process-guard.sh",
+  "ios/ScreenshotAutomation/maccatalyst-process-guard.test.sh",
+  "ios/ScreenshotAutomation/maccatalyst-screenshot-plan.rb",
+  "ios/ScreenshotAutomation/maccatalyst-screenshot-plan.test.rb",
+  "ios/ScreenshotAutomation/maccatalyst-validate-content.swift",
+  "ios/ScreenshotAutomation/maccatalyst-window-evidence.swift",
+  "ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.rb",
+  "ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.test.rb",
   "ios/ScreenshotAutomation/platform-screenshot-plan.rb",
   "ios/ScreenshotAutomation/platform-screenshot-plan.test.rb",
+  "ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.rb",
+  "ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.test.rb",
+  "ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.rb",
+  "ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.test.rb",
+  "ios/ScreenshotAutomation/safe-zip-tree.rb",
+  "ios/ScreenshotAutomation/safe-zip-tree.test.rb",
+  "ios/ScreenshotAutomation/screenshot-process-guard.sh",
+  "ios/ScreenshotAutomation/screenshot-process-guard.test.sh",
+  "ios/ScreenshotAutomation/screenshot-test-temp-root.rb",
+  "ios/ScreenshotAutomation/seal-screenshot-capture-package.rb",
+  "ios/ScreenshotAutomation/seal-screenshot-capture-package.test.rb",
   "ios/ScreenshotAutomation/validate-vision-map-content.rb",
   "ios/ScreenshotAutomation/validate-vision-map-content.test.rb",
   "ios/ScreenshotAutomation/validate-watch-foreground-badge.rb",
@@ -48,11 +94,36 @@ const screenshotAutomationFiles = [
   "ios/ScreenshotAutomation/watch-capture-guard.test.sh",
 ];
 const executableScreenshotAutomationFiles = new Set([
+  "ios/ScreenshotAutomation/capture-ios-screenshot-set.sh",
+  "ios/ScreenshotAutomation/capture-ios-screenshot.sh",
+  "ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.rb",
+  "ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.test.rb",
   "ios/ScreenshotAutomation/assemble-platform-screenshot-provenance.rb",
+  "ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh",
+  "ios/ScreenshotAutomation/capture-maccatalyst-screenshot.sh",
   "ios/ScreenshotAutomation/capture-platform-screenshot-interface.test.sh",
   "ios/ScreenshotAutomation/capture-platform-screenshot-set.sh",
   "ios/ScreenshotAutomation/capture-platform-screenshot.sh",
+  "ios/ScreenshotAutomation/ios-screenshot-build-binding.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-capture-interface.test.sh",
+  "ios/ScreenshotAutomation/ios-screenshot-content-validator.test.sh",
+  "ios/ScreenshotAutomation/ios-screenshot-plan.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-simulator-lease.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-swift-inputs.rb",
+  "ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb",
+  "ios/ScreenshotAutomation/maccatalyst-capture-interface.test.sh",
+  "ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.test.sh",
+  "ios/ScreenshotAutomation/maccatalyst-content-validator.test.sh",
+  "ios/ScreenshotAutomation/maccatalyst-process-guard.test.sh",
+  "ios/ScreenshotAutomation/maccatalyst-screenshot-plan.rb",
+  "ios/ScreenshotAutomation/maccatalyst-screenshot-plan.test.rb",
+  "ios/ScreenshotAutomation/parse-ios-screenshot-build-settings.rb",
   "ios/ScreenshotAutomation/platform-screenshot-plan.rb",
+  "ios/ScreenshotAutomation/prepare-ios-screenshot-build-source.rb",
+  "ios/ScreenshotAutomation/resolve-ios-screenshot-simulator.rb",
+  "ios/ScreenshotAutomation/safe-zip-tree.test.rb",
+  "ios/ScreenshotAutomation/seal-screenshot-capture-package.rb",
   "ios/ScreenshotAutomation/validate-vision-map-content.rb",
   "ios/ScreenshotAutomation/validate-vision-map-content.test.rb",
   "ios/ScreenshotAutomation/vision-map-capture-guard.sh",
@@ -318,18 +389,27 @@ async function writeFixture(options = {}) {
     join(repositoryRoot, "ios/AppStore/ExportOptions.plist"),
     "utf8",
   );
+  files["ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build8.json"] = await readFile(
+    join(repositoryRoot, "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build8.json"),
+    "utf8",
+  );
   for (const relativePath of [
     "ios/QuakeSignal/Supporting/Info.plist",
     "ios/QuakeSignalTV/Supporting/Info.plist",
     "ios/QuakeSignalVision/Supporting/Info.plist",
     "ios/QuakeSignalWatch/Supporting/Info.plist",
     "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements",
+    "ios/QuakeSignal/Supporting/QuakeSignal-Catalyst.entitlements",
     "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements",
+    "ios/QuakeSignal/App/AppDelegate.swift",
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
     "ios/QuakeSignal/Features/Detail/QuakeDetailView.swift",
+    "ios/QuakeSignal/Features/List/QuakeListView.swift",
+    "ios/QuakeSignal/Features/Home/QuakeRowView.swift",
     "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
     "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
     "ios/QuakeSignal/Features/Root/RootView.swift",
+    "ios/QuakeSignal/Features/Settings/SourceDisclaimerView.swift",
     "ios/QuakeSignal/Features/Settings/SettingsView.swift",
     "ios/QuakeSignal/Models/EEWEvent.swift",
     "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
@@ -337,13 +417,29 @@ async function writeFixture(options = {}) {
     "ios/QuakeSignal/Networking/WolfxClient.swift",
     "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
     "ios/QuakeSignal/Notifications/NotificationManager.swift",
+    "ios/QuakeSignal/Notifications/PushPayload.swift",
     "ios/QuakeSignal/State/AlertPolicy.swift",
+    "ios/QuakeSignal/State/AppSettings.swift",
     "ios/QuakeSignal/State/LocationManager.swift",
     "ios/QuakeSignal/State/QuakeStore.swift",
+    "ios/QuakeSignalShared/AlertSoundPreference.swift",
     "ios/QuakeSignalShared/ForegroundQuakeStore.swift",
     "ios/QuakeSignalShared/ScreenshotAutomation.swift",
+    "ios/QuakeSignalShared/WatchAlertPreferenceBridge.swift",
+    "ios/QuakeSignalShared/WatchForegroundEmergencyPolicy.swift",
+    "ios/QuakeSignalTV/TVAlertPreferences.swift",
+    "ios/QuakeSignalTV/TVAlertSoundSettingsView.swift",
     "ios/QuakeSignalTV/TVDashboardView.swift",
+    "ios/QuakeSignalTV/TVEmergencyAlertView.swift",
+    "ios/QuakeSignalTV/TVEmergencyMonitor.swift",
+    "ios/QuakeSignalTV/TVEmergencyPresentationPolicy.swift",
+    "ios/QuakeSignalTV/TVUserInitiatedAlertAudio.swift",
+    "ios/QuakeSignalTV/Supporting/PrivacyInfo.xcprivacy",
+    "ios/QuakeSignalWatch/QuakeSignalWatchApp.swift",
     "ios/QuakeSignalWatch/WatchDashboardView.swift",
+    "ios/QuakeSignalWatch/WatchEmergencyAlertAudio.swift",
+    "ios/QuakeSignalWatch/WatchForegroundEmergencyMonitor.swift",
+    "ios/QuakeSignalWatch/Supporting/PrivacyInfo.xcprivacy",
     "ios/QuakeSignal/Resources/PrivacyInfo.xcprivacy",
     "ios/QuakeSignal/Resources/en.lproj/Localizable.strings",
     "ios/QuakeSignal/Resources/ja.lproj/Localizable.strings",
@@ -363,6 +459,12 @@ async function writeFixture(options = {}) {
     "backend/cloudflare/scripts/verify-production-gates.mjs",
     "backend/cloudflare/scripts/wait-for-worker-readiness.mjs",
     "backend/cloudflare/staging/wrangler.staging.template.json",
+    ".github/scripts/assemble-apple-screenshot-release-set.rb",
+    ".github/scripts/assemble-apple-screenshot-release-set.test.rb",
+    ".github/scripts/verify-apple-screenshot-release-set.rb",
+    ".github/scripts/verify-apple-screenshot-release-set.test.rb",
+    "ios/AppStore/README.md",
+    "ios/AppStore/screenshot-manifest-v1.1-build8.template.json",
   ]) {
     files[relativePath] = await readFile(join(repositoryRoot, relativePath), "utf8");
   }
@@ -565,9 +667,10 @@ test("fails closed when the native screenshot automation inventory, bytes, or mo
   });
 });
 
-test("fails closed when checked-in Release entitlements gain a capability", async (t) => {
+test("fails closed when checked-in distribution entitlements gain a capability", async (t) => {
   for (const relativePath of [
     "ios/QuakeSignal/Supporting/QuakeSignal-Release.entitlements",
+    "ios/QuakeSignal/Supporting/QuakeSignal-Catalyst.entitlements",
     "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements",
   ]) {
     await withFixture(t, {}, async (root) => {
@@ -588,6 +691,75 @@ test("fails closed when checked-in Release entitlements gain a capability", asyn
       );
     });
   }
+});
+
+test("keeps the Mac Catalyst screenshot plan source-only and exact", async (t) => {
+  for (const [from, to] of [
+    ['"uploadApproved": false', '"uploadApproved": true'],
+    ['"captureSelector": "maccatalyst-map"', '"captureSelector": "maccatalyst-unreviewed"'],
+    ['"selectedPixels": [2560, 1600]', '"selectedPixels": [2500, 1600]'],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build8.json");
+      const source = await readFile(path, "utf8");
+      const mutated = source.replace(from, to);
+      assert.notEqual(mutated, source);
+      await writeFile(path, mutated, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /Mac Catalyst screenshot/i,
+      );
+    });
+  }
+});
+
+test("keeps the Mac Catalyst alert-preferences selector on the production Japanese voice destination", async (t) => {
+  for (const [relativePath, from, to] of [
+    [
+      "ios/QuakeSignalShared/ScreenshotAutomation.swift",
+      ".visionAlertPreferences, .macAlertPreferences:\n            .settings",
+      ".visionAlertPreferences, .macAlertPreferences:\n            .home",
+    ],
+    [
+      "ios/QuakeSignal/Features/Settings/SettingsView.swift",
+      "ScreenshotAutomation.isAlertPreferencesFrame(",
+      "ScreenshotAutomation.isAlertPreferencesFrameForMutation(",
+    ],
+    [
+      "ios/QuakeSignal/Features/Root/RootView.swift",
+      "ScreenshotAutomation.rootDestination(",
+      "ScreenshotAutomation.rootDestinationForMutation(",
+    ],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, relativePath);
+      const source = await readFile(path, "utf8");
+      const mutated = source.replace(from, to);
+      assert.notEqual(mutated, source);
+      await writeFile(path, mutated, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /Mac Catalyst alert-preferences selector/i,
+      );
+    });
+  }
+});
+
+test("keeps historical Mac Catalyst report rows date-qualified", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignal/Features/Home/QuakeRowView.swift");
+    const source = await readFile(path, "utf8");
+    const mutated = source.replace(
+      "formatted(date: .numeric, time: .shortened)",
+      "formatted(date: .omitted, time: .shortened)",
+    );
+    assert.notEqual(mutated, source);
+    await writeFile(path, mutated, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /report rows must show a calendar date/i,
+    );
+  });
 });
 
 test("fails closed when foreground-only Vision capability or localized disclosure drifts", async (t) => {
@@ -617,22 +789,28 @@ test("fails closed when foreground-only Vision capability or localized disclosur
       /foreground-only Apple platform policy must match the reviewed fingerprint/i,
     );
   });
-  for (const [from, to] of [
-    ["<key>NSPrivacyTracking</key>\n\t<false/>", "<key>NSPrivacyTracking</key>\n\t<true/>"],
-    ["<key>NSPrivacyCollectedDataTypes</key>\n\t<array/>", "<key>NSPrivacyCollectedDataTypes</key>\n\t<array><dict/></array>"],
-    ["<string>CA92.1</string>", "<string>UNREVIEWED.1</string>"],
+  for (const relativePath of [
+    "ios/QuakeSignalTV/Supporting/PrivacyInfo.xcprivacy",
+    "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy",
+    "ios/QuakeSignalWatch/Supporting/PrivacyInfo.xcprivacy",
   ]) {
-    await withFixture(t, {}, async (root) => {
-      const path = join(root, "ios/QuakeSignalVision/Resources/PrivacyInfo.xcprivacy");
-      const source = await readFile(path, "utf8");
-      const mutated = source.replace(from, to);
-      assert.notEqual(mutated, source);
-      await writeFile(path, mutated, "utf8");
-      await assert.rejects(
-        verifyIOSReleaseContract({ root }),
-        /must declare tracking false, no tracking domains or collected data, and only UserDefaults accessed for reason CA92\.1/i,
-      );
-    });
+    for (const [from, to] of [
+      ["<key>NSPrivacyTracking</key>\n\t<false/>", "<key>NSPrivacyTracking</key>\n\t<true/>"],
+      ["<key>NSPrivacyCollectedDataTypes</key>\n\t<array/>", "<key>NSPrivacyCollectedDataTypes</key>\n\t<array><dict/></array>"],
+      ["<string>CA92.1</string>", "<string>UNREVIEWED.1</string>"],
+    ]) {
+      await withFixture(t, {}, async (root) => {
+        const path = join(root, relativePath);
+        const source = await readFile(path, "utf8");
+        const mutated = source.replace(from, to);
+        assert.notEqual(mutated, source);
+        await writeFile(path, mutated, "utf8");
+        await assert.rejects(
+          verifyIOSReleaseContract({ root }),
+          /must declare tracking false, no tracking domains or collected data, and only UserDefaults accessed for reason CA92\.1/i,
+        );
+      });
+    }
   }
 });
 
@@ -640,8 +818,8 @@ test("fails closed when foreground lifecycle or nonpersistent Wolfx transport po
   for (const [relativePath, from, to] of [
     [
       "ios/QuakeSignal/State/AlertPolicy.swift",
-      "guard hasEventID, isSceneActive else {",
-      "guard hasEventID else {",
+      "guard payload.hasUsableMatchingEventSnapshot, isSceneActive else {",
+      "guard isSceneActive else {",
     ],
     [
       "ios/QuakeSignal/State/AlertPolicy.swift",
@@ -689,9 +867,29 @@ test("fails closed when foreground lifecycle or nonpersistent Wolfx transport po
       ".task",
     ],
     [
+      "ios/QuakeSignalTV/TVEmergencyMonitor.swift",
+      "self.ingest(snapshot.events, isBackfill: true)",
+      "self.ingest(snapshot.events, isBackfill: false)",
+    ],
+    [
+      "ios/QuakeSignalTV/TVAlertPreferences.swift",
+      "static func permitsAutomaticWarningPlayback(_ preference: AlertSoundPreference) -> Bool {\n        false\n    }",
+      "static func permitsAutomaticWarningPlayback(_ preference: AlertSoundPreference) -> Bool {\n        true\n    }",
+    ],
+    [
       "ios/QuakeSignalWatch/WatchDashboardView.swift",
       ".task(id: manualRefreshLifecycle.taskID(isSceneActive: scenePhase == .active))",
       ".task",
+    ],
+    [
+      "ios/QuakeSignalWatch/WatchForegroundEmergencyMonitor.swift",
+      "self.ingest(snapshot.events, isBackfill: true)",
+      "self.ingest(snapshot.events, isBackfill: false)",
+    ],
+    [
+      "ios/QuakeSignalShared/WatchAlertPreferenceBridge.swift",
+      "CFGetTypeID(number) == CFNumberGetTypeID()",
+      "CFGetTypeID(number) == CFBooleanGetTypeID()",
     ],
     [
       "ios/QuakeSignal/State/QuakeStore.swift",
@@ -789,15 +987,15 @@ test("tvOS and Watch manual refreshes are scene-bound instead of unstructured ta
   }
 });
 
-test("fails closed when Debug Simulator screenshot fixture gates drift", async (t) => {
+test("fails closed when Debug screenshot fixture gates drift", async (t) => {
   for (const [from, to] of [
     [
-      "#if DEBUG && targetEnvironment(simulator)\n        shouldActivate(",
-      "#if DEBUG\n        shouldActivate(",
+      "#if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst))\n        selectedFrame != nil",
+      "#if DEBUG\n        selectedFrame != nil",
     ],
     [
-      "#if DEBUG && targetEnvironment(simulator)\n        selectFrame(",
-      "#if targetEnvironment(simulator)\n        selectFrame(",
+      "#if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst))\n        guard let captureTarget = currentCaptureTarget else { return nil }",
+      "#if targetEnvironment(simulator)\n        guard let captureTarget = currentCaptureTarget else { return nil }",
     ],
     [
       "#else\n        []\n#endif",
@@ -1542,6 +1740,14 @@ test("fails closed when the native target, bundle, or embedding matrix drifts", 
       "        embed: true\n",
       "        embed: false\n",
     ),
+    (contents) => contents.replace(
+      "        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO\n",
+      "        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES\n",
+    ),
+    (contents) => contents.replace(
+      '        "ENABLE_APP_SANDBOX[sdk=macosx*]": YES\n',
+      '        "ENABLE_APP_SANDBOX[sdk=macosx*]": NO\n',
+    ),
   ];
   for (const mutate of mutations) {
     await withFixture(t, {}, async (root) => {
@@ -1549,7 +1755,7 @@ test("fails closed when the native target, bundle, or embedding matrix drifts", 
       await writeFile(path, mutate(await readFile(path, "utf8")), "utf8");
       await assert.rejects(
         verifyIOSReleaseContract({ root }),
-        /target-scoped|PRODUCT_BUNDLE_IDENTIFIER|embedded Watch dependency/i,
+        /target-scoped|PRODUCT_BUNDLE_IDENTIFIER|embedded Watch dependency|Mac Catalyst|Mac sandbox|Designed for iPad/i,
       );
     });
   }
@@ -1557,6 +1763,7 @@ test("fails closed when the native target, bundle, or embedding matrix drifts", 
 
 test("fails closed when generic Apple platform coverage or credential-free signing changes", async (t) => {
   for (const [from, to] of [
+    ["            destination: generic/platform=macOS,variant=Mac Catalyst\n", "            destination: generic/platform=iOS\n"],
     ["            scheme: QuakeSignalTV\n", "            scheme: QuakeSignal\n"],
     ["            destination: generic/platform=visionOS\n", "            destination: generic/platform=iOS\n"],
     [
@@ -1606,8 +1813,104 @@ test("fails closed when build or release jobs reintroduce Simulator downloads", 
 test("fails closed when the credential-free screenshot harness checks drift", async (t) => {
   for (const [from, to] of [
     [
+      "          QUAKESIGNAL_TEST_TEMP_ROOT: ${{ runner.temp }}\n",
+      "          QUAKESIGNAL_TEST_TEMP_ROOT: /tmp # skipped runner-scoped test temp root\n",
+    ],
+    [
+      "          RUNNER_TEMP: ${{ runner.temp }}\n",
+      "          RUNNER_TEMP: /tmp # skipped canonical runner temp root\n",
+    ],
+    [
+      "          TMPDIR: ${{ runner.temp }}\n",
+      "          TMPDIR: /tmp # skipped runner-scoped conventional temp root\n",
+    ],
+    [
       "          node .github/scripts/verify-ios-release-contract.mjs\n",
       "          true # skipped reviewed screenshot helper fingerprint\n",
+    ],
+    [
+      "          bash -n ios/ScreenshotAutomation/capture-ios-screenshot-set.sh\n",
+      "          true # skipped iOS/iPadOS atomic set syntax check\n",
+    ],
+    [
+      "          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-plan.test.rb\n",
+      "          true # skipped exact iOS/iPadOS frame-plan test\n",
+    ],
+    [
+      "          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-simulator-lease.rb\n",
+      "          true # skipped simulator lease helper syntax check\n",
+    ],
+    [
+      "          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb\n",
+      "          true # skipped simulator lease test syntax check\n",
+    ],
+    [
+      "          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb\n",
+      "          true # skipped simulator lease fail-closed test\n",
+    ],
+    [
+      "          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-swift-inputs.rb\n",
+      "          true # skipped Swift input allowlist helper syntax check\n",
+    ],
+    [
+      "          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb\n",
+      "          true # skipped Swift input allowlist test syntax check\n",
+    ],
+    [
+      "          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb\n",
+      "          true # skipped Swift input allowlist test\n",
+    ],
+    [
+      "          /usr/bin/ruby -c ios/ScreenshotAutomation/safe-zip-tree.rb\n",
+      "          true # skipped safe ZIP-tree helper syntax check\n",
+    ],
+    [
+      "          /usr/bin/ruby -c ios/ScreenshotAutomation/safe-zip-tree.test.rb\n",
+      "          true # skipped safe ZIP-tree test syntax check\n",
+    ],
+    [
+      "          /usr/bin/ruby ios/ScreenshotAutomation/safe-zip-tree.test.rb\n",
+      "          true # skipped safe ZIP-tree fail-closed test\n",
+    ],
+    [
+      "          /usr/bin/ruby -c ios/ScreenshotAutomation/screenshot-test-temp-root.rb\n",
+      "          true # skipped portable test temp-root helper syntax check\n",
+    ],
+    [
+      "          test -f ios/ScreenshotAutomation/safe-zip-tree.rb\n",
+      "          true # skipped safe ZIP-tree library mode check\n",
+    ],
+    [
+      "          test -f ios/ScreenshotAutomation/screenshot-test-temp-root.rb\n",
+      "          true # skipped portable test temp-root library mode check\n",
+    ],
+    [
+      "          test -x ios/ScreenshotAutomation/ios-screenshot-simulator-lease.rb\n",
+      "          true # skipped simulator lease executable mode check\n",
+    ],
+    [
+      "          test -x ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb\n",
+      "          true # skipped simulator lease test executable mode check\n",
+    ],
+    [
+      "          test -x ios/ScreenshotAutomation/ios-screenshot-swift-inputs.rb\n",
+      "          true # skipped Swift input helper executable mode check\n",
+    ],
+    [
+      "          test -x ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb\n",
+      "          true # skipped Swift input test executable mode check\n",
+    ],
+    [
+      "          test -x ios/ScreenshotAutomation/safe-zip-tree.test.rb\n",
+      "          true # skipped safe ZIP-tree test executable mode check\n",
+    ],
+    [
+      "          /usr/bin/ruby ios/ScreenshotAutomation/assemble-ios-screenshot-provenance.test.rb\n",
+      "          true # skipped iOS/iPadOS aggregate provenance test\n",
+    ],
+    [
+      "          bash ios/ScreenshotAutomation/ios-screenshot-capture-interface.test.sh\n",
+      "          true # skipped iOS/iPadOS atomic interface test\n",
     ],
     [
       "          bash -n ios/ScreenshotAutomation/watch-capture-guard.sh\n",
@@ -1654,9 +1957,45 @@ test("fails closed when the credential-free screenshot harness checks drift", as
       "          true # skipped screenshot interface fail-closed test\n",
     ],
     [
-      "          ios/ScreenshotAutomation/capture-platform-screenshot-set.sh \\\n" +
-        "            \"$PLATFORM_KEY\" \"$artifact_dir\"\n",
+      "              ios/ScreenshotAutomation/capture-platform-screenshot-set.sh \\\n" +
+        "                \"$PLATFORM_KEY\" \"$artifact_dir\"\n",
       "          true # skipped exact planned screenshot set capture\n",
+    ],
+    [
+      "              bash ios/ScreenshotAutomation/capture-ios-screenshot-set.sh \"$artifact_dir\"\n",
+      "              true # skipped exact iOS/iPadOS screenshot set capture\n",
+    ],
+    [
+      "          rm -- \"$manifest\"\n",
+      "          true # skipped removal of the superseded initial seal\n",
+    ],
+    [
+      "          /usr/bin/ruby ios/ScreenshotAutomation/seal-screenshot-capture-package.rb \\\n" +
+        "            \"$PLATFORM_KEY\" \"$SOURCE_COMMIT\" \"$CANDIDATE_DIR\" \"$manifest\"\n",
+      "          true # skipped final capture-package reseal\n",
+    ],
+    [
+      "          /usr/bin/ditto -c -k --norsrc --keepParent \"$CANDIDATE_DIR\" \"$candidate_zip\"\n",
+      "          true # skipped exact conventional raw-package ZIP\n",
+    ],
+    [
+      "            ${{ env.CANDIDATE_ZIP }}\n",
+      "            # skipped independent inner ZIP upload\n",
+    ],
+    [
+      '          final_sha="$(git rev-parse --verify HEAD)"\n',
+      '          final_sha="$GITHUB_SHA" # skipped final source revision proof\n',
+    ],
+    [
+      '          final_status="$(git status --porcelain=v1 --untracked-files=all)"\n',
+      '          final_status="" # skipped final clean-tree proof\n',
+    ],
+    [
+      '          if [ -e "$debug_local_override" ] || [ -L "$debug_local_override" ]; then\n' +
+        '            echo "::error::Ignored Debug.local.xcconfig appeared before screenshot artifact upload"\n' +
+        '            exit 1\n' +
+        '          fi\n',
+      '          true # skipped final ignored Debug.local override rejection\n',
     ],
     [
       '          pre_capture_sha="$(git rev-parse --verify HEAD)"\n',
@@ -1709,7 +2048,130 @@ test("fails closed when normal push and pull-request lint omits a Vision screens
       const path = join(root, ".github/workflows/workflow-lint.yml");
       const contents = await readFile(path, "utf8");
       assert.ok(contents.includes(command), `workflow-lint fixture must contain ${command.trim()}`);
-      await writeFile(path, contents.replace(command, ""), "utf8");
+      await writeFile(path, contents.replaceAll(command, ""), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /complete workflow directory must match the reviewed parsed-content fingerprint/i,
+      );
+    });
+  }
+});
+
+test("fails closed when normal push and pull-request lint omits an iOS screenshot guard", async (t) => {
+  for (const command of [
+    "      - \"ios/AppStore/**\"\n",
+    "      - \"ios/ScreenshotAutomation/**\"\n",
+    "          QUAKESIGNAL_TEST_TEMP_ROOT: ${{ runner.temp }}\n",
+    "          RUNNER_TEMP: ${{ runner.temp }}\n",
+    "          TMPDIR: ${{ runner.temp }}\n",
+    "          bash -n ios/ScreenshotAutomation/capture-ios-screenshot-set.sh\n",
+    "          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-build-binding.rb\n",
+    "          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-simulator-lease.rb\n",
+    "          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb\n",
+    "          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-swift-inputs.rb\n",
+    "          /usr/bin/ruby -c ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb\n",
+    "          /usr/bin/ruby -c ios/ScreenshotAutomation/safe-zip-tree.rb\n",
+    "          /usr/bin/ruby -c ios/ScreenshotAutomation/safe-zip-tree.test.rb\n",
+    "          /usr/bin/ruby -c ios/ScreenshotAutomation/screenshot-test-temp-root.rb\n",
+    "          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-plan.test.rb\n",
+    "          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-simulator-lease.test.rb\n",
+    "          /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-swift-inputs.test.rb\n",
+    "          /usr/bin/ruby ios/ScreenshotAutomation/assemble-ios-screenshot-provenance.test.rb\n",
+    "          bash ios/ScreenshotAutomation/ios-screenshot-capture-interface.test.sh\n",
+    "          bash ios/ScreenshotAutomation/screenshot-process-guard.test.sh\n",
+    "          /usr/bin/ruby ios/ScreenshotAutomation/safe-zip-tree.test.rb\n",
+    "          /usr/bin/ruby -c .github/scripts/assemble-apple-screenshot-release-set.rb\n",
+    "          /usr/bin/ruby -c .github/scripts/assemble-apple-screenshot-release-set.test.rb\n",
+    "          /usr/bin/ruby -c .github/scripts/verify-apple-screenshot-release-set.rb\n",
+    "          /usr/bin/ruby -c .github/scripts/verify-apple-screenshot-release-set.test.rb\n",
+    "          /usr/bin/ruby .github/scripts/assemble-apple-screenshot-release-set.test.rb\n",
+    "          /usr/bin/ruby .github/scripts/verify-apple-screenshot-release-set.test.rb\n",
+    "          /usr/bin/ruby .github/scripts/verify-apple-screenshot-release-set.rb\n",
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/workflow-lint.yml");
+      const contents = await readFile(path, "utf8");
+      assert.ok(contents.includes(command), `workflow-lint fixture must contain ${command.trim()}`);
+      await writeFile(path, contents.replaceAll(command, ""), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /complete workflow directory must match the reviewed parsed-content fingerprint/i,
+      );
+    });
+  }
+});
+
+test("fails closed when normal push and pull-request lint omits foreground TV emergency coverage", async (t) => {
+  for (const command of [
+    "      - \"ios/QuakeSignalShared/**\"\n",
+    "      - \"ios/QuakeSignalTests/**\"\n",
+    "      - \"ios/QuakeSignalTV/**\"\n",
+    "      - \"ios/QuakeSignalTVTests/**\"\n",
+    "      - \"ios/QuakeSignalWatch/**\"\n",
+    "            ios/QuakeSignalTV/TVEmergencyPresentationPolicy.swift \\\n",
+    "            ios/QuakeSignalTVTests/TVEmergencyPresentationPolicyStandaloneTests.swift \\\n",
+    "          \"$RUNNER_TEMP/tvos-emergency-policy-tests\"\n",
+    "            ios/QuakeSignalShared/AlertSoundPreference.swift \\\n",
+    "            ios/QuakeSignalTV/TVAlertPreferences.swift \\\n",
+    "            ios/QuakeSignalTVTests/TVAlertAudioPolicyStandaloneTests.swift \\\n",
+    "          \"$RUNNER_TEMP/tvos-alert-audio-policy-tests\"\n",
+    "          /usr/bin/ruby -c ios/QuakeSignalTVTests/tvos-emergency-interface.test.rb\n",
+    "          /usr/bin/ruby ios/QuakeSignalTVTests/tvos-emergency-interface.test.rb\n",
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/workflow-lint.yml");
+      const contents = await readFile(path, "utf8");
+      assert.ok(contents.includes(command), `workflow-lint fixture must contain ${command.trim()}`);
+      await writeFile(path, contents.replaceAll(command, ""), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /complete workflow directory must match the reviewed parsed-content fingerprint/i,
+      );
+    });
+  }
+});
+
+test("fails closed when the native Apple screenshot harness is assigned to a non-macOS runner", async (t) => {
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, ".github/workflows/workflow-lint.yml");
+    const contents = await readFile(path, "utf8");
+    assert.ok(contents.includes("    runs-on: macos-latest\n"));
+    await writeFile(path, contents.replace("    runs-on: macos-latest\n", "    runs-on: ubuntu-latest\n"), "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /native Apple screenshot harness must run on macos-latest/i,
+    );
+  });
+});
+
+test("fails closed when normal push and pull-request lint omits the Mac Catalyst screenshot harness", async (t) => {
+  for (const command of [
+    "      - \"ios/QuakeSignal/**\"\n",
+    "          bash -n ios/ScreenshotAutomation/capture-maccatalyst-screenshot.sh\n",
+    "          bash -n ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh\n",
+    "          bash -n ios/ScreenshotAutomation/maccatalyst-capture-interface.test.sh\n",
+    "          bash -n ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.sh\n",
+    "          bash -n ios/ScreenshotAutomation/maccatalyst-content-validator.test.sh\n",
+    "          bash -n ios/ScreenshotAutomation/maccatalyst-process-guard.sh\n",
+    "          /usr/bin/ruby -c ios/ScreenshotAutomation/maccatalyst-screenshot-plan.rb\n",
+    "          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.rb\n",
+    "          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-capture-window.swift\n",
+    "          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-content-validator-fixture.swift\n",
+    "          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-flatten-png.swift\n",
+    "          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-validate-content.swift\n",
+    "          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-window-evidence.swift\n",
+    "          /usr/bin/ruby ios/ScreenshotAutomation/maccatalyst-screenshot-plan.test.rb\n",
+    "          /usr/bin/ruby ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.test.rb\n",
+    "          bash ios/ScreenshotAutomation/maccatalyst-capture-interface.test.sh\n",
+    "          bash ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.test.sh\n",
+    "          bash ios/ScreenshotAutomation/maccatalyst-content-validator.test.sh\n",
+    "          bash ios/ScreenshotAutomation/maccatalyst-process-guard.test.sh\n",
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/workflow-lint.yml");
+      const contents = await readFile(path, "utf8");
+      assert.ok(contents.includes(command), `workflow-lint fixture must contain ${command.trim()}`);
+      await writeFile(path, contents.replaceAll(command, ""), "utf8");
       await assert.rejects(
         verifyIOSReleaseContract({ root }),
         /complete workflow directory must match the reviewed parsed-content fingerprint/i,

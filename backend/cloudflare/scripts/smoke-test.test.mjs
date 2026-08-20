@@ -156,7 +156,7 @@ test("rejects a malformed effective health allow-list", () => {
   );
 });
 
-test("requires the exact fresh seven-source Wolfx health inventory", () => {
+test("requires the exact fresh JMA-only Wolfx health inventory", () => {
   assert.doesNotThrow(() => assertReadyWolfxSourceHealth({ sources: readySources() }));
   const missing = readySources();
   delete missing.jma_eew;
@@ -168,7 +168,7 @@ test("requires the exact fresh seven-source Wolfx health inventory", () => {
   ]) {
     assert.throws(
       () => assertReadyWolfxSourceHealth({ sources }),
-      /all seven fresh Wolfx sources/i,
+      /exactly the two approved JMA sources/i,
     );
   }
 });

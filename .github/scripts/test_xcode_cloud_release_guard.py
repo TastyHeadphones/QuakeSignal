@@ -46,6 +46,12 @@ def environment(scheme="QuakeSignal"):
     }
 
 
+def catalyst_environment():
+    value = environment("QuakeSignal")
+    value["CI_PRODUCT_PLATFORM"] = guard.MAC_CATALYST_TARGET["platform"]
+    return value
+
+
 def source_state():
     return {
         "origin_url": "https://github.com/TastyHeadphones/QuakeSignal.git",
@@ -96,6 +102,13 @@ class GuardContextTests(unittest.TestCase):
                 source_state=source_state(),
             )
             self.assertEqual(result["scheme"], scheme)
+        catalyst = guard.verify_context(
+            catalyst_environment(),
+            phase="post-clone",
+            repository_root=REPOSITORY_ROOT,
+            source_state=source_state(),
+        )
+        self.assertEqual(catalyst["verifier"], "maccatalyst")
         for scheme, old_name in (
             ("QuakeSignal", "QuakeSignal iOS App Store Release"),
             ("QuakeSignalTV", "QuakeSignal tvOS App Store Release"),
@@ -169,6 +182,21 @@ class GuardContextTests(unittest.TestCase):
             guard.verify_context(future, phase="pre-xcodebuild")["verifier"],
             "visionos",
         )
+
+    def test_quakesignal_scheme_selects_exact_ios_or_mac_catalyst_route(self):
+        self.assertEqual(
+            guard.verify_context(environment(), phase="pre-xcodebuild")["verifier"],
+            "ios",
+        )
+        catalyst = guard.verify_context(catalyst_environment(), phase="pre-xcodebuild")
+        self.assertEqual(catalyst["platform"], "macOS")
+        self.assertEqual(catalyst["verifier"], "maccatalyst")
+
+        for value in ("", "tvOS", "watchOS"):
+            mutated = environment()
+            mutated["CI_PRODUCT_PLATFORM"] = value
+            with self.assertRaisesRegex(guard.ReleaseGuardError, "CI_PRODUCT_PLATFORM"):
+                guard.verify_context(mutated, phase="pre-xcodebuild")
 
     def test_post_clone_requires_clean_exact_remote_main_proof(self):
         for key, value in (
@@ -273,6 +301,11 @@ class GuardContextTests(unittest.TestCase):
                 environment=environment(scheme),
                 remote_verifier=lambda: calls.append(scheme),
             )
+        guard.run_phase(
+            "pre-xcodebuild",
+            environment=catalyst_environment(),
+            remote_verifier=lambda: calls.append("maccatalyst"),
+        )
         self.assertEqual(calls, [])
 
     def test_checked_in_bounded_source_contract_and_fingerprint_pass(self):
@@ -323,7 +356,8 @@ class GuardContextTests(unittest.TestCase):
             for relative in guard.PLATFORM_CAPABILITY_POLICY_PATHS
         }
         mutated = dict(sources)
-        path = guard.PLATFORM_CAPABILITY_POLICY_PATHS[0]
+        path = "ios/QuakeSignal/App/PlatformCapabilities.swift"
+        self.assertIn(path, guard.PLATFORM_CAPABILITY_POLICY_PATHS)
         mutated[path] = mutated[path].replace("#elseif os(visionOS)\n        false", "#elseif os(visionOS)\n        true")
         self.assertNotEqual(mutated[path], sources[path])
         with self.assertRaisesRegex(guard.ReleaseGuardError, "platform capability policy fingerprint"):
@@ -348,26 +382,145 @@ class GuardContextTests(unittest.TestCase):
         with self.assertRaisesRegex(guard.ReleaseGuardError, "platform capability policy fingerprint"):
             guard.verify_platform_capabilities_sources(mac_specific_copy)
 
-    def test_platform_capability_policy_rejects_vision_privacy_mutations(self):
+    def test_platform_capability_policy_rejects_foreground_privacy_mutations(self):
         sources = {
             relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
             for relative in guard.PLATFORM_CAPABILITY_POLICY_PATHS
         }
-        path = guard.VISION_PRIVACY_MANIFEST_PATH
-        for old, new in (
-            ("<key>NSPrivacyTracking</key>\n\t<false/>", "<key>NSPrivacyTracking</key>\n\t<true/>"),
-            ("<key>NSPrivacyCollectedDataTypes</key>\n\t<array/>", "<key>NSPrivacyCollectedDataTypes</key>\n\t<array><dict/></array>"),
-            ("<string>CA92.1</string>", "<string>UNREVIEWED.1</string>"),
-        ):
-            with self.subTest(replacement=new):
+        for path in guard.FOREGROUND_PRIVACY_MANIFEST_PATHS:
+            for old, new in (
+                ("<key>NSPrivacyTracking</key>\n\t<false/>", "<key>NSPrivacyTracking</key>\n\t<true/>"),
+                ("<key>NSPrivacyCollectedDataTypes</key>\n\t<array/>", "<key>NSPrivacyCollectedDataTypes</key>\n\t<array><dict/></array>"),
+                ("<string>CA92.1</string>", "<string>UNREVIEWED.1</string>"),
+            ):
+                with self.subTest(path=path, replacement=new):
+                    mutated = dict(sources)
+                    mutated[path] = mutated[path].replace(old, new, 1)
+                    self.assertNotEqual(mutated[path], sources[path])
+                    with self.assertRaisesRegex(
+                        guard.ReleaseGuardError,
+                        "must declare tracking false, no tracking domains or collected data",
+                    ):
+                        guard.verify_platform_capabilities_sources(mutated)
+
+    def test_platform_capability_policy_enforces_the_exact_jma_only_boundary(self):
+        sources = {
+            relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+            for relative in guard.PLATFORM_CAPABILITY_POLICY_PATHS
+        }
+        self.assertEqual(guard.REQUIRED_WOLFX_SOURCES, ("jma_eew", "jma_eqlist"))
+        guard.verify_jma_only_source_contract(sources)
+
+        mutations = (
+            (
+                "ios/QuakeSignal/Networking/WolfxClient.swift",
+                'static let sources = ["jma_eew", "jma_eqlist"]',
+                'static let sources = ["jma_eew", "jma_eqlist", "cenc_eew"]',
+                "disabled non-JMA feed surface",
+            ),
+            (
+                "ios/QuakeSignal/Networking/LiveSocketClient.swift",
+                'return ["query_jmaeew"]',
+                "return []",
+                "direct JMA WebSocket contract",
+            ),
+            (
+                "ios/QuakeSignal/Networking/LiveSocketClient.swift",
+                "WolfxNormalizer.validatedEvents(source: source, data: data)",
+                "WolfxNormalizer.events(source: source, data: data)",
+                "WebSocket readiness",
+            ),
+            (
+                "ios/QuakeSignal/Networking/LiveSocketClient.swift",
+                'object["type"] as? String == source',
+                'object["type"] as? String != nil',
+                "WebSocket readiness",
+            ),
+            (
+                "ios/QuakeSignal/Networking/LiveSocketClient.swift",
+                "case .keepAlive:\n            return wasReady",
+                "case .keepAlive:\n            return true",
+                "WebSocket readiness",
+            ),
+            (
+                "ios/QuakeSignal/Networking/LiveSocketClient.swift",
+                "case .invalid:\n            return false",
+                "case .invalid:\n            return wasReady",
+                "WebSocket readiness",
+            ),
+            (
+                "ios/QuakeSignal/Networking/LiveSocketClient.swift",
+                "let nextState = readyRoutes.count == Self.routes.count",
+                "let nextState = !readyRoutes.isEmpty",
+                "WebSocket readiness",
+            ),
+            (
+                "ios/QuakeSignal/Networking/LiveSocketClient.swift",
+                "readyRoutes.remove(route)",
+                "_ = route // readiness incorrectly preserved",
+                "WebSocket readiness",
+            ),
+            (
+                "ios/QuakeSignal/Networking/WolfxClient.swift",
+                'let serial = positiveInteger(value["Serial"])',
+                "let serial = 1",
+                "raw Serial field",
+            ),
+            (
+                "ios/QuakeSignal/State/AppSettings.swift",
+                "static let allSources = WolfxClient.sources",
+                'static let allSources = ["jma_eew"]',
+                "AppSettings",
+            ),
+        )
+        for path, old, new, message in mutations:
+            with self.subTest(path=path):
                 mutated = dict(sources)
                 mutated[path] = mutated[path].replace(old, new, 1)
                 self.assertNotEqual(mutated[path], sources[path])
-                with self.assertRaisesRegex(
-                    guard.ReleaseGuardError,
-                    "must declare tracking false, no tracking domains or collected data",
-                ):
-                    guard.verify_platform_capabilities_sources(mutated)
+                with self.assertRaisesRegex(guard.ReleaseGuardError, message):
+                    guard.verify_jma_only_source_contract(mutated)
+
+    def test_foreground_push_suppression_requires_an_immediately_usable_snapshot(self):
+        sources = {
+            relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+            for relative in guard.PLATFORM_CAPABILITY_POLICY_PATHS
+        }
+        guard.verify_foreground_push_presentation_contract(sources)
+
+        mutations = (
+            (
+                "ios/QuakeSignal/Notifications/PushPayload.swift",
+                "WolfxClient.sources.contains($0) ? $0 : nil",
+                "$0",
+                "structurally usable",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/PushPayload.swift",
+                'event.id == "\\(sourceID):\\(eventID)",',
+                "true,",
+                "structurally usable",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "guard payload.hasUsableMatchingEventSnapshot, isSceneActive else {",
+                "guard isSceneActive else {",
+                "may be suppressed only",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/NotificationManager.swift",
+                "return [.banner, .sound, .list]",
+                "return [.list]",
+                "preserve the system banner and sound",
+            ),
+        )
+        for path, old, new, message in mutations:
+            with self.subTest(path=path):
+                mutated = dict(sources)
+                mutated[path] = mutated[path].replace(old, new, 1)
+                self.assertNotEqual(mutated[path], sources[path])
+                with self.assertRaisesRegex(guard.ReleaseGuardError, message):
+                    guard.verify_foreground_push_presentation_contract(mutated)
 
     def test_platform_capability_policy_rejects_lifecycle_and_cache_mutations(self):
         sources = {
@@ -375,11 +528,6 @@ class GuardContextTests(unittest.TestCase):
             for relative in guard.PLATFORM_CAPABILITY_POLICY_PATHS
         }
         mutations = (
-            (
-                "ios/QuakeSignal/State/AlertPolicy.swift",
-                "guard hasEventID, isSceneActive else {",
-                "guard hasEventID else {",
-            ),
             (
                 "ios/QuakeSignal/State/AlertPolicy.swift",
                 "event.isActiveWarning && WarningFreshnessPolicy.isFresh(event, now: now)",
@@ -466,12 +614,12 @@ class GuardContextTests(unittest.TestCase):
         self.assertIn(path, guard.PLATFORM_CAPABILITY_POLICY_PATHS)
         mutations = (
             (
-                "#if DEBUG && targetEnvironment(simulator)\n        shouldActivate(",
-                "#if DEBUG\n        shouldActivate(",
+                "#if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst))\n        selectedFrame != nil",
+                "#if DEBUG\n        selectedFrame != nil",
             ),
             (
-                "#if DEBUG && targetEnvironment(simulator)\n        selectFrame(",
-                "#if targetEnvironment(simulator)\n        selectFrame(",
+                "#if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst))\n        guard let captureTarget = currentCaptureTarget else { return nil }",
+                "#if targetEnvironment(simulator)\n        guard let captureTarget = currentCaptureTarget else { return nil }",
             ),
             (
                 "#else\n        []\n#endif",
@@ -534,8 +682,13 @@ class GuardContextTests(unittest.TestCase):
             guard.verify_release_entitlements(mutated, guard.RELEASE_ENTITLEMENT_PATHS[0])
         with self.assertRaisesRegex(guard.ReleaseGuardError, "exactly the reviewed"):
             guard.verify_release_entitlements(
-                {"aps-environment": "production"},
+                {"com.apple.security.app-sandbox": False},
                 guard.RELEASE_ENTITLEMENT_PATHS[1],
+            )
+        with self.assertRaisesRegex(guard.ReleaseGuardError, "exactly the reviewed"):
+            guard.verify_release_entitlements(
+                {"aps-environment": "production"},
+                guard.RELEASE_ENTITLEMENT_PATHS[2],
             )
 
     def test_source_fingerprint_rejects_development_policy_variables(self):
@@ -620,9 +773,12 @@ class LiveWorkerContractTests(unittest.TestCase):
 
     def test_live_release_contract_rejects_stale_or_incomplete_legal_pages(self):
         for target_path, marker in (
-            ("/privacy", "QuakeSignal · Effective 19 August 2026"),
+            ("/privacy", "QuakeSignal · Effective 20 August 2026"),
             ("/privacy", "Only the app when running on an iPhone or iPad can register"),
+            ("/privacy", "watches only the jma_eew and jma_eqlist Wolfx feeds"),
+            ("/privacy", "does not create an earthquake forecast or predict local intensity or arrival time"),
             ("/support", "support cannot identify the old registration from a public issue"),
+            ("/support", "do not predict local intensity or arrival time"),
             ("/terms", "QuakeSignal · Effective 12 August 2026"),
         ):
             with self.subTest(target_path=target_path, marker=marker):

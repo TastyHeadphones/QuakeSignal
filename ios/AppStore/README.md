@@ -10,37 +10,44 @@ token, an exact current location, or a test-push result in product-page imagery.
 
 | App Store Connect field | Versioned source |
 | --- | --- |
-| English description / promotional text / keywords | `en-US/` |
-| Japanese and Simplified Chinese draft copy | `ja/`, `zh-Hans/` (do not upload without name approval) |
+| English subtitle / description / promotional text / keywords | `en-US/` |
+| Japanese and Simplified Chinese subtitle and other draft copy | `ja/`, `zh-Hans/` (do not upload without name approval) |
 | App Review notes | `review-notes.txt` |
 | Submission-answer worksheet | `submission-answers.md` |
 | Pre-submission checklist | `submission-checklist.md` |
 | Historical build-7 screenshot evidence | `screenshot-manifest-v1.1.json`, `screenshot-provenance-v1.1.json` |
-| Unapproved build-8 candidate manifest/provenance | `screenshot-manifest-v1.1-build8.json`, `screenshot-provenance-v1.1-build8.json` |
-| Unapproved build-8 English candidate images | `screenshots-v1.1-build8/en-US/` |
+| Historical, superseded build-8 candidate manifest/provenance | `screenshot-manifest-v1.1-build8.json`, `screenshot-provenance-v1.1-build8.json` |
+| Historical, superseded build-8 English candidate images | `screenshots-v1.1-build8/en-US/` |
+| Immutable historical screenshot catalog and final-set pointer | `screenshot-set-index-v1.1-build8.json` |
+| Future complete final-commit Apple release sets | `screenshot-release-sets-v1.1-build8/<source-commit>/` |
 | Coordinated native-platform release runbook | `apple-platform-release.md` |
-| tvOS / visionOS / Watch metadata and screenshot plans | `platforms/` |
-| Unapproved tvOS / visionOS / Watch candidate packages | `platforms/screenshot-candidates-v1.1-build8/` |
+| tvOS / visionOS / Watch / Mac Catalyst metadata and screenshot plans | `platforms/` |
+| Historical, superseded tvOS / visionOS / Watch candidate packages | `platforms/screenshot-candidates-v1.1-build8/` |
+| Release-owner Xcode Cloud, Mac, and content-rights decisions | `release-owner-decisions-2026-08-20.md` |
 | Read-only App Store Connect state and safe portal sequence | Historical `app-store-connect-portal-audit-2026-08-19.md` plus latest `app-store-connect-portal-audit-2026-08-20.md` addendum |
 
 ## App record
 
-The native iOS/iPadOS, tvOS, and visionOS products share the existing
-**QuakeSignal** App Store Connect record (Apple ID `6800642443`) and
+The native iOS/iPadOS, tvOS, visionOS, and Mac Catalyst products share the
+existing **QuakeSignal** App Store Connect record (Apple ID `6800642443`) and
 `com.quakesignal.app` bundle ID, forming Apple's multi-platform Universal
 Purchase relationship. The embedded Watch companion also belongs to the iOS
-product in that record. The separate Tauri macOS client uses
-`com.quakesignal.desktop` and Apple ID `6800642853`; do not select macOS in the
-native shared record, attach the Tauri package there, or create a duplicate
-record.
+product in that record. The release owner selected the SwiftUI Mac Catalyst
+target as the sole Mac storefront route and decided to disable Designed for
+iPad on Mac; the live App Store Connect availability checkbox still must be
+cleared and saved during the authorized portal reconciliation step.
+Do not attach or submit the separate Tauri package from Apple ID `6800642853`
+for this release.
 
 The latest read-only portal state is in
 [`app-store-connect-portal-audit-2026-08-20.md`](./app-store-connect-portal-audit-2026-08-20.md).
-Mac Catalyst versus Designed for iPad on Mac remains an explicit release-owner
-choice. Make no portal mutation until that route and its portal mapping are
-recorded; neither choice changes the Tauri app's separate record.
+The later product decisions are recorded in
+[`release-owner-decisions-2026-08-20.md`](./release-owner-decisions-2026-08-20.md).
+Mac Catalyst still requires its own signed build-8 evidence, QA, screenshots,
+metadata, and named approval before the shared macOS draft is used.
 
 - Name: `QuakeSignal`
+- English (U.S.) subtitle: `Earthquake Reports & Safety`
 - Primary language: English (U.S.)
 - Team: `UniSphereco LLC` (`5TT564H883`)
 - Bundle ID: `com.quakesignal.app`
@@ -66,7 +73,7 @@ checked-in release candidate is coordinated as version `1.1`,
 `CFBundleVersion` `8`: `CURRENT_PROJECT_VERSION` is `8`, the Worker App Attest
 allow-list is `1,2,3,4,5,6,7,8`, and the protected archive workflows default
 to `8`. Older allowlisted versions remain deliberately available to installed
-clients. Deploy all migrations through `0011` and the matching Worker policy
+clients. Deploy all migrations through `0012` and the matching Worker policy
 before uploading build `8`; each protected archive lane then proves the live
 `/healthz` fingerprint admits that build before certificate import.
 
@@ -170,22 +177,35 @@ pending field.
 > manifest, provenance, and ten English iPhone/iPad files are source-frozen
 > Debug Simulator candidates only: their status is
 > `unapproved-debug-simulator-candidate`, `uploadApproved` and
-> `signedReleaseEvidence` are `false`, and `reviewer` is `null`.
+> `signedReleaseEvidence` are `false`, and `reviewer` is `null`. Those bytes
+> predate the current JMA-only and Mac Catalyst source changes, so they are now
+> historical evidence and intentionally fail the current-source guard.
+> Recapture the complete final build-8 commit; never rewrite their provenance.
+
+[`screenshot-set-index-v1.1-build8.json`](./screenshot-set-index-v1.1-build8.json)
+locks all four historical byte trees independently of current-source
+eligibility. Its `activeReleaseSet` is deliberately `null` until one exact
+final source commit has a complete 26-frame set: 10 iPhone/iPad, 3 Apple TV,
+3 Apple Watch, 5 Apple Vision Pro, and 5 Mac Catalyst images. A future set
+belongs only under
+`screenshot-release-sets-v1.1-build8/<40-character-source-commit>/`; do not
+reuse any occupied historical directory.
 
 - 1024 × 1024 App Store icon: already in `Assets.xcassets`
 - Historical build-7 screenshot inventory: exactly the 30 files declared by
   [`screenshot-manifest-v1.1.json`](./screenshot-manifest-v1.1.json) and
   [`screenshot-provenance-v1.1.json`](./screenshot-provenance-v1.1.json)
-- Build-8 candidate inventory: exactly five English (U.S.) 6.5-inch iPhone
+- Historical build-8 candidate inventory: exactly five English (U.S.) 6.5-inch iPhone
   portraits at `1242 × 2688` and five English (U.S.) 13-inch iPad portraits at
   `2064 × 2752`, as declared by
   [`screenshot-manifest-v1.1-build8.json`](./screenshot-manifest-v1.1-build8.json)
   and
   [`screenshot-provenance-v1.1-build8.json`](./screenshot-provenance-v1.1-build8.json)
-- Native build-8 candidate inventory: exactly three Apple TV PNGs at
+- Historical native build-8 candidate inventory: exactly three Apple TV PNGs at
   `1920 × 1080`, three Apple Watch PNGs at `410 × 502`, and five Apple Vision
   Pro PNGs at `3840 × 2160`, with full unapproved provenance under
-  [`platforms/screenshot-candidates-v1.1-build8/`](./platforms/screenshot-candidates-v1.1-build8/)
+  [`platforms/screenshot-candidates-v1.1-build8/`](./platforms/screenshot-candidates-v1.1-build8/).
+  These packages are bound to b461 and do not satisfy the current-source gate.
 - No build-8 Japanese or Simplified Chinese screenshot set is captured or
   publishable until its localized name, trademark, and availability approvals
   are recorded.
@@ -198,50 +218,93 @@ iPad-capable target and the final map/alert-preference UI.
 
 ### Capture workflow
 
-1. Freeze the full source commit and run the required tests. Build the
-   source-matching Debug Simulator target with signing disabled and verify the
-   ignored `Debug.local.xcconfig` override is absent. Never change the build
-   number in the historical build-7 provenance.
-2. Capture both the primary 6.5-inch iPhone and 13-inch iPad candidate sets
-   with the fixture's exact launch argument and environment gate. Do not
-   substitute a legacy 6.3-inch QA/reference set for either family.
-3. Capture English (U.S.) only until Japanese and Simplified Chinese
-   localized-name, trademark, and availability approvals are recorded. Launch
-   the installed candidate with the matching language and locale. For example:
+1. Freeze and commit the complete product, capture harness, plan, and release
+   contract. Capture only when `HEAD` is that exact full commit, the worktree is
+   clean, and the ignored `ios/QuakeSignal/Supporting/Debug.local.xcconfig`
+   override is absent. Never alter or relabel any historical screenshot tree.
+2. Validate the explicit ten-frame English (U.S.) plan. Every entry binds one
+   reviewed selector to either the 6.5-inch iPhone or 13-inch iPad display
+   class; a missing, duplicate, reordered, cross-class, or pre-approved entry
+   fails before a build or Simulator launch:
 
    ```sh
-   xcrun simctl terminate booted com.quakesignal.app || true
-   xcrun simctl launch booted com.quakesignal.app \
-     -AppleLanguages '(ja)' -AppleLocale ja_JP
+   ruby ios/ScreenshotAutomation/ios-screenshot-plan.test.rb
+   ruby ios/ScreenshotAutomation/ios-screenshot-plan.rb --json
    ```
 
-   The current build-8 candidate uses `en_US` / `(en)`.
-   Complete onboarding with a selected city rather than precise current
-   location. Wait for the content to finish loading, and use the same city and
-   benign report state for every frame in that locale.
-4. Navigate manually to the screen named by the manifest. Do not capture
-   notification permission dialogs, a test notification, an active emergency
-   alert, or private details.
-5. From that visible screen, run the helper. It refuses to overwrite an
-   existing approved asset and validates the rendered device size:
+3. Capture the complete iPhone/iPad set atomically into a new absolute
+   directory outside the repository. The harness builds the source-matching
+   Debug Simulator app once, creates exactly two disposable reviewed devices,
+   captures all ten ordered frames, validates the real pixels and visible
+   route, records build/install/runtime evidence, seals the complete package,
+   and refuses partial or preexisting output:
 
    ```sh
-   ios/AppStore/scripts/capture-screenshot.sh \
-     --device booted --class 6.5 --set screenshots-v1.1-build8 en-US 01-home
-
-   ios/AppStore/scripts/capture-screenshot.sh \
-     --device booted --class ipad-13 --set screenshots-v1.1-build8 en-US 01-home
+   SOURCE_COMMIT="$(git rev-parse HEAD)"
+   IOS_CAPTURE_PARENT="/Volumes/RC20/QuakeSignalScreenshotCandidates"
+   mkdir -p "$IOS_CAPTURE_PARENT"
+   IOS_CAPTURE_ROOT="$IOS_CAPTURE_PARENT/ios-ipados-${SOURCE_COMMIT}"
+   TMPDIR=/Volumes/RC20 \
+     ios/ScreenshotAutomation/capture-ios-screenshot-set.sh "$IOS_CAPTURE_ROOT"
    ```
 
-   The explicit `--set screenshots-v1.1-build8` keeps the new capture separate
-   from the immutable historical build-7 evidence.
-6. Record exact hashes, runtime/device identity, build inputs, and candidate
-   provenance, then review every capture at full size. Keep its reviewer null
-   and its status unapproved until the named review occurs.
-7. Separately compare the candidates with the signed public `Release` archive
-   as required by the release runbook. Only after that parity evidence and
-   named marketing/release-owner approval may an operator upload the complete
-   iPhone and iPad sequence. Do not mix display classes within one localization.
+   Do not navigate manually or substitute the legacy visible-screen helper.
+   Each app launch must contain all four matching fixture inputs, which the
+   harness supplies and verifies:
+
+   - `--quakesignal-screenshot-automation`
+   - `QUAKESIGNAL_SCREENSHOT_AUTOMATION=1`
+   - `--quakesignal-screenshot-frame=<reviewed-selector>`
+   - `QUAKESIGNAL_SCREENSHOT_FRAME=<the-same-reviewed-selector>`
+
+   An invalid or wrong-device selector fails closed instead of falling back to
+   Home. The fixed reports are finalized historical JMA records; the fixture
+   performs no live networking, onboarding, permission prompt, location read,
+   notification registration, or emergency-alert simulation.
+4. Inspect every full-resolution JPEG and its retained native PNG, semantic
+   evidence, logs, source/build binding, and aggregate provenance. Keep
+   `uploadApproved: false`, `reviewer: null`, and all signed-Release fields
+   empty. Capture English (U.S.) only until Japanese and Simplified Chinese
+   localized-name, trademark, and availability approvals are recorded.
+5. Archive the sealed directory without changing it. The final assembler
+   independently parses the ZIP and requires its complete path and byte
+   inventory to equal the sealed raw package; an arbitrary, partial, mutated,
+   symlinked, or extra-entry archive is rejected:
+
+   ```sh
+   ditto -c -k --norsrc --keepParent \
+     "$IOS_CAPTURE_ROOT" "${IOS_CAPTURE_ROOT}.zip"
+   ```
+
+6. Capture and seal the exact tvOS, watchOS, visionOS, and Mac Catalyst sets
+   from the same source commit using their reviewed atomic harnesses. When all
+   five raw packages and independent archives pass, use
+   `.github/scripts/assemble-apple-screenshot-release-set.rb` to create the
+   new canonical source-addressed 26-frame directory and a *separate* proposed
+   index file outside the repository. The assembler never creates approval,
+   never overwrites the checked-in index, and never touches historical bytes.
+7. Separately compare every candidate with the matching signed public
+   `Release` archive. Only after five signed-artifact hashes, platform parity
+   evidence, and a later named marketing/release-owner approval may an
+   operator activate the proposed index and upload the complete sequences.
+   Do not mix source commits, display classes, candidates, or signed builds.
+
+Ordinary listing validation locks the historical catalog and permits the final
+pointer to remain null:
+
+```sh
+ruby .github/scripts/verify-apple-screenshot-release-set.rb
+```
+
+The protected release handoff must instead name the exact commit and fails
+unless the complete source-current set plus a separate named, signed-Release
+parity approval for all five platforms is present:
+
+```sh
+ruby .github/scripts/verify-store-assets.rb \
+  --require-build8-screenshot-release-ready \
+  --expected-source-commit="$SOURCE_COMMIT"
+```
 
 Apple's current [screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/)
 allow one to ten screenshots and list the accepted display-size resolutions.
@@ -250,9 +313,12 @@ allow one to ten screenshots and list the accepted display-size resolutions.
 
 1. Sign in to an Apple Developer Program account in Xcode.
 2. Select its Team for the QuakeSignal target and confirm the bundle ID.
-3. Enable Push Notifications and App Attest for the shared App ID as required
-   by the iPhone/iPad product, then refresh the iOS App Store provisioning
-   profile so that signed archive contains production App Attest support.
+3. Enable Push Notifications, App Attest, and Time Sensitive Notifications for
+   the shared App ID as required by the iPhone/iPad product. Complete the
+   one-time Xcode Cloud onboarding in Xcode, use automatic signing, and leave
+   every `QUAKESIGNAL_*_PROFILE_NAME` workflow variable absent. Validate the
+   Apple-managed profile and signed archive rather than adding a manual profile
+   secret to Xcode Cloud.
    visionOS remains foreground-only and its signed target must not contain
    APNs, App Attest, Time Sensitive, or Critical Alerts entitlements. Do not add
    Critical Alerts anywhere unless Apple has granted that restricted
@@ -279,16 +345,21 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    create a duplicate. After the Cloudflare bootstrap has made the final URLs
    live, set its Privacy Policy and Support URLs to the values above and
    complete the draft `1.1` metadata.
-6. Upload `1.1 (8)` through the protected TestFlight workflows. Historical 1.0
+6. Build `1.1 (8)` through the single protected Xcode Cloud workflow
+   `QuakeSignal 1.1 (8) Native Release` described in
+   [`apple-platform-release.md`](./apple-platform-release.md). Historical 1.0
    builds are not evidence for this release and must not be attached to the 1.1
    App Store version.
 7. Complete age rating, content rights, privacy, export compliance, localized
-   metadata, and screenshot fields.
-   Before certifying content rights for Wolfx-supplied earthquake data, send the
-   request in
-   [`docs/WOLFX_PERMISSION_REQUEST.md`](../../docs/WOLFX_PERMISSION_REQUEST.md)
-   and complete [`content-rights-evidence.md`](./content-rights-evidence.md),
-   including every separately required underlying-source permission.
+   metadata, and screenshot fields. For Content Rights, use the reviewed
+   published-terms mapping in
+   [`content-rights-evidence.md`](./content-rights-evidence.md). The release
+   owner decided not to send the Wolfx request. Recheck current Wolfx/Open API
+   and applicable source terms, enabled sources, attribution, product behavior,
+   relay event retention, and intended territories at action time. Map official
+   terms for every enabled non-JMA feed or disable it; do not represent a
+   private license or assume that open-source licensing alone grants
+   third-party rights.
 8. After protected upload and processing, test release candidate `1.1 (8)` on
    physical hardware
    for the normal production registration, refresh, unsubscribe, re-enrollment,

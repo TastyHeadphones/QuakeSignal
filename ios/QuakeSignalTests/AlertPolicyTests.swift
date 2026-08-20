@@ -424,20 +424,14 @@ final class AlertPolicyTests: XCTestCase {
         XCTAssertNil(replayDecision.presentationReason)
     }
 
-    func testForegroundNotificationPresentationIsCapturedAtReceiptTime() {
+    func testForegroundNotificationWithoutUsableSnapshotNeverClaimsInAppPresentation() {
+        let payload = PushPayload(userInfo: [
+            "sourceId": "jma_eew",
+            "eventId": "test",
+        ])
         XCTAssertEqual(
             ForegroundNotificationPresentationPolicy.decision(
-                hasEventID: true,
-                isSceneActive: true
-            ),
-            ForegroundNotificationPresentationDecision(
-                systemPresentation: .listOnly,
-                shouldPresentEmergencyInApp: true
-            )
-        )
-        XCTAssertEqual(
-            ForegroundNotificationPresentationPolicy.decision(
-                hasEventID: true,
+                for: payload,
                 isSceneActive: false
             ),
             ForegroundNotificationPresentationDecision(
@@ -447,7 +441,7 @@ final class AlertPolicyTests: XCTestCase {
         )
         XCTAssertEqual(
             ForegroundNotificationPresentationPolicy.decision(
-                hasEventID: false,
+                for: payload,
                 isSceneActive: true
             ),
             ForegroundNotificationPresentationDecision(
@@ -661,6 +655,23 @@ final class AlertPolicyTests: XCTestCase {
             source: "jma_eew",
             data: wrongSource
         ))
+        XCTAssertEqual(
+            WolfxNormalizer.events(
+                source: "jma_eew",
+                object: try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: wrongSource) as? [String: Any]
+                )
+            ),
+            []
+        )
+        XCTAssertThrowsError(try WolfxNormalizer.validatedEvents(
+            source: "cenc_eew",
+            data: wrongSource
+        ))
+        XCTAssertEqual(
+            WolfxNormalizer.events(source: "cenc_eew", object: [:]),
+            []
+        )
     }
 
     func testLocationFixPolicyRejectsStaleInvalidAndInaccurateLocations() {

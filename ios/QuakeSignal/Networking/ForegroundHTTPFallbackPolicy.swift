@@ -66,7 +66,7 @@ enum DirectMonitoringLifecyclePolicy {
 enum ForegroundHTTPFallbackPolicy {
     /// Give sockets time to reconnect before creating any additional HTTP load.
     static let initialDelaySeconds: UInt64 = 90
-    /// Seven upstream requests are made by one normal `refresh()`, so five
+    /// Two upstream requests are made by one normal JMA-only `refresh()`, so five
     /// minutes is deliberately conservative and stays far below Wolfx's
     /// documented public request limit.
     static let repeatDelaySeconds: UInt64 = 300

@@ -1,6 +1,42 @@
 import SwiftUI
 import UIKit
 
+enum PushSubscriptionControlAction: Equatable {
+    case none
+    case remove
+    case resume
+    case retry
+
+    static func resolve(
+        subscriptionEnabled: Bool,
+        registrationState: PushRegistrationState,
+        canRegisterForRemoteNotifications: Bool
+    ) -> Self {
+        // Only a successful protected registration proves that there is a
+        // server-side record to remove. The subscription preference defaults
+        // on so the app can register after permission is granted, but that
+        // intent must never be presented as an existing registration.
+        if registrationState == .active {
+            return .remove
+        }
+        if !subscriptionEnabled {
+            return .resume
+        }
+        guard canRegisterForRemoteNotifications else {
+            // The surrounding notification-permission control supplies the
+            // actionable Enable/Open Settings affordance in this state.
+            return .none
+        }
+        return registrationState.isRetryable ? .retry : .none
+    }
+}
+
+enum TierChipAccessibility {
+    static func traits(isSelected: Bool) -> AccessibilityTraits {
+        isSelected ? .isSelected : []
+    }
+}
+
 struct SettingsView: View {
     @State private var settings = AppSettings.shared
     @State private var notifications = NotificationManager.shared
@@ -23,7 +59,9 @@ struct SettingsView: View {
         @Bindable var settings = settings
 
         NavigationStack {
-            if ScreenshotAutomation.selectedFrame == .visionAlertPreferences {
+            if ScreenshotAutomation.isAlertPreferencesFrame(
+                ScreenshotAutomation.selectedFrame
+            ) {
                 AlertSoundSelectionView(screenshotSelectedPreference: .japaneseVoice)
             } else {
                 Form {
@@ -77,9 +115,11 @@ struct SettingsView: View {
                             }
                         } else if notifications.authorizationStatus == .denied {
                             Button("settings.openSystemSettings") { openNotificationSettings() }
-                            Text("settings.pushSubscription.permissionDenied")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                            if settings.pushRegistrationState == .active {
+                                Text("settings.pushSubscription.permissionDenied")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
 
                         pushSubscriptionControl
@@ -330,10 +370,15 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var pushSubscriptionControl: some View {
-        if settings.pushSubscriptionEnabled {
-            // Server-side deletion is authenticated by App Attest. It remains
-            // available if APNs has not provided a token in this app session;
-            // the Worker then removes the registration for that credential.
+        switch PushSubscriptionControlAction.resolve(
+            subscriptionEnabled: settings.pushSubscriptionEnabled,
+            registrationState: settings.pushRegistrationState,
+            canRegisterForRemoteNotifications: notifications.canRegisterForRemoteNotifications
+        ) {
+        case .remove:
+            // Server-side deletion is authenticated by App Attest. An active
+            // state is persisted only after the Worker accepts registration,
+            // so this destructive action never appears for a fresh install.
             Button(role: .destructive) {
                 showingRemovePushConfirmation = true
             } label: {
@@ -352,29 +397,28 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
 
             pushRegistrationStatus
+        case .retry:
+            pushRegistrationStatus
 
-            if settings.pushRegistrationState.isRetryable {
-                Button {
-                    Task { await retryPushRegistration() }
-                } label: {
-                    Group {
-                        if isUpdatingPushSubscription {
-                            ProgressView()
-                        } else {
-                            Text("settings.pushSubscription.retry")
-                        }
+            Button {
+                Task { await retryPushRegistration() }
+            } label: {
+                Group {
+                    if isUpdatingPushSubscription {
+                        ProgressView()
+                    } else {
+                        Text("settings.pushSubscription.retry")
                     }
                 }
-                .disabled(isUpdatingPushSubscription || !notifications.canRegisterForRemoteNotifications)
-
-                if notifications.deviceToken == nil,
-                   notifications.canRegisterForRemoteNotifications {
-                    Text("settings.pushSubscription.waiting")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
             }
-        } else {
+            .disabled(isUpdatingPushSubscription)
+
+            if notifications.deviceToken == nil {
+                Text("settings.pushSubscription.waiting")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        case .resume:
             Button {
                 Task { await resumePushSubscription() }
             } label: {
@@ -391,6 +435,10 @@ struct SettingsView: View {
             Text("settings.pushSubscription.resume.detail")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+        case .none:
+            if settings.pushSubscriptionEnabled {
+                pushRegistrationStatus
+            }
         }
 
         if let pushSubscriptionMessage {
@@ -643,5 +691,8 @@ private struct TierChip: View {
                 .foregroundStyle(isSelected ? .white : .primary)
         }
         .buttonStyle(.plain)
+        // VoiceOver localizes and announces the native selected state; the
+        // visible label remains the chip's accessible name.
+        .accessibilityAddTraits(TierChipAccessibility.traits(isSelected: isSelected))
     }
 }

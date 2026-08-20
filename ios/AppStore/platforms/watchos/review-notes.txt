@@ -4,15 +4,31 @@ notification permission, demo account, or reviewer credential.
 
 Open the Watch app to refresh a compact headline and recent-report list, then
 open a report for available magnitude, status, source, time, intensity, and
-depth details. It fetches only while opened and does not independently register
-for APNs, App Attest, Time Sensitive or Critical notifications, alert audio, or
-background delivery. Optional nearby alerts remain an iPhone feature; do not
-review the Watch companion as an independent emergency-alert service.
+depth details. While the scene is active, a fresh structurally valid JMA early
+warning can present a full-screen protective-action view and one native Watch
+warning haptic per event serial. The iPhone's selected System Default, original
+QuakeSignal Urgent Tone, or licensed Japanese Safety Voice preference is mirrored
+with WatchConnectivity. System Default uses only the native warning haptic;
+either custom choice also plays its bundled audio while the Watch scene remains
+active. Screenshot automation uses finalized historical reports and never
+starts feedback.
+
+The Watch app fetches only while opened and does not independently register for
+APNs, App Attest, Time Sensitive or Critical notifications, or background
+delivery. Optional background alerts remain an iPhone feature; do not review the
+Watch companion as an independent background emergency-alert service.
+
+Build 8 reads only Wolfx feed identifiers jma_eew and jma_eqlist. CENC,
+Sichuan, Fujian, and Chongqing feeds are disabled. QuakeSignal formats and
+normalizes JMA-issued factual information; it does not calculate a new
+local-intensity or ground-motion-arrival forecast.
 
 The Watch app must be tested from the signed iOS host build on a paired Apple
 Watch before submission. Simulator/generic compilation is not evidence for
-pairing, installation, Digital Crown/scroll behavior, or foreground refresh.
+pairing, installation, preference mirroring, speaker/haptic behavior,
+Digital Crown/scroll behavior, or foreground refresh.
 
-QuakeSignal is independent and non-official. Wolfx-aggregated information can
-be delayed, incomplete, revised, or inaccurate. Always follow official local
-emergency guidance.
+Source: Japan Meteorological Agency (JMA), relayed through Wolfx and
+normalized/edited by QuakeSignal. QuakeSignal is independent and non-official;
+the information can be delayed, incomplete, revised, or inaccurate. Always
+follow official local emergency guidance.

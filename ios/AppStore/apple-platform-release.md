@@ -10,14 +10,18 @@ public release.
 | Apple Watch companion | `QuakeSignalWatch` | `com.quakesignal.app.watchkitapp` | Embedded in the `QuakeSignal` iOS IPA |
 | Apple TV | `QuakeSignalTV` | `com.quakesignal.app` | `.github/workflows/apple-platforms.yml`, select `tvos` |
 | Apple Vision Pro | `QuakeSignalVision` | `com.quakesignal.app` | `.github/workflows/apple-platforms.yml`, select `visionos` |
+| Mac Catalyst | `QuakeSignal` | `com.quakesignal.app` | Xcode Cloud macOS → Mac Catalyst Archive action |
 
-The native TV and Vision uploads use the existing iOS App Store Connect record
-(Apple ID `6800642443`) and matching bundle ID. Watch metadata and screenshots
-belong to that iOS record; there is no separate Watch IPA. The Tauri Mac app
-uses its existing separate record and `.github/workflows/desktop-release.yml`.
+The native TV, Vision, and Mac Catalyst uploads use the existing shared App
+Store Connect record (Apple ID `6800642443`) and matching bundle ID. Watch
+metadata and screenshots belong to that record; there is no separate Watch
+IPA. The selected public Mac route is the Swift-native Catalyst build, not the
+separate Tauri product (`com.quakesignal.desktop`, Apple ID `6800642853`) and
+not the iPhone/iPad binary offered as Designed for iPad on Mac. Leave the
+separate Tauri record and its historical evidence unchanged.
 Use [`platforms/`](./platforms/) for reviewed copy and screenshot plans. The
 read-only portal contradictions and non-destructive action order are recorded in
-[`app-store-connect-portal-audit-2026-08-19.md`](./app-store-connect-portal-audit-2026-08-19.md).
+[`app-store-connect-portal-audit-2026-08-20.md`](./app-store-connect-portal-audit-2026-08-20.md).
 
 ## Version contract
 
@@ -38,7 +42,7 @@ node .github/scripts/verify-ios-release-contract.mjs --build-number 8
 
 Configure exactly one Xcode Cloud workflow named
 `QuakeSignal 1.1 (8) Native Release`. A single workflow is required because
-Xcode Cloud assigns one `CI_BUILD_NUMBER` to the build; three separate
+Xcode Cloud assigns one `CI_BUILD_NUMBER` to the build; separate
 workflows could silently assign different bundle versions to the native
 products.
 
@@ -58,19 +62,23 @@ protected workflow variables described below. Every gated run requires both
 system IDs to equal their pins and requires the exact Xcode Cloud product name
 `QuakeSignal` and workflow name.
 
-As of the read-only App Store Connect audit on 2026-08-19, Xcode Cloud is not
-yet onboarded for Apple ID `6800642443`: the portal shows **Create a workflow
-in Xcode to get started** and no workflow or build history. That is consistent
-with the bootstrap sequence above; it is not evidence that build 8 can be
-started yet.
+The 2026-08-20 account audit confirmed that the explicit Watch identifier
+`com.quakesignal.app.watchkitapp` is registered on team `5TT564H883` and that
+the checked-in Release settings select automatic signing with every
+`QUAKESIGNAL_*_PROFILE_NAME` variable absent. Automatic-signing resolution for
+all four native Archive actions remains unproven until Xcode Cloud is onboarded
+and a signed build `8` completes. Keep those profile-name variables absent in
+Xcode Cloud; they are manual-signing inputs for the separate GitHub fallback
+lanes, not Xcode Cloud requirements.
 
 The workflow must have no push, pull-request, tag, or schedule start condition.
-Start it manually from the protected `main` source commit and add these three
+Start it manually from the protected `main` source commit and add these four
 Archive actions:
 
 | Archive action | Scheme | Destination/product | Signed artifact requirement |
 | --- | --- | --- | --- |
 | iPhone/iPad + Watch | `QuakeSignal` | iOS | App Store-signed iOS app containing exactly one `QuakeSignalWatch.app` |
+| Mac Catalyst | `QuakeSignal` | macOS → Mac Catalyst | App Store-signed native Mac app with the shared bundle ID, sandbox, outbound networking, and foreground location entitlement; no embedded Watch or alert-registration entitlements |
 | Apple TV | `QuakeSignalTV` | tvOS | App Store-signed tvOS app |
 | Apple Vision Pro | `QuakeSignalVision` | visionOS | App Store-signed visionOS app |
 
@@ -79,19 +87,20 @@ only inside the iOS artifact, and the post-build verifier rejects a missing,
 additional, or independently substituted Watch bundle.
 
 For the final build-8 workflow, set **Deployment Preparation** to
-**TestFlight and App Store** on all three Archive actions. Eligibility alone
+**TestFlight and App Store** on all four Archive actions. Eligibility alone
 does not upload a build. Add a **TestFlight Internal Testing** post-action for
 each archived product and target only the existing internal group
-`InternalQA`. Do not select external testers, external groups, or any App
-Review/App Store submission action. The build-1 onboarding workflow must have
+`QuakeSignal Internal QA`. Do not select external testers, external groups, or
+any App Review/App Store submission action. The build-1 onboarding workflow must have
 no distribution post-action (and should use no distribution preparation), so
 its intentionally rejected bootstrap cannot reach testers.
 
 The repository hooks cannot inspect Xcode Cloud's server-side workflow graph.
 Before starting build 8, retain a portal screenshot or App Store Connect API
 export proving the exact workflow name, restricted editing, clean environment,
-three Archive actions and scheme/platform mappings, **TestFlight and App
-Store** preparation on each, and the three `InternalQA`-only post-actions.
+four Archive actions and scheme/platform mappings, **TestFlight and App
+Store** preparation on each, and the four `QuakeSignal Internal QA`-only
+post-actions.
 Treat that audit artifact as a required release input; a successful hook log is
 not proof that the post-actions were configured.
 
@@ -129,8 +138,9 @@ documented Python 3 runtime, shell/Xcode tools, environment variables, and
 Apple-provided artifact paths. They never assume Node.js or repository source
 is present in those later phases. For the iOS action only, both later hooks
 wait for the exact `https://quakesignal-api.hopeso.workers.dev` production
-origin to become fully ready and run its build-8 remote smoke contract. tvOS
-and visionOS are foreground-only and make no notification-relay request.
+origin to become fully ready and run its build-8 remote smoke contract. Mac
+Catalyst, tvOS, and visionOS are foreground-only and make no
+notification-relay request.
 
 After Xcode finishes, the hook requires a successful `xcodebuild`, marketing
 version `1.1`, build `8`, the reviewed host/Watch structure, and no unexpected
@@ -142,6 +152,12 @@ export directory, or exported xcarchive layout—must be unambiguous and signed
 for TestFlight/App Store distribution with Apple team `5TT564H883`, matching
 provisioning platform and application IDs, and the reviewed
 production/foreground-only capability split.
+For Mac Catalyst, that proof additionally requires a macOS bundle layout,
+`CFBundleSupportedPlatforms=MacOSX`, device family `2`, macOS 14.0 minimum,
+Weather category, no `LSRequiresIPhoneOS`, an `OSX` App Store profile, and the
+exact App Sandbox, outbound-network, and foreground-location entitlements. It
+rejects APNs, App Attest, Time Sensitive, Critical Alert, and embedded-Watch
+claims for the Mac artifact.
 The GitHub manual-signing lane remains stricter and requires the raw archive
 and export both to be Apple Distribution-signed.
 
@@ -151,8 +167,9 @@ explicit warning for a nonempty, undocumented value other than `visionOS` or
 `xrOS`; a missing value or one of Apple's documented non-Vision values fails.
 Scheme, workflow, bundle ID, and the exported signed visionOS/xrOS profile
 remain hard requirements. Retain that first-run log as release evidence and
-update the reviewed diagnostic only after observing Apple’s value. iOS and
-tvOS platform values are documented and must match exactly.
+update the reviewed diagnostic only after observing Apple’s value. iOS, tvOS,
+and Mac Catalyst platform values are documented and must match exactly;
+Catalyst uses `CI_PRODUCT_PLATFORM=macOS` and the `QuakeSignal` scheme.
 
 These hooks neither deploy the Worker nor call App Store submission APIs.
 Xcode Cloud performs its configured archive/sign/distribution behavior only
@@ -160,20 +177,30 @@ after all pre-build gates pass. Do not start the workflow until the hook commit
 itself is merged into protected `main`, the native identifiers are registered,
 and Xcode Cloud automatic signing resolves both the host and Watch products.
 Freeze merges to protected `main` from immediately before the workflow starts
-until all three actions finish: every action proves that its pinned commit is
+until all four actions finish: every action proves that its pinned commit is
 still the live remote `main` tip, so a later merge intentionally stops the run.
 Xcode Cloud cannot join the GitHub Actions concurrency lock used by the Worker
 release lane, so the release owner must freeze approvals for
 `cloudflare-production` deployments from immediately before this workflow
-starts until the iOS action's pre/post Worker proofs and all three actions'
+starts until the iOS action's pre/post Worker proofs and all four actions'
 artifact checks finish. The iOS before/after smokes detect most accidental
 races; they are not a substitute for that protected deployment freeze.
 
 ## Protected environment configuration
 
-The existing protected GitHub environment `ios-app-store-release` must contain
-all selected signing inputs. An absent or empty value fails the job before
-certificate/profile import.
+Xcode Cloud uses Apple-managed automatic signing for all four Archive actions.
+Do not add `QUAKESIGNAL_IOS_PROFILE_NAME`,
+`QUAKESIGNAL_WATCH_PROFILE_NAME`, `QUAKESIGNAL_TV_PROFILE_NAME`,
+`QUAKESIGNAL_VISION_PROFILE_NAME`, or `QUAKESIGNAL_CATALYST_PROFILE_NAME` to
+the Cloud workflow; absent values intentionally leave each conditional
+`PROVISIONING_PROFILE_SPECIFIER` empty so Xcode Cloud can resolve the registered
+identifiers.
+
+The existing protected GitHub environment `ios-app-store-release` is a
+separate manual-signing fallback for iOS/Watch, tvOS, and visionOS. It must
+contain all selected inputs before those workflows are dispatched. The GitHub
+fallback does not sign or upload Mac Catalyst; `.github/workflows/ios.yml`
+only gives Catalyst a credential-free Release compilation gate.
 
 Shared certificate and upload configuration:
 
@@ -197,15 +224,15 @@ Target profiles:
   `VISIONOS_APP_STORE_PROFILE_NAME`
 
 The Watch profile must authorize `com.quakesignal.app.watchkitapp`; the host,
-TV, and Vision profiles authorize `com.quakesignal.app` for their respective
-platforms. The 2026-08-19 portal audit found only the existing iOS App Store
-profile and no visionOS profile, so profile creation/resolution remains a
-preflight blocker rather than something these scripts can perform. The signed
-verifier checks team, profile name, application ID, platform, build number,
+TV, Vision, and Catalyst profiles authorize `com.quakesignal.app` for their
+respective platforms. Xcode Cloud resolves those profiles automatically; the
+manual profile names above apply only to the GitHub fallback. The signed
+verifier checks team, application ID, platform, build number,
 certificate/profile coherence, and the exact signed capability policy. iOS
 alone requires the reviewed production APS, App Attest, and Time Sensitive
-Notification entitlements. TV, Vision, and Watch are foreground-only and must
-not claim them. This Vision split follows Apple's published
+Notification entitlements. Mac Catalyst, TV, Vision, and Watch are
+foreground-only and must not claim them. This Vision split follows Apple's
+published
 [visionOS capability table](https://developer.apple.com/help/account/reference/supported-capabilities-visionos/),
 which lists App Attest but not Push Notifications or Time Sensitive
 Notifications.
@@ -213,9 +240,11 @@ Notifications.
 ## CI and archive commands
 
 Ordinary push and pull-request CI performs credential-free generic Release
-builds for all schemes with `CODE_SIGNING_ALLOWED=NO`. Hosted runners install
-the selected Xcode platform component first because tvOS, watchOS, and visionOS
-components are not guaranteed to be preinstalled.
+builds for iOS/iPadOS, Mac Catalyst, tvOS, visionOS, and watchOS with
+`CODE_SIGNING_ALLOWED=NO`. Catalyst uses the `QuakeSignal` scheme and exact
+destination `generic/platform=macOS,variant=Mac Catalyst`. Hosted runners
+install the selected Xcode platform component first because tvOS, watchOS, and
+visionOS components are not guaranteed to be preinstalled.
 
 The GitHub release workflows remain a separately protected fallback and
 archive-evidence lane. They are manual-only for signed artifacts. Their signing jobs
@@ -249,35 +278,71 @@ pass, repeat each run with `archive_only=false` and
 
 ## Distribution blockers outside workflow automation
 
-- Create and review store-complete icon assets: layered Vision icon, Apple TV
-  brand/top-shelf assets, and Watch icon set. Do not manufacture these by
-  blindly reusing the flat iOS icon.
+- The layered Vision icon, Apple TV brand/top-shelf assets, and flattened
+  Watch catalog are structurally complete. The Watch input deliberately uses
+  the canonical signal artwork (SHA-256
+  `b792fccc4c08645fb6485ab96c1882c069229246162b02ebdbb605157a5bc65f`):
+  its foreground remains at least 128 px inside the circular-mask radius and
+  the listing validator pins its catalog, vector geometry, color profile, and
+  opacity. Obtain named visual approval against that exact digest; do not
+  invent divergent Watch artwork merely to make it different.
 - Capture and hash screenshots from the frozen build-8 binaries at Apple’s
-  accepted sizes.
+  accepted sizes. The Mac source-only plan is
+  [`platforms/maccatalyst/screenshot-manifest-v1.1-build8.json`](./platforms/maccatalyst/screenshot-manifest-v1.1-build8.json):
+  five unapproved `2560 × 1600` frames from a `1280 × 800` point window at 2×,
+  using the exact `maccatalyst-*`
+  selectors. Existing Tauri screenshots cannot serve as Catalyst evidence.
+- Preserve every existing screenshot tree as historical evidence. Final images
+  are one indivisible 26-frame package under
+  `screenshot-release-sets-v1.1-build8/<source-commit>/`, addressed by
+  `screenshot-set-index-v1.1-build8.json`. Ordinary listing CI may leave its
+  `activeReleaseSet` null. The protected handoff must run:
+
+  ```sh
+  ruby .github/scripts/verify-store-assets.rb \
+    --require-build8-screenshot-release-ready \
+    --expected-source-commit=<40-character-source-commit>
+  ```
+
+  That command must not pass without exact-current product source and plan
+  bytes, all five platform packages, and a separate named approval proving
+  signed public-Release parity for each platform.
 - Exercise iOS/iPadOS notifications and App Attest on physical hardware or
   TestFlight. Simulator/generic builds are not evidence for APNs, App Attest,
   background delivery, Focus, Silent Mode, or alert sounds.
-- Exercise Vision foreground/local monitoring and selected alert sounds,
-  TV focus/remote behavior, and Watch foreground behavior on their actual
-  platforms. Do not claim Vision background notification delivery.
+- Exercise Catalyst and Vision foreground/local monitoring, maps, location,
+  and selected alert sounds; TV focus/remote behavior; and Watch foreground
+  warning UI, native warning haptic, custom audio, iPhone-preference mirroring,
+  Crown/scroll behavior, and scene-deactivation audio stop on their actual
+  platforms. Do not claim Catalyst, Vision, TV, or Watch background
+  notification delivery.
+- In App Store Connect, explicitly clear **Make this app available** under the
+  iPhone/iPad-on-Apple-silicon-Mac availability controls. The checked-in
+  `SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD=NO` removes the competing Xcode
+  destination but does not prove the portal availability setting was cleared.
 - Complete content-rights, privacy, export, age-rating, review-contact, and
   platform-metadata approvals before submission.
 
-The current App Store Connect audit found empty tvOS `1.0` and visionOS `1.0`
-drafts in Apple ID `6800642443`. Reuse those drafts and change their editable
-version number to `1.1` only after the corresponding build-8 release evidence
-is frozen. Do not delete the drafts or create duplicate platforms. The same
-record also contains a macOS draft that must not receive the separate Tauri
-Mac app (`com.quakesignal.desktop`); leave it untouched and use Apple ID
-`6800642853` for Mac 1.1.0.
+The App Store Connect audit found platform drafts in Apple ID `6800642443`.
+Reuse the existing native drafts and change an editable version number to
+`1.1` only after the corresponding build-8 release evidence is frozen. Do not
+delete a draft or create a duplicate platform. The macOS platform on this
+shared record is now reserved for the `com.quakesignal.app` Catalyst archive.
+Do not attach the separate Tauri package (`com.quakesignal.desktop`) to it;
+leave Tauri Apple ID `6800642853` unchanged.
 
 The existing 30-image iPhone/iPad provenance records build 7 and remains
 historical evidence. A separate ten-image English iPhone/iPad build-8 Debug
 Simulator candidate has now been captured with exact source/build provenance,
-but it is unsigned, reviewer-null, and not approved for upload. A separate
+but it predates the current JMA-only/Mac Catalyst source changes and is now
+historical, unsigned, reviewer-null, and not approved for upload. A separate
 source-frozen native capture now preserves three tvOS frames at
 `1920 × 1080`, five visionOS frames at `3840 × 2160`, and three Watch frames
 at `410 × 502`, together with their full unapproved provenance under
 `platforms/screenshot-candidates-v1.1-build8/`. No native-platform screenshot
-is approved; signed-build evidence and named release-owner review remain
-pending.
+is approved, and the b461 native capture must not be treated as current-source
+evidence. The Catalyst plan adds five source-defined native PNG frames at
+`2560 × 1600`, captured from a `1280 × 800` logical window at 2×, but no
+Catalyst PNG has been captured or validated yet. Signed
+build evidence, a complete final-commit recapture, and named release-owner
+review remain pending for every native platform screenshot set.

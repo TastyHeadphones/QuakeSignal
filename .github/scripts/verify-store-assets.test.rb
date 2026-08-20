@@ -1,7 +1,52 @@
 # frozen_string_literal: true
 
 require "minitest/autorun"
+require "rbconfig"
+require "tmpdir"
 require_relative "verify-store-assets"
+require_relative "../../ios/ScreenshotAutomation/screenshot-test-temp-root"
+
+class WatchAppIconContractTest < Minitest::Test
+  def repository_root
+    Pathname.new(__dir__).join("..", "..").realpath
+  end
+
+  def test_accepts_reviewed_watch_icon_catalog_and_geometry
+    assert validate_watch_app_icon_contract!(repository_root)
+  end
+
+  def test_rejects_catalog_digest_or_icon_composer_supersession
+    Dir.mktmpdir(
+      "quakesignal-watch-icon-",
+      QuakeSignalScreenshotTestTempRoot.path.to_s,
+    ) do |directory|
+      root = Pathname.new(directory)
+      %w[
+        assets/app-icon.svg
+        ios/project.yml
+        ios/QuakeSignal/Assets.xcassets/AppIcon.appiconset/icon-1024.png
+        ios/QuakeSignalWatch/Assets.xcassets/WatchAppIcon.appiconset/Contents.json
+        ios/QuakeSignalWatch/Assets.xcassets/WatchAppIcon.appiconset/watch-icon-1024.png
+      ].each do |relative_path|
+        source = repository_root.join(relative_path)
+        destination = root.join(relative_path)
+        FileUtils.mkdir_p(destination.dirname)
+        FileUtils.cp(source, destination)
+      end
+
+      root.join("ios/QuakeSignalWatch/Assets.xcassets/WatchAppIcon.appiconset/watch-icon-1024.png")
+        .open("ab") { |file| file.write("drift") }
+      assert_raises(RuntimeError) { validate_watch_app_icon_contract!(root) }
+
+      FileUtils.cp(
+        repository_root.join("ios/QuakeSignalWatch/Assets.xcassets/WatchAppIcon.appiconset/watch-icon-1024.png"),
+        root.join("ios/QuakeSignalWatch/Assets.xcassets/WatchAppIcon.appiconset/watch-icon-1024.png"),
+      )
+      FileUtils.mkdir_p(root.join("ios/QuakeSignal.icon"))
+      assert_raises(RuntimeError) { validate_watch_app_icon_contract!(root) }
+    end
+  end
+end
 
 class StoreAssetReleaseApprovalTest < Minitest::Test
   def approved_provenance
@@ -60,5 +105,27 @@ class StoreAssetReleaseApprovalTest < Minitest::Test
         validate_macos_release_approval!(provenance)
       end
     end
+  end
+end
+
+class StoreAssetScreenshotReleaseModeTest < Minitest::Test
+  ROOT = Pathname.new(__dir__).join("..", "..").realpath
+  SCRIPT = ROOT.join(".github/scripts/verify-store-assets.rb")
+
+  def test_release_ready_mode_rejects_an_absent_or_different_active_commit
+    output, error_output, status = Open3.capture3(
+      RbConfig.ruby,
+      SCRIPT.to_s,
+      "--require-build8-screenshot-release-ready",
+      "--expected-source-commit=#{'0' * 40}",
+      chdir: ROOT.to_s,
+    )
+
+    refute status.success?
+    assert_equal "", output
+    assert_match(
+      /complete active build-8 screenshot release set|active\/expected screenshot source commit/,
+      error_output,
+    )
   end
 end

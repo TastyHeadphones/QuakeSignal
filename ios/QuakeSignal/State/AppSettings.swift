@@ -18,49 +18,6 @@ enum PushRegistrationState: String, Codable, Sendable, Equatable {
     }
 }
 
-/// Stable wire values shared with the notification Worker. These identifiers
-/// deliberately describe QuakeSignal-owned sounds, not government warning
-/// systems. Custom notification audio still follows the person's Silent Mode,
-/// Focus, volume, and notification settings because the app does not request
-/// Apple's Critical Alerts entitlement.
-enum AlertSoundPreference: String, CaseIterable, Codable, Sendable, Equatable {
-    case system
-    case urgentTone = "urgent-tone"
-    case japaneseVoice = "japanese-voice"
-
-    var titleKey: String {
-        switch self {
-        case .system: "settings.alertSound.system"
-        case .urgentTone: "settings.alertSound.urgentTone"
-        case .japaneseVoice: "settings.alertSound.japaneseVoice"
-        }
-    }
-
-    var detailKey: String {
-        switch self {
-        case .system: "settings.alertSound.system.detail"
-        case .urgentTone: "settings.alertSound.urgentTone.detail"
-        case .japaneseVoice: "settings.alertSound.japaneseVoice.detail"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .system: "bell"
-        case .urgentTone: "waveform"
-        case .japaneseVoice: "person.wave.2"
-        }
-    }
-
-    var bundledFilename: String? {
-        switch self {
-        case .system: nil
-        case .urgentTone: "quakesignal_urgent.caf"
-        case .japaneseVoice: "quakesignal_japanese_voice.caf"
-        }
-    }
-}
-
 enum PushTestAlertPolicy {
     static func isAvailable(
         subscriptionEnabled: Bool,
@@ -96,7 +53,10 @@ enum PushTestAlertPolicy {
 final class AppSettings {
     static let shared = AppSettings()
 
-    static let allSources = ["jma_eew", "sc_eew", "cenc_eew", "fj_eew", "cq_eew", "cenc_eqlist", "jma_eqlist"]
+    /// Build 8's reviewed source-rights boundary. Keep settings and direct
+    /// foreground fetches on the same allow-list so a stale preference cannot
+    /// silently restore an unreviewed upstream feed.
+    static let allSources = WolfxClient.sources
     static let radiusTiersKm: [Double] = [50, 100, 300, 500]
     static let magnitudeTiers: [Double] = [3, 4, 5, 6]
 
@@ -122,7 +82,10 @@ final class AppSettings {
         didSet { defaults.set(notifyAtNight, forKey: Keys.notifyAtNight) }
     }
     var alertSound: AlertSoundPreference {
-        didSet { defaults.set(alertSound.rawValue, forKey: Keys.alertSound) }
+        didSet {
+            defaults.set(alertSound.rawValue, forKey: Keys.alertSound)
+            WatchAlertPreferenceBridge.synchronizeFromPhone(alertSound)
+        }
     }
     /// Controls whether this device is registered with QuakeSignal's alert
     /// service. It is separate from iOS notification permission, which only
@@ -171,7 +134,11 @@ final class AppSettings {
         radiusKm = defaults.object(forKey: Keys.radiusKm) as? Double ?? 100
         minMagnitude = defaults.object(forKey: Keys.minMagnitude) as? Double ?? 3
         if let saved = defaults.array(forKey: Keys.sources) as? [String] {
-            enabledSources = Set(saved)
+            let reviewedSources = Set(saved).intersection(Self.allSources)
+            enabledSources = reviewedSources
+            if reviewedSources != Set(saved) {
+                defaults.set(reviewedSources.sorted(), forKey: Keys.sources)
+            }
         } else {
             enabledSources = Set(Self.allSources)
         }

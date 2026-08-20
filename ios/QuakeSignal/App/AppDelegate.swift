@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         guard !ScreenshotAutomation.isEnabled else { return true }
         NotificationManager.shared.configureForLaunch()
+        WatchAlertPreferenceBridge.activatePhone(current: AppSettings.shared.alertSound)
         return true
     }
 

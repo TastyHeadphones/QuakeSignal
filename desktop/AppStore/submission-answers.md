@@ -7,6 +7,11 @@ has evidence. Use it together with
 [`submission-checklist.md`](./submission-checklist.md): a **PENDING** row is a
 non-submission condition, not a value to infer or certify.
 
+> **DORMANT / NOT SELECTED FOR 1.1.** The 20 August 2026 release-owner decision
+> selects SwiftUI Mac Catalyst in shared Apple ID `6800642443` as the sole Mac
+> storefront route. Do not use this worksheet to change, attach, or submit the
+> Tauri record for the current release.
+
 ## Record and version
 
 | Field | Intended value / status | Evidence |
@@ -66,7 +71,7 @@ is selected.
 
 | App Store Connect area | Required decision/evidence | Current status |
 | --- | --- | --- |
-| Content Rights | Affirmative written Wolfx permission covering native macOS, persistent client-local event/revision history, intended App Store territories, attribution, restrictions, duration, and termination, plus either Wolfx authority over every underlying feed or each separately required source permission | **PENDING / SUBMISSION BLOCKER** — `docs/WOLFX_PERMISSION_REQUEST.md` is a request draft only. No affirmative Wolfx reply or separately required source permission is retained. Use `ios/AppStore/content-rights-evidence.md`; do not certify or submit before the complete evidence is obtained and reviewed. |
+| Content Rights | Current published Wolfx/Open API and applicable source terms mapped to the exact attributed/non-official/no-resale product use | **NOT ACTIONABLE FOR THIS DORMANT RECORD.** If a later release owner reactivates it, use `ios/AppStore/content-rights-evidence.md`, recheck the then-current product and territories, and do not claim open source alone grants rights or that a private Wolfx license exists. |
 | Age Rating | Complete Apple's current questionnaire from the final build/content | **PENDING** release-owner review |
 | Export Compliance | Answer Apple's current encryption/export questions for final signed package | **PENDING** legal/release-owner confirmation |
 | Availability / pricing | Select approved territories and timing | **PENDING** release-owner decision |

@@ -6,8 +6,8 @@
 /* Onboarding */
 "onboarding.title1" = "欢迎使用震息";
 "onboarding.body1" = "在一个简洁的应用中查看地震速报、附近提醒与防灾指南。";
-"onboarding.title2" = "第三方聚合数据";
-"onboarding.body2" = "震息整理来自 Wolfx Open API 的第三方数据。信息可能延迟、修订或存在误差。";
+"onboarding.title2" = "通过 Wolfx 获取日本气象厅信息";
+"onboarding.body2" = "震息整理并显示由 Wolfx Open API 中继的日本气象厅（JMA）公开地震信息。信息可能延迟、修订或存在误差。";
 "onboarding.title3" = "开启通知";
 "onboarding.body3" = "允许通知后，应用在后台时也可发送符合条件的地震信息。通知送达无法保证。";
 "onboarding.continue" = "继续";
@@ -27,10 +27,6 @@
 "quake.intensity.label" = "最大烈度 %1$@";
 "quake.depth.label" = "深度 %1$@ 公里";
 "quake.source.jma" = "日本气象厅";
-"quake.source.cenc" = "中国地震台网中心";
-"quake.source.sc" = "四川省地震局";
-"quake.source.fj" = "福建省地震局";
-"quake.source.cq" = "重庆市地震局";
 
 /* Full-screen alert */
 "alert.badge.new" = "地震预警";
@@ -67,11 +63,6 @@
 "settings.section.sources" = "预警数据源";
 "settings.source.jma_eew" = "日本气象厅 — 地震预警";
 "settings.source.jma_eqlist" = "日本气象厅 — 地震速报";
-"settings.source.cenc_eew" = "中国地震台网中心 — 地震预警";
-"settings.source.cenc_eqlist" = "中国地震台网中心 — 地震速报";
-"settings.source.sc_eew" = "四川省地震局 — 地震预警";
-"settings.source.fj_eew" = "福建省地震局 — 地震预警";
-"settings.source.cq_eew" = "重庆市地震局 — 地震预警";
 "settings.section.threshold" = "最小震级";
 "settings.section.notifications" = "通知";
 "settings.openNotificationSettings" = "检查通知设置";
@@ -121,9 +112,9 @@
 "settings.section.about" = "关于";
 "settings.privacyPolicy" = "隐私政策";
 "settings.support" = "技术支持";
-"settings.about.dataSource" = "地震数据通过 Wolfx Open API，转发自日本气象厅、中国地震台网中心及各省地震局。";
+"settings.about.dataSource" = "地震数据通过 Wolfx Open API 获取日本气象厅（JMA）的公开信息。";
 "settings.about.version" = "版本 %1$@";
-"settings.about.disclaimer" = "QuakeSignal 为独立应用，与日本气象厅、中国地震台网中心及其他政府机构均无官方关联。";
+"settings.about.disclaimer" = "QuakeSignal 为独立应用，与日本气象厅及其他政府机构均无官方关联。";
 
 /* Push notification loc-key pairs -- MUST stay in sync with
    backend/src/push/payload.ts LOC_KEYS. */
@@ -149,7 +140,7 @@
 "onboarding.title4" = "选择你的位置";
 "onboarding.body4" = "订阅一个城市，或使用当前位置，震息就能告诉你地震距离你有多远。";
 "onboarding.chooseLocation" = "选择位置";
-"onboarding.disclaimer" = "震息不是官方预警平台。信息来自第三方聚合服务，可能存在延迟或误差。";
+"onboarding.disclaimer" = "震息不是官方预警平台。应用显示由 Wolfx 中继的日本气象厅发布信息，可能存在延迟或误差。";
 
 /* 首页 */
 "home.status.normal" = "当前暂无附近地震";
@@ -183,14 +174,13 @@
 "compass.nw" = "西北";
 
 /* 通用 */
-"shared.disclaimer" = "数据来源于第三方聚合服务，实际信息请以官方发布为准。";
+"shared.disclaimer" = "日本气象厅信息由 Wolfx 中继。请始终以官方发布为准。";
 "quake.depth.label.plain" = "震源深度";
 
 /* 全屏预警重做 */
 "alert.header.final" = "地震报告";
 "alert.header.cancelled" = "预警已取消";
 "alert.header.training" = "地震预警（测试）";
-"alert.countdown.label" = "预计还有主要震动";
 "alert.step.drop" = "趴下";
 "alert.step.cover" = "掩护";
 "alert.step.holdOn" = "抓牢";
@@ -269,11 +259,13 @@
 
 /* 来源与免责声明 页面 */
 "disclaimer.badge" = "本应用非官方预警平台";
-"disclaimer.summary" = "数据来源于第三方聚合服务，实际信息请以官方发布为准。信息可能存在延迟、缺失或误差。";
+"disclaimer.summary" = "日本气象厅信息由 Wolfx 中继。权威信息请以官方发布为准。信息可能存在延迟、缺失或误差。";
 "disclaimer.section.sources" = "数据来源";
-"disclaimer.source.wolfx" = "Wolfx Open API（聚合）";
-"disclaimer.source.cenc" = "中国地震台网中心 公开速报（聚合）";
-"disclaimer.source.jma" = "日本气象厅 公开速报（聚合）";
+"disclaimer.source.wolfx" = "Wolfx Open API（日本气象厅数据中继）";
+"disclaimer.source.jma" = "日本气象厅公开地震信息";
+"disclaimer.source.jmaAttribution" = "来源：日本气象厅（JMA）。内容经 QuakeSignal 规范化和编辑，并非由日本气象厅创建或认可。依据《公共数据使用条款 1.0》使用。";
+"disclaimer.source.jmaTerms" = "日本气象厅条款与来源说明";
+"disclaimer.source.publicDataLicense" = "公共数据使用条款 1.0";
 "disclaimer.notOfficial" = "本应用不是官方政府地震预警平台，不替代官方权威信息。";
 "disclaimer.mayBeDelayed" = "信息可能延迟、不完整或不准确，请以官方发布与当地应急指示为准。";
 "disclaimer.deliveryNotGuaranteed" = "通知送达取决于操作系统、网络状况与设备设置，无法保证秒级到达。";
@@ -337,7 +329,20 @@
 "platform.historical.reports" = "历史地震报告";
 "platform.tv.title" = "地震信息看板";
 "platform.tv.foregroundOnly.detail" = "Apple TV 仅在此看板打开时更新地震信息，不会注册后台提醒。";
-"platform.watch.foregroundOnly.detail" = "打开手表 App 即可刷新。在安全的伴侣设备推送可用前，后台提醒仍由已配对的 iPhone 接收。";
-"platform.watch.foregroundOnly.short" = "打开时刷新。提醒仍由配对的 iPhone 接收。";
+"platform.tv.alertSound.detail" = "选择 Apple TV 如何处理提醒声音。声音不会自动播放；仅在你使用 Siri Remote 选择“试听”或“播放”后播放。";
+"platform.tv.alertSound.disclosure" = "Apple TV 提醒仅在前台显示，并始终提供视觉安全指引。QuakeSignal 紧急提示音和日语安全语音仅在你按下“试听”或“播放”后播放。由于 tvOS 不播放通知声音，“系统默认”仅提供视觉提醒。日语语音使用名古屋工业大学的 HTS Voice “Mei”（CC BY 3.0）。均非 J-Alert 或日本气象厅录音。";
+"platform.tv.alertSound.selected" = "已选择";
+"platform.tv.alertSound.notSelected" = "未选择";
+"platform.tv.alertSound.previewPlaying" = "正在播放试听。";
+"platform.tv.alertSound.previewUnavailable" = "无法播放所选声音。";
+"platform.tv.alertSound.system.detail" = "tvOS 不播放系统通知声音。选择此项后，前台预警仅提供视觉提醒。";
+"platform.tv.alertSound.system.visualOnly" = "在 Apple TV 上，“系统默认”仅提供视觉提醒。";
+"platform.tv.alert.safetyTitle" = "立即保护自己";
+"platform.tv.alert.playSelectedSound" = "播放所选声音";
+"platform.tv.alert.playSelectedSound.hint" = "按下 Siri Remote 后播放所选的 QuakeSignal 声音。";
+"platform.watch.foregroundOnly.detail" = "打开 Watch App 时可接收实时前台预警并刷新。后台提醒仍由已配对的 iPhone 接收。";
+"platform.watch.foregroundOnly.short" = "打开时接收实时预警。后台提醒仍由配对的 iPhone 接收。";
+"platform.watch.alertSound.changeOnPhone" = "请在已配对 iPhone 上的震息中选择声音。“系统默认”使用 Watch 警告触感；自定义声音也会在此应用打开时播放。";
+"platform.watch.emergency.foregroundOnly" = "这是应用打开时根据气象厅最新信息显示的提醒。送达不受保证；请遵从当地官方指引。";
 "platform.refresh" = "刷新";
 "platform.loading" = "正在加载地震信息…";

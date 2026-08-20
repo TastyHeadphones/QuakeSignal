@@ -1,12 +1,13 @@
 # QuakeSignal — Privacy Policy
 
-Effective date: 19 August 2026
+Effective date: 20 August 2026
 
-This policy covers every QuakeSignal client: the **Windows and native macOS
-desktop app**, the **Chrome extension**, the **iPhone and iPad app**, its
+This policy covers every QuakeSignal client: the **Windows desktop app** and
+legacy **Tauri macOS desktop builds** (dormant for Apple release 1.1 build 8),
+the **Chrome extension**, the **iPhone and iPad app**, its
 embedded **Apple Watch companion**, the **Apple TV** and **Apple Vision Pro**
-apps, and the iPhone/iPad target when it runs through **Mac Catalyst** or as
-**Designed for iPad on Mac**. QuakeSignal is a free, MIT-licensed open source
+apps, and the shared iPhone/iPad target when it runs through **Mac Catalyst**.
+QuakeSignal is a free, MIT-licensed open source
 project; its complete source code is public at
 <https://github.com/TastyHeadphones/QuakeSignal>.
 
@@ -25,16 +26,16 @@ and keep that service reliable.
 
 | Client | App registration or telemetry sent to the QuakeSignal notification service | Direct services contacted | Local state |
 |---|---|---|---|
-| Windows / native macOS desktop | **None** | Wolfx | Event history and preferences on your computer |
+| Windows / legacy Tauri macOS desktop | **None** | Wolfx | Event history and preferences on your computer; the Tauri Mac storefront route is dormant for Apple release 1.1 build 8 |
 | Chrome extension | **None** | Wolfx | Preferences and recent events in the browser profile |
 | iPhone / iPad | Only if you enable alert registration | Wolfx; Apple Maps and Location Services when used; Cloudflare and Apple APNs/App Attest for opted-in alerts | Preferences, guide details, and current display state on your device; the opted-in registration described below is also held by Cloudflare |
-| Embedded Apple Watch / Apple TV | **None** | Wolfx over HTTPS while the app is open | Current report state in memory for the foreground session |
-| Apple Vision Pro / Mac Catalyst / Designed for iPad on Mac | **None** | Wolfx while the app is open; Apple Maps and Location Services when used | Preferences and guide details in local app storage; current report and location state are not sent to Wolfx or the QuakeSignal relay |
+| Embedded Apple Watch / Apple TV | **None** | Wolfx over encrypted WebSocket and HTTPS connections while the app is open | Current report state in memory for the foreground session; selected alert presentation mode in local storage |
+| Apple Vision Pro / Mac Catalyst | **None** | Wolfx while the app is open; Apple Maps and Location Services when used | Preferences and guide details in local app storage; current report and location state are not sent to Wolfx or the QuakeSignal relay |
 
 There is no QuakeSignal account on any platform. Only the iPhone/iPad alert
 path transmits registration data to infrastructure operated by this project,
 and only after alert registration is enabled. The Watch, TV, Vision, Catalyst,
-Designed-for-iPad-on-Mac, native desktop, and Chrome experiences do not
+native desktop, and Chrome experiences do not
 independently register with that service.
 
 Opening a public QuakeSignal privacy, support, or terms page is an ordinary web
@@ -46,7 +47,7 @@ subject to GitHub's own policies.
 
 ---
 
-## Desktop app (Windows and macOS)
+## Desktop app (Windows and legacy Tauri macOS builds)
 
 **What leaves your computer.** Only requests to the public Wolfx earthquake
 service:
@@ -143,7 +144,7 @@ stored for your device:
 | APNs device token | Addressing the notification to your device |
 | An approximate coordinate on a 0.1° grid, derived from either the current location or a selected city's coordinate | Deciding whether an event is near enough to alert you |
 | Optional chosen city name | Showing and matching the selected alert area |
-| Alert radius, minimum magnitude, selected sources | Matching your alert thresholds |
+| Alert radius, minimum magnitude, selected JMA feed types | Filtering JMA-issued information against your alert choices; QuakeSignal does not create a new local-intensity or arrival-time forecast |
 | Locale, UTC offset, night-notification preference | Localizing text and honouring quiet hours |
 | Test-alert preference | Respecting your alert choices |
 | Created and updated timestamps | Housekeeping |
@@ -156,8 +157,9 @@ in the `app_attest_keys` and short-lived `app_attest_challenges` tables in
 [`backend/cloudflare/migrations/`](../backend/cloudflare/migrations/), which
 you can read yourself. The service also keeps bounded operational delivery and
 deduplication records. An operational delivery failure contains a token hash,
-event/delivery metadata, APNs status, and reason—not a raw request body—and is
-purged after 14 days.
+event/delivery metadata, APNs status, and reason—not a raw request body—and
+becomes eligible for deletion after 14 days. It is removed by the next
+successful routine cleanup; an operational cleanup failure can delay deletion.
 
 **What is not stored.** No name, no email address, no account, no contacts, no
 advertising identifier, exact GPS fix, unrounded selected-city coordinate, or
@@ -183,20 +185,29 @@ key; it cannot claim or remove a legacy/unbound subscription. If the app has a
 new integrity key or the server does not yet associate that key with a device,
 it must supply the exact current APNs token for a token-bound recovery request
 and cannot identify the old registration from the new key alone. Each App
-Attest challenge expires in no more than five minutes and expired records are
-removed by routine cleanup.
+Attest challenge becomes invalid in no more than five minutes. Its expired row
+is removed by the next successful routine cleanup; an operational cleanup
+failure can delay deletion.
 When the last associated registration is removed, that App Attest verifier,
 receipt, and assertion-counter record is deleted too. A production training
 test creates a separate token-free claim containing only the opaque
-App Attest key ID and UTC timestamps; it is retained for at most 14 days to
-enforce one production training attempt per key per UTC day. Its optional
+App Attest key ID and UTC timestamps; it becomes eligible for deletion after
+14 days and is removed by the next successful routine cleanup. An operational
+cleanup failure can delay deletion. The claim enforces one production training
+attempt per key per UTC day. Its optional
 fixed-delay check creates a private scheduler record containing only that key
 ID, a due time, and an at-most-once attempted state. It is deleted after the
 one scheduled attempt or cancellation, and an alarm more than 30 seconds late
-is deleted without delivery. APNs also removes invalidated tokens, and the
-daily retention job removes registrations that have not been refreshed for 90
-days along with those orphaned integrity records; delivery-failure token hashes
-are purged after 14 days. A public support issue cannot privately identify an
+is deleted without delivery. APNs also removes invalidated tokens. Registrations
+become eligible for deletion after they have not been refreshed for 90 days,
+together with those orphaned integrity records; the next successful daily
+cleanup removes them, and an operational cleanup failure can delay deletion.
+Delivery-failure token hashes become eligible for deletion after 14 days and
+are removed by the next successful routine cleanup; an operational cleanup
+failure can delay deletion. Normalized earthquake event rows and their revision
+history become eligible for deletion after 89 days and are removed by the next
+successful daily cleanup; an operational cleanup failure can delay deletion.
+A public support issue cannot privately identify an
 old registration after its App Attest key and APNs token are unavailable.
 Deleting the app or switching off iOS notifications alone cannot reliably
 communicate a deletion request to the service, so use the in-app control before
@@ -209,23 +220,27 @@ the old key record. Assertions and tokenless requests cannot transfer a
 different key's subscription. If APNs has not supplied the token after a reset,
 the app cannot delete the unreachable old registration. Do not post a token,
 key identifier, proof, or location in a public support issue; support can guide
-recovery, and the old registration and its orphaned integrity record are
-automatically purged after they have not been refreshed for 90 days.
+recovery. The old registration and its orphaned integrity record become eligible
+for deletion after they have not been refreshed for 90 days and are removed by
+the next successful daily cleanup; an operational cleanup failure can delay
+deletion.
 
 ---
 
 ## Foreground-only Apple experiences
 
 **Apple Watch and Apple TV.** These apps request recent public earthquake
-reports directly from Wolfx over HTTPS only while they are open. Current report
-state is held in memory for that foreground session. They do not send a
-location, alert preference, device token, App Attest record, account identifier,
-or usage event to infrastructure operated by QuakeSignal. They do not
-independently use APNs or provide background emergency alerts. If Apple mirrors
-an iPhone notification to a paired Watch, that remains part of the iPhone's
-opted-in registration rather than a separate Watch registration.
+reports directly from Wolfx over encrypted WebSocket and HTTPS connections only
+while they are open. Current report state is held in memory for that foreground
+session. The selected System, Urgent, or Japanese Voice presentation mode is
+stored locally and is not uploaded. They do not send a location, alert
+preference, device token, App Attest record, account identifier, or usage event
+to infrastructure operated by QuakeSignal. They do not independently use APNs
+or provide background emergency alerts. If Apple mirrors an iPhone notification
+to a paired Watch, that remains part of the iPhone's opted-in registration
+rather than a separate Watch registration.
 
-**Apple Vision Pro, Mac Catalyst, and Designed for iPad on Mac.** These
+**Apple Vision Pro and Mac Catalyst.** These
 full-interface experiences connect directly to Wolfx for public earthquake data
 while the app is open. Preferences, the preparedness-kit checklist, and any
 optional family contact details stay in local app storage. A current location,
@@ -259,13 +274,13 @@ purchases.
 
 | Service | Used by | What it receives |
 |---|---|---|
-| [Wolfx](https://wolfx.jp) | All clients | Ordinary connection metadata such as your IP address, under [its own policies](https://wolfx.jp) |
+| [Wolfx](https://wolfx.jp) | All clients; the current Apple release requests only JMA feeds | Ordinary connection metadata such as your IP address, under [its own policies](https://wolfx.jp) |
 | [Apple Maps](https://www.apple.com/legal/privacy/data/en/apple-maps/) and [Location Services](https://www.apple.com/legal/privacy/data/en/location-services/) | Full-interface Apple experiences when you use maps or current location | Apple may process associated map, location-service, device, and network data under its own policies; QuakeSignal does not include the exact fix in Wolfx requests or its notification relay |
 | Cloudflare (Workers, D1) | Public legal/support pages; opted-in iPhone/iPad alerts | Ordinary web-request and security metadata for public pages; the device registration and App Attest integrity record described above only for opted-in alerts |
 | Apple APNs and App Attest | Opted-in iPhone/iPad alerts only | Notification delivery and Apple-managed app-instance attestation material under Apple's policies |
 | GitHub | Downloads, source links, and public support issues | Standard web-request and account data under GitHub's policies when you use those services |
 
-QuakeSignal is not affiliated with JMA, CENC, Wolfx, or any government
+QuakeSignal is not affiliated with JMA, Wolfx, or any government
 emergency agency.
 
 ## Children
@@ -287,5 +302,5 @@ Questions and recovery guidance can be requested on the public
 [issue tracker](https://github.com/TastyHeadphones/QuakeSignal/issues). Never
 post an APNs token, App Attest key identifier or proof, exact location, or other
 private information there. Use the in-app removal control for an immediate
-authenticated deletion; an unreachable old registration ages out under the
-90-day retention rule described above.
+authenticated deletion; an unreachable old registration ages out under its
+separate 90-day registration rule described above.

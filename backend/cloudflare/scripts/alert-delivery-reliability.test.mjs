@@ -988,7 +988,7 @@ test("health returns a no-store structured 503 when the relay status call fails"
   assert.equal(body.delivery.status, "degraded");
   assert.equal(body.delivery.apnsConfigured, null);
   assert.equal(body.upstream.status, "degraded");
-  assert.equal(body.upstream.staleSources.length, 7);
+  assert.deepEqual(body.upstream.staleSources, ["jma_eew", "jma_eqlist"]);
   assert.deepEqual(body.appAttestPolicy, {
     format: policyFormat,
     fingerprint: await appAttestPolicyFingerprint(
@@ -1074,7 +1074,7 @@ test("status probes preserve first boot but do not repeatedly run relay recovery
     await relay.fetch(new Request("https://relay.internal/status"));
     assert.equal(d1Batches, 0);
     assert.equal(httpSeedRequests, 0);
-    assert.equal(upgradeRequests, 3, "one Upgrade attempt per watcher is enough");
+    assert.equal(upgradeRequests, 2, "one Upgrade attempt per JMA watcher is enough");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1155,7 +1155,7 @@ test("a first status probe still performs operational bootstrap when no alarm ex
       0,
       "the initial snapshot is deferred to its own immediate relay alarm",
     );
-    assert.equal(upgradeRequests, 3, "first status opens one Upgrade per route");
+    assert.equal(upgradeRequests, 2, "first status opens one Upgrade per JMA route");
     assert.notEqual(alarmAt, null, "first status schedules routine recovery");
   } finally {
     globalThis.fetch = originalFetch;
@@ -1236,10 +1236,11 @@ test("activates one fetch-Upgraded Wolfx route only after accept", async () => {
     const relay = new QuakeRelay(state, {});
     // These private TypeScript methods remain callable in the bundled black-box
     // test. Calling twice exercises the real connectingRoutes guard.
-    relay.connect("all_eew");
-    relay.connect("all_eew");
+    relay.connect("jma_eew");
+    relay.connect("jma_eew");
+    relay.connect("cenc_eqlist");
     assert.equal(fetchCalls.length, 1, "an in-flight route must not be duplicated");
-    assert.equal(fetchCalls[0].url, "https://ws-api.wolfx.jp/all_eew");
+    assert.equal(fetchCalls[0].url, "https://ws-api.wolfx.jp/jma_eew");
     assert.equal(
       new Headers(fetchCalls[0].init.headers).get("upgrade"),
       "websocket",
@@ -1249,20 +1250,14 @@ test("activates one fetch-Upgraded Wolfx route only after accept", async () => {
     await drain();
 
     assert.equal(socket.accepted, true);
-    assert.deepEqual(socket.sent, [
-      "query_jmaeew",
-      "query_sceew",
-      "query_cenceew",
-      "query_fjeew",
-      "query_cqeew",
-    ]);
+    assert.deepEqual(socket.sent, ["query_jmaeew"]);
     assert.equal(
       relay.statuses.get("jma_eew"),
       "connecting",
       "the Upgrade alone is not valid upstream liveness",
     );
-    assert.equal(relay.upstreams.get("all_eew"), socket);
-    assert.equal(relay.connectingRoutes.has("all_eew"), false);
+    assert.equal(relay.upstreams.get("jma_eew"), socket);
+    assert.equal(relay.connectingRoutes.has("jma_eew"), false);
     assert.deepEqual(alarms, []);
   } finally {
     globalThis.fetch = originalFetch;
@@ -1369,10 +1364,10 @@ test("rejected and failed Upgrade handshakes cancel, log safely, and retry", asy
     assert.equal(values.get("upstream-reconnect-failures:jma_eqlist"), 2);
 
     mode = "throw";
-    relay.connect("cenc_eqlist");
+    relay.connect("jma_eew");
     await drain();
-    assert.equal(relay.statuses.get("cenc_eqlist"), "error");
-    assert.equal(relay.connectingRoutes.has("cenc_eqlist"), false);
+    assert.equal(relay.statuses.get("jma_eew"), "error");
+    assert.equal(relay.connectingRoutes.has("jma_eew"), false);
     const failed = JSON.parse(warnings.at(-1));
     assert.deepEqual(
       {
@@ -1382,7 +1377,7 @@ test("rejected and failed Upgrade handshakes cancel, log safely, and retry", asy
       },
       {
         outcome: "wolfx_upstream_upgrade_error",
-        route: "cenc_eqlist",
+        route: "jma_eew",
         errorName: "TypeError",
       },
     );
@@ -1680,15 +1675,7 @@ test("rotates recovery sweep fairness in memory and treats a silent open socket 
     waitUntil() {},
   };
   const relay = new QuakeRelay(state, {});
-  const sources = [
-    "jma_eew",
-    "sc_eew",
-    "cenc_eew",
-    "fj_eew",
-    "cq_eew",
-    "cenc_eqlist",
-    "jma_eqlist",
-  ];
+  const sources = ["jma_eew", "jma_eqlist"];
   for (const source of sources) relay.statuses.set(source, "error");
 
   assert.deepEqual(relay.recoverySweepSources(0), sources);
@@ -1698,7 +1685,7 @@ test("rotates recovery sweep fairness in memory and treats a silent open socket 
     "each minute starts at the next source without a durable recovery cursor",
   );
   assert.deepEqual(
-    relay.recoverySweepSources(7 * 60_000),
+    relay.recoverySweepSources(2 * 60_000),
     sources,
     "the fair source order wraps after every source receives first position",
   );
@@ -2647,6 +2634,68 @@ test("a cold Queue-facing relay defers its first HTTP baseline to the alarm", as
   assert.deepEqual(maintenance, ["dlq", "legacy", "journal", "outbox", "purge"]);
 });
 
+test("routine retention uses an 89-day event and revision cutoff", async () => {
+  const { QuakeRelay } = await workerModule();
+  const batches = [];
+  const stored = new Map();
+  const state = {
+    storage: {
+      async get(key) {
+        return stored.get(key);
+      },
+      async put(key, value) {
+        stored.set(key, value);
+      },
+    },
+  };
+  const database = {
+    prepare(sql) {
+      return {
+        sql,
+        bindings: [],
+        bind(...bindings) {
+          return { sql, bindings };
+        },
+      };
+    },
+    async batch(statements) {
+      batches.push(statements);
+      return statements.map(() => ({ meta: { changes: 0 } }));
+    },
+  };
+  const relay = new QuakeRelay(state, { DB: database });
+  const now = Date.parse("2026-08-20T12:00:00.000Z");
+  const originalNow = Date.now;
+  Date.now = () => now;
+  try {
+    await relay.purgeExpiredDevicesIfDue();
+  } finally {
+    Date.now = originalNow;
+  }
+
+  assert.equal(batches.length, 1, "retention uses one ordered D1 batch");
+  const statements = batches[0];
+  const revisionIndex = statements.findIndex(({ sql }) =>
+    sql === "DELETE FROM event_revisions WHERE recorded_at_utc < ?"
+  );
+  const eventIndex = statements.findIndex(({ sql }) =>
+    sql === "DELETE FROM events WHERE last_updated_utc < ?"
+  );
+  assert.ok(revisionIndex >= 0, "revision retention must be explicit and bounded");
+  assert.ok(eventIndex > revisionIndex, "revisions must be pruned before events");
+  // The sweep uses the disclosed 89-day eligibility cutoff. Public copy also
+  // states that the next successful daily cleanup performs deletion and that
+  // operational failures can delay it.
+  const expectedCutoff = new Date(now - (89 * 24 * 60 * 60_000)).toISOString();
+  assert.deepEqual(statements[revisionIndex].bindings, [expectedCutoff]);
+  assert.deepEqual(statements[eventIndex].bindings, [expectedCutoff]);
+  assert.equal(
+    stored.get("last-device-purge-ms"),
+    now,
+    "the shared daily cadence covers event retention",
+  );
+});
+
 test("HTTP fallback ingests only structurally valid changed snapshots", async () => {
   const { QuakeRelay, isStructurallyValidHttpSnapshot } = await workerModule();
   const originalFetch = globalThis.fetch;
@@ -2675,30 +2724,112 @@ test("HTTP fallback ingests only structurally valid changed snapshots", async ()
     },
     waitUntil() {},
   };
-  const validSnapshot = {
-    EventID: "http-snapshot-1",
-    Serial: 1,
-    AnnouncedTime: "2026/08/13 12:00:05",
-    OriginTime: "2026/08/13 12:00:00",
-    Hypocenter: "Test coast",
-    Latitude: 35.1,
-    Longitude: 140.2,
-    Magunitude: 4.2,
-  };
+  const validSnapshot = jmaEewSnapshot();
+  const normalizedValidSnapshot = normalizedJmaEewSnapshot(validSnapshot);
   assert.equal(
-    isStructurallyValidHttpSnapshot("jma_eew", validSnapshot, [{
-      sourceId: "jma_eew",
-      eventId: "http-snapshot-1",
-      serial: 1,
-      originTimeUtc: "2026-08-13T03:00:00.000Z",
-      reportTimeUtc: "2026-08-13T03:00:05.000Z",
-      latitude: 35.1,
-      longitude: 140.2,
-      magnitude: 4.2,
-      hypocenter: "Test coast",
-    }]),
+    isStructurallyValidHttpSnapshot(
+      "jma_eew",
+      validSnapshot,
+      [normalizedValidSnapshot],
+    ),
     true,
   );
+  const {
+    isSea: _isSea,
+    isWarn: _isWarn,
+    isFinal: _isFinal,
+    isCancel: _isCancel,
+    isTraining: _isTraining,
+    isAssumption: _isAssumption,
+    ...withoutDecisionBooleans
+  } = validSnapshot;
+  assert.equal(
+    isStructurallyValidHttpSnapshot(
+      "jma_eew",
+      withoutDecisionBooleans,
+      [normalizedJmaEewSnapshot(withoutDecisionBooleans)],
+    ),
+    false,
+    "missing all raw decision booleans must not be normalized into false decisions",
+  );
+  for (const field of [
+    "isSea",
+    "isTraining",
+    "isAssumption",
+    "isWarn",
+    "isFinal",
+    "isCancel",
+  ]) {
+    const missing = { ...validSnapshot };
+    delete missing[field];
+    assert.equal(
+      isStructurallyValidHttpSnapshot(
+        "jma_eew",
+        missing,
+        [normalizedJmaEewSnapshot(missing)],
+      ),
+      false,
+      `missing raw ${field} must fail closed`,
+    );
+    const coercedRawValue = field === "isWarn" ? 1 : "false";
+    const coerced = { ...validSnapshot, [field]: coercedRawValue };
+    assert.equal(
+      isStructurallyValidHttpSnapshot(
+        "jma_eew",
+        coerced,
+        [normalizedJmaEewSnapshot(coerced)],
+      ),
+      false,
+      `non-Boolean raw ${field} must fail closed`,
+    );
+  }
+  for (const [rawField, normalizedField] of [
+    ["Depth", "depth"],
+    ["MaxIntensity", "maxIntensity"],
+  ]) {
+    const missing = { ...validSnapshot };
+    delete missing[rawField];
+    assert.equal(
+      isStructurallyValidHttpSnapshot(
+        "jma_eew",
+        missing,
+        [normalizedJmaEewSnapshot(missing, { [normalizedField]: null })],
+      ),
+      false,
+      `missing essential raw ${rawField} must fail closed`,
+    );
+  }
+  for (const [field, mismatch] of [
+    ["id", "jma_eew:20260813120001"],
+    ["sourceId", "jma_eqlist"],
+    ["eventId", "20260813120001"],
+    ["serial", 2],
+    ["kind", "report"],
+    ["originTimeUtc", "2026-08-13T03:00:01.000Z"],
+    ["reportTimeUtc", "2026-08-13T03:00:06.000Z"],
+    ["hypocenter", "Other coast"],
+    ["latitude", 35.2],
+    ["longitude", 140.3],
+    ["magnitude", 4.3],
+    ["depth", 11],
+    ["maxIntensity", "5-"],
+    ["isWarn", false],
+    ["isFinal", true],
+    ["isCancel", true],
+    ["isTraining", true],
+    ["tsunami", "unexpected"],
+    ["raw", { ...validSnapshot }],
+  ]) {
+    assert.equal(
+      isStructurallyValidHttpSnapshot(
+        "jma_eew",
+        validSnapshot,
+        [{ ...normalizedValidSnapshot, [field]: mismatch }],
+      ),
+      false,
+      `normalized ${field} must exactly match its raw JMA field`,
+    );
+  }
   assert.equal(
     isStructurallyValidHttpSnapshot("jma_eew", { EventID: "x", Serial: 1 }, [{
       sourceId: "jma_eew",
@@ -2789,34 +2920,64 @@ test("HTTP fallback ingests only structurally valid changed snapshots", async ()
       "an invalid response must not reach the durable ingest path",
     );
 
-    const malformedList = {
-      md5: "not-a-real-list",
-      No51: {
-        Title: "report",
-        EventID: "too-many",
-        time: "2026/08/13 12:00",
-        time_full: "2026/08/13 12:00:00",
-        location: "Test coast",
-        magnitude: "4.2",
-        shindo: "2",
-        depth: "10km",
-        latitude: "35.1",
-        longitude: "140.2",
-        info: "",
-      },
+    const rankedReport = jmaEqlistEntry(1);
+    const soleNo50 = {
+      md5: "50505050505050505050505050505050",
+      No50: jmaEqlistEntry(50),
     };
     assert.equal(
-      isStructurallyValidHttpSnapshot("jma_eqlist", malformedList, [{
-        sourceId: "jma_eqlist",
-        eventId: "too-many",
-        serial: 1,
-        originTimeUtc: "2026-08-13T03:00:00.000Z",
-        reportTimeUtc: "2026-08-13T03:00:00.000Z",
-        latitude: 35.1,
-        longitude: 140.2,
-        magnitude: 4.2,
-        hypocenter: "Test coast",
-      }]),
+      isStructurallyValidHttpSnapshot(
+        "jma_eqlist",
+        soleNo50,
+        [normalizedJmaEqlistEntry(soleNo50.No50)],
+      ),
+      false,
+      "a sole valid No50 entry must not masquerade as a complete ranked snapshot",
+    );
+    const gappedList = {
+      md5: "13131313131313131313131313131313",
+      No1: rankedReport,
+      No3: jmaEqlistEntry(3),
+    };
+    assert.equal(
+      isStructurallyValidHttpSnapshot(
+        "jma_eqlist",
+        gappedList,
+        [
+          normalizedJmaEqlistEntry(gappedList.No1),
+          normalizedJmaEqlistEntry(gappedList.No3),
+        ],
+      ),
+      false,
+      "ranked snapshots must not skip an entry",
+    );
+    const contiguousList = {
+      md5: "12121212121212121212121212121212",
+      No1: rankedReport,
+      No2: jmaEqlistEntry(2),
+    };
+    assert.equal(
+      isStructurallyValidHttpSnapshot(
+        "jma_eqlist",
+        contiguousList,
+        [
+          normalizedJmaEqlistEntry(contiguousList.No1),
+          normalizedJmaEqlistEntry(contiguousList.No2),
+        ],
+      ),
+      true,
+      "an exact No1...NoN ranked snapshot remains valid",
+    );
+    const malformedList = {
+      md5: "51515151515151515151515151515151",
+      No51: jmaEqlistEntry(50),
+    };
+    assert.equal(
+      isStructurallyValidHttpSnapshot(
+        "jma_eqlist",
+        malformedList,
+        [normalizedJmaEqlistEntry(malformedList.No51)],
+      ),
       false,
       "No51 must be rejected before it can create unbounded D1/outbox work",
     );
@@ -2827,28 +2988,11 @@ test("HTTP fallback ingests only structurally valid changed snapshots", async ()
 
 test("upstream snapshots reject non-finite and out-of-range coordinates", async () => {
   const { isStructurallyValidHttpSnapshot } = await workerModule();
-  const raw = {
-    EventID: "coordinate-boundary",
-    Serial: 1,
-    AnnouncedTime: "2026/08/13 12:00:05",
-    OriginTime: "2026/08/13 12:00:00",
-    Hypocenter: "Test coast",
+  const raw = jmaEewSnapshot({
     Latitude: 90,
     Longitude: 180,
-    Magunitude: 4.2,
-  };
-  const normalized = {
-    id: "jma_eew:coordinate-boundary",
-    sourceId: "jma_eew",
-    eventId: "coordinate-boundary",
-    serial: 1,
-    originTimeUtc: "2026-08-13T03:00:00.000Z",
-    reportTimeUtc: "2026-08-13T03:00:05.000Z",
-    latitude: 90,
-    longitude: 180,
-    magnitude: 4.2,
-    hypocenter: "Test coast",
-  };
+  });
+  const normalized = normalizedJmaEewSnapshot(raw);
 
   assert.equal(
     isStructurallyValidHttpSnapshot("jma_eew", raw, [normalized]),
@@ -2863,11 +3007,12 @@ test("upstream snapshots reject non-finite and out-of-range coordinates", async 
     ["normalized longitude above 180", {}, { longitude: 180.000_001 }],
     ["non-finite normalized latitude", {}, { latitude: Number.POSITIVE_INFINITY }],
   ]) {
+    const candidate = { ...raw, ...rawMutation };
     assert.equal(
       isStructurallyValidHttpSnapshot(
         "jma_eew",
-        { ...raw, ...rawMutation },
-        [{ ...normalized, ...normalizedMutation }],
+        candidate,
+        [normalizedJmaEewSnapshot(candidate, normalizedMutation)],
       ),
       false,
       label,
@@ -2875,59 +3020,273 @@ test("upstream snapshots reject non-finite and out-of-range coordinates", async 
   }
 
   const reportRaw = {
-    md5: "invalid-report-coordinate",
-    No1: {
-      Title: "report",
-      EventID: "invalid-report-coordinate",
-      time: "2026/08/13 12:00",
-      time_full: "2026/08/13 12:00:00",
-      location: "Test coast",
-      magnitude: "4.2",
-      shindo: "2",
-      depth: "10km",
-      latitude: "35.1",
-      longitude: "181",
-      info: "",
-    },
+    md5: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    No1: jmaEqlistEntry(1, { longitude: "181" }),
   };
   assert.equal(
-    isStructurallyValidHttpSnapshot("jma_eqlist", reportRaw, [{
-      ...normalized,
-      id: "jma_eqlist:invalid-report-coordinate",
-      sourceId: "jma_eqlist",
-      eventId: "invalid-report-coordinate",
-      latitude: 35.1,
-      longitude: 140.2,
-    }]),
+    isStructurallyValidHttpSnapshot(
+      "jma_eqlist",
+      reportRaw,
+      [normalizedJmaEqlistEntry(reportRaw.No1)],
+    ),
     false,
     "ranked report raw coordinates use the same range validation",
   );
+  const validReportRaw = {
+    md5: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    No1: jmaEqlistEntry(1),
+  };
   assert.equal(
-    isStructurallyValidHttpSnapshot("jma_eqlist", {
-      ...reportRaw,
-      No1: { ...reportRaw.No1, longitude: "140.2" },
-    }, [{
-      ...normalized,
-      id: "jma_eqlist:invalid-report-coordinate",
-      sourceId: "jma_eqlist",
-      eventId: "invalid-report-coordinate",
-      latitude: 35.1,
-      longitude: 181,
-    }]),
+    isStructurallyValidHttpSnapshot(
+      "jma_eqlist",
+      validReportRaw,
+      [normalizedJmaEqlistEntry(validReportRaw.No1, { longitude: 181 })],
+    ),
     false,
     "ranked report normalized coordinates use the same range validation",
   );
 });
 
+test("JMA wire domains reject rollover and coercion while preserving documented boundaries", async () => {
+  const { isStructurallyValidHttpSnapshot } = await workerModule();
+  const validEew = (raw, normalizedOverrides = {}) =>
+    isStructurallyValidHttpSnapshot(
+      "jma_eew",
+      raw,
+      [normalizedJmaEewSnapshot(raw, normalizedOverrides)],
+    );
+  const validList = (entry, normalizedOverrides = {}, md5 = "cccccccccccccccccccccccccccccccc") => {
+    const raw = { md5, No1: entry };
+    return isStructurallyValidHttpSnapshot(
+      "jma_eqlist",
+      raw,
+      [normalizedJmaEqlistEntry(entry, normalizedOverrides)],
+    );
+  };
+
+  const lowBoundaryEew = jmaEewSnapshot({
+    EventID: "20240229000000",
+    OriginTime: "2024/02/29 00:00:00",
+    AnnouncedTime: "2024/02/29 00:00:00",
+    Magunitude: -2,
+    Depth: 0,
+    MaxIntensity: "0",
+  });
+  const highBoundaryEew = jmaEewSnapshot({
+    Magunitude: 12,
+    Depth: 1_000,
+    MaxIntensity: "7",
+  });
+  assert.equal(validEew(lowBoundaryEew), true, "leap day and lower domains remain valid");
+  assert.equal(validEew(highBoundaryEew), true, "upper documented safety domains remain valid");
+  for (const intensity of ["0", "1", "2", "3", "4", "5-", "5+", "6-", "6+", "7"]) {
+    const raw = jmaEewSnapshot({ MaxIntensity: intensity });
+    assert.equal(validEew(raw), true, `JMA EEW intensity ${intensity} remains valid`);
+  }
+
+  for (const [label, mutation] of [
+    ["rollover EventID", { EventID: "20260230000000" }],
+    ["rollover origin", { OriginTime: "2026/02/30 12:00:00" }],
+    ["rollover announcement", { AnnouncedTime: "2026/08/13 12:00:60" }],
+    ["announcement before origin", { AnnouncedTime: "2026/08/13 11:59:59" }],
+    ["string magnitude", { Magunitude: "4.2" }],
+    ["magnitude below bound", { Magunitude: -2.01 }],
+    ["magnitude above bound", { Magunitude: 12.01 }],
+    ["negative depth", { Depth: -1 }],
+    ["depth above bound", { Depth: 1_000.01 }],
+    ["non-domain intensity", { MaxIntensity: "5" }],
+  ]) {
+    const raw = jmaEewSnapshot(mutation);
+    assert.equal(validEew(raw), false, label);
+  }
+
+  const lowBoundaryEntry = jmaEqlistEntry(1, {
+    EventID: "20240229000059",
+    time: "2024/02/29 00:00",
+    time_full: "2024/02/29 00:00:59",
+    magnitude: "-2",
+    shindo: "0",
+    depth: "0km",
+    latitude: "-90",
+    longitude: "-180",
+  });
+  const highBoundaryEntry = jmaEqlistEntry(1, {
+    magnitude: "12",
+    shindo: "7",
+    depth: "1000km",
+    latitude: "90",
+    longitude: "180",
+  });
+  assert.equal(validList(lowBoundaryEntry), true, "canonical lower list boundaries remain valid");
+  assert.equal(validList(highBoundaryEntry), true, "canonical upper list boundaries remain valid");
+  assert.equal(
+    validList(jmaEqlistEntry(1, { EventID: "20260814090203" })),
+    true,
+    "a valid JMA origin EventID may precede or follow the report publication minute",
+  );
+  for (const intensity of ["0", "1", "2", "3", "4", "5-", "5+", "6-", "6+", "7"]) {
+    const entry = jmaEqlistEntry(1, { shindo: intensity });
+    assert.equal(validList(entry), true, `JMA report intensity ${intensity} remains valid`);
+  }
+
+  for (const [label, mutation, md5] of [
+    ["rollover list EventID", { EventID: "20260230000000" }],
+    ["rollover minute time", { EventID: "20260228090001", time: "2026/02/30 09:00", time_full: "2026/02/28 09:00:00" }],
+    ["rollover full time", { time_full: "2026/08/14 09:00:60" }],
+    ["time/full-time mismatch", { time_full: "2026/08/14 09:01:00" }],
+    ["nonnumeric magnitude", { magnitude: "abc" }],
+    ["noncanonical magnitude", { magnitude: "+4.2" }],
+    ["noncanonical latitude", { latitude: " 35.1" }],
+    ["noncanonical longitude", { longitude: "+140.2" }],
+    ["sign-only depth", { depth: "+" }],
+    ["fractional depth", { depth: "10.5km" }],
+    ["leading-zero depth", { depth: "010km" }],
+    ["depth above bound", { depth: "1001km" }],
+    ["non-domain shindo", { shindo: "5" }],
+    ["nonhex md5", {}, "not-a-canonical-md5"],
+    ["uppercase md5", {}, "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"],
+  ]) {
+    const entry = jmaEqlistEntry(1, mutation);
+    assert.equal(validList(entry, {}, md5), false, label);
+  }
+
+  const listEntry = jmaEqlistEntry(1);
+  const normalizedListEntry = normalizedJmaEqlistEntry(listEntry);
+  const listRaw = { md5: "dddddddddddddddddddddddddddddddd", No1: listEntry };
+  for (const [field, mismatch] of [
+    ["id", "jma_eqlist:20260814090002"],
+    ["sourceId", "jma_eew"],
+    ["eventId", "20260814090002"],
+    ["serial", 2],
+    ["kind", "eew"],
+    ["originTimeUtc", "2026-08-14T00:00:01.000Z"],
+    ["reportTimeUtc", "2026-08-14T00:00:01.000Z"],
+    ["hypocenter", "Other coast"],
+    ["latitude", 35.2],
+    ["longitude", 140.3],
+    ["magnitude", 4.3],
+    ["depth", 11],
+    ["maxIntensity", "3"],
+    ["isWarn", true],
+    ["isFinal", false],
+    ["isCancel", true],
+    ["isTraining", true],
+    ["tsunami", "unexpected"],
+    ["raw", { ...listEntry }],
+  ]) {
+    assert.equal(
+      isStructurallyValidHttpSnapshot(
+        "jma_eqlist",
+        listRaw,
+        [{ ...normalizedListEntry, [field]: mismatch }],
+      ),
+      false,
+      `normalized list ${field} must match its exact raw-derived value`,
+    );
+  }
+});
+
 test("queued event validation requires strict numeric in-range coordinates", async () => {
-  const { isQueuedEvent } = await workerModule();
+  const {
+    APNS_RELAY_DISABLED_SOURCES,
+    APNS_RELAY_SOURCES,
+    dispatchPushPage,
+    isApnsRelaySource,
+    isQueuedEvent,
+  } = await workerModule();
   const event = message(1).event;
+  assert.deepEqual(APNS_RELAY_SOURCES, ["jma_eew", "jma_eqlist"]);
+  assert.equal(isApnsRelaySource("jma_eew"), true);
+  assert.equal(isApnsRelaySource("jma_eqlist"), true);
+  for (const sourceId of APNS_RELAY_DISABLED_SOURCES) {
+    assert.equal(isApnsRelaySource(sourceId), false);
+    assert.equal(
+      isQueuedEvent({
+        ...event,
+        id: `${sourceId}:example`,
+        sourceId,
+        kind: sourceId.endsWith("eqlist") ? "report" : "eew",
+      }),
+      false,
+      `${sourceId} cannot enter Queue delivery`,
+    );
+  }
   assert.equal(isQueuedEvent(event), true);
   assert.equal(isQueuedEvent({ ...event, latitude: "35" }), false);
   assert.equal(isQueuedEvent({ ...event, longitude: "139" }), false);
   assert.equal(isQueuedEvent({ ...event, latitude: 90.000_001 }), false);
   assert.equal(isQueuedEvent({ ...event, longitude: -180.000_001 }), false);
   assert.equal(isQueuedEvent({ ...event, id: "jma_eew:other" }), false);
+
+  let databaseTouched = false;
+  await assert.rejects(
+    dispatchPushPage(
+      {
+        get DB() {
+          databaseTouched = true;
+          throw new Error("disabled delivery must stop before D1");
+        },
+      },
+      { ...event, id: "cenc_eew:example", sourceId: "cenc_eew" },
+      "new",
+      "unused",
+      "disabled-source-delivery",
+    ),
+    /source is not permitted/i,
+  );
+  assert.equal(databaseTouched, false);
+});
+
+test("disabled sources stop before live journaling or HTTP recovery I/O", async () => {
+  const { QuakeRelay } = await workerModule();
+  let storageTouched = false;
+  let databaseTouched = false;
+  let networkTouched = false;
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  const errors = [];
+  globalThis.fetch = async () => {
+    networkTouched = true;
+    throw new Error("disabled recovery must not fetch");
+  };
+  console.error = (entry) => errors.push(JSON.parse(entry));
+  try {
+    const relay = new QuakeRelay(
+      {
+        storage: {
+          get() { storageTouched = true; throw new Error("disabled ingest must not read storage"); },
+          transaction() { storageTouched = true; throw new Error("disabled ingest must not write storage"); },
+        },
+        waitUntil() {},
+      },
+      {
+        get DB() {
+          databaseTouched = true;
+          throw new Error("disabled ingest must not reach D1");
+        },
+      },
+    );
+    const blockedEvent = {
+      ...message(1).event,
+      id: "cenc_eew:example",
+      sourceId: "cenc_eew",
+    };
+    await relay.enqueueLiveIngest(blockedEvent);
+    assert.deepEqual(errors, [{
+      sourceId: "cenc_eew",
+      outcome: "disabled_source_live_ingest_rejected",
+    }]);
+    assert.deepEqual(
+      await relay.seedHttpSource("cenc_eqlist", "recovery"),
+      { completed: false, snapshotWorkStarted: false },
+    );
+    assert.equal(storageTouched, false);
+    assert.equal(databaseTouched, false);
+    assert.equal(networkTouched, false);
+  } finally {
+    console.error = originalConsoleError;
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("live point-event listeners reject out-of-range coordinates before liveness or ingest", async () => {
@@ -2936,8 +3295,16 @@ test("live point-event listeners reject out-of-range coordinates before liveness
   const backgroundErrors = [];
   const ingested = [];
   const liveness = [];
+  const values = new Map();
+  let alarmAt = null;
   const state = {
-    storage: {},
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async list() { return new Map(); },
+      async getAlarm() { return alarmAt; },
+      async setAlarm(value) { alarmAt = value; },
+    },
     waitUntil(promise) {
       let tracked;
       tracked = Promise.resolve(promise)
@@ -2947,6 +3314,8 @@ test("live point-event listeners reject out-of-range coordinates before liveness
     },
   };
   class Socket {
+    readyState = 1;
+    closeCalls = 0;
     listeners = new Map();
 
     addEventListener(type, listener) {
@@ -2956,6 +3325,11 @@ test("live point-event listeners reject out-of-range coordinates before liveness
     emit(type, event) {
       this.listeners.get(type)?.(event);
     }
+
+    close() {
+      this.closeCalls += 1;
+      this.readyState = 3;
+    }
   }
   const drain = async () => {
     for (let pass = 0; pass < 10 && pending.size > 0; pass += 1) {
@@ -2964,24 +3338,16 @@ test("live point-event listeners reject out-of-range coordinates before liveness
     assert.equal(pending.size, 0);
     assert.deepEqual(backgroundErrors, []);
   };
-  const frame = {
-    type: "jma_eew",
-    EventID: "live-coordinate-boundary",
-    Serial: 1,
-    AnnouncedTime: "2026/08/13 12:00:05",
-    OriginTime: "2026/08/13 12:00:00",
-    Hypocenter: "Test coast",
-    Latitude: 35.1,
-    Longitude: 140.2,
-    Magunitude: 4.2,
-    isWarn: true,
-  };
+  const frame = jmaEewFrame();
   const relay = new QuakeRelay(state, {});
   relay.enqueueLiveIngest = async (event) => ingested.push(event);
-  relay.recordUpstreamLiveness = async (...arguments_) => liveness.push(arguments_);
+  relay.recordUpstreamTransportLiveness = async (...arguments_) => liveness.push(arguments_);
   const socket = new Socket();
-  relay.upstreams.set("all_eew", socket);
-  relay.attachUpstreamSocketListeners("all_eew", socket);
+  relay.upstreams.set("jma_eew", socket);
+  relay.readyUpstreamSockets.set("jma_eew", socket);
+  relay.statuses.set("jma_eew", "open");
+  relay.lastSuccessfulUpstreamMs.set("jma_eew", Date.now());
+  relay.attachUpstreamSocketListeners("jma_eew", socket);
 
   const originalConsoleWarn = console.warn;
   try {
@@ -2992,12 +3358,338 @@ test("live point-event listeners reject out-of-range coordinates before liveness
     await drain();
     assert.deepEqual(ingested, [], "invalid live coordinates never reach durable ingest");
     assert.deepEqual(liveness, [], "invalid live coordinates never publish source liveness");
+    assert.equal(socket.closeCalls, 1, "invalid data closes its current socket");
+    assert.equal(relay.upstreams.has("jma_eew"), false);
+    assert.equal(relay.readyUpstreamSockets.has("jma_eew"), false);
+    assert.equal(relay.statuses.get("jma_eew"), "error");
+    assert.equal(values.get("upstream-reconnect-failures:jma_eew"), 1);
+    assert.ok(alarmAt > 0, "invalid data schedules a bounded reconnect");
 
-    socket.emit("message", { data: JSON.stringify(frame) });
+    socket.emit("message", { data: JSON.stringify(wolfxHeartbeat()) });
+    await drain();
+    assert.deepEqual(
+      liveness,
+      [],
+      "a buffered heartbeat from the rejected socket cannot restore liveness",
+    );
+    assert.equal(relay.statuses.get("jma_eew"), "error");
+
+    const replacement = new Socket();
+    relay.upstreams.set("jma_eew", replacement);
+    relay.attachUpstreamSocketListeners("jma_eew", replacement);
+    replacement.emit("message", { data: JSON.stringify(frame) });
     await drain();
     assert.equal(ingested.length, 1, "a valid live point event still reaches ingest");
     assert.equal(ingested[0].latitude, 35.1);
     assert.equal(liveness.length, 1, "valid point traffic records transport liveness");
+  } finally {
+    console.warn = originalConsoleWarn;
+  }
+});
+
+test("non-text, malformed, missing, and unknown Wolfx frames each reconnect fail closed", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalConsoleWarn = console.warn;
+  const values = new Map();
+  const pending = new Set();
+  const failures = [];
+  let alarmAt = null;
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async list() { return new Map(); },
+      async getAlarm() { return alarmAt; },
+      async setAlarm(value) { alarmAt = value; },
+    },
+    waitUntil(promise) {
+      let tracked;
+      tracked = Promise.resolve(promise)
+        .catch((error) => failures.push(error))
+        .finally(() => pending.delete(tracked));
+      pending.add(tracked);
+    },
+  };
+  class Socket {
+    readyState = 1;
+    closeCalls = 0;
+    listeners = new Map();
+
+    addEventListener(type, listener) {
+      this.listeners.set(type, listener);
+    }
+
+    emit(type, event) {
+      this.listeners.get(type)?.(event);
+    }
+
+    close() {
+      this.closeCalls += 1;
+      this.readyState = 3;
+    }
+  }
+  const drain = async () => {
+    for (let pass = 0; pass < 20 && pending.size > 0; pass += 1) {
+      await Promise.all([...pending]);
+    }
+    assert.equal(pending.size, 0);
+    assert.deepEqual(failures, []);
+  };
+  const frames = [
+    { data: new Uint8Array([1]) },
+    { data: "{" },
+    { data: JSON.stringify({ EventID: "missing-route-type" }) },
+    { data: JSON.stringify({ type: "unknown" }) },
+    { data: JSON.stringify({ type: "jma_eew" }) },
+    { data: JSON.stringify({ type: "heartbeat" }) },
+    { data: JSON.stringify({ type: "pong" }) },
+  ];
+  const relay = new QuakeRelay(state, {});
+  try {
+    console.warn = () => {};
+    for (const [index, frame] of frames.entries()) {
+      const socket = new Socket();
+      relay.upstreams.set("jma_eew", socket);
+      relay.readyUpstreamSockets.set("jma_eew", socket);
+      relay.statuses.set("jma_eew", "open");
+      relay.lastSuccessfulUpstreamMs.set("jma_eew", Date.now());
+      relay.attachUpstreamSocketListeners("jma_eew", socket);
+
+      socket.emit("message", frame);
+      await drain();
+
+      assert.equal(socket.closeCalls, 1);
+      assert.equal(relay.upstreams.has("jma_eew"), false);
+      assert.equal(relay.readyUpstreamSockets.has("jma_eew"), false);
+      assert.equal(relay.statuses.get("jma_eew"), "error");
+      assert.equal(
+        values.get("upstream-reconnect-failures:jma_eew"),
+        index + 1,
+        "each rejected current socket owns exactly one reconnect transition",
+      );
+    }
+  } finally {
+    console.warn = originalConsoleWarn;
+  }
+});
+
+test("strict Wolfx wire domains reject before persistence and cannot regain readiness", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalConsoleWarn = console.warn;
+
+  class Socket {
+    readyState = 1;
+    closeCalls = 0;
+    listeners = new Map();
+
+    addEventListener(type, listener) {
+      this.listeners.set(type, listener);
+    }
+
+    emit(type, event) {
+      this.listeners.get(type)?.(event);
+    }
+
+    close() {
+      this.closeCalls += 1;
+      this.readyState = 3;
+    }
+  }
+
+  const createHarness = () => {
+    const values = new Map();
+    const pending = new Set();
+    const failures = [];
+    let alarmAt = null;
+    const state = {
+      storage: {
+        async get(key) { return values.get(key); },
+        async put(key, value) { values.set(key, value); },
+        async delete(key) { values.delete(key); },
+        async list() { return new Map(); },
+        async getAlarm() { return alarmAt; },
+        async setAlarm(value) { alarmAt = value; },
+      },
+      waitUntil(promise) {
+        let tracked;
+        tracked = Promise.resolve(promise)
+          .catch((error) => failures.push(error))
+          .finally(() => pending.delete(tracked));
+        pending.add(tracked);
+      },
+    };
+    const drain = async () => {
+      for (let pass = 0; pass < 30 && pending.size > 0; pass += 1) {
+        await Promise.all([...pending]);
+      }
+      assert.equal(pending.size, 0);
+      assert.deepEqual(failures, []);
+    };
+    return { alarmAt: () => alarmAt, drain, state, values };
+  };
+
+  const listFrame = (entryMutation = {}, envelopeMutation = {}) => {
+    const frame = jmaEqlistSnapshot(1);
+    frame.No1 = { ...frame.No1, ...entryMutation };
+    return { ...frame, ...envelopeMutation };
+  };
+  const withoutBooleans = jmaEewFrame();
+  for (const field of [
+    "isSea",
+    "isTraining",
+    "isAssumption",
+    "isWarn",
+    "isFinal",
+    "isCancel",
+  ]) delete withoutBooleans[field];
+  const rejectedFrames = [
+    ["string heartbeat version", "jma_eew", wolfxHeartbeat({ ver: "22" })],
+    ["zero heartbeat version", "jma_eew", wolfxHeartbeat({ ver: 0 })],
+    ["fractional heartbeat version", "jma_eew", wolfxHeartbeat({ ver: 22.5 })],
+    ["oversized heartbeat version", "jma_eew", wolfxHeartbeat({ ver: 100_000_000 })],
+    ["noncanonical heartbeat id", "jma_eew", wolfxHeartbeat({ id: "connection" })],
+    ["leading-zero heartbeat id", "jma_eew", wolfxHeartbeat({ id: "02094581" })],
+    ["oversized heartbeat id", "jma_eew", wolfxHeartbeat({ id: "1".repeat(21) })],
+    ["numeric heartbeat id", "jma_eew", wolfxHeartbeat({ id: 2094581 })],
+    ["noncanonical heartbeat timestamp", "jma_eew", wolfxHeartbeat({ timestamp: "01786665600000" })],
+    ["short numeric heartbeat timestamp", "jma_eew", wolfxHeartbeat({ timestamp: 999_999_999_999 })],
+    ["long numeric heartbeat timestamp", "jma_eew", wolfxHeartbeat({ timestamp: 10_000_000_000_000 })],
+    ["fractional heartbeat timestamp", "jma_eew", wolfxHeartbeat({ timestamp: 1787241213884.5 })],
+    ["object heartbeat timestamp", "jma_eew", wolfxHeartbeat({ timestamp: {} })],
+    ["noncanonical pong timestamp", "jma_eew", wolfxPong({ timestamp: "now" })],
+    ["rollover EEW EventID", "jma_eew", jmaEewFrame({ EventID: "20260230000000" })],
+    ["rollover EEW origin", "jma_eew", jmaEewFrame({ OriginTime: "2026/02/30 12:00:00" })],
+    ["coercible EEW magnitude", "jma_eew", jmaEewFrame({ Magunitude: "4.2" })],
+    ["negative EEW depth", "jma_eew", jmaEewFrame({ Depth: -1 })],
+    ["invalid EEW intensity", "jma_eew", jmaEewFrame({ MaxIntensity: "5" })],
+    ["missing EEW booleans", "jma_eew", withoutBooleans],
+    ["nonhex list md5", "jma_eqlist", listFrame({}, { md5: "invalid" })],
+    ["rollover list time", "jma_eqlist", listFrame({ time_full: "2026/08/14 09:00:60" })],
+    ["coercible list magnitude", "jma_eqlist", listFrame({ magnitude: "abc" })],
+    ["sign-only list depth", "jma_eqlist", listFrame({ depth: "+" })],
+    ["invalid list intensity", "jma_eqlist", listFrame({ shindo: "5" })],
+    ["noncanonical list coordinate", "jma_eqlist", listFrame({ latitude: "+35.1" })],
+  ];
+
+  const rejectCase = async ([label, route, frame]) => {
+    const harness = createHarness();
+    const relay = new QuakeRelay(harness.state, {});
+    const socket = new Socket();
+    let persistenceCalls = 0;
+    relay.enqueueLiveIngest = async () => { persistenceCalls += 1; };
+    relay.enqueueLiveSnapshot = async () => { persistenceCalls += 1; };
+    relay.upstreams.set(route, socket);
+    relay.statuses.set(route, "connecting");
+    relay.validatedUpstreamDataSockets.set(route, {
+      socket,
+      durableIntentRecorded: true,
+    });
+    relay.attachUpstreamSocketListeners(route, socket);
+
+    socket.emit("message", { data: JSON.stringify(frame) });
+    await harness.drain();
+    // Model an older successful persistence completion resuming after the
+    // invalid frame synchronously revoked this socket's candidate.
+    await relay.markSourceSuccessfulAndPublishReadiness(route);
+
+    assert.equal(persistenceCalls, 0, `${label} must stop before persistence`);
+    assert.equal(socket.closeCalls, 1, `${label} must close its socket`);
+    assert.equal(relay.upstreams.has(route), false, `${label} must detach its socket`);
+    assert.equal(relay.validatedUpstreamDataSockets.has(route), false, `${label} must revoke its candidate`);
+    assert.equal(relay.readyUpstreamSockets.has(route), false, `${label} must remain unready`);
+    assert.equal(relay.routeIsOpen(route), false, `${label} must fail route readiness`);
+    assert.equal(relay.statuses.get(route), "error", `${label} must retain error status`);
+    assert.equal(harness.values.get(`upstream-reconnect-failures:${route}`), 1);
+    assert.ok(harness.alarmAt() > 0, `${label} must schedule reconnect`);
+  };
+
+  const acceptDataCase = async (label, route, frame) => {
+    const harness = createHarness();
+    const relay = new QuakeRelay(harness.state, {});
+    const socket = new Socket();
+    let persistenceCalls = 0;
+    const commit = async (source, readinessCandidate) => {
+      persistenceCalls += 1;
+      readinessCandidate.durableIntentRecorded = true;
+      await relay.markSourceSuccessfulAndPublishReadiness(source);
+    };
+    relay.enqueueLiveIngest = async (_event, readinessCandidate) =>
+      commit(route, readinessCandidate);
+    relay.enqueueLiveSnapshot = async (_source, _events, readinessCandidate) =>
+      commit(route, readinessCandidate);
+    relay.upstreams.set(route, socket);
+    relay.statuses.set(route, "connecting");
+    relay.attachUpstreamSocketListeners(route, socket);
+
+    socket.emit("message", { data: JSON.stringify(frame) });
+    await harness.drain();
+
+    assert.equal(persistenceCalls, 1, `${label} must cross simulated persistence once`);
+    assert.equal(socket.closeCalls, 0, `${label} must keep its socket`);
+    assert.equal(relay.readyUpstreamSockets.get(route), socket);
+    assert.equal(relay.routeIsOpen(route), true, `${label} must become ready only after commit`);
+    assert.equal(relay.statuses.get(route), "open");
+  };
+
+  try {
+    console.warn = () => {};
+    for (const rejectedFrame of rejectedFrames) await rejectCase(rejectedFrame);
+
+    await acceptDataCase(
+      "valid EEW leap/minimum boundary",
+      "jma_eew",
+      jmaEewFrame({
+        EventID: "20240229000000",
+        OriginTime: "2024/02/29 00:00:00",
+        AnnouncedTime: "2024/02/29 00:00:00",
+        Magunitude: -2,
+        Depth: 0,
+        MaxIntensity: "0",
+      }),
+    );
+    await acceptDataCase(
+      "valid list maximum boundary",
+      "jma_eqlist",
+      listFrame({
+        magnitude: "12",
+        depth: "1000km",
+        shindo: "7",
+        latitude: "90",
+        longitude: "180",
+      }),
+    );
+
+    for (const route of ["jma_eew", "jma_eqlist"]) {
+      const controlHarness = createHarness();
+      const controlRelay = new QuakeRelay(controlHarness.state, {});
+      const controlSocket = new Socket();
+      controlRelay.upstreams.set(route, controlSocket);
+      controlRelay.statuses.set(route, "connecting");
+      controlRelay.attachUpstreamSocketListeners(route, controlSocket);
+      // Exact public frames observed on both JMA routes remain valid alongside
+      // the documented UUID/string representation.
+      controlSocket.emit("message", { data: JSON.stringify(wolfxHeartbeat()) });
+      controlSocket.emit("message", { data: JSON.stringify(wolfxPong()) });
+      controlSocket.emit("message", {
+        data: JSON.stringify(wolfxHeartbeat({
+          ver: 20260415,
+          id: "123e4567-e89b-42d3-a456-426614174000",
+          timestamp: "1787241213884",
+        })),
+      });
+      controlSocket.emit("message", {
+        data: JSON.stringify(wolfxPong({ timestamp: "1787241234570" })),
+      });
+      await controlHarness.drain();
+      assert.equal(
+        controlSocket.closeCalls,
+        0,
+        `${route} accepts documented and observed control representations`,
+      );
+      assert.equal(controlRelay.upstreams.get(route), controlSocket);
+      assert.equal(controlRelay.routeIsOpen(route), false, "valid controls remain watchdog-only");
+      assert.equal(controlRelay.readyUpstreamSockets.has(route), false);
+    }
   } finally {
     console.warn = originalConsoleWarn;
   }
@@ -3325,19 +4017,19 @@ test("serializes an opened route reset before its next close records backoff", a
     // usable. The queue must retain the close's failure state rather than
     // letting the older reset zero its persisted retry gate afterwards.
     await Promise.all([
-      relay.resetUpstreamReconnectBackoff("all_eew"),
+      relay.resetUpstreamReconnectBackoff("jma_eew"),
       relay.scheduleUpstreamReconnect(
-        "all_eew",
+        "jma_eew",
         "wolfx_upstream_websocket_closed",
         { closeCode: 1006, wasClean: false, closeReasonPresent: false },
         "closed",
       ),
     ]);
-    assert.equal(values.get("upstream-reconnect-failures:all_eew"), 1);
+    assert.equal(values.get("upstream-reconnect-failures:jma_eew"), 1);
     assert.ok(
-      values.get("upstream-reconnect-not-before-ms:all_eew") > Date.now(),
+      values.get("upstream-reconnect-not-before-ms:jma_eew") > Date.now(),
     );
-    assert.ok(values.get("upstream-degraded-since-ms:all_eew") > 0);
+    assert.ok(values.get("upstream-degraded-since-ms:jma_eew") > 0);
     assert.ok(alarmAt > Date.now());
   } finally {
     console.warn = originalConsoleWarn;
@@ -3403,12 +4095,12 @@ test("a websocket listener owns recovery when send fails after an Upgrade", asyn
   console.warn = (entry) => warnings.push(JSON.parse(entry));
   try {
     const relay = new QuakeRelay(state, {});
-    relay.connect("cenc_eqlist");
+    relay.connect("jma_eqlist");
     for (let pass = 0; pass < 20 && pending.size > 0; pass += 1) {
       await Promise.all([...pending]);
     }
     assert.deepEqual(failures, []);
-    assert.equal(values.get("upstream-reconnect-failures:cenc_eqlist"), 1);
+    assert.equal(values.get("upstream-reconnect-failures:jma_eqlist"), 1);
     assert.deepEqual(
       warnings.map((entry) => entry.outcome),
       ["wolfx_upstream_websocket_error"],
@@ -3547,7 +4239,7 @@ test("an Upgrade without Wolfx traffic keeps exponential reconnect pacing", asyn
   }
 });
 
-test("valid Wolfx liveness publishes freshness before resetting stable reconnect state", async () => {
+test("heartbeat readiness starts only after a validated data commit and then remains watchdog-fresh", async () => {
   const { QuakeRelay } = await workerModule();
   const originalNow = Date.now;
   let now = Date.parse("2026-08-14T00:00:00.000Z");
@@ -3596,6 +4288,19 @@ test("valid Wolfx liveness publishes freshness before resetting stable reconnect
   const route = "jma_eqlist";
   const socket = new Socket();
   const relay = new QuakeRelay(state, {});
+  let releaseCommit;
+  let announceCommitStarted;
+  const commitGate = new Promise((resolve) => { releaseCommit = resolve; });
+  const commitStarted = new Promise((resolve) => { announceCommitStarted = resolve; });
+  relay.enqueueLiveSnapshot = async (source, _events, readinessCandidate) => {
+    announceCommitStarted();
+    await commitGate;
+    // Existing live-snapshot tests exercise the real D1 cursor boundary. This
+    // gate isolates the listener transition immediately before/after that
+    // method's post-commit freshness call.
+    readinessCandidate.durableIntentRecorded = true;
+    await relay.markSourceSuccessfulAndPublishReadiness(source);
+  };
   const drain = async () => {
     for (let pass = 0; pass < 20 && pending.size > 0; pass += 1) {
       await Promise.all([...pending]);
@@ -3616,20 +4321,49 @@ test("valid Wolfx liveness publishes freshness before resetting stable reconnect
       false,
       "a replacement Upgrade cannot reuse the prior socket's freshness",
     );
-    socket.emit("message", { data: JSON.stringify({ type: "heartbeat" }) });
+    socket.emit("message", { data: JSON.stringify(wolfxHeartbeat()) });
     await drain();
 
-    assert.equal(relay.lastSuccessfulUpstreamMs.get(route), now);
-    assert.equal(relay.routeIsOpen(route), true);
+    assert.equal(
+      relay.lastSuccessfulUpstreamMs.get(route),
+      now - 1_000,
+      "an initial heartbeat cannot reuse freshness from the preceding socket",
+    );
+    assert.equal(relay.routeIsOpen(route), false);
+    assert.equal(relay.statuses.get(route), "connecting");
+    assert.equal(relay.readyUpstreamSockets.has(route), false);
     assert.equal(values.get(`upstream-reconnect-failures:${route}`), 3);
     assert.equal(
       values.get(`upstream-reconnect-not-before-ms:${route}`),
       now + 20_000,
-      "the first valid frame proves freshness but does not erase backoff",
+      "an initial heartbeat is transport-only and cannot erase backoff",
     );
 
+    socket.emit("message", { data: JSON.stringify(jmaEqlistSnapshot(1)) });
+    await commitStarted;
+    assert.equal(
+      relay.routeIsOpen(route),
+      false,
+      "validated frame receipt alone cannot create readiness before commit",
+    );
+    assert.equal(relay.statuses.get(route), "connecting");
+    assert.equal(relay.readyUpstreamSockets.has(route), false);
+    await relay.markSourceSuccessfulAndPublishReadiness(route);
+    assert.equal(
+      relay.routeIsOpen(route),
+      false,
+      "an older journal completion cannot certify this newer unrecorded frame",
+    );
+
+    releaseCommit();
+    await drain();
+    assert.equal(relay.lastSuccessfulUpstreamMs.get(route), now);
+    assert.equal(relay.routeIsOpen(route), true);
+    assert.equal(relay.statuses.get(route), "open");
+    assert.equal(relay.readyUpstreamSockets.get(route), socket);
+
     now += 60_000;
-    socket.emit("message", { data: JSON.stringify({ type: "heartbeat" }) });
+    socket.emit("message", { data: JSON.stringify(wolfxHeartbeat()) });
     await drain();
 
     assert.equal(values.get(`upstream-reconnect-failures:${route}`), 0);
@@ -3656,35 +4390,241 @@ test("valid Wolfx liveness publishes freshness before resetting stable reconnect
   }
 });
 
+test("a replacement socket cannot inherit committed readiness through a heartbeat", async () => {
+  const { QuakeRelay } = await workerModule();
+  const originalNow = Date.now;
+  const startedAt = Date.parse("2026-08-14T00:00:00.000Z");
+  let now = startedAt;
+  const values = new Map();
+  const pending = new Set();
+  const failures = [];
+  const state = {
+    storage: {
+      async get(key) { return values.get(key); },
+      async put(key, value) { values.set(key, value); },
+      async list() { return new Map(); },
+    },
+    waitUntil(promise) {
+      let tracked;
+      tracked = Promise.resolve(promise)
+        .catch((error) => failures.push(error))
+        .finally(() => pending.delete(tracked));
+      pending.add(tracked);
+    },
+  };
+  class Socket {
+    readyState = 1;
+    listeners = new Map();
+    sent = [];
+
+    addEventListener(type, listener) {
+      this.listeners.set(type, listener);
+    }
+
+    send(value) {
+      this.sent.push(value);
+    }
+
+    emit(type, event) {
+      this.listeners.get(type)?.(event);
+    }
+  }
+  const drain = async () => {
+    for (let pass = 0; pass < 20 && pending.size > 0; pass += 1) {
+      await Promise.all([...pending]);
+    }
+    assert.equal(pending.size, 0);
+    assert.deepEqual(failures, []);
+  };
+  const route = "jma_eew";
+  const oldSocket = new Socket();
+  const replacement = new Socket();
+  const relay = new QuakeRelay(state, {});
+  try {
+    Date.now = () => now;
+    relay.upstreams.set(route, oldSocket);
+    relay.activateUpstreamSocket(route, oldSocket);
+    relay.validatedUpstreamDataSockets.set(route, {
+      socket: oldSocket,
+      durableIntentRecorded: true,
+    });
+    await relay.markSourceSuccessfulAndPublishReadiness(route);
+    assert.equal(relay.routeIsOpen(route), true);
+
+    relay.upstreams.set(route, replacement);
+    relay.attachUpstreamSocketListeners(route, replacement);
+    relay.activateUpstreamSocket(route, replacement);
+    assert.equal(relay.routeIsOpen(route), false);
+    assert.equal(relay.readyUpstreamSockets.has(route), false);
+    assert.equal(relay.statuses.get(route), "connecting");
+
+    now += 30_000;
+    replacement.emit("message", { data: JSON.stringify(wolfxHeartbeat()) });
+    await drain();
+    assert.equal(
+      relay.lastSuccessfulUpstreamMs.get(route),
+      startedAt,
+      "the replacement heartbeat cannot advance the prior committed timestamp",
+    );
+    assert.equal(relay.routeIsOpen(route), false);
+    assert.equal(relay.readyUpstreamSockets.has(route), false);
+    assert.equal(relay.statuses.get(route), "connecting");
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+function normalizedWireNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = typeof value === "string"
+    ? Number(value.replace(/[^\d.+-]/g, ""))
+    : Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function jmaJstIso(value) {
+  const match = /^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+  assert.ok(match, `test fixture must use a JMA date-time: ${value}`);
+  return new Date(
+    Date.UTC(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+      Number(match[4]) - 9,
+      Number(match[5]),
+      Number(match[6] ?? "0"),
+    ),
+  ).toISOString();
+}
+
+function jmaEewSnapshot(overrides = {}) {
+  return {
+    Title: "緊急地震速報（予報）",
+    CodeType: "Ｍ、最大予測震度及び主要動到達予測時刻の緊急地震速報",
+    Issue: { Source: "大阪", Status: "通常" },
+    EventID: "20260813120000",
+    Serial: 1,
+    AnnouncedTime: "2026/08/13 12:00:05",
+    OriginTime: "2026/08/13 12:00:00",
+    Hypocenter: "Test coast",
+    Latitude: 35.1,
+    Longitude: 140.2,
+    Magunitude: 4.2,
+    Depth: 10,
+    MaxIntensity: "4",
+    Accuracy: { Epicenter: "test", Depth: "test", Magnitude: "test" },
+    MaxIntChange: { String: "no change", Reason: "test" },
+    WarnArea: [{
+      Chiiki: "Test region",
+      Shindo1: "4",
+      Shindo2: "4",
+      Time: "2026/08/13 12:00:10",
+      Type: "Forecast",
+      Arrive: false,
+    }],
+    isSea: true,
+    isTraining: false,
+    isAssumption: false,
+    isWarn: true,
+    isFinal: false,
+    isCancel: false,
+    OriginalText: "test",
+    ...overrides,
+  };
+}
+
+function jmaEewFrame(overrides = {}) {
+  return { type: "jma_eew", ...jmaEewSnapshot(overrides) };
+}
+
+function normalizedJmaEewSnapshot(raw, overrides = {}) {
+  return {
+    id: `jma_eew:${raw.EventID}`,
+    sourceId: "jma_eew",
+    eventId: raw.EventID,
+    serial: raw.Serial ?? 1,
+    kind: "eew",
+    originTimeUtc: jmaJstIso(raw.OriginTime),
+    reportTimeUtc: jmaJstIso(raw.AnnouncedTime),
+    hypocenter: raw.Hypocenter,
+    latitude: normalizedWireNumber(raw.Latitude),
+    longitude: normalizedWireNumber(raw.Longitude),
+    magnitude: normalizedWireNumber(raw.Magunitude),
+    depth: normalizedWireNumber(raw.Depth),
+    maxIntensity: raw.MaxIntensity ?? null,
+    isWarn: !!raw.isWarn,
+    isFinal: !!raw.isFinal,
+    isCancel: !!raw.isCancel,
+    isTraining: !!raw.isTraining,
+    tsunami: null,
+    raw,
+    ...overrides,
+  };
+}
+
+function jmaEqlistEntry(index = 1, overrides = {}) {
+  return {
+    Title: "report",
+    EventID: `202608140900${String(index).padStart(2, "0")}`,
+    time: "2026/08/14 09:00",
+    time_full: "2026/08/14 09:00:00",
+    location: `Test coast ${index}`,
+    magnitude: "4.2",
+    shindo: "2",
+    depth: "10km",
+    latitude: "35.1",
+    longitude: "140.2",
+    info: "",
+    ...overrides,
+  };
+}
+
+function normalizedJmaEqlistEntry(raw, overrides = {}) {
+  return {
+    id: `jma_eqlist:${raw.EventID}`,
+    sourceId: "jma_eqlist",
+    eventId: raw.EventID,
+    serial: 1,
+    kind: "report",
+    originTimeUtc: jmaJstIso(raw.time_full || raw.time),
+    reportTimeUtc: jmaJstIso(raw.time_full || raw.time),
+    hypocenter: raw.location,
+    latitude: normalizedWireNumber(raw.latitude),
+    longitude: normalizedWireNumber(raw.longitude),
+    magnitude: normalizedWireNumber(raw.magnitude),
+    depth: normalizedWireNumber(raw.depth),
+    maxIntensity: raw.shindo || null,
+    isWarn: false,
+    isFinal: true,
+    isCancel: false,
+    isTraining: false,
+    tsunami: raw.info || null,
+    raw,
+    ...overrides,
+  };
+}
+
+function jmaEqlistVariantEventId(variant) {
+  return `202608140900${String(50 + variant).padStart(2, "0")}`;
+}
+
 function jmaEqlistSnapshot(count = 50) {
   const snapshot = {
     type: "jma_eqlist",
-    md5: "live-jma-eqlist-snapshot-v1",
+    md5: "11111111111111111111111111111111",
   };
   for (let index = 1; index <= count; index += 1) {
-    snapshot[`No${index}`] = {
-      Title: "report",
-      EventID: `live-jma-eqlist-${index}`,
-      time: "2026/08/14 09:00",
-      time_full: "2026/08/14 09:00:00",
-      location: `Test coast ${index}`,
-      magnitude: "4.2",
-      shindo: "2",
-      depth: "10km",
-      latitude: "35.1",
-      longitude: "140.2",
-      info: "",
-    };
+    snapshot[`No${index}`] = jmaEqlistEntry(index);
   }
   return snapshot;
 }
 
 function distinctJmaEqlistSnapshot(variant, count = 50) {
   const snapshot = jmaEqlistSnapshot(count);
-  snapshot.md5 = `live-jma-eqlist-snapshot-${variant}`;
+  snapshot.md5 = Number(variant).toString(16).padStart(32, "0");
   snapshot.No1 = {
     ...snapshot.No1,
-    EventID: `live-jma-eqlist-variant-${variant}`,
+    EventID: jmaEqlistVariantEventId(variant),
     location: `Variant coast ${variant}`,
   };
   return snapshot;
@@ -3750,6 +4690,24 @@ function livePointEvent({ serial = 1, magnitude = 4.2 } = {}) {
     isTraining: false,
     tsunami: null,
     raw: null,
+  };
+}
+
+function wolfxHeartbeat(overrides = {}) {
+  return {
+    type: "heartbeat",
+    ver: 22,
+    id: "2094581",
+    timestamp: 1787241213884,
+    ...overrides,
+  };
+}
+
+function wolfxPong(overrides = {}) {
+  return {
+    type: "pong",
+    timestamp: 1787241234570,
+    ...overrides,
   };
 }
 
@@ -4433,7 +5391,7 @@ test("a third distinct live list is durably retained before bounded source backp
     const overflow = harness.values.get(overflowKey);
     assert.equal(
       overflow?.events?.[0]?.eventId,
-      "live-jma-eqlist-variant-3",
+      jmaEqlistVariantEventId(3),
       "the third accepted frame must be durable before the source is closed",
     );
     assert.equal(
@@ -4502,15 +5460,15 @@ test("a failed live-list slice retains all three admitted snapshots until they c
     assert.equal(harness.d1BatchAttempts, 1, "only the first active slice reaches failed D1");
     assert.equal(
       harness.values.get(activeKey)?.events?.[0]?.eventId,
-      "live-jma-eqlist-variant-1",
+      jmaEqlistVariantEventId(1),
     );
     assert.equal(
       harness.values.get(latestKey)?.events?.[0]?.eventId,
-      "live-jma-eqlist-variant-2",
+      jmaEqlistVariantEventId(2),
     );
     assert.equal(
       harness.values.get(overflowKey)?.events?.[0]?.eventId,
-      "live-jma-eqlist-variant-3",
+      jmaEqlistVariantEventId(3),
     );
     assert.ok(harness.values.has(overloadKey), "overload remains a freshness fence");
 
@@ -4534,9 +5492,9 @@ test("a failed live-list slice retains all three admitted snapshots until they c
       .filter((statement) => statement.sql?.includes("INSERT INTO events"))
       .map((statement) => statement.bindings?.[2])
       .filter((eventId) => typeof eventId === "string");
-    const first = persistedFirstEventIds.indexOf("live-jma-eqlist-variant-1");
-    const second = persistedFirstEventIds.indexOf("live-jma-eqlist-variant-2");
-    const third = persistedFirstEventIds.indexOf("live-jma-eqlist-variant-3");
+    const first = persistedFirstEventIds.indexOf(jmaEqlistVariantEventId(1));
+    const second = persistedFirstEventIds.indexOf(jmaEqlistVariantEventId(2));
+    const third = persistedFirstEventIds.indexOf(jmaEqlistVariantEventId(3));
     assert.ok(first >= 0 && second > first && third > second);
   } finally {
     console.error = originalConsoleError;
@@ -4756,11 +5714,14 @@ test("training pushes obtain APNs authorization from the relay cache and fail cl
   const originalFetch = globalThis.fetch;
   const relayPaths = [];
   const apnsAuthorizations = [];
+  const apnsSources = [];
   const device = {
     token: "sandbox-training-device-token",
     environment: "sandbox",
     locale: null,
-    sources: '["jma_eew"]',
+    // Simulate a registration created before build 8. Its old selection must
+    // never determine the source identity of a new training notification.
+    sources: '["cenc_eew"]',
     min_magnitude: 0,
     critical_alerts_enabled: 0,
     city_name: null,
@@ -4833,6 +5794,7 @@ test("training pushes obtain APNs authorization from the relay cache and fail cl
   };
   globalThis.fetch = async (_url, init) => {
     apnsAuthorizations.push(new Headers(init.headers).get("authorization"));
+    apnsSources.push(JSON.parse(init.body).sourceId);
     return new Response(null, { status: 200, headers: { "apns-id": "test-id" } });
   };
   try {
@@ -4845,6 +5807,7 @@ test("training pushes obtain APNs authorization from the relay cache and fail cl
     assert.equal(response.status, 200);
     assert.deepEqual(relayPaths, ["/apns/authorization"]);
     assert.deepEqual(apnsAuthorizations, ["bearer cached.provider.jwt"]);
+    assert.deepEqual(apnsSources, ["jma_eew"]);
 
     const relayCallsBeforeMismatch = relayPaths.length;
     const apnsCallsBeforeMismatch = apnsAuthorizations.length;
@@ -4908,7 +5871,7 @@ test("an undrained live-ingest journal immediately makes its source stale", asyn
   );
 });
 
-test("coalesces live freshness checkpoints without hiding pending ingest", async () => {
+test("coalesces committed live freshness checkpoints without hiding pending ingest", async () => {
   const { QuakeRelay } = await workerModule();
   const originalNow = Date.now;
   let now = Date.parse("2026-08-13T00:00:00.000Z");
@@ -4938,7 +5901,7 @@ test("coalesces live freshness checkpoints without hiding pending ingest", async
     assert.deepEqual(
       writes.filter(([key]) => key === upstreamKey),
       [[upstreamKey, now]],
-      "concurrent heartbeats commit one initial checkpoint",
+      "concurrent committed-success signals write one initial checkpoint",
     );
 
     now += 30_000;
@@ -4952,7 +5915,7 @@ test("coalesces live freshness checkpoints without hiding pending ingest", async
     assert.equal(
       restartedRelay.lastSuccessfulUpstreamMs.get("jma_eew"),
       now,
-      "the new live heartbeat remains fresh in memory",
+      "the new committed-success signal remains fresh in memory",
     );
 
     now += 30_000;
@@ -4970,7 +5933,7 @@ test("coalesces live freshness checkpoints without hiding pending ingest", async
     assert.equal(
       writes.filter(([key]) => key === upstreamKey).length,
       2,
-      "a heartbeat never overwrites the pending-ingest readiness fence",
+      "source success never overwrites the pending-ingest readiness fence",
     );
     assert.equal(
       relay.lastSuccessfulUpstreamMs.get("jma_eew"),
@@ -5023,7 +5986,7 @@ test("failed freshness checkpoints do not publish in-memory success", async () =
     assert.equal(
       putAttempts,
       1,
-      "a quota failure is retried at the checkpoint cadence, not every heartbeat",
+      "a quota failure is retried at the checkpoint cadence, not every success signal",
     );
     assert.equal(relay.lastSuccessfulUpstreamMs.has("jma_eew"), false);
 
@@ -5286,10 +6249,29 @@ test("builds bounded typed APNs snapshots and reserves custom Time Sensitive sou
 });
 
 test("accepts only exact alert-sound registration identifiers and defaults old clients to system", async () => {
-  const { validatedRegistrationValues } = await workerModule();
+  const {
+    APNS_RELAY_DISABLED_SOURCES,
+    APNS_RELAY_SOURCES,
+    validatedRegistrationValues,
+  } = await workerModule();
   const registration = { token: "0123456789abcdef" };
   const legacy = validatedRegistrationValues(registration);
   assert.equal(legacy.alertSound, "system");
+  assert.deepEqual(JSON.parse(legacy.sources), ["jma_eew", "jma_eqlist"]);
+  const jmaOnly = validatedRegistrationValues({
+    ...registration,
+    sources: ["jma_eew", "jma_eqlist"],
+  });
+  assert.ok(!(jmaOnly instanceof Response));
+  assert.deepEqual(JSON.parse(jmaOnly.sources), APNS_RELAY_SOURCES);
+  for (const source of APNS_RELAY_DISABLED_SOURCES) {
+    const response = validatedRegistrationValues({
+      ...registration,
+      sources: [source],
+    });
+    assert.ok(response instanceof Response);
+    assert.equal(response.status, 400, `${source} must not be registered`);
+  }
   for (const alertSound of ["system", "urgent-tone", "japanese-voice"]) {
     const values = validatedRegistrationValues({ ...registration, alertSound });
     assert.equal(values.alertSound, alertSound);
@@ -5534,6 +6516,36 @@ test("migration 0011 backfills the legacy iOS route and constrains platform meta
   );
 });
 
+test("migration 0012 indexes the bounded event-revision retention cutoff", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "quakesignal-migration-0012-"));
+  const databasePath = join(directory, "migration.sqlite");
+  const sqlite = new DatabaseSync(databasePath);
+  t.after(async () => {
+    sqlite.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const migrationEntries = await readdir(join(cloudflareDirectory, "migrations"));
+  for (let version = 1; version <= 12; version += 1) {
+    const filename = migrationEntries.find((entry) =>
+      entry.startsWith(String(version).padStart(4, "0")),
+    );
+    assert.ok(filename, `migration ${version} must exist`);
+    sqlite.exec(await readFile(join(cloudflareDirectory, "migrations", filename), "utf8"));
+  }
+
+  assert.deepEqual(
+    sqlite.prepare(
+      `SELECT name, sql FROM sqlite_master
+       WHERE type = 'index' AND name = 'idx_revisions_recorded_at'`,
+    ).all().map((row) => ({ ...row })),
+    [{
+      name: "idx_revisions_recorded_at",
+      sql: "CREATE INDEX idx_revisions_recorded_at\n  ON event_revisions(recorded_at_utc)",
+    }],
+  );
+});
+
 test("uses one validated Queue-name triplet and preserves legacy defaults", async () => {
   const {
     default: worker,
@@ -5644,6 +6656,91 @@ test("uses one validated Queue-name triplet and preserves legacy defaults", asyn
   );
   assert.equal(acknowledged, 1);
   assert.deepEqual(relayRequests, ["/deliver", "/outbox/ack"]);
+});
+
+test("terminalizes pre-build-8 non-JMA Queue work without reaching APNs", async () => {
+  const { QuakeRelay, default: worker } = await workerModule();
+  const blocked = {
+    ...message(9),
+    event: {
+      ...message(9).event,
+      id: "cenc_eew:example",
+      sourceId: "cenc_eew",
+    },
+  };
+
+  const batches = [];
+  const relay = new QuakeRelay(
+    { storage: {}, waitUntil() {} },
+    {
+      DB: {
+        prepare(sql) {
+          return {
+            bind(...bindings) {
+              return { sql, bindings };
+            },
+          };
+        },
+        async batch(statements) {
+          batches.push(statements);
+          return statements.map((_, index) => ({
+            meta: { changes: index === 0 ? 1 : 0 },
+          }));
+        },
+      },
+    },
+  );
+  const rejected = await relay.fetch(
+    new Request("https://relay.internal/outbox/source-policy/reject", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ outboxId: blocked.outboxId }),
+    }),
+  );
+  assert.equal(rejected.status, 200);
+  assert.equal(batches.length, 1);
+  assert.match(batches[0][0].sql, /terminal_reason = COALESCE\(terminal_reason, 'superseded'\)/);
+  assert.match(
+    batches[0][0].sql,
+    /substr\(event_ref, 1, instr\(event_ref, ':'\) - 1\) IN/,
+    "the authoritative rollover predicate extracts an exact source ID",
+  );
+  for (const source of ["sc_eew", "cenc_eew", "fj_eew", "cq_eew", "cenc_eqlist"]) {
+    assert.match(batches[0][0].sql, new RegExp(`'${source}'`));
+  }
+  assert.doesNotMatch(batches[0][0].sql, /'jma_(?:eew|eqlist)'/);
+
+  const relayPaths = [];
+  let acknowledged = 0;
+  let retried = 0;
+  await worker.queue(
+    {
+      queue: "quakesignal-alert-delivery",
+      messages: [{
+        id: "legacy-cenc-queue-copy",
+        attempts: 1,
+        body: blocked,
+        ack() { acknowledged += 1; },
+        retry() { retried += 1; },
+      }],
+    },
+    {
+      RELAY: {
+        idFromName() { return "global"; },
+        get() {
+          return {
+            async fetch(request) {
+              relayPaths.push(new URL(request.url).pathname);
+              return Response.json({ ok: true });
+            },
+          };
+        },
+      },
+    },
+  );
+  assert.deepEqual(relayPaths, ["/outbox/source-policy/reject"]);
+  assert.equal(acknowledged, 1);
+  assert.equal(retried, 0);
 });
 
 test("D1-unavailable DLQ persistence is acknowledged only after token-free Durable Object fallback", async () => {

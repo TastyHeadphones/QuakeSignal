@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct SourceDisclaimerView: View {
@@ -17,8 +18,12 @@ struct SourceDisclaimerView: View {
 
             Section("disclaimer.section.sources") {
                 Label("disclaimer.source.wolfx", systemImage: "antenna.radiowaves.left.and.right")
-                Label("disclaimer.source.cenc", systemImage: "antenna.radiowaves.left.and.right")
                 Label("disclaimer.source.jma", systemImage: "antenna.radiowaves.left.and.right")
+                Text("disclaimer.source.jmaAttribution")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Link("disclaimer.source.jmaTerms", destination: Self.jmaTermsURL)
+                Link("disclaimer.source.publicDataLicense", destination: Self.publicDataLicenseURL)
             }
 
             Section {
@@ -40,4 +45,9 @@ struct SourceDisclaimerView: View {
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1"
     }
+
+    private static let jmaTermsURL = URL(string: "https://www.jma.go.jp/jma/en/copyright.html")!
+    private static let publicDataLicenseURL = URL(
+        string: "https://www.digital.go.jp/en/resources/open_data/public_data_license_v1.0"
+    )!
 }
