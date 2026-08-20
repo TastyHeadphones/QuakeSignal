@@ -136,7 +136,9 @@ so navigation safe-area changes cannot hide that fixed banner; rejection logs
 also report the full-frame orange count for diagnosis. Headline and recent-report
 pagers extend through the bottom container safe area so each page matches the
 complete visible Watch viewport. Their raster contracts reject next-page content
-in the bottom central band; recent reports additionally require the full orange
+in the bottom central band. Recent reports allow the early two-fifths of that
+band to contain the complete second-row tail, but require the final three-fifths
+at the physical screen edge to remain clean; they also require the full orange
 foreground label to reach its reviewed rightmost extent. The icon-only refresh
 control has a 44-by-44-point accessible hit target so that label retains its
 production layout width.

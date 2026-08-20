@@ -84,9 +84,20 @@ last_badge_row = (height * last_badge_percent) / 100
 badge_columns = (width * 4) / 5
 bottom_band_rows = [(height * 6) / 100, 1].max
 first_bottom_row = height - bottom_band_rows
+# The complete second report row can occupy the early portion of this band
+# after the 44-point refresh control is laid out. A leaked third row instead
+# reappears at the physical screen edge, so only reports narrow the scan to
+# the final three-fifths. Headline continues to review the whole band.
+bottom_review_offset = if frame_selector == "watchos-recent-reports"
+  (bottom_band_rows * 2) / 5
+else
+  0
+end
+first_reviewed_bottom_row = first_bottom_row + bottom_review_offset
 first_bottom_column = (width * 15) / 100
 last_bottom_column = (width * 85) / 100
-bottom_band_area = bottom_band_rows * (last_bottom_column - first_bottom_column)
+reviewed_bottom_rows = height - first_reviewed_bottom_row
+bottom_band_area = reviewed_bottom_rows * (last_bottom_column - first_bottom_column)
 maximum_bottom_nonblack_pixels = (bottom_band_area * 5) / 100
 bottom_nonblack_pixels = 0
 
@@ -99,7 +110,7 @@ bottom_nonblack_pixels = 0
     green = data.getbyte(offset + 1)
     red = data.getbyte(offset + 2)
 
-    if requires_clean_page_bottom && display_y >= first_bottom_row &&
+    if requires_clean_page_bottom && display_y >= first_reviewed_bottom_row &&
         x >= first_bottom_column && x < last_bottom_column && [red, green, blue].max > 16
       bottom_nonblack_pixels += 1
     end
@@ -154,10 +165,19 @@ end
 if requires_clean_page_bottom && bottom_nonblack_pixels > maximum_bottom_nonblack_pixels
   fail_validation(
     "Watch screenshot has next-page leakage in the bottom central band " \
-    "(found #{bottom_nonblack_pixels} nonblack pixels, maximum #{maximum_bottom_nonblack_pixels}); " \
+    "(found #{bottom_nonblack_pixels} nonblack pixels, maximum #{maximum_bottom_nonblack_pixels}; " \
+    "reviewed rows #{first_reviewed_bottom_row}...#{height - 1}); " \
     "refusing a clipped first viewport",
     65,
   )
 end
 
-puts "Validated Watch foreground-only badge: #{orange_pixels} orange pixels"
+if requires_clean_page_bottom
+  puts(
+    "Validated Watch foreground-only badge: #{orange_pixels} orange pixels; " \
+    "bottom central band #{bottom_nonblack_pixels}/#{maximum_bottom_nonblack_pixels} nonblack pixels " \
+    "in rows #{first_reviewed_bottom_row}...#{height - 1}",
+  )
+else
+  puts "Validated Watch foreground-only badge: #{orange_pixels} orange pixels"
+end

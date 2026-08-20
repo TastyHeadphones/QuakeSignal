@@ -99,14 +99,50 @@ Dir.mktmpdir("quakesignal-watch-badge-test.") do |directory|
   assert_exit_status(status, 65, "next-page content in the headline bottom central band")
   assert(stderr.include?("found 22 nonblack pixels, maximum 21"), "headline leakage rejection should expose its evidence")
 
-  leaking_recent_pixels = recent_pixels.merge(
-    (15...37).to_h { |x| [[x, 94], [41, 41, 41]] },
+  complete_second_row_tail = recent_pixels.merge(
+    (94...96).flat_map { |y| (15...85).map { |x| [[x, y], [41, 41, 41]] } }.to_h,
+  )
+  complete_second_row_tail_path = File.join(directory, "complete-second-row-tail.bmp")
+  build_bitmap(complete_second_row_tail_path, complete_second_row_tail)
+  _stdout, stderr, status = run_validator(
+    complete_second_row_tail_path,
+    frame: "watchos-recent-reports",
+  )
+  assert(status.success?, "a complete second-row tail before the final review band should pass: #{stderr}")
+
+  _stdout, stderr, status = run_validator(complete_second_row_tail_path, frame: "watchos-headline")
+  assert_exit_status(status, 65, "the same bottom tail on the headline route")
+  assert(stderr.include?("next-page leakage in the bottom central band"), "headline must continue to review the whole band")
+
+  reviewed_boundary_pixels = complete_second_row_tail.merge(
+    (15...29).to_h { |x| [[x, 96], [41, 41, 41]] },
+  )
+  reviewed_boundary_path = File.join(directory, "recent-reviewed-boundary.bmp")
+  build_bitmap(reviewed_boundary_path, reviewed_boundary_pixels)
+  stdout, stderr, status = run_validator(reviewed_boundary_path, frame: "watchos-recent-reports")
+  assert(status.success?, "14 reviewed recent bottom pixels should pass: #{stderr}")
+  assert(stdout.include?("bottom central band 14/14 nonblack pixels in rows 96...99"), "accepted recent telemetry should expose its exact bottom boundary")
+
+  reviewed_overflow_pixels = complete_second_row_tail.merge(
+    (15...30).to_h { |x| [[x, 96], [41, 41, 41]] },
+  )
+  reviewed_overflow_path = File.join(directory, "recent-reviewed-overflow.bmp")
+  build_bitmap(reviewed_overflow_path, reviewed_overflow_pixels)
+  _stdout, stderr, status = run_validator(reviewed_overflow_path, frame: "watchos-recent-reports")
+  assert_exit_status(status, 65, "15 pixels at the first reviewed recent bottom row")
+  assert(stderr.include?("found 15 nonblack pixels, maximum 14"), "first-row overflow should expose its threshold")
+  assert(stderr.include?("reviewed rows 96...99"), "first-row overflow should expose its reviewed rows")
+
+  leaking_recent_pixels = complete_second_row_tail.merge(
+    (15...30).to_h { |x| [[x, 99], [41, 41, 41]] },
   )
   leaking_recent_path = File.join(directory, "leaking-recent-next-page.bmp")
   build_bitmap(leaking_recent_path, leaking_recent_pixels)
   _stdout, stderr, status = run_validator(leaking_recent_path, frame: "watchos-recent-reports")
-  assert_exit_status(status, 65, "next-page content in the recent-reports bottom central band")
+  assert_exit_status(status, 65, "content reappearing at the physical bottom of recent reports")
   assert(stderr.include?("next-page leakage in the bottom central band"), "recent leakage rejection should be explicit")
+  assert(stderr.include?("found 15 nonblack pixels, maximum 14"), "recent bottom reappearance should expose its threshold")
+  assert(stderr.include?("reviewed rows 96...99"), "recent bottom reappearance should expose its reviewed rows")
 
   detail_pixels = {}
   (20...30).each do |y|
