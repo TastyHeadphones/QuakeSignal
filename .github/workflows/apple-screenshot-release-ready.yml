@@ -92,7 +92,12 @@ jobs:
             %w[VISUAL PRIVACY SIGNED_PARITY].each do |kind|
               reviewer = ENV.fetch("#{kind}_REVIEWER")
               abort "#{kind} approval requires one valid named reviewer" unless
-                !reviewer.strip.empty? && reviewer.length <= 100 && !reviewer.match?(/[\u0000-\u001f\u007f]/)
+                reviewer == reviewer.strip && !reviewer.empty? && reviewer.length <= 100 &&
+                !reviewer.match?(/[\u0000-\u001f\u007f]/)
+              placeholder = reviewer.match?(/[<>]/) ||
+                reviewer.match?(/\A(?:tbd|todo|unknown|placeholder|pending|none|n\/a|na|reviewer|name|your name|named reviewer|replace me)\z/i) ||
+                reviewer.match?(/\b(?:tbd|todo|unknown|placeholder)\b/i)
+              abort "#{kind} approval reviewer is a placeholder" if placeholder
               abort "#{kind} approval must be explicitly true" unless ENV.fetch("#{kind}_APPROVED") == "true"
             end
             signed_hashes = JSON.parse(ENV.fetch("SIGNED_ARTIFACT_SHA256S_JSON"))

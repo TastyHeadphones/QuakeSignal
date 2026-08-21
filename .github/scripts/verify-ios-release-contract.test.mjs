@@ -2394,6 +2394,10 @@ test("fails closed when hosted screenshot approval, run binding, or retention dr
       '              ENV.fetch("GITHUB_REPOSITORY") == "TastyHeadphones/QuakeSignal"\n',
       '              ENV.fetch("GITHUB_REPOSITORY") == "UntrustedFork/QuakeSignal"\n',
     ],
+    [
+      '              abort "#{kind} approval reviewer is a placeholder" if placeholder\n',
+      '              abort "#{kind} approval reviewer is a placeholder" if false\n',
+    ],
   ]) {
     await withFixture(t, {}, async (root) => {
       const path = join(root, ".github/workflows/apple-screenshot-release-ready.yml");

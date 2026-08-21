@@ -53,6 +53,14 @@ these saves.
 | App Accessibility | Not configured; the setup dialog was inspected and cancelled without saving claims |
 | Submission | No platform was added for review or submitted |
 
+The TestFlight dashboard lists only the iOS surface. Its newest upload is
+version `1.1 (7)`, marked **Complete** and **Ready to Submit**; build `8` is not
+present. The existing `QuakeSignal Internal QA` group is visible, but there is
+no tvOS, visionOS, or Mac build section and no qualifying multi-platform build
+8 to test or attach. TestFlight's Beta App Review contact mirrors the same
+first and last names while leaving phone and email blank; its feedback email is
+also blank, so it provides no authoritative contact value to reuse.
+
 ## Shared questionnaires and privacy
 
 - App Information still displays Content Rights as **Yes**. That portal value
@@ -76,6 +84,13 @@ these saves.
 - The live `ios-app-store-release` environment must be confirmed to require an
   independent reviewer and prevent self-review before its human-supplied
   reviewer names or signed-artifact hashes are accepted as release evidence.
+- App Store Connect's Xcode Cloud page still shows the initial onboarding state
+  and says to create a workflow in Xcode; it exposes no QuakeSignal workflow or
+  build history. Because this release forbids local Xcode/build execution, no
+  initial Xcode Cloud workflow was created. GitHub Actions is the only currently
+  repository-defined hosted build, capture, signing, and upload lane; it is not
+  operational until the branch is merged and its protected environment is
+  confirmed.
 - The Apple distribution profiles exist in the Developer portal, but their
   existence does not prove that the protected GitHub environment contains the
   corresponding base64 profile and certificate values.

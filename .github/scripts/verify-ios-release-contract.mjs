@@ -412,7 +412,7 @@ const WORKFLOW_JOBS_FINGERPRINT = "sha256:-d0wBZyf2k7VY4Cg7wm6mTUqSTznpgg0MB99EF
 const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:kdmNDd9nWmheihycQJl2FGWnO-Y5l5GVqo9a-LspzIg";
 const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:ytjQtZGGTHGr6F-iQ-JjbQ7CFhEAFwd7p5mkDl2WlcY";
 const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:mKE3lLqxtJUhMRw6pIX4gSy4IuKbxI67MCX7UYRVwzg";
-const SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT = "sha256:wF5yAEHWTYOieQ2oAozOkG_YA4h1VLVBRv3RTnEQ48o";
+const SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT = "sha256:ayLzRpt3mWocM2GlgxSNnMnA-9FSmiUSkGYeuBI3ynY";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
 const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:676KBpvZr_X34qvSu8sARCkTdyux7qfkzN92e5tPebY";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
@@ -422,8 +422,8 @@ const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:14FdmmhtuHwHY7yGNg84H7
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:vtAIx8JZ4s9UUN07yItVzVx-po5bFVrgWPH5FV_zhXA";
 const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:QWPW7UmK-pIieBOG-2Ywe2njyUoVoMzzrEiijxo4LIs";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:yaHxjPxaZNH8hJSlnzW_Lp8vjGPR4CwH8eStMMykBbE";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:RjNhmRZRlrssKC6P_eR946V_cr87Qd9DBMnOnilpuI8";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:jiHkGD2NS0px3g9IkdPOu3U-HfauQn7JOGUZca7KtPQ";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:c145GnEk0QQC586orpXKO51NA3cy4-59Uv9vi5SXuZ0";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:gNHr13EktFUXs0KiPpLYbdaL3I7IApzP4PQjaDmX2Gk";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -2401,6 +2401,10 @@ function verifyScreenshotReleaseWorkflow(workflowSource) {
     'ENV.fetch("GITHUB_REPOSITORY") == "TastyHeadphones/QuakeSignal"',
     'ENV.fetch("GITHUB_REF") == "refs/heads/main"',
     'ENV.fetch("REF_PROTECTED") == "true"',
+    "reviewer == reviewer.strip",
+    "reviewer.match?(/[<>]/)",
+    "reviewer.match?(/\\b(?:tbd|todo|unknown|placeholder)\\b/i)",
+    'abort "#{kind} approval reviewer is a placeholder" if placeholder',
   ], `${label} canonical repository dispatch preflight command`);
   const checkout = stepByName(steps, "Check out exact source commit", `${label} checkout`);
   exactRecord(checkout, {

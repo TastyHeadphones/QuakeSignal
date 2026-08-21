@@ -40,6 +40,14 @@ node .github/scripts/verify-ios-release-contract.mjs --build-number 8
 
 ## Xcode Cloud protected native release workflow
 
+Action-time portal inspection on 2026-08-22 shows no configured QuakeSignal
+workflow or build history; App Store Connect remains on the initial screen that
+requires creating the first workflow in Xcode. Under this release's no-local-
+Xcode/build constraint, the workflow described below is a future configuration
+specification, not an available lane. Use the protected GitHub workflows in
+this runbook for build 8 unless an initial Xcode Cloud workflow is created by an
+authorized release owner outside this run.
+
 Configure exactly one Xcode Cloud workflow named
 `QuakeSignal 1.1 (8) Native Release`. A single workflow is required because
 Xcode Cloud assigns one `CI_BUILD_NUMBER` to the build; separate
@@ -350,6 +358,80 @@ submitted for review.
   indivisible 26-frame package in an external hosted evidence root while the
   checked-in `screenshot-set-index-v1.1-build8.json` remains pending. The
   protected handoff must run:
+
+  ```sh
+  set -euo pipefail
+  QUAKESIGNAL_REPOSITORY=TastyHeadphones/QuakeSignal
+  QUAKESIGNAL_CAPTURE_DISPATCH_OUTPUT="$(
+    gh workflow run apple-platform-screenshots.yml \
+      --repo "$QUAKESIGNAL_REPOSITORY" \
+      --ref main 2>&1
+  )"
+  printf '%s\n' "$QUAKESIGNAL_CAPTURE_DISPATCH_OUTPUT"
+  QUAKESIGNAL_CAPTURE_RUN_URL="$(
+    printf '%s\n' "$QUAKESIGNAL_CAPTURE_DISPATCH_OUTPUT" |
+      /usr/bin/sed -nE \
+        's#^.*(https://github\.com/TastyHeadphones/QuakeSignal/actions/runs/[1-9][0-9]*).*$#\1#p'
+  )"
+  QUAKESIGNAL_CAPTURE_RUN_ID="$(
+    printf '%s\n' "${QUAKESIGNAL_CAPTURE_RUN_URL##*/}"
+  )"
+  case "$QUAKESIGNAL_CAPTURE_RUN_ID" in
+    ""|0|*[!0-9]*) echo "capture dispatch did not return one positive run ID" >&2; exit 1 ;;
+  esac
+  test "$QUAKESIGNAL_CAPTURE_RUN_URL" = \
+    "https://github.com/$QUAKESIGNAL_REPOSITORY/actions/runs/$QUAKESIGNAL_CAPTURE_RUN_ID"
+
+  gh run watch "$QUAKESIGNAL_CAPTURE_RUN_ID" \
+    --repo "$QUAKESIGNAL_REPOSITORY" \
+    --exit-status
+
+  QUAKESIGNAL_CAPTURE_RUN_FIELDS="$(
+    gh run view "$QUAKESIGNAL_CAPTURE_RUN_ID" \
+      --repo "$QUAKESIGNAL_REPOSITORY" \
+      --json databaseId,url,headSha,event,headBranch,conclusion \
+      --jq '[.databaseId,.url,.headSha,.event,.headBranch,.conclusion] | @tsv'
+  )"
+  IFS=$'\t' read -r QUAKESIGNAL_VIEW_RUN_ID QUAKESIGNAL_VIEW_RUN_URL \
+    QUAKESIGNAL_SOURCE_COMMIT QUAKESIGNAL_CAPTURE_EVENT \
+    QUAKESIGNAL_CAPTURE_BRANCH QUAKESIGNAL_CAPTURE_CONCLUSION \
+    <<< "$QUAKESIGNAL_CAPTURE_RUN_FIELDS"
+  test "$QUAKESIGNAL_VIEW_RUN_ID" = "$QUAKESIGNAL_CAPTURE_RUN_ID"
+  test "$QUAKESIGNAL_VIEW_RUN_URL" = "$QUAKESIGNAL_CAPTURE_RUN_URL"
+  test "$QUAKESIGNAL_CAPTURE_EVENT" = workflow_dispatch
+  test "$QUAKESIGNAL_CAPTURE_BRANCH" = main
+  test "$QUAKESIGNAL_CAPTURE_CONCLUSION" = success
+  test "${#QUAKESIGNAL_SOURCE_COMMIT}" -eq 40
+  case "$QUAKESIGNAL_SOURCE_COMMIT" in
+    *[!0-9a-f]*) echo "capture run headSha is not a full lowercase Git SHA" >&2; exit 1 ;;
+  esac
+
+  # Replace every placeholder only with the canonical signed-run digest or
+  # named reviewer recorded by the independent protected-environment approver.
+  QUAKESIGNAL_SIGNED_HASHES_JSON='{"ios-ipados":"<ios-and-watch-ipa-sha256>","tvos":"<tvos-ipa-sha256>","watchos":"<ios-and-watch-ipa-sha256>","visionos":"<visionos-ipa-sha256>","maccatalyst":"<maccatalyst-pkg-sha256>"}'
+
+  gh workflow run apple-screenshot-release-ready.yml \
+    --repo "$QUAKESIGNAL_REPOSITORY" \
+    --ref main \
+    -f capture_run_id="$QUAKESIGNAL_CAPTURE_RUN_ID" \
+    -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT" \
+    -f visual_reviewer="<named-visual-reviewer>" \
+    -f visual_review_approved=true \
+    -f privacy_reviewer="<named-privacy-reviewer>" \
+    -f privacy_review_approved=true \
+    -f signed_parity_reviewer="<named-signed-parity-reviewer>" \
+    -f signed_release_parity_approved=true \
+    -f signed_artifact_sha256s="$QUAKESIGNAL_SIGNED_HASHES_JSON"
+  ```
+
+  The capture dispatch must return one canonical run URL; absence or ambiguity
+  is a stop condition. Never pre-read moving `main` or select a subsequently
+  listed run. Watch the returned positive run ID, then derive and validate
+  its exact `headSha`, event, branch, URL, and successful conclusion with
+  `gh run view`. The finalizer independently rechecks that run, its canonical
+  repository, and all five artifact identities before and after download.
+
+  Inside the protected finalizer, the strict verifier invocation is:
 
   ```sh
   ruby .github/scripts/verify-store-assets.rb \
