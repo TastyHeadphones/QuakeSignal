@@ -46,6 +46,37 @@ class ParseIOSScreenshotBuildSettingsTest < Minitest::Test
     end
   end
 
+  def test_accepts_xcode_26_6_omitted_identity_only_when_signing_is_fully_disabled
+    settings = exact_settings
+    settings.delete("CODE_SIGN_IDENTITY")
+
+    parsed = QuakeSignalIOSBuildSettings.parse(build_settings_source(settings))
+
+    assert_equal "NO", parsed.fetch("codeSigningAllowed")
+    assert_equal "NO", parsed.fetch("codeSigningRequired")
+    assert_equal "", parsed.fetch("codeSignIdentity")
+  end
+
+  def test_rejects_omitted_identity_when_either_signing_guard_is_not_disabled
+    %w[CODE_SIGNING_ALLOWED CODE_SIGNING_REQUIRED].each do |unsafe_key|
+      settings = exact_settings
+      settings.delete("CODE_SIGN_IDENTITY")
+      settings[unsafe_key] = "YES"
+
+      assert_error(/omitted CODE_SIGN_IDENTITY requires CODE_SIGNING_ALLOWED=NO and CODE_SIGNING_REQUIRED=NO/) do
+        QuakeSignalIOSBuildSettings.parse(build_settings_source(settings))
+      end
+    end
+  end
+
+  def test_rejects_a_retained_nonempty_identity_even_when_signing_is_disabled
+    settings = exact_settings.merge("CODE_SIGN_IDENTITY" => "Apple Development")
+
+    assert_error(/codeSignIdentity is not the exact credential-free screenshot value/) do
+      QuakeSignalIOSBuildSettings.parse(build_settings_source(settings))
+    end
+  end
+
   private
 
   def fixture_root
@@ -79,6 +110,16 @@ class ParseIOSScreenshotBuildSettingsTest < Minitest::Test
       "CLANG_MODULE_CACHE_PATH" => "#{root}/ModuleCache.noindex",
       "DSTROOT" => "#{root}/Dst",
     }
+  end
+
+  def build_settings_source(settings)
+    JSON.generate([
+      {
+        "target" => "QuakeSignal",
+        "action" => "build",
+        "buildSettings" => settings,
+      },
+    ])
   end
 
   def assert_error(pattern)

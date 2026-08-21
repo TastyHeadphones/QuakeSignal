@@ -10,11 +10,18 @@ REVIEWED_FRAME_SELECTORS = %w[
 
 # Every reviewed route must contain a committed app-panel frame rather than the
 # low-contrast launch card that visionOS can leave visible after process launch.
-# These common thresholds are intentionally below the weakest retained Guide
-# and Alert Preferences captures while remaining above both observed launch
-# placeholders. The map adds stricter, route-specific evidence below.
+# These common thresholds remain the default for every route except the
+# separately reviewed Guide composition. The map and Guide add stricter,
+# route-specific evidence below.
 MINIMUM_READY_LUMA_STANDARD_DEVIATION = 25.0
 MINIMUM_READY_EDGE_FRACTION = 0.01
+MINIMUM_GUIDE_LUMA_STANDARD_DEVIATION = 26.0
+MINIMUM_GUIDE_QUANTIZED_COLOR_BINS = 24
+MAXIMUM_GUIDE_SATURATED_FRACTION = 0.01
+MAXIMUM_GUIDE_MAP_BLUE_FRACTION = 0.002
+MINIMUM_GUIDE_BRIGHT_FRACTION = 0.00015
+MINIMUM_GUIDE_EDGE_FRACTION = 0.007
+MAXIMUM_GUIDE_EDGE_FRACTION = 0.012
 MINIMUM_MAP_LUMA_STANDARD_DEVIATION = 28.0
 MINIMUM_MAP_QUANTIZED_COLOR_BINS = 80
 MINIMUM_MAP_SATURATED_FRACTION = 0.15
@@ -151,8 +158,20 @@ metrics = format(
   edge_fraction * 100,
 )
 
-valid_ready_frame = luma_standard_deviation >= MINIMUM_READY_LUMA_STANDARD_DEVIATION &&
-  edge_fraction >= MINIMUM_READY_EDGE_FRACTION
+valid_guide_route = luma_standard_deviation >= MINIMUM_GUIDE_LUMA_STANDARD_DEVIATION &&
+  quantized_bins.length >= MINIMUM_GUIDE_QUANTIZED_COLOR_BINS &&
+  saturated_fraction <= MAXIMUM_GUIDE_SATURATED_FRACTION &&
+  map_blue_fraction <= MAXIMUM_GUIDE_MAP_BLUE_FRACTION &&
+  bright_fraction >= MINIMUM_GUIDE_BRIGHT_FRACTION &&
+  edge_fraction >= MINIMUM_GUIDE_EDGE_FRACTION &&
+  edge_fraction <= MAXIMUM_GUIDE_EDGE_FRACTION
+
+valid_ready_frame = if frame_selector == "visionos-guide"
+  valid_guide_route
+else
+  luma_standard_deviation >= MINIMUM_READY_LUMA_STANDARD_DEVIATION &&
+    edge_fraction >= MINIMUM_READY_EDGE_FRACTION
+end
 
 valid_map_route = luma_standard_deviation >= MINIMUM_MAP_LUMA_STANDARD_DEVIATION &&
   quantized_bins.length >= MINIMUM_MAP_QUANTIZED_COLOR_BINS &&
@@ -165,6 +184,8 @@ valid_route = frame_selector != "visionos-map" || valid_map_route
 unless valid_ready_frame && valid_route
   route_requirement = if frame_selector == "visionos-map"
     "Vision map lacks reviewed semantic pixel diversity"
+  elsif frame_selector == "visionos-guide"
+    "Vision Guide lacks reviewed list-and-text pixel structure"
   else
     "Vision frame #{frame_selector} lacks reviewed app-panel pixel structure"
   end

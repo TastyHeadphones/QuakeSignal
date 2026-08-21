@@ -327,6 +327,9 @@ watch_detail_layout_errors = lambda do |view|
   end
   errors << "one max-intensity field" unless view.scan("event.maxIntensity").length == 1
   errors << "one depth field" unless view.scan("event.depth").length == 1
+  unless view.match?(/date\.formatted\(date: \.numeric, time: \.shortened\).*?Divider\(\)\s*\.padding\(\.top, 12\)/m)
+    errors << "clean initial viewport boundary after date"
+  end
   disclosure = view[/Text\("platform\.watch\.foregroundOnly\.detail"\).*?(?=\n\s*\}\n\s*\.padding\(\.horizontal, 8\))/m]
   unless disclosure&.match?(/\.font\(\.footnote\).*?\.fixedSize\(horizontal: false, vertical: true\)/m) &&
          !disclosure.include?(".lineLimit(") &&
@@ -348,6 +351,10 @@ layout_mutations = {
   "oversized magnitude" => detail.sub("size: 34", "size: 40"),
   "missing horizontal inset" => detail.sub(".padding(.horizontal, 8)", ".padding(.horizontal, 0)"),
   "missing bottom inset" => detail.sub(".padding(.bottom, 10)", ".padding(.bottom, 0)"),
+  "insufficient first-viewport disclosure separation" => detail.sub(
+    ".padding(.top, 12)",
+    ".padding(.top, 0)"
+  ),
   "undersized disclosure" => detail.sub(".font(.footnote)", ".font(.system(size: 9.5))"),
   "truncated disclosure" => detail.sub(
     ".fixedSize(horizontal: false, vertical: true)",
