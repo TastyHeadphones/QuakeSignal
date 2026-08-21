@@ -90,7 +90,7 @@ fi
     capture.include?("quakesignal_maccatalyst_run_tracked xcodebuild -showBuildSettings") &&
     capture.scan(%q[quakesignal_maccatalyst_run_tracked "$window_helper"]).length == 2
   abort "shell lost exact PID/window/selector/nonce request-response handshake" unless
-    capture.include?(%q["capture-request-evidence/$frame_selector.json]) &&
+    capture.include?(%q[capture_request_path="$payload/capture-request-evidence/$frame_selector.json"]) &&
     capture.include?(%q["capture-request.json"]) &&
     capture.include?(%q["capture-response.json"]) &&
     capture.include?("SecureRandom.hex(32)") &&
