@@ -769,7 +769,7 @@ class IOSScreenshotProvenanceTest < Minitest::Test
       "appleLocale" => "en_US",
       "timeZone" => "UTC",
       "appearance" => "dark",
-      "statusBarTime" => "2026-01-01T09:41:00+00:00",
+      "statusBarTime" => "2026-01-01T09:41:00Z",
       "captureAttemptCount" => 1,
       "retryPerformed" => false,
       "stdoutSha256" => Digest::SHA256.file(stdout_path).hexdigest,

@@ -709,7 +709,7 @@ export IOS_INSTALL_EXECUTABLE_SHA="$(shasum -a 256 "$installed_executable" | awk
 quakesignal_screenshot_run_tracked xcrun simctl status_bar \
   "$simulator_id" clear >/dev/null 2>&1 || true
 quakesignal_screenshot_run_tracked xcrun simctl status_bar "$simulator_id" override \
-  --time '2026-01-01T09:41:00+00:00' \
+  --time '2026-01-01T09:41:00Z' \
   --dataNetwork wifi --wifiMode active --wifiBars 3 \
   --cellularMode active --cellularBars 4 --operatorName '' \
   --batteryState charged --batteryLevel 100
@@ -892,7 +892,7 @@ export IOS_LAUNCH_STDERR_SHA="$(shasum -a 256 "$app_stderr" | awk '{ print $1 }'
     "appleLocale" => "en_US",
     "timeZone" => "UTC",
     "appearance" => "dark",
-    "statusBarTime" => "2026-01-01T09:41:00+00:00",
+    "statusBarTime" => "2026-01-01T09:41:00Z",
     "captureAttemptCount" => Integer(ENV.fetch("IOS_LAUNCH_ATTEMPTS"), 10),
     "retryPerformed" => ENV.fetch("IOS_LAUNCH_RETRY") == "true",
     "stdoutSha256" => ENV.fetch("IOS_LAUNCH_STDOUT_SHA"),
