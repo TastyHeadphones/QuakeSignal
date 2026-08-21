@@ -2,7 +2,7 @@ import SwiftUI
 
 enum VisionGuideLayoutPolicy {
     static let wideAfterQuakeItemCount = 3
-    static let afterQuakeRowBottomInset: CGFloat = 24
+    static let afterQuakeRowBottomInset: CGFloat = 48
 
     static func usesWideAfterQuakeRow(
         itemCount: Int,
