@@ -64,7 +64,7 @@ test("the checked-in direct macOS and Homebrew release contracts are coherent", 
   const verified = await verifyDesktopReleaseContract({ root: repositoryRoot });
   assert.deepEqual(verified, {
     directStepsFingerprint: "sha256:9_cZ-KeTzLZFiOlAwbIJw4av4Zlihs9Xr2eXsQfnbmA",
-    macAppStoreStepsFingerprint: "sha256:RfLhsMpFJdK9JCx7AT0KvvvfuHb2YSV1YwWonSaPgAE",
+    macAppStoreStepsFingerprint: "sha256:hTaWK2GTIrrEc34RKsSVTM0n4llBmdOqS9KNelgqgF4",
     releaseStepsFingerprint: "sha256:3dX8Og0fyNOioMHFK-Jt8FiTZTqwkc8dhXjbovwV2qI",
     homebrewStepsFingerprint: "sha256:NuwuAFiTLY6LC19V3jx8XcjFSwpafYQVpgHgnveCywY",
   });
@@ -116,15 +116,15 @@ test("fails closed if any desktop release build skips the frontend safety-policy
   }
 });
 
-test("keeps artifact-only mechanical validation separate from the upload-only exact-source approval gate", async (t) => {
+test("keeps hash-and-log-only mechanical validation separate from the upload-only exact-source approval gate", async (t) => {
   await expectFailure(t, {
     mutateDesktop: (source) => replaceOnce(
       source,
       "      - name: Validate Mac App Store listing assets\n        run: ruby .github/scripts/verify-store-assets.rb\n",
       "      - name: Validate Mac App Store listing assets\n        run: ruby .github/scripts/verify-store-assets.rb --require-macos-release-ready --expected-source-commit=\"$GITHUB_SHA\"\n",
-      "Mac App Store artifact-only listing-assets gate",
+      "Mac App Store hash/log-only listing-assets gate",
     ),
-  }, /artifact-only listing-assets gate/i);
+  }, /hash\/log-only listing-assets gate/i);
   await expectFailure(t, {
     mutateDesktop: (source) => replaceInMacosAppStore(
       source,
@@ -163,7 +163,7 @@ test("fails closed if Mac App Store dispatch defaults or protected upload condit
   await expectFailure(t, {
     mutateDesktop: (source) => replaceInMacosAppStore(
       source,
-      "          if [ \"$BUILD_ARTIFACT_ONLY\" = \"true\" ] && [ \"$UPLOAD_TO_APP_STORE_CONNECT\" = \"true\" ]; then\n",
+      "          if [ \"$HASH_LOG_ONLY\" = \"true\" ] && [ \"$UPLOAD_TO_APP_STORE_CONNECT\" = \"true\" ]; then\n",
       "          if false; then\n",
       "Mac App Store mutually exclusive mode gate",
     ),
@@ -178,7 +178,7 @@ test("fails closed if a Mac App Store post-provenance or credential-ordering ste
       "echo upload-was-skipped \"$MACOS_APP_STORE_PACKAGE\"",
       "Mac App Store package upload command",
     ),
-  }, /macos-app-store steps must match the reviewed/i);
+  }, /macos-app-store upload step|macos-app-store steps must match the reviewed/i);
   await expectFailure(t, {
     mutateDesktop: (source) => replaceInMacosAppStore(
       source,
@@ -187,6 +187,123 @@ test("fails closed if a Mac App Store post-provenance or credential-ordering ste
       "Mac App Store pre-credential setup",
     ),
   }, /macos-app-store pre-credential step Set up Node\.js/i);
+});
+
+test("pins the exact Mac App Store record coordinates and digest-bound upload", async (t) => {
+  const mutations = [
+    ["          MACOS_APP_STORE_ALTOOL_PLATFORM: macos\n", "          MACOS_APP_STORE_ALTOOL_PLATFORM: ios\n"],
+    ['          MACOS_APP_STORE_APPLE_ID: "6800642853"\n', '          MACOS_APP_STORE_APPLE_ID: "6800642443"\n'],
+    ["          MACOS_APP_STORE_BUNDLE_IDENTIFIER: com.quakesignal.desktop\n", "          MACOS_APP_STORE_BUNDLE_IDENTIFIER: com.quakesignal.app\n"],
+    ['          MACOS_APP_STORE_SHORT_VERSION: "1.1.0"\n', '          MACOS_APP_STORE_SHORT_VERSION: "1.0.0"\n'],
+    ['          MACOS_APP_STORE_BUNDLE_VERSION: "1.1.0"\n', '          MACOS_APP_STORE_BUNDLE_VERSION: "1.0.0"\n'],
+    [
+      'if [ "${MACOS_APP_STORE_PACKAGE_VERIFIED:-false}" != true ]; then',
+      "if false; then",
+    ],
+    [
+      'upload_sha256="$(/usr/bin/shasum -a 256 "${MACOS_APP_STORE_PACKAGE:?Mac App Store package path is missing}")"',
+      'upload_sha256="${MACOS_APP_STORE_PACKAGE_SHA256}"',
+    ],
+    [
+      'xcrun altool --validate-app "$MACOS_APP_STORE_PACKAGE" "${upload_arguments[@]}"',
+      'xcrun altool --validate-app "/tmp/unreviewed.pkg" "${upload_arguments[@]}"',
+    ],
+    [
+      '--api-key "$APP_STORE_CONNECT_KEY_ID"',
+      '--api-key "unbound-key-id"',
+    ],
+  ];
+  for (const [from, to] of mutations) {
+    await expectFailure(t, {
+      mutateDesktop: (source) => replaceInMacosAppStore(
+        source,
+        from,
+        to,
+        "Mac App Store record or digest binding",
+      ),
+    }, /macos-app-store upload step|macos-app-store steps/i);
+  }
+});
+
+test("pins the trusted Mac App Store installer leaf and verified package digest", async (t) => {
+  for (const [from, to] of [
+    [
+      "'Mac Installer Distribution: '*' (5TT564H883)'|'3rd Party Mac Developer Installer: '*' (5TT564H883)'",
+      "'Mac Installer Distribution: '*' (ABCDEFGHIJ)'|'3rd Party Mac Developer Installer: '*' (ABCDEFGHIJ)'",
+    ],
+    ["if leaf_identities != [expected_identity]:", "if False:"],
+    [
+      '"Status: signed by a certificate trusted by macOS"',
+      '"Status: signed by an unknown certificate"',
+    ],
+    [
+      'package_sha256="$(/usr/bin/shasum -a 256 "$package")"',
+      'package_sha256="0000000000000000000000000000000000000000000000000000000000000000"',
+    ],
+    [
+      "echo 'MACOS_APP_STORE_PACKAGE_VERIFIED=false' >> \"$GITHUB_ENV\"",
+      "echo 'MACOS_APP_STORE_PACKAGE_VERIFIED=true' >> \"$GITHUB_ENV\"",
+    ],
+    [
+      "echo 'MACOS_APP_STORE_PACKAGE_VERIFIED=true' >> \"$GITHUB_ENV\"",
+      "echo 'MACOS_APP_STORE_PACKAGE_VERIFIED=false' >> \"$GITHUB_ENV\"",
+    ],
+  ]) {
+    await expectFailure(t, {
+      mutateDesktop: (source) => replaceInMacosAppStore(
+        source,
+        from,
+        to,
+        "Mac App Store installer identity verification",
+      ),
+    }, /protected configuration step|signed artifact version\/build verification|macos-app-store steps/i);
+  }
+});
+
+test("rejects reintroduced Mac App Store signed-package retention", async (t) => {
+  await expectFailure(t, {
+    mutateDesktop: (source) => replaceInMacosAppStore(
+      source,
+      "      - name: Remove App Store signing material\n",
+      [
+        "      - name: Retain signed Mac App Store package",
+        "        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+        "        with:",
+        "          name: forbidden-macos-app-store-pkg",
+        "          path: artifacts/macos-app-store/*.pkg",
+        "",
+        "      - name: Remove App Store signing material",
+        "",
+      ].join("\n"),
+      "Mac App Store signed-package retention",
+    ),
+  }, /must not retain its signed package as a GitHub Actions artifact/i);
+});
+
+test("keeps Mac App Store package deletion in the unconditional cleanup", async (t) => {
+  for (const [from, to] of [
+    [
+      "      - name: Remove App Store signing material\n        if: always()\n",
+      "      - name: Remove App Store signing material\n        if: success()\n",
+    ],
+    [
+      "          rm -f artifacts/macos-app-store/*.pkg\n",
+      "",
+    ],
+    [
+      '          rm -f "$RUNNER_TEMP/quakesignal-macos-app-store-package-signature.txt"\n',
+      "",
+    ],
+  ]) {
+    await expectFailure(t, {
+      mutateDesktop: (source) => replaceInMacosAppStore(
+        source,
+        from,
+        to,
+        "Mac App Store package cleanup",
+      ),
+    }, /macos-app-store cleanup step|macos-app-store steps/i);
+  }
 });
 
 test("fails closed if the Mac App Store source or signed artifact version/build drifts from 1.1.0", async (t) => {

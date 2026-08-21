@@ -1,4 +1,4 @@
-name: Native tvOS and visionOS release
+name: Native Apple platform release
 
 on:
   workflow_dispatch:
@@ -11,8 +11,9 @@ on:
         options:
           - tvos
           - visionos
+          - maccatalyst
       archive_only:
-        description: Archive, export, and validate a signed IPA without uploading it to App Store Connect
+        description: Archive, verify, and hash a signed IPA or PKG without retaining or uploading it
         required: false
         default: false
         type: boolean
@@ -41,7 +42,7 @@ env:
 
 jobs:
   release:
-    name: Archive ${{ matrix.name }} and optionally upload to TestFlight
+    name: Archive ${{ matrix.name }} and optionally upload to App Store Connect
     if: >-
       github.event_name == 'workflow_dispatch' &&
       (inputs.archive_only || inputs.upload_to_testflight) &&
@@ -58,13 +59,15 @@ jobs:
       matrix:
         include:
           - key: ${{ inputs.platform }}
-            name: ${{ inputs.platform == 'tvos' && 'tvOS' || 'visionOS' }}
-            scheme: ${{ inputs.platform == 'tvos' && 'QuakeSignalTV' || 'QuakeSignalVision' }}
-            destination: ${{ inputs.platform == 'tvos' && 'generic/platform=tvOS' || 'generic/platform=visionOS' }}
+            name: ${{ inputs.platform == 'tvos' && 'tvOS' || inputs.platform == 'visionos' && 'visionOS' || 'Mac Catalyst' }}
+            scheme: ${{ inputs.platform == 'tvos' && 'QuakeSignalTV' || inputs.platform == 'visionos' && 'QuakeSignalVision' || 'QuakeSignal' }}
+            destination: ${{ inputs.platform == 'tvos' && 'generic/platform=tvOS' || inputs.platform == 'visionos' && 'generic/platform=visionOS' || 'generic/platform=macOS,variant=Mac Catalyst' }}
             bundle_identifier: com.quakesignal.app
-            profile_secret: ${{ inputs.platform == 'tvos' && 'TVOS_APP_STORE_PROVISIONING_PROFILE' || 'VISIONOS_APP_STORE_PROVISIONING_PROFILE' }}
-            profile_variable: ${{ inputs.platform == 'tvos' && 'TVOS_APP_STORE_PROFILE_NAME' || 'VISIONOS_APP_STORE_PROFILE_NAME' }}
-            profile_platform: ${{ inputs.platform == 'tvos' && 'tvOS' || 'visionOS' }}
+            profile_secret: ${{ inputs.platform == 'tvos' && 'TVOS_APP_STORE_PROVISIONING_PROFILE' || inputs.platform == 'visionos' && 'VISIONOS_APP_STORE_PROVISIONING_PROFILE' || 'MACCATALYST_APP_STORE_PROVISIONING_PROFILE' }}
+            profile_variable: ${{ inputs.platform == 'tvos' && 'TVOS_APP_STORE_PROFILE_NAME' || inputs.platform == 'visionos' && 'VISIONOS_APP_STORE_PROFILE_NAME' || 'MACCATALYST_APP_STORE_PROFILE_NAME' }}
+            profile_platform: ${{ inputs.platform == 'tvos' && 'tvOS' || inputs.platform == 'visionos' && 'visionOS' || 'OSX' }}
+            profile_extension: ${{ inputs.platform == 'maccatalyst' && 'provisionprofile' || 'mobileprovision' }}
+            altool_platform: ${{ inputs.platform == 'tvos' && 'appletvos' || inputs.platform == 'visionos' && 'visionos' || 'macos' }}
             requires_alert_entitlements: "false"
 
     steps:
@@ -73,7 +76,7 @@ jobs:
 
       # Keep the frozen source/project/artifact contract ahead of every step
       # that receives signing or upload credentials. tvOS and visionOS are
-      # foreground-only, so their archives have no live Worker dependency.
+      # foreground-only; Catalyst shares the production iOS Worker contract.
       - name: Verify frozen Apple platform release contract
         id: release-contract
         env:
@@ -109,9 +112,14 @@ jobs:
           PLATFORM_DESTINATION: ${{ matrix.destination }}
           PLATFORM_BUNDLE_IDENTIFIER: ${{ matrix.bundle_identifier }}
           PLATFORM_PROFILE_PLATFORM: ${{ matrix.profile_platform }}
+          PLATFORM_PROFILE_EXTENSION: ${{ matrix.profile_extension }}
+          PLATFORM_ALTOOL_PLATFORM: ${{ matrix.altool_platform }}
           PLATFORM_REQUIRES_ALERT_ENTITLEMENTS: ${{ matrix.requires_alert_entitlements }}
           PLATFORM_PROFILE: ${{ secrets[matrix.profile_secret] }}
           PLATFORM_PROFILE_NAME: ${{ vars[matrix.profile_variable] }}
+          PLATFORM_INSTALLER_CERTIFICATE: ${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || '' }}
+          PLATFORM_INSTALLER_CERTIFICATE_PASSWORD: ${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD || '' }}
+          PLATFORM_INSTALLER_IDENTITY: ${{ inputs.platform == 'maccatalyst' && vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || '' }}
           IOS_CERTIFICATE: ${{ secrets.IOS_APP_STORE_CERTIFICATE }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_APP_STORE_CERTIFICATE_PASSWORD }}
           ARCHIVE_ONLY: ${{ inputs.archive_only }}
@@ -132,12 +140,21 @@ jobs:
             PLATFORM_DESTINATION
             PLATFORM_BUNDLE_IDENTIFIER
             PLATFORM_PROFILE_PLATFORM
+            PLATFORM_PROFILE_EXTENSION
+            PLATFORM_ALTOOL_PLATFORM
             PLATFORM_REQUIRES_ALERT_ENTITLEMENTS
             PLATFORM_PROFILE
             PLATFORM_PROFILE_NAME
             IOS_CERTIFICATE
             IOS_CERTIFICATE_PASSWORD
           )
+          if [ "$PLATFORM_KEY" = maccatalyst ]; then
+            required+=(
+              PLATFORM_INSTALLER_CERTIFICATE
+              PLATFORM_INSTALLER_CERTIFICATE_PASSWORD
+              PLATFORM_INSTALLER_IDENTITY
+            )
+          fi
           missing=()
           for name in "${required[@]}"; do
             if [ -z "${!name:-}" ]; then missing+=("$name"); fi
@@ -151,13 +168,29 @@ jobs:
               test "$PLATFORM_SCHEME" = QuakeSignalTV
               test "$PLATFORM_DESTINATION" = generic/platform=tvOS
               test "$PLATFORM_PROFILE_PLATFORM" = tvOS
+              test "$PLATFORM_PROFILE_EXTENSION" = mobileprovision
+              test "$PLATFORM_ALTOOL_PLATFORM" = appletvos
               test "$PLATFORM_REQUIRES_ALERT_ENTITLEMENTS" = false
               ;;
             visionos)
               test "$PLATFORM_SCHEME" = QuakeSignalVision
               test "$PLATFORM_DESTINATION" = generic/platform=visionOS
               test "$PLATFORM_PROFILE_PLATFORM" = visionOS
+              test "$PLATFORM_PROFILE_EXTENSION" = mobileprovision
+              test "$PLATFORM_ALTOOL_PLATFORM" = visionos
               test "$PLATFORM_REQUIRES_ALERT_ENTITLEMENTS" = false
+              ;;
+            maccatalyst)
+              test "$PLATFORM_SCHEME" = QuakeSignal
+              test "$PLATFORM_DESTINATION" = 'generic/platform=macOS,variant=Mac Catalyst'
+              test "$PLATFORM_PROFILE_PLATFORM" = OSX
+              test "$PLATFORM_PROFILE_EXTENSION" = provisionprofile
+              test "$PLATFORM_ALTOOL_PLATFORM" = macos
+              test "$PLATFORM_REQUIRES_ALERT_ENTITLEMENTS" = false
+              case "$PLATFORM_INSTALLER_IDENTITY" in
+                'Mac Installer Distribution: '*' (5TT564H883)'|'3rd Party Mac Developer Installer: '*' (5TT564H883)') ;;
+                *) echo "::error::Mac Catalyst requires an exact Mac Installer Distribution identity"; exit 1 ;;
+              esac
               ;;
             *)
               echo "::error::Unsupported native platform $PLATFORM_KEY"
@@ -187,15 +220,19 @@ jobs:
       - name: Import Apple Distribution certificate and selected App Store profile
         env:
           PLATFORM_KEY: ${{ matrix.key }}
+          PLATFORM_PROFILE_EXTENSION: ${{ matrix.profile_extension }}
           PLATFORM_PROFILE: ${{ secrets[matrix.profile_secret] }}
+          PLATFORM_INSTALLER_CERTIFICATE: ${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || '' }}
+          PLATFORM_INSTALLER_CERTIFICATE_PASSWORD: ${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD || '' }}
           IOS_CERTIFICATE: ${{ secrets.IOS_APP_STORE_CERTIFICATE }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_APP_STORE_CERTIFICATE_PASSWORD }}
         run: |
           set -euo pipefail
           keychain="$RUNNER_TEMP/quakesignal-$PLATFORM_KEY.keychain-db"
           certificate="$RUNNER_TEMP/quakesignal-$PLATFORM_KEY-distribution.p12"
+          installer_certificate="$RUNNER_TEMP/quakesignal-$PLATFORM_KEY-installer.p12"
           profile_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
-          profile="$profile_dir/quakesignal-$PLATFORM_KEY.mobileprovision"
+          profile="$profile_dir/quakesignal-$PLATFORM_KEY.$PLATFORM_PROFILE_EXTENSION"
           keychain_password="$(uuidgen)"
 
           printf '%s' "$IOS_CERTIFICATE" | base64 -D > "$certificate"
@@ -209,8 +246,16 @@ jobs:
           security list-keychains -d user -s "$keychain"
           security default-keychain -d user -s "$keychain"
           security import "$certificate" -k "$keychain" -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          if [ "$PLATFORM_KEY" = maccatalyst ]; then
+            printf '%s' "$PLATFORM_INSTALLER_CERTIFICATE" | base64 -D > "$installer_certificate"
+            chmod 600 "$installer_certificate"
+            security import "$installer_certificate" -k "$keychain" -P "$PLATFORM_INSTALLER_CERTIFICATE_PASSWORD" -T /usr/bin/productbuild
+          fi
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
           security find-identity -v -p codesigning "$keychain"
+          if [ "$PLATFORM_KEY" = maccatalyst ]; then
+            security find-identity -v "$keychain"
+          fi
 
       - name: Archive selected signed App Store build
         env:
@@ -231,13 +276,15 @@ jobs:
           CODE_SIGN_IDENTITY='Apple Distribution'
           QUAKESIGNAL_TV_PROFILE_NAME="$PLATFORM_PROFILE_NAME"
           QUAKESIGNAL_VISION_PROFILE_NAME="$PLATFORM_PROFILE_NAME"
+          QUAKESIGNAL_CATALYST_PROFILE_NAME="$PLATFORM_PROFILE_NAME"
           CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
 
-      - name: Export selected App Store Connect IPA
+      - name: Export selected App Store Connect artifact
         env:
           PLATFORM_KEY: ${{ matrix.key }}
           PLATFORM_BUNDLE_IDENTIFIER: ${{ matrix.bundle_identifier }}
           PLATFORM_PROFILE_NAME: ${{ vars[matrix.profile_variable] }}
+          PLATFORM_INSTALLER_IDENTITY: ${{ inputs.platform == 'maccatalyst' && vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || '' }}
         run: |
           set -euo pipefail
           export_options="$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY-ExportOptions.plist"
@@ -245,43 +292,82 @@ jobs:
           cp ios/AppStore/ExportOptions.plist "$export_options"
           /usr/libexec/PlistBuddy -c 'Add :provisioningProfiles dict' "$export_options"
           /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$PLATFORM_BUNDLE_IDENTIFIER string $PLATFORM_PROFILE_NAME" "$export_options"
+          /usr/libexec/PlistBuddy -c 'Add :manageAppVersionAndBuildNumber bool false' "$export_options"
+          if [ "$PLATFORM_KEY" = maccatalyst ]; then
+            /usr/libexec/PlistBuddy -c 'Add :signingCertificate string Apple Distribution' "$export_options"
+            /usr/libexec/PlistBuddy -c "Add :installerSigningCertificate string $PLATFORM_INSTALLER_IDENTITY" "$export_options"
+          fi
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY.xcarchive" \
             -exportOptionsPlist "$export_options" \
             -exportPath "$export_path"
-          ipa=("$export_path"/*.ipa)
-          if [ "${#ipa[@]}" -ne 1 ]; then
-            echo "::error::Expected exactly one exported $PLATFORM_KEY IPA"
+          shopt -s nullglob
+          if [ "$PLATFORM_KEY" = maccatalyst ]; then
+            artifacts=("$export_path"/*.pkg)
+            unexpected=("$export_path"/*.ipa)
+            artifact_kind=pkg
+          else
+            artifacts=("$export_path"/*.ipa)
+            unexpected=("$export_path"/*.pkg)
+            artifact_kind=ipa
+          fi
+          if [ "${#artifacts[@]}" -ne 1 ] || [ "${#unexpected[@]}" -ne 0 ] || [ ! -f "${artifacts[0]:-}" ] || [ -L "${artifacts[0]:-}" ]; then
+            echo "::error::Expected exactly one regular non-symlink exported $PLATFORM_KEY $artifact_kind"
             exit 1
           fi
-          echo "IPA_PATH=${ipa[0]}" >> "$GITHUB_ENV"
+          echo "APPLE_ARTIFACT_PATH=${artifacts[0]}" >> "$GITHUB_ENV"
+          echo 'APPLE_ARTIFACT_VERIFIED=false' >> "$GITHUB_ENV"
 
-      - name: Verify selected signed archive and exported IPA
+      - name: Verify selected signed archive and exported artifact
         shell: bash
         env:
           BUILD_NUMBER: ${{ inputs.build_number }}
           PLATFORM_KEY: ${{ matrix.key }}
           PLATFORM_PROFILE_NAME: ${{ vars[matrix.profile_variable] }}
+          PLATFORM_INSTALLER_IDENTITY: ${{ inputs.platform == 'maccatalyst' && vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || '' }}
         run: |
           set -euo pipefail
-          ios/ci_scripts/verify-signed-apple-artifacts.sh \
-            --platform "$PLATFORM_KEY" \
-            --archive "$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY.xcarchive" \
-            --exported "${IPA_PATH:?IPA_PATH is not set after export}" \
-            --build-number "$BUILD_NUMBER" \
-            --marketing-version 1.1 \
-            --team-id 5TT564H883 \
-            --archive-signing strict-distribution \
+          verifier_arguments=(
+            --platform "$PLATFORM_KEY"
+            --archive "$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY.xcarchive"
+            --exported "${APPLE_ARTIFACT_PATH:?APPLE_ARTIFACT_PATH is not set after export}"
+            --build-number "$BUILD_NUMBER"
+            --marketing-version 1.1
+            --team-id 5TT564H883
+            --archive-signing strict-distribution
             --host-profile-name "$PLATFORM_PROFILE_NAME"
+          )
+          if [ "$PLATFORM_KEY" = maccatalyst ]; then
+            verifier_arguments+=(--installer-identity "${PLATFORM_INSTALLER_IDENTITY:?Mac Catalyst installer identity is missing}")
+          fi
+          ios/ci_scripts/verify-signed-apple-artifacts.sh "${verifier_arguments[@]}"
+          artifact_sha256="$(/usr/bin/shasum -a 256 "$APPLE_ARTIFACT_PATH")"
+          artifact_sha256="${artifact_sha256%% *}"
+          if [[ ! "$artifact_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Verified Apple artifact did not produce a valid SHA-256 digest"
+            exit 1
+          fi
+          echo "APPLE_ARTIFACT_SHA256=$artifact_sha256" >> "$GITHUB_ENV"
+          printf 'Verified `%s` SHA-256: `%s`\n' "${APPLE_ARTIFACT_PATH##*/}" "$artifact_sha256" >> "$GITHUB_STEP_SUMMARY"
+          echo 'APPLE_ARTIFACT_VERIFIED=true' >> "$GITHUB_ENV"
 
       - name: Upload selected build to TestFlight
         if: ${{ inputs.upload_to_testflight && !inputs.archive_only }}
         env:
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          PLATFORM_KEY: ${{ matrix.key }}
+          PLATFORM_ALTOOL_PLATFORM: ${{ matrix.altool_platform }}
+          PLATFORM_BUNDLE_IDENTIFIER: ${{ matrix.bundle_identifier }}
+          APP_STORE_CONNECT_APPLE_ID: "6800642443"
           APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
           APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER: ${{ vars.APP_STORE_CONNECT_API_ISSUER }}
         run: |
           set -euo pipefail
+          if [ "${APPLE_ARTIFACT_VERIFIED:-false}" != true ]; then
+            echo "::error::Refusing to upload an Apple artifact that did not pass signed verification"
+            exit 1
+          fi
           key_dir="$RUNNER_TEMP/appstore-private-keys"
           key_path="$key_dir/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
           mkdir -p "$key_dir"
@@ -293,27 +379,34 @@ jobs:
           printf '%s' "$APP_STORE_CONNECT_KEY" > "$key_path"
           chmod 600 "$key_path"
           export API_PRIVATE_KEYS_DIR="$key_dir"
-          xcrun altool --upload-package "$IPA_PATH" \
-            --api-key "$APP_STORE_CONNECT_KEY_ID" \
-            --api-issuer "$APP_STORE_CONNECT_ISSUER" \
+          upload_sha256="$(/usr/bin/shasum -a 256 "$APPLE_ARTIFACT_PATH")"
+          upload_sha256="${upload_sha256%% *}"
+          if [ "$upload_sha256" != "${APPLE_ARTIFACT_SHA256:?Verified Apple artifact SHA-256 is missing}" ]; then
+            echo "::error::Apple artifact changed after signed verification"
+            exit 1
+          fi
+          upload_arguments=(
+            --platform "$PLATFORM_ALTOOL_PLATFORM"
+            --apple-id "$APP_STORE_CONNECT_APPLE_ID"
+            --bundle-id "$PLATFORM_BUNDLE_IDENTIFIER"
+            --bundle-version "$BUILD_NUMBER"
+            --bundle-short-version-string 1.1
+            --api-key "$APP_STORE_CONNECT_KEY_ID"
+            --api-issuer "$APP_STORE_CONNECT_ISSUER"
             --output-format json
-
-      - name: Upload selected IPA as a private workflow artifact
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: quakesignal-${{ matrix.key }}-app-store-ipa
-          path: ${{ env.IPA_PATH }}
-          if-no-files-found: ignore
-          retention-days: 14
+          )
+          xcrun altool --validate-app "$APPLE_ARTIFACT_PATH" "${upload_arguments[@]}"
+          xcrun altool --upload-package "$APPLE_ARTIFACT_PATH" "${upload_arguments[@]}"
 
       - name: Remove signing material
         if: always()
         env:
           PLATFORM_KEY: ${{ matrix.key }}
+          PLATFORM_PROFILE_EXTENSION: ${{ matrix.profile_extension }}
         run: |
           rm -f "$RUNNER_TEMP/quakesignal-$PLATFORM_KEY-distribution.p12"
+          rm -f "$RUNNER_TEMP/quakesignal-$PLATFORM_KEY-installer.p12"
           rm -f "$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY-ExportOptions.plist"
-          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/quakesignal-$PLATFORM_KEY.mobileprovision"
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/quakesignal-$PLATFORM_KEY.$PLATFORM_PROFILE_EXTENSION"
           rmdir "$RUNNER_TEMP/appstore-private-keys" 2>/dev/null || true
           security delete-keychain "$RUNNER_TEMP/quakesignal-$PLATFORM_KEY.keychain-db" 2>/dev/null || true

@@ -39,7 +39,7 @@ on:
   workflow_dispatch:
     inputs:
       archive_only:
-        description: Archive, export, and validate a signed IPA without uploading it to App Store Connect
+        description: Archive, verify, and hash a signed IPA without retaining or uploading it
         required: false
         default: false
         type: boolean
@@ -525,20 +525,25 @@ jobs:
         run: |
           set -euo pipefail
           export_options="$RUNNER_TEMP/QuakeSignal-ExportOptions.plist"
+          export_path="$RUNNER_TEMP/QuakeSignal-export"
           cp ios/AppStore/ExportOptions.plist "$export_options"
           /usr/libexec/PlistBuddy -c 'Add :provisioningProfiles dict' "$export_options"
           /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:com.quakesignal.app string $IOS_PROFILE_NAME" "$export_options"
           /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:com.quakesignal.app.watchkitapp string $WATCH_PROFILE_NAME" "$export_options"
+          /usr/libexec/PlistBuddy -c 'Add :manageAppVersionAndBuildNumber bool false' "$export_options"
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/QuakeSignal.xcarchive" \
             -exportOptionsPlist "$export_options" \
-            -exportPath "$RUNNER_TEMP/QuakeSignal-export"
-          ipa=("$RUNNER_TEMP/QuakeSignal-export"/*.ipa)
-          if [ "${#ipa[@]}" -ne 1 ]; then
-            echo "::error::Expected exactly one exported IPA"
+            -exportPath "$export_path"
+          shopt -s nullglob
+          ipas=("$export_path"/*.ipa)
+          unexpected=("$export_path"/*.pkg)
+          if [ "${#ipas[@]}" -ne 1 ] || [ "${#unexpected[@]}" -ne 0 ] || [ ! -f "${ipas[0]:-}" ] || [ -L "${ipas[0]:-}" ]; then
+            echo "::error::Expected exactly one regular non-symlink exported iOS IPA and no PKG"
             exit 1
           fi
-          echo "IPA_PATH=${ipa[0]}" >> "$GITHUB_ENV"
+          echo "IPA_PATH=${ipas[0]}" >> "$GITHUB_ENV"
+          echo 'IPA_VERIFIED=false' >> "$GITHUB_ENV"
 
       - name: Verify signed iOS archive and exported IPA
         shell: bash
@@ -558,15 +563,38 @@ jobs:
             --archive-signing strict-distribution \
             --host-profile-name "$IOS_PROFILE_NAME" \
             --watch-profile-name "$WATCH_PROFILE_NAME"
+          ipa_sha256="$(/usr/bin/shasum -a 256 "$IPA_PATH")"
+          ipa_sha256="${ipa_sha256%% *}"
+          if [[ ! "$ipa_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Verified iOS IPA did not produce a valid SHA-256 digest"
+            exit 1
+          fi
+          echo "IPA_SHA256=$ipa_sha256" >> "$GITHUB_ENV"
+          printf 'Verified `%s` SHA-256: `%s`\n' "${IPA_PATH##*/}" "$ipa_sha256" >> "$GITHUB_STEP_SUMMARY"
+          echo 'IPA_VERIFIED=true' >> "$GITHUB_ENV"
 
       - name: Upload build to TestFlight
         if: ${{ inputs.upload_to_testflight && !inputs.archive_only }}
         env:
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          IOS_ALTOOL_PLATFORM: ios
+          APP_STORE_CONNECT_APPLE_ID: "6800642443"
+          IOS_BUNDLE_IDENTIFIER: com.quakesignal.app
           APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
           APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER: ${{ vars.APP_STORE_CONNECT_API_ISSUER }}
         run: |
           set -euo pipefail
+          if [ "${IPA_VERIFIED:-false}" != true ]; then
+            echo "::error::Refusing to upload an iOS IPA that did not pass signed verification"
+            exit 1
+          fi
+          upload_sha256="$(/usr/bin/shasum -a 256 "${IPA_PATH:?IPA_PATH is not set after export}")"
+          upload_sha256="${upload_sha256%% *}"
+          if [ "$upload_sha256" != "${IPA_SHA256:?Verified iOS IPA SHA-256 is missing}" ]; then
+            echo "::error::iOS IPA changed after signed verification"
+            exit 1
+          fi
           key_dir="$RUNNER_TEMP/appstore-private-keys"
           key_path="$key_dir/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
           mkdir -p "$key_dir"
@@ -578,19 +606,18 @@ jobs:
           printf '%s' "$APP_STORE_CONNECT_KEY" > "$key_path"
           chmod 600 "$key_path"
           export API_PRIVATE_KEYS_DIR="$key_dir"
-          xcrun altool --upload-package "$IPA_PATH" \
-            --api-key "$APP_STORE_CONNECT_KEY_ID" \
-            --api-issuer "$APP_STORE_CONNECT_ISSUER" \
+          upload_arguments=(
+            --platform "$IOS_ALTOOL_PLATFORM"
+            --apple-id "$APP_STORE_CONNECT_APPLE_ID"
+            --bundle-id "$IOS_BUNDLE_IDENTIFIER"
+            --bundle-version "$BUILD_NUMBER"
+            --bundle-short-version-string 1.1
+            --api-key "$APP_STORE_CONNECT_KEY_ID"
+            --api-issuer "$APP_STORE_CONNECT_ISSUER"
             --output-format json
-
-      - name: Upload IPA as a private workflow artifact
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: quakesignal-ios-app-store-ipa
-          path: ${{ env.IPA_PATH }}
-          if-no-files-found: ignore
-          retention-days: 14
+          )
+          xcrun altool --validate-app "$IPA_PATH" "${upload_arguments[@]}"
+          xcrun altool --upload-package "$IPA_PATH" "${upload_arguments[@]}"
 
       - name: Remove signing material
         if: always()

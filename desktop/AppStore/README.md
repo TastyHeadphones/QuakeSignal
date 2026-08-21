@@ -121,8 +121,8 @@ The protected Mac App Store lane has two mutually exclusive manual modes. Both
 inputs default to `false`; setting both to `true` is an explicit failure rather
 than an upload or a silent skip.
 
-First, freeze protected main at baseline commit `A` and create a private signed
-evidence package without contacting App Store Connect:
+First, freeze protected main at baseline commit `A` and run signed package
+verification without contacting App Store Connect:
 
 ```sh
 gh workflow run desktop-release.yml --ref main \
@@ -130,18 +130,24 @@ gh workflow run desktop-release.yml --ref main \
   -f upload_macos_to_app_store_connect=false
 ```
 
-This artifact-only mode runs mechanical listing checks, builds and verifies the
-signed sandboxed package, and retains it as a private workflow artifact. It is
-evidence/bootstrap only: it does not approve screenshots, contact App Store
-Connect, authorize review, or release anything. Install and visually compare
-that exact package on a supported Mac, then record its SHA-256, full baseline
-commit `A`, timestamps, and named reviewer in `screenshot-provenance.json`.
-Commit only the resulting `desktop/AppStore` provenance, approved assets, and
-metadata at protected-main commit `B`; any Mac application, configuration,
-icon, lockfile, packaging script, or release-workflow change requires a new
-artifact-only baseline and review.
+This hash/log-only mode runs mechanical listing checks, builds and verifies the
+signed sandboxed package, records its SHA-256 digest and verification log, and
+deletes the package during cleanup. Because this repository is public, the
+package is never retained as a GitHub Actions artifact. Hash/log-only evidence
+cannot be installed or visually compared and therefore cannot satisfy the
+signed-build approval required by `screenshot-provenance.json`.
 
-Only after that evidence commit may the protected upload mode run:
+The Tauri lane remains blocked and dormant until a release owner approves a
+separate private handoff mechanism for the exact signed package and updates this
+procedure and its frozen contract. After that private comparison, record the
+package SHA-256, full baseline commit `A`, timestamps, and named reviewer in
+`screenshot-provenance.json`. Commit only the resulting `desktop/AppStore`
+provenance, approved assets, and metadata at protected-main commit `B`; any Mac
+application, configuration, icon, lockfile, packaging script, or
+release-workflow change requires a new hash/log-only baseline and review.
+
+Only after the separately approved private handoff and that evidence commit may
+the protected upload mode run:
 
 ```sh
 gh workflow run desktop-release.yml --ref main \
@@ -154,7 +160,10 @@ all Mac binary/release-relevant paths are byte-unchanged from `A` through `B`,
 and that only the excluded App Store provenance/assets/metadata account for the
 review commit. It then runs the release-ready validator with
 `--expected-source-commit=A`. The App Store Connect API key is not materialized
-in artifact-only mode and appears only immediately before the approved upload.
+in hash/log-only mode and appears only immediately before the approved upload. The
+upload step rechecks the verified package digest and binds both modern `altool`
+commands to platform `macos`, Apple ID `6800642853`, bundle ID
+`com.quakesignal.desktop`, short version `1.1.0`, and bundle version `1.1.0`.
 
 To pass, provenance must use top-level status
 `approved`, set `capture.sourceBaselineCommit` to the full frozen 40-character

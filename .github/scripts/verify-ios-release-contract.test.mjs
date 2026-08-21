@@ -237,7 +237,7 @@ schemes:
       "        type: string\nenv:\n",
       `        type: string
       archive_only:
-        description: Archive, export, and validate a signed IPA without uploading it to App Store Connect
+        description: Archive, verify, and hash a signed IPA without retaining or uploading it
         required: false
         default: false
         type: boolean
@@ -1407,8 +1407,8 @@ test("fails closed when the protected signing lane or dispatch consent widens", 
       "  cancel-in-progress: true\n",
     ),
     (contents) => contents.replace(
-      "      archive_only:\n        description: Archive, export, and validate a signed IPA without uploading it to App Store Connect\n        required: false\n        default: false\n        type: boolean\n",
-      "      archive_only:\n        description: Archive, export, and validate a signed IPA without uploading it to App Store Connect\n        required: false\n        default: true\n        type: boolean\n",
+      "      archive_only:\n        description: Archive, verify, and hash a signed IPA without retaining or uploading it\n        required: false\n        default: false\n        type: boolean\n",
+      "      archive_only:\n        description: Archive, verify, and hash a signed IPA without retaining or uploading it\n        required: false\n        default: true\n        type: boolean\n",
     ),
   ];
   for (const mutate of mutations) {
@@ -1471,6 +1471,125 @@ test("fails closed when a post-smoke step can alter the signed artifact sequence
       await assert.rejects(
         verifyIOSReleaseContract({ root }),
         /post-remote signing sequence must match the reviewed fingerprint/i,
+      );
+    });
+  }
+});
+
+test("fails closed when iOS IPA export, digest binding, or App Store coordinates drift", async (t) => {
+  const mutations = [
+    [
+      "Add :manageAppVersionAndBuildNumber bool false",
+      "Add :manageAppVersionAndBuildNumber bool true",
+    ],
+    [
+      'ipas=("$export_path"/*.ipa)',
+      'ipas=("$export_path"/*)',
+    ],
+    [
+      '[ "${#ipas[@]}" -ne 1 ]',
+      '[ "${#ipas[@]}" -lt 1 ]',
+    ],
+    [
+      '[ "${#unexpected[@]}" -ne 0 ]',
+      'false',
+    ],
+    [
+      '[ ! -f "${ipas[0]:-}" ]',
+      '[ ! -e "${ipas[0]:-}" ]',
+    ],
+    [
+      '[ -L "${ipas[0]:-}" ]',
+      'false',
+    ],
+    [
+      'ipa_sha256="$(/usr/bin/shasum -a 256 "$IPA_PATH")"',
+      'ipa_sha256="0000000000000000000000000000000000000000000000000000000000000000"',
+    ],
+    [
+      'echo "IPA_SHA256=$ipa_sha256" >> "$GITHUB_ENV"',
+      'echo "IPA_SHA256=unreviewed" >> "$GITHUB_ENV"',
+    ],
+    [
+      "          IOS_ALTOOL_PLATFORM: ios\n",
+      "          IOS_ALTOOL_PLATFORM: watchos\n",
+    ],
+    [
+      '            --platform "$IOS_ALTOOL_PLATFORM"\n',
+      '            --type "$IOS_ALTOOL_PLATFORM"\n',
+    ],
+    [
+      '          APP_STORE_CONNECT_APPLE_ID: "6800642443"\n',
+      '          APP_STORE_CONNECT_APPLE_ID: "6800642853"\n',
+    ],
+    [
+      "          IOS_BUNDLE_IDENTIFIER: com.quakesignal.app\n",
+      "          IOS_BUNDLE_IDENTIFIER: com.quakesignal.app.watchkitapp\n",
+    ],
+    [
+      '--bundle-version "$BUILD_NUMBER"',
+      '--bundle-version 7',
+    ],
+    [
+      "--bundle-short-version-string 1.1",
+      "--bundle-short-version-string 1.0",
+    ],
+    [
+      'if [ "$upload_sha256" != "${IPA_SHA256:?Verified iOS IPA SHA-256 is missing}" ]; then',
+      'if [ "$upload_sha256" != "$upload_sha256" ]; then',
+    ],
+    [
+      'if [ "${IPA_VERIFIED:-false}" != true ]; then',
+      'if false; then',
+    ],
+    [
+      'xcrun altool --validate-app "$IPA_PATH" "${upload_arguments[@]}"',
+      'xcrun altool --validate-app "/tmp/unreviewed.ipa" "${upload_arguments[@]}"',
+    ],
+    [
+      'xcrun altool --upload-package "$IPA_PATH" "${upload_arguments[@]}"',
+      'xcrun altool --upload-package "/tmp/unreviewed.ipa" "${upload_arguments[@]}"',
+    ],
+  ];
+
+  for (const [from, to] of mutations) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/ios.yml");
+      const source = await readFile(path, "utf8");
+      assert.ok(source.includes(from), `fixture must contain ${from}`);
+      const mutated = source.replace(from, to);
+      assert.notEqual(mutated, source, "iOS signed lane mutation must apply");
+      await writeFile(path, mutated, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /iOS workflow exported IPA|iOS signed artifact verifier|iOS App Store Connect upload|post-remote signing sequence/i,
+      );
+    });
+  }
+});
+
+test("fails closed when a native signed release job reintroduces Actions retention", async (t) => {
+  const cases = [
+    [".github/workflows/ios.yml", "      - name: Remove signing material\n", "${{ env.IPA_PATH }}"],
+    [".github/workflows/apple-platforms.yml", "      - name: Remove signing material\n", "${{ env.APPLE_ARTIFACT_PATH }}"],
+  ];
+  for (const [relativePath, cleanupMarker, artifactPath] of cases) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, relativePath);
+      const source = await readFile(path, "utf8");
+      assert.ok(source.includes(cleanupMarker), `fixture must contain cleanup marker in ${relativePath}`);
+      const retained = [
+        "      - name: Retain signed release binary",
+        "        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+        "        with:",
+        "          name: forbidden-signed-release-binary",
+        `          path: ${artifactPath}`,
+        "",
+      ].join("\n");
+      await writeFile(path, source.replace(cleanupMarker, `${retained}${cleanupMarker}`), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /must not retain signed release binaries as GitHub Actions artifacts/i,
       );
     });
   }
@@ -1775,8 +1894,8 @@ test("fails closed when a native platform release gate or selected profile mappi
       "      name: unprotected-native-platform-release\n",
     ),
     (contents) => contents.replace(
-      "TVOS_APP_STORE_PROVISIONING_PROFILE' || 'VISIONOS_APP_STORE_PROVISIONING_PROFILE",
-      "UNREVIEWED_PROFILE' || 'VISIONOS_APP_STORE_PROVISIONING_PROFILE",
+      "TVOS_APP_STORE_PROVISIONING_PROFILE' || inputs.platform == 'visionos' && 'VISIONOS_APP_STORE_PROVISIONING_PROFILE",
+      "UNREVIEWED_PROFILE' || inputs.platform == 'visionos' && 'VISIONOS_APP_STORE_PROVISIONING_PROFILE",
     ),
     (contents) => contents.replace(
       "jobs:\n  release:\n",
@@ -1786,10 +1905,102 @@ test("fails closed when a native platform release gate or selected profile mappi
   for (const mutate of mutations) {
     await withFixture(t, {}, async (root) => {
       const path = join(root, ".github/workflows/apple-platforms.yml");
-      await writeFile(path, mutate(await readFile(path, "utf8")), "utf8");
+      const source = await readFile(path, "utf8");
+      const mutated = mutate(source);
+      assert.notEqual(mutated, source, "native platform release mutation must apply");
+      await writeFile(path, mutated, "utf8");
       await assert.rejects(
         verifyIOSReleaseContract({ root }),
         /native platform release job header|reviewed protected release job|protected-release graph fingerprint/i,
+      );
+    });
+  }
+});
+
+test("fails closed when the Mac Catalyst signed-package route drifts", async (t) => {
+  const mutations = [
+    ["          - maccatalyst\n", ""],
+    [
+      "'generic/platform=macOS,variant=Mac Catalyst' }}",
+      "'generic/platform=macOS' }}",
+    ],
+    [
+      "'MACCATALYST_APP_STORE_PROVISIONING_PROFILE' }}",
+      "'UNREVIEWED_CATALYST_PROFILE' }}",
+    ],
+    [
+      "secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || ''",
+      "secrets.UNREVIEWED_INSTALLER_CERTIFICATE || ''",
+    ],
+    [
+      "vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || ''",
+      "vars.UNREVIEWED_INSTALLER_IDENTITY || ''",
+    ],
+    [
+      "inputs.platform == 'visionos' && 'visionos' || 'macos'",
+      "inputs.platform == 'visionos' && 'visionos' || 'ios'",
+    ],
+    [
+      "Add :manageAppVersionAndBuildNumber bool false",
+      "Add :manageAppVersionAndBuildNumber bool true",
+    ],
+    [
+      '[ ! -f "${artifacts[0]:-}" ]',
+      '[ ! -e "${artifacts[0]:-}" ]',
+    ],
+    [
+      '[ "${#artifacts[@]}" -ne 1 ]',
+      '[ "${#artifacts[@]}" -lt 1 ]',
+    ],
+    [
+      '[ "${#unexpected[@]}" -ne 0 ]',
+      'false',
+    ],
+    [
+      '[ -L "${artifacts[0]:-}" ]',
+      'false',
+    ],
+    [
+      "Add :installerSigningCertificate string $PLATFORM_INSTALLER_IDENTITY",
+      "Add :installerSigningCertificate string Apple Distribution",
+    ],
+    [
+      "verifier_arguments+=(--installer-identity",
+      "verifier_arguments+=(--host-profile-name",
+    ],
+    [
+      'xcrun altool --validate-app "$APPLE_ARTIFACT_PATH" "${upload_arguments[@]}"',
+      'xcrun altool --validate-app "/tmp/unreviewed.pkg" "${upload_arguments[@]}"',
+    ],
+    [
+      'xcrun altool --upload-package "$APPLE_ARTIFACT_PATH" "${upload_arguments[@]}"',
+      'xcrun altool --upload-package "/tmp/unreviewed.pkg" "${upload_arguments[@]}"',
+    ],
+    [
+      'APP_STORE_CONNECT_APPLE_ID: "6800642443"',
+      'APP_STORE_CONNECT_APPLE_ID: "6800642853"',
+    ],
+    [
+      'upload_sha256="$(/usr/bin/shasum -a 256 "$APPLE_ARTIFACT_PATH")"',
+      'upload_sha256="${APPLE_ARTIFACT_SHA256}"',
+    ],
+    [
+      'if [ "${APPLE_ARTIFACT_VERIFIED:-false}" != true ]; then',
+      'if false; then',
+    ],
+  ];
+
+  for (const [from, to] of mutations) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/apple-platforms.yml");
+      const source = await readFile(path, "utf8");
+      assert.ok(source.includes(from), `fixture must contain ${from}`);
+      const mutated = source.replace(from, to);
+      assert.notEqual(mutated, source, "Mac Catalyst package mutation must apply");
+      await writeFile(path, mutated, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /native platform|credential-bearing workflows|workflow directory/i,
       );
     });
   }

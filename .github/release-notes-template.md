@@ -16,8 +16,12 @@ preferences on your device, and has no account or telemetry.
 
 The Windows app is an MSIX package distributed and signed by Microsoft Store
 after certification. The macOS direct-download build is Developer ID signed,
-notarized, and stapled. The separate Mac App Store package is retained as a
-private Actions artifact for App Store Connect upload.
+notarized, and stapled. The dormant, separate Tauri Mac App Store lane never
+retains its signed package in GitHub Actions; it keeps verification logs and a
+SHA-256 digest, then deletes the package. Signed-build visual approval remains
+blocked until a release owner approves a separate private handoff; only after
+that approval can the same verified package be sent directly to App Store
+Connect.
 
 ## Verifying this release
 

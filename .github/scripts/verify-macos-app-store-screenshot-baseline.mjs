@@ -7,10 +7,11 @@ export const repositoryRoot = resolve(scriptDirectory, "../..");
 
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
 
-// The signed evidence package and later upload build must use the same Mac
-// application and packaging source. App Store listing metadata/provenance is
-// deliberately excluded so a reviewer can record the artifact-only result in
-// a later protected-main commit without creating a self-referential SHA gate.
+// A privately handed-off signed package and the later upload build must use the
+// same Mac application and packaging source. App Store listing
+// metadata/provenance is deliberately excluded so a reviewer can record that
+// separately approved comparison in a later protected-main commit without
+// creating a self-referential SHA gate.
 export const MAC_APP_STORE_RELEASE_RELEVANT_PATHS = [
   ".github/workflows/desktop-release.yml",
   ".github/scripts/verify-desktop-release-contract.mjs",

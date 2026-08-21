@@ -24,15 +24,41 @@ represented in this repository.
 | `IOS_APP_STORE_CERTIFICATE` | Secret | Base64-encoded Apple Distribution `.p12` for `com.quakesignal.app` |
 | `IOS_APP_STORE_CERTIFICATE_PASSWORD` | Secret | Password used when exporting that `.p12` |
 | `IOS_APP_STORE_PROVISIONING_PROFILE` | Secret | Base64-encoded App Store provisioning profile with production Push Notifications, Time Sensitive Notifications, and App Attest support |
-| `IOS_APP_STORE_PROFILE_NAME` | Environment variable | Exact provisioning-profile name |
+| `IOS_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal App Store Release` |
+| `WATCHOS_APP_STORE_PROVISIONING_PROFILE` | Secret | Base64-encoded App Store profile for `com.quakesignal.app.watchkitapp` |
+| `WATCHOS_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal Watch App Store Release` |
+| `TVOS_APP_STORE_PROVISIONING_PROFILE` | Secret | Base64-encoded tvOS App Store profile for `com.quakesignal.app` |
+| `TVOS_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal tvOS App Store Release` |
+| `VISIONOS_APP_STORE_PROVISIONING_PROFILE` | Secret | Base64-encoded visionOS App Store profile for `com.quakesignal.app` |
+| `VISIONOS_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal visionOS App Store Release` |
+| `MACCATALYST_APP_STORE_PROVISIONING_PROFILE` | Secret | Base64-encoded Mac App Store provisioning profile for the Catalyst `com.quakesignal.app` |
+| `MACCATALYST_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal Mac Catalyst App Store Release` |
+| `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE` | Secret | Base64-encoded Mac Installer Distribution `.p12` used only for the Catalyst `.pkg` |
+| `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD` | Secret | Password used when exporting that installer `.p12` |
+| `MACCATALYST_APP_STORE_INSTALLER_IDENTITY` | Environment variable | `Mac Installer Distribution: UniSphereco LLC (5TT564H883)` |
 | `APP_STORE_CONNECT_API_KEY` | Secret | Team App Store Connect API private `.p8` key contents |
 | `APP_STORE_CONNECT_API_KEY_ID` | Environment variable | App Store Connect API key ID |
 | `APP_STORE_CONNECT_API_ISSUER` | Environment variable | App Store Connect API issuer UUID |
 | `CLOUDFLARE_WORKER_URL` | Environment variable | Exactly `https://quakesignal-api.hopeso.workers.dev`; the Release archive verifies this user-approved public Workers.dev production origin |
 
 The Account Holder must first enable App Store Connect API access. Use a
-least-privilege team key. The workflow only uploads when a trusted maintainer
-starts **iOS → Run workflow** with `upload_to_testflight` enabled.
+least-privilege team key. The workflows only upload when a trusted maintainer
+starts **iOS** or **Native Apple platform release → Run workflow** with
+`upload_to_testflight` enabled. The Catalyst lane requires both the Apple
+Distribution application identity and the separate Mac Installer Distribution
+identity. Because this repository is public, the verified iOS, tvOS, and
+visionOS `.ipa` files and Catalyst `.pkg` are never retained as GitHub Actions
+artifacts. Each workflow records the artifact's SHA-256 digest and, only with
+explicit upload consent, rehashes and sends that same verified binary directly
+to App Store Connect. An archive-only run retains its log and digest, not the
+signed release binary.
+
+The five named profiles above exist in the Apple Developer portal as of
+2026-08-22 and expire on 2027-08-12. The Watch, tvOS, visionOS, and Catalyst
+profiles were generated and downloaded during the release audit. Their portal
+existence is not evidence that the protected GitHub environment contains the
+matching base64 values; the signed workflows remain the fail-closed proof of
+that configuration.
 
 ## `macos-direct-release`
 
@@ -72,7 +98,10 @@ contents) and `MACOS_APP_STORE_CONNECT_API_KEY_ID` plus
 `MACOS_APP_STORE_CONNECT_API_ISSUER` protected environment variables. The
 workflow only uploads when a trusted maintainer starts **Desktop release → Run
 workflow** with `upload_macos_to_app_store_connect` enabled. Its signed `.pkg`
-is never a public GitHub Release asset.
+is never retained as a GitHub Actions artifact or public GitHub Release asset.
+Build-only runs retain hash and verification-log evidence only and delete the
+package. Signed-build visual approval remains blocked until a release owner
+approves a separate private handoff mechanism for this dormant lane.
 
 ## `microsoft-store-release`
 

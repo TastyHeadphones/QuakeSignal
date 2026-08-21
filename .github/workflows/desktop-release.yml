@@ -23,7 +23,7 @@ on:
         default: false
         type: boolean
       build_macos_app_store:
-        description: Build a private signed Mac App Store evidence package without uploading it
+        description: Build and verify a signed Mac App Store package, retaining hash and log evidence only
         required: false
         default: false
         type: boolean
@@ -504,12 +504,12 @@ jobs:
       - name: Validate mutually exclusive Mac App Store mode
         shell: bash
         env:
-          BUILD_ARTIFACT_ONLY: ${{ inputs.build_macos_app_store }}
+          HASH_LOG_ONLY: ${{ inputs.build_macos_app_store }}
           UPLOAD_TO_APP_STORE_CONNECT: ${{ inputs.upload_macos_to_app_store_connect }}
         run: |
           set -euo pipefail
-          if [ "$BUILD_ARTIFACT_ONLY" = "true" ] && [ "$UPLOAD_TO_APP_STORE_CONNECT" = "true" ]; then
-            echo "::error::Select exactly one Mac App Store mode; build-only and upload cannot both be true"
+          if [ "$HASH_LOG_ONLY" = "true" ] && [ "$UPLOAD_TO_APP_STORE_CONNECT" = "true" ]; then
+            echo "::error::Select exactly one Mac App Store mode; hash/log-only and upload cannot both be true"
             exit 1
           fi
 
@@ -605,6 +605,10 @@ jobs:
             echo "::error::macos-app-store-release is missing: $(IFS=,; echo "${missing[*]}")"
             exit 1
           fi
+          case "$INSTALLER_IDENTITY" in
+            'Mac Installer Distribution: '*' (5TT564H883)'|'3rd Party Mac Developer Installer: '*' (5TT564H883)') ;;
+            *) echo "::error::Mac App Store packaging requires an exact Installer Distribution identity for team 5TT564H883"; exit 1 ;;
+          esac
 
       - name: Import App Store certificates and provisioning profile
         shell: bash
@@ -686,6 +690,8 @@ jobs:
           expected_team="5TT564H883"
           expected_bundle_identifier="com.quakesignal.desktop"
           expected_application_identifier="$expected_team.$expected_bundle_identifier"
+          signature_listing="$RUNNER_TEMP/quakesignal-macos-app-store-package-signature.txt"
+          echo 'MACOS_APP_STORE_PACKAGE_VERIFIED=false' >> "$GITHUB_ENV"
 
           assert_plist_value() {
             local plist="$1"
@@ -868,9 +874,50 @@ jobs:
           # app assertions above verify the required sandbox configuration.
           mkdir -p "$package_dir"
           xcrun productbuild --sign "$MACOS_APP_STORE_INSTALLER_IDENTITY" --component "$app" /Applications "$package"
-          pkgutil --check-signature "$package"
+          case "$MACOS_APP_STORE_INSTALLER_IDENTITY" in
+            "Mac Installer Distribution: "*" ($expected_team)"|"3rd Party Mac Developer Installer: "*" ($expected_team)") ;;
+            *) echo "::error::Mac App Store package identity is not an exact Installer Distribution identity for the expected team"; exit 1 ;;
+          esac
+          if ! pkgutil --check-signature "$package" > "$signature_listing" 2>&1; then
+            echo "::error::Mac App Store package has an invalid or untrusted installer signature"
+            exit 1
+          fi
+          if ! /usr/bin/python3 -I - "$MACOS_APP_STORE_INSTALLER_IDENTITY" "$signature_listing" <<'PY'
+          import re
+          import sys
+
+          expected_identity = sys.argv[1]
+          lines = open(sys.argv[2], encoding="utf-8").read().splitlines()
+          trusted_statuses = {
+              "Status: signed by a certificate trusted by macOS",
+              "Status: signed by a certificate trusted by Mac OS X",
+          }
+          statuses = [line.strip() for line in lines if line.strip().startswith("Status:")]
+          if len(statuses) != 1 or statuses[0] not in trusted_statuses:
+              raise SystemExit("package signature status is missing, ambiguous, or untrusted")
+          leaf_identities = []
+          for line in lines:
+              match = re.fullmatch(r"\s*1\.\s+(.+?)\s*", line)
+              if match:
+                  leaf_identities.append(match.group(1))
+          if leaf_identities != [expected_identity]:
+              raise SystemExit("package leaf installer identity does not match")
+          PY
+          then
+            echo "::error::Mac App Store package does not have the expected trusted installer signature"
+            exit 1
+          fi
           assert_package_payload_permissions "$package"
+          package_sha256="$(/usr/bin/shasum -a 256 "$package")"
+          package_sha256="${package_sha256%% *}"
+          if [[ ! "$package_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Verified Mac App Store package did not produce a valid SHA-256 digest"
+            exit 1
+          fi
           echo "MACOS_APP_STORE_PACKAGE=$package" >> "$GITHUB_ENV"
+          echo "MACOS_APP_STORE_PACKAGE_SHA256=$package_sha256" >> "$GITHUB_ENV"
+          printf 'Verified `%s` SHA-256: `%s`\n' "${package##*/}" "$package_sha256" >> "$GITHUB_STEP_SUMMARY"
+          echo 'MACOS_APP_STORE_PACKAGE_VERIFIED=true' >> "$GITHUB_ENV"
 
       - name: Materialize App Store Connect API key immediately before upload
         if: github.event_name == 'workflow_dispatch' && inputs.upload_macos_to_app_store_connect
@@ -905,26 +952,37 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.upload_macos_to_app_store_connect
         shell: bash
         env:
+          MACOS_APP_STORE_ALTOOL_PLATFORM: macos
+          MACOS_APP_STORE_APPLE_ID: "6800642853"
+          MACOS_APP_STORE_BUNDLE_IDENTIFIER: com.quakesignal.desktop
+          MACOS_APP_STORE_SHORT_VERSION: "1.1.0"
+          MACOS_APP_STORE_BUNDLE_VERSION: "1.1.0"
           APP_STORE_CONNECT_KEY_ID: ${{ vars.MACOS_APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER: ${{ vars.MACOS_APP_STORE_CONNECT_API_ISSUER }}
         run: |
           set -euo pipefail
-          xcrun altool --validate-app "$MACOS_APP_STORE_PACKAGE" \
-            --api-key "$APP_STORE_CONNECT_KEY_ID" \
-            --api-issuer "$APP_STORE_CONNECT_ISSUER" \
+          if [ "${MACOS_APP_STORE_PACKAGE_VERIFIED:-false}" != true ]; then
+            echo "::error::Refusing to upload a Mac App Store package that did not pass signed verification"
+            exit 1
+          fi
+          upload_sha256="$(/usr/bin/shasum -a 256 "${MACOS_APP_STORE_PACKAGE:?Mac App Store package path is missing}")"
+          upload_sha256="${upload_sha256%% *}"
+          if [ "$upload_sha256" != "${MACOS_APP_STORE_PACKAGE_SHA256:?Verified Mac App Store package SHA-256 is missing}" ]; then
+            echo "::error::Mac App Store package changed after signed verification"
+            exit 1
+          fi
+          upload_arguments=(
+            --platform "$MACOS_APP_STORE_ALTOOL_PLATFORM"
+            --apple-id "$MACOS_APP_STORE_APPLE_ID"
+            --bundle-id "$MACOS_APP_STORE_BUNDLE_IDENTIFIER"
+            --bundle-version "$MACOS_APP_STORE_BUNDLE_VERSION"
+            --bundle-short-version-string "$MACOS_APP_STORE_SHORT_VERSION"
+            --api-key "$APP_STORE_CONNECT_KEY_ID"
+            --api-issuer "$APP_STORE_CONNECT_ISSUER"
             --output-format json
-          xcrun altool --upload-package "$MACOS_APP_STORE_PACKAGE" \
-            --api-key "$APP_STORE_CONNECT_KEY_ID" \
-            --api-issuer "$APP_STORE_CONNECT_ISSUER" \
-            --output-format json
-
-      - name: Upload private Mac App Store package artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: macos-app-store-pkg
-          path: artifacts/macos-app-store/*.pkg
-          if-no-files-found: error
-          retention-days: 14
+          )
+          xcrun altool --validate-app "$MACOS_APP_STORE_PACKAGE" "${upload_arguments[@]}"
+          xcrun altool --upload-package "$MACOS_APP_STORE_PACKAGE" "${upload_arguments[@]}"
 
       - name: Remove App Store signing material
         if: always()
@@ -934,7 +992,10 @@ jobs:
           rm -f "$RUNNER_TEMP/quakesignal-macos-app-store-installer.p12"
           rm -f "$RUNNER_TEMP/quakesignal-macos-app-store-entitlements.plist"
           rm -f "$RUNNER_TEMP/quakesignal-macos-app-store-profile.plist"
+          rm -f "$RUNNER_TEMP/quakesignal-macos-app-store-package-signature.txt"
           rm -f "desktop/src-tauri/macos-app-store.provisionprofile"
+          rm -f artifacts/macos-app-store/*.pkg
+          rmdir artifacts/macos-app-store 2>/dev/null || true
           rm -f "$RUNNER_TEMP/macos-app-store-private-keys/AuthKey_${{ vars.MACOS_APP_STORE_CONNECT_API_KEY_ID }}.p8"
           rmdir "$RUNNER_TEMP/macos-app-store-private-keys" 2>/dev/null || true
           security delete-keychain "$RUNNER_TEMP/quakesignal-macos-app-store.keychain-db" 2>/dev/null || true

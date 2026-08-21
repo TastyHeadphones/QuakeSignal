@@ -62,15 +62,51 @@ if [ "$1" = cms ] && [ "$2" = -D ] && [ "$3" = -i ]; then
 fi
 exit 70
 STUB
-chmod +x "$test_root/bin/codesign" "$test_root/bin/security"
+cat > "$test_root/bin/pkgutil" <<'STUB'
+#!/bin/bash
+set -euo pipefail
+case "$1" in
+  --check-signature)
+    [ "$#" -eq 2 ]
+    cat "$2.signature"
+    ;;
+  --payload-files)
+    [ "$#" -eq 2 ]
+    cat "$2.payload-files"
+    ;;
+  --bom)
+    [ "$#" -eq 2 ]
+    printf '%s\n' "$2.bom"
+    ;;
+  --expand)
+    [ "$#" -eq 3 ]
+    [ ! -e "$3" ]
+    mkdir -p "$3"
+    cp -R "$2.expanded/." "$3/"
+    ;;
+  *) exit 70 ;;
+esac
+STUB
+cat > "$test_root/bin/lsbom" <<'STUB'
+#!/bin/bash
+set -euo pipefail
+[ "$#" -eq 3 ]
+[ "$1" = -p ]
+[ "$2" = mf ]
+cat "$3.entries"
+STUB
+chmod +x "$test_root/bin/codesign" "$test_root/bin/security" "$test_root/bin/pkgutil" "$test_root/bin/lsbom"
 export PATH="$test_root/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export QUAKESIGNAL_VERIFICATION_TEMP_ROOT="$test_root/tmp"
 unset CI GITHUB_ACTIONS CI_XCODE_CLOUD
 export QUAKESIGNAL_ARTIFACT_VERIFIER_TEST_MODE=fixture-v1
 export QUAKESIGNAL_TEST_CODESIGN_BIN="$test_root/bin/codesign"
 export QUAKESIGNAL_TEST_SECURITY_BIN="$test_root/bin/security"
+export QUAKESIGNAL_TEST_PKGUTIL_BIN="$test_root/bin/pkgutil"
+export QUAKESIGNAL_TEST_LSBOM_BIN="$test_root/bin/lsbom"
 
 team="5TT564H883"
+installer_identity="Mac Installer Distribution: QuakeSignal Fixture ($team)"
 
 write_info_plist() {
   local path="$1"
@@ -187,11 +223,12 @@ create_fixture() {
 create_mac_catalyst_app() {
   local app="$1"
   local profile_name="$2"
-  mkdir -p "$app/Contents/Resources"
+  mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
   {
     printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0"><dict>'
     printf '%s\n' \
       '<key>CFBundleIdentifier</key><string>com.quakesignal.app</string>' \
+      '<key>CFBundleExecutable</key><string>QuakeSignal</string>' \
       '<key>CFBundleShortVersionString</key><string>1.1</string>' \
       '<key>CFBundleVersion</key><string>8</string>' \
       '<key>CFBundleSupportedPlatforms</key><array><string>MacOSX</string></array>' \
@@ -225,6 +262,8 @@ create_mac_catalyst_app() {
   printf '%s\n' "$team" > "$app/.test-team"
   printf '%s\n' 'Apple Distribution: QuakeSignal Fixture' > "$app/.test-authority"
   printf '%s' 'fixture-leaf-cert' > "$app/.test-signing-certificate"
+  printf '%s\n' '#!/bin/true' > "$app/Contents/MacOS/QuakeSignal"
+  chmod 755 "$app/Contents/MacOS/QuakeSignal"
   cp "$repository_root/ios/QuakeSignal/Resources/Audio/quakesignal_urgent.caf" "$app/Contents/Resources/"
   cp "$repository_root/ios/QuakeSignal/Resources/Audio/quakesignal_japanese_voice.caf" "$app/Contents/Resources/"
   cp "$repository_root/ios/QuakeSignal/Resources/Audio/ATTRIBUTION.md" "$app/Contents/Resources/"
@@ -238,6 +277,39 @@ create_mac_catalyst_fixture() {
   create_mac_catalyst_app "$archive_app" 'Catalyst Profile'
   mkdir -p "$(dirname "$exported_app")"
   cp -R "$archive_app" "$exported_app"
+}
+
+create_mac_catalyst_package_fixture() {
+  local fixture="$1"
+  local package="$fixture/QuakeSignal.pkg"
+  local expanded="$package.expanded"
+  rm -rf \
+    "$package" \
+    "$package.signature" \
+    "$package.payload-files" \
+    "$package.bom" \
+    "$package.bom.entries" \
+    "$expanded"
+  : > "$package"
+  mkdir -p "$expanded"
+  (
+    cd "$fixture/export"
+    /usr/bin/find QuakeSignal.app -print > "$package.payload-files"
+    /usr/bin/ditto -c --norsrc --keepParent QuakeSignal.app "$expanded/Payload"
+  )
+  printf '%s\n' \
+    'Package "QuakeSignal.pkg":' \
+    '   Status: signed by a certificate trusted by macOS' \
+    '   Certificate Chain:' \
+    "    1. $installer_identity" > "$package.signature"
+  : > "$package.bom"
+  printf '%s\t%s\n' \
+    0 . \
+    40755 './QuakeSignal.app' \
+    40755 './QuakeSignal.app/Contents' \
+    40755 './QuakeSignal.app/Contents/MacOS' \
+    100755 './QuakeSignal.app/Contents/MacOS/QuakeSignal' \
+    100644 './QuakeSignal.app/Contents/Info.plist' > "$package.bom.entries"
 }
 
 run_verifier_mode() {
@@ -285,6 +357,33 @@ run_catalyst_export_directory_verifier() {
     --platform maccatalyst \
     --archive "$fixture/Archive.xcarchive" \
     --exported "$fixture/export" \
+    --build-number 8 \
+    --marketing-version 1.1 \
+    --team-id "$team" \
+    --archive-signing strict-distribution \
+    --host-profile-name 'Catalyst Profile'
+}
+
+run_catalyst_package_verifier() {
+  local fixture="$1"
+  "$verifier" \
+    --platform maccatalyst \
+    --archive "$fixture/Archive.xcarchive" \
+    --exported "$fixture/QuakeSignal.pkg" \
+    --build-number 8 \
+    --marketing-version 1.1 \
+    --team-id "$team" \
+    --archive-signing strict-distribution \
+    --host-profile-name 'Catalyst Profile' \
+    --installer-identity "$installer_identity"
+}
+
+run_catalyst_package_verifier_without_identity() {
+  local fixture="$1"
+  "$verifier" \
+    --platform maccatalyst \
+    --archive "$fixture/Archive.xcarchive" \
+    --exported "$fixture/QuakeSignal.pkg" \
     --build-number 8 \
     --marketing-version 1.1 \
     --team-id "$team" \
@@ -416,6 +515,105 @@ catalyst_fixture="$test_root/maccatalyst"
 create_mac_catalyst_fixture "$catalyst_fixture"
 run_catalyst_verifier "$catalyst_fixture"
 run_catalyst_export_directory_verifier "$catalyst_fixture"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+run_catalyst_package_verifier "$catalyst_fixture"
+
+expect_failure catalyst-package-missing-installer-identity 'requires an exact Mac Installer Distribution identity' run_catalyst_package_verifier_without_identity "$catalyst_fixture"
+
+rm "$catalyst_fixture/QuakeSignal.pkg.signature"
+expect_failure catalyst-package-signature-command-failure 'invalid or untrusted signature' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+
+printf '%s\n' \
+  'Package "QuakeSignal.pkg":' \
+  '   Status: signed by an untrusted certificate' \
+  '   Certificate Chain:' \
+  "    1. $installer_identity" > "$catalyst_fixture/QuakeSignal.pkg.signature"
+expect_failure catalyst-package-untrusted-status 'expected trusted installer signature' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+
+printf '%s\n' \
+  'Package "QuakeSignal.pkg":' \
+  '   Status: signed by a certificate trusted by macOS' \
+  '   Certificate Chain:' \
+  "    1. Mac Installer Distribution: Other Fixture ($team)" > "$catalyst_fixture/QuakeSignal.pkg.signature"
+expect_failure catalyst-package-wrong-installer-identity 'expected trusted installer signature' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+
+printf '%s\n' '../escape' >> "$catalyst_fixture/QuakeSignal.pkg.payload-files"
+expect_failure catalyst-package-unsafe-path 'unsafe or unexpected payload inventory' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+
+printf '%s\t%s\n' \
+  40755 . \
+  40755 './QuakeSignal.app' \
+  100755 './QuakeSignal.app/Contents/MacOS/QuakeSignal' \
+  100600 './QuakeSignal.app/Contents/Info.plist' > "$catalyst_fixture/QuakeSignal.pkg.bom.entries"
+expect_failure catalyst-package-unreadable-bom-file 'payload file unreadable after installation' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+
+printf '%s\t%s\n' \
+  40755 . \
+  40750 './QuakeSignal.app/Contents' \
+  100755 './QuakeSignal.app/Contents/MacOS/QuakeSignal' > "$catalyst_fixture/QuakeSignal.pkg.bom.entries"
+expect_failure catalyst-package-unsearchable-bom-directory 'payload directory unsearchable after installation' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+
+printf '%s\t%s\n' \
+  40755 . \
+  40755 './QuakeSignal.app' \
+  40755 './QuakeSignal.app/Contents/MacOS' \
+  100644 './QuakeSignal.app/Contents/MacOS/QuakeSignal' \
+  100644 './QuakeSignal.app/Contents/Info.plist' > "$catalyst_fixture/QuakeSignal.pkg.bom.entries"
+expect_failure catalyst-package-nonexecutable-main-bom-entry 'main executable is not executable after installation' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+
+printf '%s\t%s\n' \
+  40755 . \
+  40755 './QuakeSignal.app' \
+  40755 './QuakeSignal.app/Contents/MacOS' \
+  100644 './QuakeSignal.app/Contents/Info.plist' > "$catalyst_fixture/QuakeSignal.pkg.bom.entries"
+expect_failure catalyst-package-missing-main-bom-entry 'exactly one regular main executable entry' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+
+printf '%s\t%s\n' \
+  40755 . \
+  40755 './QuakeSignal.app' \
+  40755 './QuakeSignal.app/Contents/MacOS' \
+  100755 './QuakeSignal.app/Contents/MacOS/QuakeSignal' \
+  120777 './QuakeSignal.app/Contents/Resources/unapproved-link' > "$catalyst_fixture/QuakeSignal.pkg.bom.entries"
+expect_failure catalyst-package-unapproved-bom-entry-type 'unapproved entry type' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+
+chmod 644 "$catalyst_fixture/export/QuakeSignal.app/Contents/MacOS/QuakeSignal"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+expect_failure catalyst-package-extracted-main-not-executable 'CFBundleExecutable is not a regular non-symlink executable' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_fixture "$catalyst_fixture"
+
+/usr/libexec/PlistBuddy -c 'Delete :CFBundleExecutable' "$catalyst_fixture/export/QuakeSignal.app/Contents/Info.plist"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+expect_failure catalyst-package-missing-cfbundleexecutable 'invalid or missing CFBundleExecutable' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_fixture "$catalyst_fixture"
+
+rm "$catalyst_fixture/export/QuakeSignal.app/Contents/MacOS/QuakeSignal"
+ln -s /bin/true "$catalyst_fixture/export/QuakeSignal.app/Contents/MacOS/QuakeSignal"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+expect_failure catalyst-package-symlinked-main-executable 'payload must not contain symbolic links' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_fixture "$catalyst_fixture"
+
+mkdir -p "$catalyst_fixture/QuakeSignal.pkg.expanded/Scripts"
+expect_failure catalyst-package-installer-scripts 'must not contain installer scripts' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+
+mkdir -p "$catalyst_fixture/QuakeSignal.pkg.expanded/nested"
+cp "$catalyst_fixture/QuakeSignal.pkg.expanded/Payload" "$catalyst_fixture/QuakeSignal.pkg.expanded/nested/Payload"
+expect_failure catalyst-package-multiple-payloads 'exactly one regular payload' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_fixture "$catalyst_fixture"
+
+ln -s /dev/null "$catalyst_fixture/export/QuakeSignal.app/Contents/Resources/unexpected-link"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+expect_failure catalyst-package-symbolic-link 'payload must not contain symbolic links' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_fixture "$catalyst_fixture"
 
 /usr/libexec/PlistBuddy -c 'Set :com.apple.security.app-sandbox false' "$catalyst_fixture/export/QuakeSignal.app/.test-entitlements.plist"
 expect_failure catalyst-sandbox 'app-sandbox.*false' run_catalyst_verifier "$catalyst_fixture"

@@ -10,7 +10,7 @@ public release.
 | Apple Watch companion | `QuakeSignalWatch` | `com.quakesignal.app.watchkitapp` | Embedded in the `QuakeSignal` iOS IPA |
 | Apple TV | `QuakeSignalTV` | `com.quakesignal.app` | `.github/workflows/apple-platforms.yml`, select `tvos` |
 | Apple Vision Pro | `QuakeSignalVision` | `com.quakesignal.app` | `.github/workflows/apple-platforms.yml`, select `visionos` |
-| Mac Catalyst | `QuakeSignal` | `com.quakesignal.app` | Xcode Cloud macOS → Mac Catalyst Archive action |
+| Mac Catalyst | `QuakeSignal` | `com.quakesignal.app` | Xcode Cloud macOS → Mac Catalyst Archive action; protected GitHub fallback selects `maccatalyst` |
 
 The native TV, Vision, and Mac Catalyst uploads use the existing shared App
 Store Connect record (Apple ID `6800642443`) and matching bundle ID. Watch
@@ -197,10 +197,11 @@ the Cloud workflow; absent values intentionally leave each conditional
 identifiers.
 
 The existing protected GitHub environment `ios-app-store-release` is a
-separate manual-signing fallback for iOS/Watch, tvOS, and visionOS. It must
-contain all selected inputs before those workflows are dispatched. The GitHub
-fallback does not sign or upload Mac Catalyst; `.github/workflows/ios.yml`
-only gives Catalyst a credential-free Release compilation gate.
+separate manual-signing fallback for iOS/Watch, tvOS, visionOS, and Mac
+Catalyst. It must contain all selected inputs before those workflows are
+dispatched. Ordinary `.github/workflows/ios.yml` CI still gives Catalyst a
+credential-free Release compilation gate; only an explicitly approved
+`apple-platforms.yml` dispatch may materialize its signing credentials.
 
 Shared certificate and upload configuration:
 
@@ -222,13 +223,42 @@ Target profiles:
   `TVOS_APP_STORE_PROFILE_NAME`
 - Secret `VISIONOS_APP_STORE_PROVISIONING_PROFILE` and variable
   `VISIONOS_APP_STORE_PROFILE_NAME`
+- Secret `MACCATALYST_APP_STORE_PROVISIONING_PROFILE` and variable
+  `MACCATALYST_APP_STORE_PROFILE_NAME`
+- Secrets `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE` and
+  `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD` for the base64-encoded
+  Mac Installer Distribution `.p12`
+- Variable `MACCATALYST_APP_STORE_INSTALLER_IDENTITY`, the exact imported
+  `Mac Installer Distribution: … (5TT564H883)` or legacy
+  `3rd Party Mac Developer Installer: … (5TT564H883)` identity
+
+Apple Developer portal state recorded on 2026-08-22:
+
+- `QuakeSignal App Store Release` — iOS host
+- `QuakeSignal Watch App Store Release` — embedded Watch app
+- `QuakeSignal tvOS App Store Release` — tvOS app
+- `QuakeSignal visionOS App Store Release` — visionOS app
+- `QuakeSignal Mac Catalyst App Store Release` — Mac Catalyst app
+
+All five profiles authorize the intended QuakeSignal identifiers, use the
+current UniSphereco LLC Distribution certificate, and expire on 2027-08-12.
+The four newly generated profiles were downloaded from the portal. This portal
+state does not prove that their base64 contents or exact names have been added
+to the protected GitHub environment; keep that environment-configuration gate
+open until a protected workflow confirms each selected profile.
 
 The Watch profile must authorize `com.quakesignal.app.watchkitapp`; the host,
 TV, Vision, and Catalyst profiles authorize `com.quakesignal.app` for their
 respective platforms. Xcode Cloud resolves those profiles automatically; the
 manual profile names above apply only to the GitHub fallback. The signed
 verifier checks team, application ID, platform, build number,
-certificate/profile coherence, and the exact signed capability policy. iOS
+certificate/profile coherence, and the exact signed capability policy. The
+Catalyst fallback additionally requires a Mac App Store provisioning profile
+whose leaf certificate matches the imported Apple Distribution identity. Its
+exported `.pkg` must have a trusted, exact-team installer signature; a safe
+single-app payload without installer scripts or symlinks; readable/searchable
+BOM permissions; and the same verified inner-app metadata, profile, signature,
+resources, and entitlements as the archive. iOS
 alone requires the reviewed production APS, App Attest, and Time Sensitive
 Notification entitlements. Mac Catalyst, TV, Vision, and Watch are
 foreground-only and must not claim them. This Vision split follows Apple's
@@ -270,11 +300,30 @@ gh workflow run apple-platforms.yml --ref main \
   -f archive_only=true \
   -f upload_to_testflight=false \
   -f build_number=8
+
+gh workflow run apple-platforms.yml --ref main \
+  -f platform=maccatalyst \
+  -f archive_only=true \
+  -f upload_to_testflight=false \
+  -f build_number=8
 ```
 
 After the signed archives, platform QA, metadata, screenshots, and legal gates
 pass, repeat each run with `archive_only=false` and
 `upload_to_testflight=true`. Archive-only runs never contact App Store Connect.
+Each protected lane exports and verifies exactly one regular, non-symlink
+artifact and records its SHA-256 digest. Because this repository is public, the
+workflows never upload the signed iOS, tvOS, or visionOS `.ipa` files or the
+Catalyst `.pkg` as GitHub Actions artifacts. An archive-only run therefore
+retains the verification log and digest, not the binary. With explicit upload
+consent, the lane rehashes, validates, and directly uploads the same binary
+with shared Apple ID
+`6800642443`, `com.quakesignal.app` bundle ID, marketing version `1.1`, and the
+selected build number. The iOS/Watch host uses `ios`, Catalyst uses `macos`, and
+the tvOS and visionOS lanes use `appletvos` and `visionos`, respectively.
+A successful upload starts Apple's asynchronous processing; it is not evidence
+that the build is processed, selectable, attached to version `1.1`, or
+submitted for review.
 
 ## Distribution blockers outside workflow automation
 
