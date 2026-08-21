@@ -449,7 +449,7 @@ else
     "CLANG_MODULE_CACHE_PATH=$derived_data/ModuleCache.noindex"
     "DSTROOT=$derived_data/Dst"
     "ARCHS=$host_architecture"
-    "ONLY_ACTIVE_ARCH=YES"
+    "ONLY_ACTIVE_ARCH=NO"
     "CODE_SIGNING_ALLOWED=NO"
     "CODE_SIGNING_REQUIRED=NO"
     "CODE_SIGN_IDENTITY="

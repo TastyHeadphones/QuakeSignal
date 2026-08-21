@@ -1128,7 +1128,7 @@ class IOSScreenshotProvenanceTest < Minitest::Test
           "PRODUCT_BUNDLE_IDENTIFIER" => "com.quakesignal.app",
           "SDKROOT" => "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk",
           "ARCHS" => host_architecture,
-          "ONLY_ACTIVE_ARCH" => "YES",
+          "ONLY_ACTIVE_ARCH" => "NO",
           "CODE_SIGNING_ALLOWED" => "NO",
           "CODE_SIGNING_REQUIRED" => "NO",
           "CODE_SIGN_IDENTITY" => "",

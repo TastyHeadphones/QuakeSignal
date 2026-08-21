@@ -133,7 +133,7 @@ class IOSScreenshotBuildBindingTest < Minitest::Test
           "SDK_NAME" => "iphonesimulator26.5",
           "SDKROOT" => "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk",
           "ARCHS" => @host_architecture,
-          "ONLY_ACTIVE_ARCH" => "YES",
+          "ONLY_ACTIVE_ARCH" => "NO",
           "CODE_SIGNING_ALLOWED" => "NO",
           "CODE_SIGNING_REQUIRED" => "NO",
           "CODE_SIGN_IDENTITY" => "",
@@ -378,6 +378,18 @@ class IOSScreenshotBuildBindingTest < Minitest::Test
     settings.first.fetch("buildSettings")["ARCHS"] = @host_architecture == "arm64" ? "x86_64" : "arm64"
     write_json(@settings, settings)
     assert_error(/capture host/) { verify_binding }
+  end
+
+  def test_rejects_noncanonical_or_multi_architecture_build_settings
+    settings = JSON.parse(@settings.read)
+    settings.first.fetch("buildSettings")["ONLY_ACTIVE_ARCH"] = "YES"
+    write_json(@settings, settings)
+    assert_error(/onlyActiveArchitecture is not the exact deterministic screenshot value/) { write_binding }
+
+    settings.first.fetch("buildSettings")["ONLY_ACTIVE_ARCH"] = "NO"
+    settings.first.fetch("buildSettings")["ARCHS"] = "arm64 x86_64"
+    write_json(@settings, settings)
+    assert_error(/architectures is not one exact supported host architecture/) { write_binding }
   end
 
   def test_rejects_watch_payload_or_symlinked_parent

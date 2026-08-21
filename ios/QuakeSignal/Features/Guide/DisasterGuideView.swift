@@ -1,5 +1,17 @@
 import SwiftUI
 
+enum VisionGuideLayoutPolicy {
+    static let wideAfterQuakeItemCount = 3
+
+    static func usesWideAfterQuakeRow(
+        itemCount: Int,
+        dynamicTypeSize: DynamicTypeSize
+    ) -> Bool {
+        itemCount == wideAfterQuakeItemCount &&
+            !dynamicTypeSize.isAccessibilitySize
+    }
+}
+
 struct DisasterGuideView: View {
     @State private var guide = GuideStore.shared
     @State private var showingFamilyCheckIn = false
@@ -47,6 +59,10 @@ struct DisasterGuideView: View {
                 }
 
                 Section("guide.section.afterQuake") {
+#if os(visionOS)
+                    VisionAfterQuakeItems(keys: GuideContent.afterQuakeKeys)
+                        .visionReadableRow()
+#else
                     ForEach(GuideContent.afterQuakeKeys, id: \.self) { key in
                         Label {
                             Text(LocalizedStringKey(key))
@@ -58,6 +74,7 @@ struct DisasterGuideView: View {
                         .visionFont(.body)
                         .visionReadableRow()
                     }
+#endif
                 }
 
                 Section("guide.section.kit") {
@@ -103,3 +120,40 @@ struct DisasterGuideView: View {
         }
     }
 }
+
+#if os(visionOS)
+private struct VisionAfterQuakeItems: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    let keys: [String]
+
+    private var responsiveLayout: AnyLayout {
+        if VisionGuideLayoutPolicy.usesWideAfterQuakeRow(
+            itemCount: keys.count,
+            dynamicTypeSize: dynamicTypeSize
+        ) {
+            AnyLayout(HStackLayout(alignment: .top, spacing: 24))
+        } else {
+            AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+        }
+    }
+
+    var body: some View {
+        responsiveLayout {
+            ForEach(keys, id: \.self) { key in
+                Label {
+                    Text(LocalizedStringKey(key))
+                } icon: {
+                    Image(systemName: "checkmark.circle")
+                        .foregroundStyle(Color("NormalColor"))
+                }
+                .font(.body)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+#endif

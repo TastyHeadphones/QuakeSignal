@@ -86,8 +86,10 @@ module QuakeSignalIOSBuildSettings
     unless %w[arm64 x86_64].include?(result.fetch("architectures"))
       raise Error, "build-settings architectures is not one exact supported host architecture"
     end
+    unless result.fetch("onlyActiveArchitecture") == "NO"
+      raise Error, "build-settings onlyActiveArchitecture is not the exact deterministic screenshot value"
+    end
     expected_flags = {
-      "onlyActiveArchitecture" => "YES",
       "codeSigningAllowed" => "NO",
       "codeSigningRequired" => "NO",
       "codeSignIdentity" => "",

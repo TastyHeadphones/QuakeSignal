@@ -28,6 +28,7 @@ class ParseIOSScreenshotBuildSettingsTest < Minitest::Test
     assert_equal "#{fixture_root}/Build/Products/Debug-iphonesimulator",
                  parsed.fetch("targetBuildDirectory")
     assert_equal "arm64", parsed.fetch("architectures")
+    assert_equal "NO", parsed.fetch("onlyActiveArchitecture")
     assert_equal "NO", parsed.fetch("codeSigningRequired")
   end
 
@@ -77,6 +78,36 @@ class ParseIOSScreenshotBuildSettingsTest < Minitest::Test
     end
   end
 
+  def test_rejects_missing_or_noncanonical_only_active_architecture
+    missing = exact_settings
+    missing.delete("ONLY_ACTIVE_ARCH")
+    assert_error(/target build settings are incomplete/) do
+      QuakeSignalIOSBuildSettings.parse(build_settings_source(missing))
+    end
+
+    %w[YES no FALSE 0].each do |value|
+      settings = exact_settings.merge("ONLY_ACTIVE_ARCH" => value)
+      assert_error(/onlyActiveArchitecture is not the exact deterministic screenshot value/) do
+        QuakeSignalIOSBuildSettings.parse(build_settings_source(settings))
+      end
+    end
+  end
+
+  def test_rejects_multiple_or_noncanonical_architectures
+    missing = exact_settings
+    missing.delete("ARCHS")
+    assert_error(/target build settings are incomplete/) do
+      QuakeSignalIOSBuildSettings.parse(build_settings_source(missing))
+    end
+
+    ["arm64 x86_64", "x86_64 arm64", "arm64, x86_64", "$(ARCHS_STANDARD)", "i386"].each do |value|
+      settings = exact_settings.merge("ARCHS" => value)
+      assert_error(/architectures is not one exact supported host architecture/) do
+        QuakeSignalIOSBuildSettings.parse(build_settings_source(settings))
+      end
+    end
+  end
+
   private
 
   def fixture_root
@@ -96,7 +127,7 @@ class ParseIOSScreenshotBuildSettingsTest < Minitest::Test
       "SDK_NAME" => "iphonesimulator26.5",
       "SDKROOT" => "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk",
       "ARCHS" => "arm64",
-      "ONLY_ACTIVE_ARCH" => "YES",
+      "ONLY_ACTIVE_ARCH" => "NO",
       "CODE_SIGNING_ALLOWED" => "NO",
       "CODE_SIGNING_REQUIRED" => "NO",
       "CODE_SIGN_IDENTITY" => "",

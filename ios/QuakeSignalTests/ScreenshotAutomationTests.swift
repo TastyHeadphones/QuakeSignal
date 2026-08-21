@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import QuakeSignal
 
@@ -341,6 +342,50 @@ final class ScreenshotAutomationTests: XCTestCase {
         for (name, mutation) in invalidMutations {
             XCTAssertFalse(mutation.retainsReviewedComposition, name)
         }
+    }
+
+    func testVisionGuideUsesOneWideReviewedRowWithAccessibleDynamicTypeFallback() {
+        XCTAssertEqual(
+            GuideContent.afterQuakeKeys.count,
+            VisionGuideLayoutPolicy.wideAfterQuakeItemCount
+        )
+
+        for dynamicTypeSize in [
+            DynamicTypeSize.xSmall,
+            .small,
+            .medium,
+            .large,
+            .xLarge,
+            .xxLarge,
+            .xxxLarge,
+        ] {
+            XCTAssertTrue(VisionGuideLayoutPolicy.usesWideAfterQuakeRow(
+                itemCount: GuideContent.afterQuakeKeys.count,
+                dynamicTypeSize: dynamicTypeSize
+            ))
+        }
+
+        for dynamicTypeSize in [
+            DynamicTypeSize.accessibility1,
+            .accessibility2,
+            .accessibility3,
+            .accessibility4,
+            .accessibility5,
+        ] {
+            XCTAssertFalse(VisionGuideLayoutPolicy.usesWideAfterQuakeRow(
+                itemCount: GuideContent.afterQuakeKeys.count,
+                dynamicTypeSize: dynamicTypeSize
+            ))
+        }
+
+        XCTAssertFalse(VisionGuideLayoutPolicy.usesWideAfterQuakeRow(
+            itemCount: VisionGuideLayoutPolicy.wideAfterQuakeItemCount - 1,
+            dynamicTypeSize: .large
+        ))
+        XCTAssertFalse(VisionGuideLayoutPolicy.usesWideAfterQuakeRow(
+            itemCount: VisionGuideLayoutPolicy.wideAfterQuakeItemCount + 1,
+            dynamicTypeSize: .large
+        ))
     }
 
     func testMacCaptureGeometryPolicyAcceptsOnlyReviewedMacSelectors() throws {

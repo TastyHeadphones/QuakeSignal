@@ -764,7 +764,7 @@ test("keeps historical Mac Catalyst report rows date-qualified", async (t) => {
   });
 });
 
-test("fails closed when foreground-only Vision capability or localized disclosure drifts", async (t) => {
+test("fails closed when foreground-only Vision capability, layout, or localized disclosure drifts", async (t) => {
   await withFixture(t, {}, async (root) => {
     const path = join(root, "ios/QuakeSignal/App/PlatformCapabilities.swift");
     const source = await readFile(path, "utf8");
@@ -820,6 +820,40 @@ test("fails closed when foreground-only Vision capability or localized disclosur
       /foreground-only Apple platform policy must match the reviewed fingerprint/i,
     );
   });
+  for (const [name, from, to] of [
+    [
+      "visionOS-only post-quake composition",
+      "#if os(visionOS)\n                    VisionAfterQuakeItems",
+      "#if os(iOS)\n                    VisionAfterQuakeItems",
+    ],
+    [
+      "wide post-quake row",
+      "AnyLayout(HStackLayout(alignment: .top, spacing: 24))",
+      "AnyLayout(VStackLayout(alignment: .leading, spacing: 24))",
+    ],
+    [
+      "accessibility Dynamic Type fallback",
+      "!dynamicTypeSize.isAccessibilitySize",
+      "true",
+    ],
+    [
+      "multi-line localized post-quake actions",
+      ".fixedSize(horizontal: false, vertical: true)",
+      ".lineLimit(1)",
+    ],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, "ios/QuakeSignal/Features/Guide/DisasterGuideView.swift");
+      const source = await readFile(path, "utf8");
+      const mutated = source.replace(from, to);
+      assert.notEqual(mutated, source, `${name} fixture mutation must apply`);
+      await writeFile(path, mutated, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /foreground-only Apple platform policy must match the reviewed fingerprint/i,
+      );
+    });
+  }
   await withFixture(t, {}, async (root) => {
     const path = join(root, "ios/QuakeSignal/Resources/en.lproj/Localizable.strings");
     const source = await readFile(path, "utf8");

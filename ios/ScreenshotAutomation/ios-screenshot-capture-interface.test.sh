@@ -166,10 +166,18 @@ fi
     [single, set].all? do |source|
       %w[SYMROOT OBJROOT BUILD_DIR BUILD_ROOT CONFIGURATION_BUILD_DIR SHARED_PRECOMPS_DIR CLANG_MODULE_CACHE_PATH DSTROOT].all? do |key|
         source.include?(%Q["#{key}=$derived_data/])
-      end && source.include?(%q["ARCHS=$host_architecture"])
+      end &&
+        source.scan(/"ARCHS=[^"]*"/).length == 1 &&
+        source.include?(%q["ARCHS=$host_architecture"]) &&
+        source.scan(/"ONLY_ACTIVE_ARCH=[^"]*"/).length == 1 &&
+        source.include?(%q["ONLY_ACTIVE_ARCH=NO"]) &&
+        source.scan(%q["${build_overrides[@]}"]).length == 2
     end
-  abort "set capture architecture is not fail-closed to runner architecture" unless
-    set.include?(%q[host_architecture="$(uname -m)"]) && set.include?("arm64|x86_64")
+  abort "set/direct capture architecture is not fail-closed to one supported runner architecture" unless
+    [single, set].all? do |source|
+      source.include?(%q[host_architecture="$(uname -m)"]) &&
+        source.scan("arm64|x86_64").length == 1
+    end
 ' "$script_dir/capture-ios-screenshot.sh" \
   "$script_dir/capture-ios-screenshot-set.sh" \
   "$script_dir/ios-screenshot-plan.rb" \
