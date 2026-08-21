@@ -476,8 +476,13 @@ jobs:
 
   capture_maccatalyst:
     name: Debug Mac Catalyst direct UIKit candidate
-    runs-on: macos-latest
+    # The Arm64 hosted desktop is 1024x768 logical points and cannot present
+    # the reviewed 1280x800 live UIWindow. The Intel Tahoe image provides the
+    # larger hosted display while retaining the Xcode 26.6 release toolchain.
+    runs-on: macos-26-intel
     timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
 
     steps:
       - name: Check out source-frozen revision
@@ -535,6 +540,37 @@ jobs:
             echo "::error::Screenshot candidate workflow must not reference secrets"
             exit 1
           fi
+
+      - name: Prove hosted Catalyst capture capacity
+        run: |
+          set -euo pipefail
+          host_architecture="$(/usr/bin/uname -m)"
+          if [ "$host_architecture" != "x86_64" ]; then
+            echo "::error::Mac Catalyst capture requires the reviewed x86_64 hosted runner"
+            exit 1
+          fi
+          expected_xcode=$'Xcode 26.6\nBuild version 17F113'
+          actual_xcode="$(xcodebuild -version)"
+          if [ "$actual_xcode" != "$expected_xcode" ]; then
+            printf '%s\n' "$actual_xcode"
+            echo "::error::Mac Catalyst capture requires Xcode 26.6 build 17F113"
+            exit 1
+          fi
+          display_geometry="$(xcrun swift -e 'import AppKit; import Darwin; if let screen = NSScreen.main { let frame = screen.frame; let visible = screen.visibleFrame; print("\(Int(frame.width)) \(Int(frame.height)) \(Int(visible.width)) \(Int(visible.height)) \(screen.backingScaleFactor)") } else { fputs("main screen unavailable\n", stderr); exit(69) }')"
+          read -r display_width display_height visible_width visible_height backing_scale extra_display_value <<<"$display_geometry"
+          if [[ ! "$display_width" =~ ^[0-9]+$ ]] || \
+             [[ ! "$display_height" =~ ^[0-9]+$ ]] || \
+             [[ ! "$visible_width" =~ ^[0-9]+$ ]] || \
+             [[ ! "$visible_height" =~ ^[0-9]+$ ]] || \
+             [[ ! "$backing_scale" =~ ^[0-9]+([.][0-9]+)?$ ]] || \
+             [ -n "${extra_display_value:-}" ] || \
+             [ "$visible_width" -lt 1280 ] || \
+             [ "$visible_height" -lt 800 ]; then
+            echo "::error::Mac Catalyst capture requires at least 1280x800 visible logical display points; received '$display_geometry'"
+            exit 1
+          fi
+          printf 'Hosted Catalyst capture capacity: %s, Xcode 26.6 (17F113), %sx%s full / %sx%s visible logical points, backing scale %s\n' \
+            "$host_architecture" "$display_width" "$display_height" "$visible_width" "$visible_height" "$backing_scale"
 
       - name: Prove exact clean source immediately before Catalyst capture
         run: |

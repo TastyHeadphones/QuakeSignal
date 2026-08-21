@@ -89,6 +89,9 @@ fi
     capture.include?("quakesignal_maccatalyst_run_tracked xcodebuild build") &&
     capture.include?("quakesignal_maccatalyst_run_tracked xcodebuild -showBuildSettings") &&
     capture.scan(%q[quakesignal_maccatalyst_run_tracked "$window_helper"]).length == 2
+  abort "failed app geometry no longer emits bounded JSON and app-log diagnostics" unless
+    capture.include?(%q[warn "Catalyst geometry evidence rejected: #{JSON.generate(diagnostic)}"]) &&
+    capture.include?(%q[tail -n 120 "$attempt_app_log" >&2 || true])
   abort "shell lost exact PID/window/selector/nonce request-response handshake" unless
     capture.include?(%q[capture_request_path="$payload/capture-request-evidence/$frame_selector.json"]) &&
     capture.include?(%q[capture_request_source="$geometry_root/capture-request.json"]) &&

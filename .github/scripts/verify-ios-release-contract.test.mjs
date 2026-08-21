@@ -1901,6 +1901,18 @@ test("fails closed when build or release jobs reintroduce Simulator downloads", 
 test("fails closed when the credential-free screenshot harness checks drift", async (t) => {
   for (const [from, to] of [
     [
+      '          if [ "$host_architecture" != "x86_64" ]; then\n',
+      '          if false; then # skipped x86_64 hosted-runner proof\n',
+    ],
+    [
+      "          expected_xcode=$'Xcode 26.6\\nBuild version 17F113'\n",
+      "          expected_xcode=\"$(xcodebuild -version)\" # skipped exact Xcode proof\n",
+    ],
+    [
+      '             [ "$visible_height" -lt 800 ]; then\n',
+      '             [ "$visible_height" -lt 1 ]; then # skipped logical-display capacity proof\n',
+    ],
+    [
       "          QUAKESIGNAL_TEST_TEMP_ROOT: ${{ runner.temp }}\n",
       "          QUAKESIGNAL_TEST_TEMP_ROOT: /tmp # skipped runner-scoped test temp root\n",
     ],
@@ -2139,6 +2151,34 @@ test("fails closed when the credential-free screenshot harness checks drift", as
         verifyIOSReleaseContract({ root }),
         /native screenshot candidate workflow jobs must match the reviewed capture graph fingerprint/i,
       );
+    });
+  }
+});
+
+test("fails closed when the Mac Catalyst capture runner or toolchain loses exact geometry capacity", async (t) => {
+  for (const [from, to, error] of [
+    [
+      "    runs-on: macos-26-intel\n",
+      "    runs-on: macos-latest\n",
+      /Mac Catalyst screenshot capture must run on macos-26-intel/i,
+    ],
+    [
+      "      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer\n",
+      "      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer\n",
+      /Mac Catalyst screenshot capture toolchain/i,
+    ],
+    [
+      "    runs-on: macos-26-intel\n    timeout-minutes: 90\n",
+      "    runs-on: macos-26-intel\n    timeout-minutes: 30\n",
+      /Mac Catalyst screenshot capture timeout must remain 90 minutes/i,
+    ],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/apple-platform-screenshots.yml");
+      const contents = await readFile(path, "utf8");
+      assert.ok(contents.includes(from), `screenshot workflow fixture must contain ${from.trim()}`);
+      await writeFile(path, contents.replace(from, to), "utf8");
+      await assert.rejects(verifyIOSReleaseContract({ root }), error);
     });
   }
 });

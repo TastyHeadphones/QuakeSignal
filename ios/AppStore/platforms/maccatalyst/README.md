@@ -37,10 +37,12 @@ Publishing hierarchy bytes additionally requires exactly one
 `--quakesignal-catalyst-hierarchy-capture` argument and
 `QUAKESIGNAL_CATALYST_HIERARCHY_CAPTURE=1`.
 
-Trigger the distinct Mac Catalyst job in
-`.github/workflows/apple-platform-screenshots.yml` on GitHub. It captures an
-exact clean `GITHUB_SHA`; the following command is a job-internal detail and
-is not a supported local capture path:
+Trigger the distinct `macos-26-intel` Mac Catalyst job in
+`.github/workflows/apple-platform-screenshots.yml` on GitHub. It pins Xcode
+26.6 build 17F113 and fails before building unless the x86_64 host exposes at
+least 1280 x 800 visible logical display points for the exact live UIWindow.
+It captures an exact clean `GITHUB_SHA`; the following
+command is a job-internal detail and is not a supported local capture path:
 
 ```bash
 ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh "$RUNNER_TEMP/quakesignal-maccatalyst-build8"

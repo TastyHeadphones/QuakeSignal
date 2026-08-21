@@ -128,10 +128,26 @@ semantic retry is used, it also retains the rejected first attempt as
 `semantic-rejections/<selector>-attempt-1.json` and the exact paired
 `semantic-rejections/<selector>-attempt-1.png` raster.
 
-Mac Catalyst uses a distinct GitHub-hosted macOS job in
-`.github/workflows/apple-platform-screenshots.yml`. The job invokes the same
-set harness against one exact clean `GITHUB_SHA`; no signing, Screen Recording,
-Accessibility, or App Store Connect credential is supplied:
+The committed-view non-black floor is 0.12 for every iOS/iPadOS selector
+except the exact `ios-ipad-13-reports` dark plain-list composition, whose four
+final historical rows intentionally leave most of the 13-inch canvas black.
+That selector uses a 0.004 floor, equal to the unchanged bright-detail floor:
+every bright sample is necessarily also non-black, and aggregate validation
+rejects evidence that violates that relationship. Luminance variation,
+bright detail, horizontal edges, at least five recognized-text observations,
+all Reports term groups, and forbidden-system-prompt checks remain independent
+mandatory gates. Rejections emit one sanitized JSON diagnostic containing
+only numeric metrics, counts, and reasons; OCR strings, selector/image
+identifiers, hashes, and paths are never logged in that summary.
+
+Mac Catalyst uses a distinct `macos-26-intel` GitHub-hosted job in
+`.github/workflows/apple-platform-screenshots.yml`, pinned to Xcode 26.6 build
+17F113. Before building, the job proves that the host is x86_64 and that its
+main display exposes at least 1280x800 visible logical points; the reviewed
+1280x800 live UIWindow cannot be presented on the smaller Arm64 hosted
+desktop. The job then invokes the same set harness against one exact clean
+`GITHUB_SHA`; no signing, Screen Recording, Accessibility, or App Store
+Connect credential is supplied:
 
 ```sh
 capture_parent="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/QuakeSignalScreenshotCandidates"
@@ -238,8 +254,11 @@ For watchOS the harness also creates and boots a disposable paired iPhone
 Simulator; no existing personal pair is reused. CoreSimulator may take longer
 than watchOS's two-minute return-to-clock interval to service its first
 screenshot. While that request is pending, the harness restarts QuakeSignal in
-the foreground every 45 seconds with the same dual-gated frame selector. The
-screenshot and restart children share a five-minute hard deadline and are both
+the foreground every 45 seconds with the same dual-gated frame selector. A
+periodic restart that returns CoreSimulator's transient FBS status 4 receives
+exactly one direct, tracked retry after five seconds; any other failure or a
+second status-4 failure remains operational status 70. The screenshot and
+restart children share a five-minute hard deadline and are both
 stopped with bounded TERM-to-KILL cleanup on timeout or interruption.
 Before settling or requesting that first screenshot, the initial exact-frame
 launch uses the same tracked helper as semantic recovery: at most two launch

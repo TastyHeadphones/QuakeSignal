@@ -123,6 +123,22 @@ wait_for_nonempty_file() {
   fi
 }
 
+wait_for_file_content() {
+  local file="$1"
+  local expected="$2"
+  local label="$3"
+  local attempt=0
+  while { [ ! -f "$file" ] || [ "$(<"$file")" != "$expected" ]; } && \
+      [ "$attempt" -lt 400 ]; do
+    sleep 0.05
+    attempt=$((attempt + 1))
+  done
+  if [ ! -f "$file" ] || [ "$(<"$file")" != "$expected" ]; then
+    echo "error: timed out waiting for $label content" >&2
+    exit 1
+  fi
+}
+
 wait_for_recorded_process_stopped() {
   local pid_file="$1"
   local label="$2"
@@ -269,6 +285,22 @@ assert_file_content "$QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE" $'4\n4' \
 if [ -e "$initial_launch_failure_dir/accepted-candidate.png" ] || \
     [ -e "$initial_launch_failure_dir/capture-provenance.json" ]; then
   echo "error: exhausted initial Watch launch published a candidate or provenance" >&2
+  exit 1
+fi
+
+initial_launch_nontransient_dir="$test_root/initial-launch-nontransient"
+mkdir "$initial_launch_nontransient_dir"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$initial_launch_nontransient_dir/launched"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES="29|0"
+export QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE="$initial_launch_nontransient_dir/statuses"
+expect_status 70 launch_and_publish_initial_watch "$initial_launch_nontransient_dir"
+assert_file_content "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" 1 \
+  "initial launch nontransient count"
+assert_file_content "$QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE" 29 \
+  "initial launch nontransient status"
+if [ -e "$initial_launch_nontransient_dir/accepted-candidate.png" ] || \
+    [ -e "$initial_launch_nontransient_dir/capture-provenance.json" ]; then
+  echo "error: nontransient initial Watch launch published a candidate or provenance" >&2
   exit 1
 fi
 
@@ -636,6 +668,158 @@ export QUAKESIGNAL_TEST_HOLD_PID_ASSIGNMENT=0
 unset QUAKESIGNAL_TEST_CAPTURE_PAYLOADS QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE
 export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$test_root/reactivated"
 
+# Periodic foreground keeping uses the same narrowly classified recovery as
+# the hosted failure: one FBS status-4 result may retry after five seconds.
+# The retry remains a directly tracked xcrun child, and every other outcome
+# fails closed without waiting for the screenshot command to publish.
+periodic_recovery_dir="$test_root/periodic-restart-recovery"
+mkdir "$periodic_recovery_dir"
+periodic_recovery_release_file="$periodic_recovery_dir/capture.release"
+export QUAKESIGNAL_TEST_CAPTURE_DELAY=0
+export QUAKESIGNAL_TEST_CAPTURE_PID_FILE="$periodic_recovery_dir/capture.pid"
+export QUAKESIGNAL_TEST_CAPTURE_RELEASE_FILE="$periodic_recovery_release_file"
+export QUAKESIGNAL_TEST_REACTIVATION_PID_FILE="$periodic_recovery_dir/reactivation.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$periodic_recovery_dir/reactivated"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES="4|0"
+export QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE="$periodic_recovery_dir/statuses"
+(
+  screenshot_pid=""
+  watch_reactivation_pid=""
+
+  periodic_recovery_cleanup() {
+    quakesignal_stop_processes "$screenshot_pid" "$watch_reactivation_pid"
+  }
+  trap periodic_recovery_cleanup EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  quakesignal_capture_watch_screenshot \
+    fake-watch fake.bundle "$periodic_recovery_dir/candidate.png" en en_US \
+    watchos-headline 20 1
+) &
+gated_test_supervisor_pid=$!
+wait_for_nonempty_file "$QUAKESIGNAL_TEST_CAPTURE_PID_FILE" \
+  "periodic restart recovery screenshot PID"
+wait_for_file_content "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" 2 \
+  "periodic restart recovery launch count"
+wait_for_recorded_process_stopped "$QUAKESIGNAL_TEST_REACTIVATION_PID_FILE" \
+  "periodic restart recovery launch"
+touch "$periodic_recovery_release_file"
+periodic_recovery_status=0
+if wait "$gated_test_supervisor_pid"; then
+  periodic_recovery_status=0
+else
+  periodic_recovery_status=$?
+fi
+gated_test_supervisor_pid=""
+if [ "$periodic_recovery_status" -ne 0 ]; then
+  echo "error: periodic restart recovery expected status 0, got $periodic_recovery_status" >&2
+  exit 1
+fi
+assert_file_content "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" 2 \
+  "periodic restart recovery count"
+assert_file_content "$QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE" $'4\n0' \
+  "periodic restart recovery statuses"
+assert_recorded_process_stopped "$QUAKESIGNAL_TEST_CAPTURE_PID_FILE" \
+  "periodic restart recovery screenshot"
+assert_recorded_process_stopped "$QUAKESIGNAL_TEST_REACTIVATION_PID_FILE" \
+  "periodic restart recovery launch"
+export QUAKESIGNAL_TEST_CAPTURE_RELEASE_FILE=""
+
+periodic_exhaustion_dir="$test_root/periodic-restart-exhaustion"
+mkdir "$periodic_exhaustion_dir"
+export QUAKESIGNAL_TEST_CAPTURE_DELAY=15
+export QUAKESIGNAL_TEST_CAPTURE_PID_FILE="$periodic_exhaustion_dir/capture.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_PID_FILE="$periodic_exhaustion_dir/reactivation.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$periodic_exhaustion_dir/reactivated"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES="4|4"
+export QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE="$periodic_exhaustion_dir/statuses"
+expect_status 70 quakesignal_capture_watch_screenshot \
+  fake-watch fake.bundle "$periodic_exhaustion_dir/candidate.png" en en_US \
+  watchos-headline 20 1
+assert_file_content "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" 2 \
+  "periodic restart exhaustion count"
+assert_file_content "$QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE" $'4\n4' \
+  "periodic restart exhaustion statuses"
+assert_recorded_process_stopped "$QUAKESIGNAL_TEST_CAPTURE_PID_FILE" \
+  "periodic restart exhaustion screenshot"
+assert_recorded_process_stopped "$QUAKESIGNAL_TEST_REACTIVATION_PID_FILE" \
+  "periodic restart exhaustion launch"
+
+periodic_nontransient_dir="$test_root/periodic-restart-nontransient"
+mkdir "$periodic_nontransient_dir"
+export QUAKESIGNAL_TEST_CAPTURE_DELAY=8
+export QUAKESIGNAL_TEST_CAPTURE_PID_FILE="$periodic_nontransient_dir/capture.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_PID_FILE="$periodic_nontransient_dir/reactivation.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$periodic_nontransient_dir/reactivated"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES="29|0"
+export QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE="$periodic_nontransient_dir/statuses"
+expect_status 70 quakesignal_capture_watch_screenshot \
+  fake-watch fake.bundle "$periodic_nontransient_dir/candidate.png" en en_US \
+  watchos-headline 12 1
+assert_file_content "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" 1 \
+  "periodic nontransient failure count"
+assert_file_content "$QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE" 29 \
+  "periodic nontransient failure status"
+assert_recorded_process_stopped "$QUAKESIGNAL_TEST_CAPTURE_PID_FILE" \
+  "periodic nontransient screenshot"
+assert_recorded_process_stopped "$QUAKESIGNAL_TEST_REACTIVATION_PID_FILE" \
+  "periodic nontransient launch"
+
+periodic_backoff_signal_dir="$test_root/periodic-restart-backoff-signal"
+mkdir "$periodic_backoff_signal_dir"
+export QUAKESIGNAL_TEST_CAPTURE_DELAY=30
+export QUAKESIGNAL_TEST_CAPTURE_PID_FILE="$periodic_backoff_signal_dir/capture.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_PID_FILE="$periodic_backoff_signal_dir/reactivation.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$periodic_backoff_signal_dir/reactivated"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES="4|0"
+export QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE="$periodic_backoff_signal_dir/statuses"
+(
+  screenshot_pid=""
+  watch_reactivation_pid=""
+
+  periodic_backoff_cleanup() {
+    quakesignal_stop_processes "$screenshot_pid" "$watch_reactivation_pid"
+  }
+  trap periodic_backoff_cleanup EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  quakesignal_capture_watch_screenshot \
+    fake-watch fake.bundle "$periodic_backoff_signal_dir/candidate.png" en en_US \
+    watchos-headline 20 1
+) &
+gated_test_supervisor_pid=$!
+wait_for_recorded_process_stopped "$QUAKESIGNAL_TEST_REACTIVATION_PID_FILE" \
+  "periodic restart before backoff"
+sleep 2
+kill -TERM "$gated_test_supervisor_pid"
+periodic_backoff_signal_status=0
+if wait "$gated_test_supervisor_pid"; then
+  periodic_backoff_signal_status=0
+else
+  periodic_backoff_signal_status=$?
+fi
+gated_test_supervisor_pid=""
+if [ "$periodic_backoff_signal_status" -ne 143 ]; then
+  echo "error: TERM during periodic restart backoff expected 143, got $periodic_backoff_signal_status" >&2
+  exit 1
+fi
+assert_file_content "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" 1 \
+  "periodic backoff signal launch count"
+assert_file_content "$QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE" 4 \
+  "periodic backoff signal status"
+assert_recorded_process_stopped "$QUAKESIGNAL_TEST_CAPTURE_PID_FILE" \
+  "periodic backoff signal screenshot"
+assert_recorded_process_stopped "$QUAKESIGNAL_TEST_REACTIVATION_PID_FILE" \
+  "periodic backoff signal launch"
+
+export QUAKESIGNAL_TEST_CAPTURE_PID_FILE="$test_root/capture.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_PID_FILE="$test_root/reactivation.pid"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$test_root/reactivated"
+export QUAKESIGNAL_TEST_REACTIVATION_STATUSES=""
+export QUAKESIGNAL_TEST_LAUNCH_STATUS_TRACE_FILE=""
+
 export QUAKESIGNAL_TEST_CAPTURE_DELAY=3
 expect_status 0 quakesignal_capture_watch_screenshot \
   fake-watch fake.bundle "$test_root/slow.png" en en_US \
@@ -663,6 +847,7 @@ assert_recorded_process_stopped "$QUAKESIGNAL_TEST_CAPTURE_PID_FILE" "screenshot
 
 run_same_poll_completion_test 29 same-poll-restart-failure
 run_same_poll_completion_test 143 same-poll-natural-sigterm
+run_same_poll_completion_test 4 same-poll-transient-restart-failure
 
 timeout_capture_release_file="$test_root/timeout-capture.release"
 timeout_reactivation_release_file="$test_root/timeout-reactivation.release"

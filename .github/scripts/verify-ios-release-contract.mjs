@@ -400,18 +400,18 @@ const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:lZgHa3Y9qXK8lfLTbhAal
 const WORKFLOW_JOBS_FINGERPRINT = "sha256:5498q5lbi5Yom3Sn4_Z-CWhkfathWmEmju9dNMTTJHY";
 const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:gIdap293hpqUJ9U_gKOGiTsYupuumhNhDR3BileJEVI";
 const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:pyFXJBB9gZ7oyUQR5FTk2qRZe4TlhnJmc0HjteIYnLI";
-const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:XjMqFIUGD8ViszcFKrN8WPthxy5Xl0kPqf0VOr66Etg";
+const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:mKE3lLqxtJUhMRw6pIX4gSy4IuKbxI67MCX7UYRVwzg";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
 const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:kDoiWAWmjEt4yzMoyqbCs0MFXPOIkPA6rB37qgq3mMY";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
 const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:toLX1XB92g900YQMVNdY6b_qs9oHUEVANOZMzpJrM3Q";
 const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:LiQ_GD8IWRxjS7x_EkXZ2JV1SfOlRaWw1_m0DhLxJsg";
-const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:s1X1Q23Xh8WEtzCXl9vTXQViFPpCpgc8p1xbZpU73-s";
+const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:14FdmmhtuHwHY7yGNg84H7ZI87TjHTAjT1zJsE8RNJY";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:vtAIx8JZ4s9UUN07yItVzVx-po5bFVrgWPH5FV_zhXA";
 const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:FziznhIyMsrK3XG4hiulKdGrLslyBQ0GnhkgxKYdK5c";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:H8y5aUmnYqxGiCtzdJn9fHbaQwdxWZ1QhfwzIGzF2OA";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:NDse_YkiaR-9CgCIKSciW-H9y8tgThXuvd9jNqxzO7o";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:gjhaPbj0w_HYW0dfSVIAebHv_61FOo6f5Sq-ADaoOHY";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:KU7O0otOfVV0C2MxsDpZBOHFvmPM2-REA79B6Tnkmsg";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:gNHr13EktFUXs0KiPpLYbdaL3I7IApzP4PQjaDmX2Gk";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -1981,6 +1981,44 @@ function verifyScreenshotCandidateWorkflow(workflowSource) {
   const jobs = record(workflow.jobs, "native screenshot candidate workflow jobs");
   if (!sameValue(Object.keys(jobs), ["capture", "capture_maccatalyst"])) {
     fail("native screenshot candidate workflow must expose exactly its reviewed simulator matrix and distinct Mac Catalyst hierarchy jobs.");
+  }
+  const simulatorCaptureJob = record(jobs.capture, "native simulator screenshot capture job");
+  if (simulatorCaptureJob["runs-on"] !== "macos-latest") {
+    fail("native simulator screenshot capture must run on macos-latest.");
+  }
+  const catalystCaptureJob = record(jobs.capture_maccatalyst, "native Mac Catalyst screenshot capture job");
+  if (catalystCaptureJob["runs-on"] !== "macos-26-intel") {
+    fail("native Mac Catalyst screenshot capture must run on macos-26-intel for exact live-window geometry.");
+  }
+  if (catalystCaptureJob["timeout-minutes"] !== 90) {
+    fail("native Mac Catalyst screenshot capture timeout must remain 90 minutes.");
+  }
+  exactRecord(
+    catalystCaptureJob.env,
+    { DEVELOPER_DIR: "/Applications/Xcode_26.6.app/Contents/Developer" },
+    "native Mac Catalyst screenshot capture toolchain",
+  );
+  if (!Array.isArray(catalystCaptureJob.steps)) {
+    fail("native Mac Catalyst screenshot capture steps must be a sequence.");
+  }
+  const capacityPreflight = stepByName(
+    catalystCaptureJob.steps,
+    "Prove hosted Catalyst capture capacity",
+    "native Mac Catalyst screenshot capacity preflight",
+  );
+  const harnessValidation = stepByName(
+    catalystCaptureJob.steps,
+    "Validate credential-free Mac Catalyst harness",
+    "native Mac Catalyst screenshot harness validation",
+  );
+  const cleanSourceProof = stepByName(
+    catalystCaptureJob.steps,
+    "Prove exact clean source immediately before Catalyst capture",
+    "native Mac Catalyst screenshot clean-source proof",
+  );
+  if (catalystCaptureJob.steps.indexOf(capacityPreflight) !== catalystCaptureJob.steps.indexOf(harnessValidation) + 1 ||
+      catalystCaptureJob.steps.indexOf(capacityPreflight) >= catalystCaptureJob.steps.indexOf(cleanSourceProof)) {
+    fail("native Mac Catalyst screenshot capacity preflight must run immediately after harness validation and before the clean-source proof.");
   }
   const jobsFingerprint = workflowSequenceFingerprint(jobs);
   if (jobsFingerprint !== SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT) {

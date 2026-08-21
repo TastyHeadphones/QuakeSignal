@@ -47,8 +47,24 @@ context.fill(CGRect(origin: .zero, size: size))
 
 if mode != "blank" {
     context.setFillColor(red: 0.10, green: 0.11, blue: 0.13, alpha: 1)
-    for y in stride(from: 220, to: Int(size.height) - 260, by: 420) {
-        context.fill(CGRect(x: 40, y: CGFloat(y), width: size.width - 80, height: 280))
+    if mode == "sparse-reports" {
+        guard displayClass == "ipad" else {
+            fputs("error: sparse reports fixture requires iPad dimensions\n", stderr)
+            exit(64)
+        }
+        // A deterministic dark plain-list composition: every non-black pixel
+        // remains inside a 288-pixel band (about 10.5% of sampled rows), while
+        // the right-hand stripes independently guarantee bright/edge detail.
+        let band = CGRect(x: 0, y: size.height - 288, width: size.width, height: 288)
+        context.fill(band)
+        context.setFillColor(red: 0.92, green: 0.94, blue: 0.98, alpha: 1)
+        for x in stride(from: 1_760, to: Int(size.width), by: 16) {
+            context.fill(CGRect(x: CGFloat(x), y: band.minY, width: 8, height: band.height))
+        }
+    } else {
+        for y in stride(from: 220, to: Int(size.height) - 260, by: 420) {
+            context.fill(CGRect(x: 40, y: CGFloat(y), width: size.width - 80, height: 280))
+        }
     }
     if mode == "map" || mode == "map-placeholder" {
         context.setFillColor(red: 0.08, green: 0.32, blue: 0.58, alpha: 1)
@@ -60,13 +76,17 @@ if mode != "blank" {
     let graphicsContext = NSGraphicsContext(cgContext: context, flipped: false)
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = graphicsContext
-    let fontSize: CGFloat = displayClass == "iphone" ? 42 : 52
+    let fontSize: CGFloat = mode == "sparse-reports"
+        ? 34
+        : (displayClass == "iphone" ? 42 : 52)
     let lines: [String]
     switch mode {
     case "home", "permission":
         lines = ["QuakeSignal Home", "Latest Earthquake", "No nearby activity", "Noto Peninsula Ishikawa", "Magnitude 7.6", mode == "permission" ? "Allow While Using App" : "Final historical report"]
     case "reports":
         lines = ["QuakeSignal Reports", "Earthquake List", "Noto Peninsula", "Off Fukushima Prefecture", "Magnitude 7.6", "Final historical report"]
+    case "sparse-reports":
+        lines = ["Earthquake List", "Noto Peninsula", "Off Fukushima Prefecture", "Final Reports", "Magnitude 7.6", "JMA History"]
     case "map":
         lines = ["QuakeSignal Map", "24 hours", "7 days 30 days", "All", "M3+", "M4+", "M5+ Earthquake markers", "Maps Legal"]
     case "map-placeholder":
@@ -82,9 +102,12 @@ if mode != "blank" {
         exit(64)
     }
     for (index, line) in lines.enumerated() {
+        let y = mode == "sparse-reports"
+            ? size.height - 48 - CGFloat(index) * 44
+            : size.height - 260 - CGFloat(index) * 300
         drawText(
             line,
-            at: CGPoint(x: 70, y: size.height - 260 - CGFloat(index) * 300),
+            at: CGPoint(x: 70, y: y),
             size: fontSize,
             color: index == 0 ? .white : .lightGray
         )

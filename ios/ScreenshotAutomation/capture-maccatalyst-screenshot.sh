@@ -312,7 +312,16 @@ while [ "$capture_attempt_count" -lt 2 ]; do
     record = JSON.parse(File.read(ARGV.fetch(0)))
     expected_keys = %w[captureSelector logicalFrame processId reason recordedAtUtc schemaVersion sourceDisplayScale status]
     abort "geometry evidence keys differ" unless record.keys.sort == expected_keys.sort
-    abort "geometry evidence is not ready" unless record["schemaVersion"] == 1 && record["status"] == "ready" && record["reason"].nil?
+    unless record["schemaVersion"] == 1 && record["status"] == "ready" && record["reason"].nil?
+      diagnostic = {
+        "status" => record["status"],
+        "reason" => record["reason"],
+        "logicalFrame" => record["logicalFrame"],
+        "sourceDisplayScale" => record["sourceDisplayScale"],
+      }
+      warn "Catalyst geometry evidence rejected: #{JSON.generate(diagnostic)}"
+      abort "geometry evidence is not ready"
+    end
     abort "geometry evidence PID differs" unless record["processId"] == Integer(ARGV.fetch(1), 10)
     abort "geometry evidence selector differs" unless record["captureSelector"] == ARGV.fetch(2)
     frame = record.fetch("logicalFrame")
@@ -323,6 +332,7 @@ while [ "$capture_attempt_count" -lt 2 ]; do
     timestamp = record.fetch("recordedAtUtc")
     abort "geometry timestamp is not UTC" unless timestamp.end_with?("Z") && Time.iso8601(timestamp).utc_offset.zero?
   ' "$geometry_source" "$app_pid" "$frame_selector"; then
+    tail -n 120 "$attempt_app_log" >&2 || true
     echo "error: app-written Catalyst geometry evidence is invalid" >&2
     exit 70
   fi

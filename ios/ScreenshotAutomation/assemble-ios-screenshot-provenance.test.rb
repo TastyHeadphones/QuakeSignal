@@ -532,6 +532,63 @@ class IOSScreenshotProvenanceTest < Minitest::Test
     end
   end
 
+  def test_applies_the_sparse_non_black_floor_only_to_ipad_reports
+    assert_equal 0.12, QuakeSignalIOSScreenshotProvenance::DEFAULT_MINIMUM_NON_BLACK_FRACTION
+    assert_equal(
+      { "ios-ipad-13-reports" => 0.004 },
+      QuakeSignalIOSScreenshotProvenance::MINIMUM_NON_BLACK_FRACTION_BY_SELECTOR,
+    )
+
+    with_capture_fixture do |capture_root, output|
+      selector = "ios-ipad-13-reports"
+      mutate_json_artifact(
+        capture_root, selector, "semanticValidation", reference_key: "finalEvidence"
+      ) do |record|
+        metrics = record.fetch("checks").fetch("committedView")
+        metrics["nonBlackFraction"] = 0.004
+        metrics["brightFraction"] = 0.004
+      end
+      aggregate = assemble(capture_root, output)
+      assert_equal 10, aggregate.fetch("frames").length
+    end
+
+    with_capture_fixture do |capture_root, output|
+      selector = "ios-ipad-13-reports"
+      mutate_json_artifact(
+        capture_root, selector, "semanticValidation", reference_key: "finalEvidence"
+      ) do |record|
+        metrics = record.fetch("checks").fetch("committedView")
+        metrics["nonBlackFraction"] = 0.003_999
+        metrics["brightFraction"] = 0.003_999
+      end
+      assert_rejected(capture_root, output, /derived semantic reasons/)
+    end
+
+    with_capture_fixture do |capture_root, output|
+      selector = "ios-iphone-6.5-reports"
+      mutate_json_artifact(
+        capture_root, selector, "semanticValidation", reference_key: "finalEvidence"
+      ) do |record|
+        metrics = record.fetch("checks").fetch("committedView")
+        metrics["nonBlackFraction"] = 0.004
+        metrics["brightFraction"] = 0.004
+      end
+      assert_rejected(capture_root, output, /derived semantic reasons/)
+    end
+
+    with_capture_fixture do |capture_root, output|
+      selector = "ios-ipad-13-reports"
+      mutate_json_artifact(
+        capture_root, selector, "semanticValidation", reference_key: "finalEvidence"
+      ) do |record|
+        metrics = record.fetch("checks").fetch("committedView")
+        metrics["nonBlackFraction"] = 0.004
+        metrics["brightFraction"] = 0.004_001
+      end
+      assert_rejected(capture_root, output, /brightFraction cannot exceed nonBlackFraction/)
+    end
+  end
+
   def test_rejects_permission_dialog_semantic_evidence
     with_capture_fixture do |capture_root, output|
       mutate_json_artifact(
