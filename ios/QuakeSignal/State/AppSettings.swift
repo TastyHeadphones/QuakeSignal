@@ -61,32 +61,77 @@ final class AppSettings {
     static let magnitudeTiers: [Double] = [3, 4, 5, 6]
 
     var selectedCityId: String? {
-        didSet { defaults.set(selectedCityId, forKey: Keys.cityId) }
+        didSet {
+            guard oldValue != selectedCityId else { return }
+            defaults.set(selectedCityId, forKey: Keys.cityId)
+            markPushRegistrationPreferencesChanged()
+        }
     }
     var useCurrentLocation: Bool {
-        didSet { defaults.set(useCurrentLocation, forKey: Keys.useCurrentLocation) }
+        didSet {
+            guard oldValue != useCurrentLocation else { return }
+            defaults.set(useCurrentLocation, forKey: Keys.useCurrentLocation)
+            markPushRegistrationPreferencesChanged()
+        }
     }
     var radiusKm: Double {
-        didSet { defaults.set(radiusKm, forKey: Keys.radiusKm) }
+        didSet {
+            guard oldValue != radiusKm else { return }
+            defaults.set(radiusKm, forKey: Keys.radiusKm)
+            markPushRegistrationPreferencesChanged()
+        }
     }
     var minMagnitude: Double {
-        didSet { defaults.set(minMagnitude, forKey: Keys.minMagnitude) }
+        didSet {
+            guard oldValue != minMagnitude else { return }
+            defaults.set(minMagnitude, forKey: Keys.minMagnitude)
+            markPushRegistrationPreferencesChanged()
+        }
     }
     var enabledSources: Set<String> {
-        didSet { defaults.set(Array(enabledSources), forKey: Keys.sources) }
+        didSet {
+            let reviewedSources = enabledSources.intersection(Self.allSources)
+            let previousReviewedSources = oldValue.intersection(Self.allSources)
+            let normalizedSources = reviewedSources.isEmpty
+                ? (previousReviewedSources.isEmpty ? Set(Self.allSources) : previousReviewedSources)
+                : reviewedSources
+            if enabledSources != normalizedSources {
+                // At least one reviewed JMA source is required by both the
+                // foreground policy and protected registration contract.
+                enabledSources = normalizedSources
+            }
+            guard oldValue != enabledSources else { return }
+            defaults.set(enabledSources.sorted(), forKey: Keys.sources)
+            markPushRegistrationPreferencesChanged()
+        }
     }
     var includeTestAlerts: Bool {
-        didSet { defaults.set(includeTestAlerts, forKey: Keys.includeTestAlerts) }
+        didSet {
+            guard oldValue != includeTestAlerts else { return }
+            defaults.set(includeTestAlerts, forKey: Keys.includeTestAlerts)
+            markPushRegistrationPreferencesChanged()
+        }
     }
     var notifyAtNight: Bool {
-        didSet { defaults.set(notifyAtNight, forKey: Keys.notifyAtNight) }
+        didSet {
+            guard oldValue != notifyAtNight else { return }
+            defaults.set(notifyAtNight, forKey: Keys.notifyAtNight)
+            markPushRegistrationPreferencesChanged()
+        }
     }
     var alertSound: AlertSoundPreference {
         didSet {
+            guard oldValue != alertSound else { return }
             defaults.set(alertSound.rawValue, forKey: Keys.alertSound)
             WatchAlertPreferenceBridge.synchronizeFromPhone(alertSound)
+            markPushRegistrationPreferencesChanged()
         }
     }
+    /// A single observable trigger for every preference encoded into the
+    /// protected APNs registration. CityPickerView is reachable from Home and
+    /// onboarding as well as Settings, so registration resynchronization must
+    /// be owned by RootView rather than by one presentation of SettingsView.
+    private(set) var pushRegistrationPreferencesRevision = 0
     /// Controls whether this device is registered with QuakeSignal's alert
     /// service. It is separate from iOS notification permission, which only
     /// the user can change in Settings.
@@ -125,6 +170,10 @@ final class AppSettings {
 
     private let defaults: UserDefaults
 
+    private func markPushRegistrationPreferencesChanged() {
+        pushRegistrationPreferencesRevision &+= 1
+    }
+
     /// The injected defaults suite makes persistence behavior directly
     /// testable without mutating the application's live preferences.
     init(defaults: UserDefaults = .standard) {
@@ -135,9 +184,12 @@ final class AppSettings {
         minMagnitude = defaults.object(forKey: Keys.minMagnitude) as? Double ?? 3
         if let saved = defaults.array(forKey: Keys.sources) as? [String] {
             let reviewedSources = Set(saved).intersection(Self.allSources)
-            enabledSources = reviewedSources
-            if reviewedSources != Set(saved) {
-                defaults.set(reviewedSources.sorted(), forKey: Keys.sources)
+            let normalizedSources = reviewedSources.isEmpty
+                ? Set(Self.allSources)
+                : reviewedSources
+            enabledSources = normalizedSources
+            if normalizedSources != Set(saved) {
+                defaults.set(normalizedSources.sorted(), forKey: Keys.sources)
             }
         } else {
             enabledSources = Set(Self.allSources)
@@ -157,7 +209,10 @@ final class AppSettings {
         // An app termination can interrupt a request after it has been sent
         // but before its response is observed. Never restore that ambiguous
         // state as active: surface a retryable failure instead.
-        if persistedRegistrationState == .registering {
+        if !pushSubscriptionEnabled {
+            pushRegistrationState = .unregistered
+            defaults.set(PushRegistrationState.unregistered.rawValue, forKey: Keys.pushRegistrationState)
+        } else if persistedRegistrationState == .registering {
             pushRegistrationState = .failed
             defaults.set(PushRegistrationState.failed.rawValue, forKey: Keys.pushRegistrationState)
         } else {

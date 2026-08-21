@@ -61,11 +61,11 @@ the contingency Wolfx request unless the evidence record's stop conditions are
 triggered.
 
 The iOS multi-platform record (Apple ID `6800642443`) also contains a macOS
-draft. Do not attach this Tauri app or its metadata there: that record expects
-the shared iOS bundle ID, while this Mac app uses `com.quakesignal.desktop`.
-Leave that non-canonical draft untouched. The complete read-only portal state
-and safe action sequence are in
-[`ios/AppStore/app-store-connect-portal-audit-2026-08-19.md`](../../ios/AppStore/app-store-connect-portal-audit-2026-08-19.md).
+`1.1` draft for the canonical Swift-native Mac Catalyst route. Do not attach
+this Tauri app or modify that draft with Tauri metadata: the shared record
+expects `com.quakesignal.app`, while this dormant Mac app uses
+`com.quakesignal.desktop`. The current portal state and safe sequence are in
+[`ios/AppStore/app-store-connect-portal-audit-2026-08-22.md`](../../ios/AppStore/app-store-connect-portal-audit-2026-08-22.md).
 
 ### Final public URLs
 

@@ -194,8 +194,9 @@ export interface DistanceFilterEvent {
  * within that radius of the event's epicenter, AND (for drill/training
  * broadcasts) that have opted in to receiving them, AND (for routine
  * reports, at night, if quiet hours are enabled) aren't currently in their
- * quiet-hours window. A device with no latitude/longitude/radiusKm set gets
- * no distance filtering -- magnitude threshold alone still applies.
+ * quiet-hours window. Historical or malformed registrations without a full
+ * latitude/longitude/radius triplet fail closed and receive no automatic
+ * alert; there is no user-visible nationwide subscription mode.
  */
 export function listDevicesForSource(sourceId: WolfxSourceId, event: DistanceFilterEvent): DeviceRecord[] {
   const rows = db.prepare("SELECT * FROM devices").all() as any[];
@@ -206,12 +207,15 @@ export function listDevicesForSource(sourceId: WolfxSourceId, event: DistanceFil
     if (event.isRoutineReport && !d.notifyAtNight && d.utcOffsetMinutes != null) {
       if (isQuietHours(d.utcOffsetMinutes)) return false;
     }
-    if (d.radiusKm != null && d.latitude != null && d.longitude != null) {
-      if (event.latitude == null || event.longitude == null) return false;
-      const distance = haversineDistanceKm(d.latitude, d.longitude, event.latitude, event.longitude);
-      if (distance > d.radiusKm) return false;
-    }
-    return true;
+    if (
+      d.radiusKm == null ||
+      d.latitude == null ||
+      d.longitude == null ||
+      event.latitude == null ||
+      event.longitude == null
+    ) return false;
+    const distance = haversineDistanceKm(d.latitude, d.longitude, event.latitude, event.longitude);
+    return distance <= d.radiusKm;
   });
 }
 

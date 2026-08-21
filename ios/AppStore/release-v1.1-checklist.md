@@ -28,8 +28,9 @@ recorded in the existing submission documents.
   ordinary listing CI until one exact final commit has all 26 required Apple
   frames under `screenshot-release-sets-v1.1-build8/<source-commit>/`. Never
   reuse or mutate an occupied historical path.
-- Before upload, require the source-addressed screenshot release gate as well
-  as the ordinary listing checks:
+- Before screenshot upload, build attachment to version `1.1`, or App Review
+  submission, require the source-addressed screenshot release gate as well as
+  the ordinary listing checks:
 
   ```sh
   ruby .github/scripts/verify-store-assets.rb \
@@ -47,6 +48,12 @@ recorded in the existing submission documents.
 - Upload only the public `Release` archive. Never submit the `InternalQA`
   configuration, whose controlled delayed training control is intentionally
   excluded from the public build.
+- After the exact source/Worker policy, distribution credentials/profiles, and
+  store-complete icon gates pass, use the four protected GitHub upload lanes to
+  stage build 8 in TestFlight for internal/physical QA. This prerequisite upload
+  is not permission to select or attach a build to version `1.1`, add it to App
+  Review, submit it, or release it. Archive-only rehearsals are not final signed
+  evidence; the finalizer requires the four successful upload-run attestations.
 - Complete physical-device App Attest, APNs foreground/background/terminated,
   notification-sound, Silent Mode/Focus, location, and iPad QA before public
   submission.
@@ -68,9 +75,11 @@ recorded in the existing submission documents.
   evidence, pause the affected scope rather than claiming a private written
   license. Separately confirm the App Review contact fields.
 - Follow `apple-platform-release.md` for the iOS+embedded-Watch, tvOS,
-  visionOS, and Mac Catalyst protected Xcode Cloud archive actions. Do not
-  upload a native platform until its store-complete icon set, screenshots,
-  signing, metadata, and platform QA are approved.
+  visionOS, and Mac Catalyst protected GitHub archive/upload actions. Xcode
+  Cloud remains a future lane until an authorized owner creates its first
+  workflow. Do not attach a native build to version `1.1` or submit it until its
+  screenshots, signing, metadata, privacy/legal checks, and platform QA are
+  approved.
 - The Watch catalog is mechanically valid and intentionally carries the
   canonical signal artwork. Obtain named visual approval against SHA-256
   `b792fccc4c08645fb6485ab96c1882c069229246162b02ebdbb605157a5bc65f`;

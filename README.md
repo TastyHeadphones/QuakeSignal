@@ -247,10 +247,11 @@ Before a public Apple-platform release:
   `/healthz`. A different `workers.dev` hostname is only for isolated
   Debug/staging service and must not be used as a Release fallback.
 - Confirm the registered `com.quakesignal.app` and Watch App IDs and their
-  reviewed capabilities, then onboard the single coordinated build-8 workflow
-  from Xcode desktop. Use Xcode Cloud automatic signing and leave every
-  `QUAKESIGNAL_*_PROFILE_NAME` override unset; verify the resulting signed
-  archives and embedded entitlements rather than supplying manual profiles.
+  reviewed capabilities. The 2026-08-22 account audit found no configured
+  Xcode Cloud workflow, and this release forbids local Xcode, so use the
+  protected GitHub build-8 workflows with the five reviewed distribution
+  profiles. Pin every signing run to the frozen full source SHA and verify its
+  machine-readable signed-artifact attestation before TestFlight QA.
 - Keep Debug and Simulator clients on a separate staging Worker with no shared
   production data or credentials. Provision it through the protected
   `cloudflare-staging` environment, then complete physical-device APNs/App Attest,

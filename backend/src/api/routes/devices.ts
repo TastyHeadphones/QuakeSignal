@@ -53,9 +53,9 @@ devicesRouter.post("/", (req, res) => {
     (sources !== undefined && !isValidSources(sources)) ||
     (minMagnitude !== undefined && !isFiniteInRange(minMagnitude, 0, 10)) ||
     (alertSound !== undefined && !isAlertSound(alertSound)) ||
-    (latitude !== undefined && !isFiniteInRange(latitude, -90, 90)) ||
-    (longitude !== undefined && !isFiniteInRange(longitude, -180, 180)) ||
-    (radiusKm !== undefined && !isFiniteInRange(radiusKm, 1, 2_000)) ||
+    !isFiniteInRange(latitude, -90, 90) ||
+    !isFiniteInRange(longitude, -180, 180) ||
+    !isFiniteInRange(radiusKm, 1, 2_000) ||
     (utcOffsetMinutes !== undefined && !isFiniteInRange(utcOffsetMinutes, -720, 840)) ||
     (includeTestAlerts !== undefined && typeof includeTestAlerts !== "boolean") ||
     (notifyAtNight !== undefined && typeof notifyAtNight !== "boolean")

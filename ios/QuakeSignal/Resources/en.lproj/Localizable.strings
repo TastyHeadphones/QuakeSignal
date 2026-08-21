@@ -63,6 +63,7 @@
 "settings.section.sources" = "Alert Sources";
 "settings.source.jma_eew" = "JMA — Early Warning";
 "settings.source.jma_eqlist" = "JMA — Earthquake Reports";
+"settings.sources.minimum" = "Keep at least one JMA alert source enabled.";
 "settings.section.threshold" = "Minimum Magnitude";
 "settings.section.notifications" = "Notifications";
 "settings.openNotificationSettings" = "Review Notification Settings";
@@ -70,7 +71,7 @@
 "settings.notificationDelivery.degraded.detail" = "Turn on alerts, sounds, and Time Sensitive Notifications in system Settings for the best available delivery. QuakeSignal does not bypass Silent Mode or Focus.";
 "settings.alertSound.title" = "Alert Sound";
 "settings.alertSound.system" = "System Default";
-"settings.alertSound.system.detail" = "Apple's standard notification sound.";
+"settings.alertSound.system.detail" = "The normal notification sound in the background and a short system alert while QuakeSignal is open.";
 "settings.alertSound.urgentTone" = "QuakeSignal Urgent Tone";
 "settings.alertSound.urgentTone.detail" = "An original, distinctive two-note warning tone.";
 "settings.alertSound.japaneseVoice" = "Japanese Safety Voice";
@@ -105,6 +106,7 @@
 "settings.pushSubscription.retry.success" = "Alert registration updated.";
 "settings.pushSubscription.retry.failure" = "Couldn't update alert registration: %1$@";
 "settings.pushSubscription.sync.failure" = "Couldn't update alert registration: %1$@. Retry from this screen.";
+"settings.pushSubscription.locationRequired" = "Choose a city or current location before enabling nearby earthquake alerts.";
 "settings.pushSubscription.status.unregistered" = "Alert registration has not reached QuakeSignal yet.";
 "settings.pushSubscription.status.registering" = "Updating alert registration…";
 "settings.pushSubscription.status.active" = "Alert registration is active.";
@@ -146,6 +148,8 @@
 /* Home */
 "home.status.normal" = "No nearby activity";
 "home.status.normal.detail" = "Nothing significant within %1$d km in the last 24 hours";
+"home.status.locationRequired" = "Choose an alert area";
+"home.status.locationRequired.detail" = "Select a city or current location to filter nearby activity and enable earthquake alerts.";
 "home.status.caution" = "Nearby earthquake information";
 "home.status.caution.detail" = "M%2$@ earthquake %1$d km away — tap to view";
 "home.status.caution.detail.noDistance" = "A recent M%1$@ earthquake was reported — tap to view";

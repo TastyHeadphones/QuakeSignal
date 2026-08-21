@@ -31,17 +31,22 @@ value.
 - [x] Record the release owner's Mac route: SwiftUI Mac Catalyst in shared
   Apple ID `6800642443`, with Designed for iPad on Mac disabled and the Tauri
   record left unused. See `release-owner-decisions-2026-08-20.md`.
-- [ ] Complete Mac Catalyst automatic signing, Mac QA, exact screenshots,
-  metadata, signed-Release parity, availability, and named approval.
+- [x] Save the shared Mac draft as `1.1` with exact Catalyst metadata, manual
+  release, and Designed for iPad on Mac disabled (2026-08-22 portal audit).
+- [ ] Complete protected GitHub Mac Catalyst signing, Mac QA, exact
+  screenshots, signed-Release parity, availability, and named approval.
 - [ ] Verify the English name, category, bundle ID, SKU, version, copyright,
   exact `en-US/subtitle.txt`, and current build against
   `submission-answers.md` and the signed archive.
-- [ ] Enter an accountable UniSphereco LLC App Review contact name, email, and
-  phone number.
+- [x] Save App Review and TestFlight contacts from the authenticated Apple
+  Developer Account Holder membership record without copying personal values
+  into source.
+- [ ] Visually confirm the complete contact block during the final portal pass.
 - [ ] Copy the exact current `review-notes.txt` content only after checking it
   against the selected public archive.
-- [ ] Choose price, territories, availability timing, and any customer-facing
-  Terms/EULA option only after release-owner approval.
+- [x] Confirm Free public distribution across 175 countries or regions.
+- [ ] Choose final availability timing and any customer-facing Terms/EULA
+  option only after release-owner approval.
 - [ ] Keep Japanese and Simplified Chinese localizations unpublished until the
   exact display names, availability, and trademark review are approved.
 - [ ] Freeze `screenshot-provenance-v1.1.json`, verify all 30 hashes, and
@@ -51,10 +56,11 @@ value.
   evidence only. It predates the current source. Recapture the exact final
   build-8 commit, then separately obtain named visual approval and signed
   public-Release parity before any upload.
-- [ ] Complete the Apple Watch, tvOS, visionOS, and Mac Catalyst metadata,
-  screenshot, icon, signing, and platform-QA gates in `platforms/` before
-  submitting those experiences. tvOS, visionOS, Watch, and Mac Catalyst must
-  remain foreground-only in every independent-notification claim.
+- [x] Save the exact tvOS, visionOS, and Mac Catalyst `1.1` copy recorded in
+  the 2026-08-22 portal audit.
+- [ ] Complete Apple Watch/tvOS/visionOS/Mac screenshots, icons, signing,
+  remaining privacy/App Motion answers, and platform QA before submission.
+  All four remain foreground-only in every independent-notification claim.
 - [ ] Record named visual approval for the exact Watch icon digest pinned by
   `verify-store-assets.rb`; do not infer approval from catalog validity or from
   its deliberate reuse of the canonical iOS signal artwork.

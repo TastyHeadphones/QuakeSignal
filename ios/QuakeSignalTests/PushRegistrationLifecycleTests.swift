@@ -51,6 +51,23 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "settings.pushRegistrationState"), PushRegistrationState.failed.rawValue)
     }
 
+    func testDisabledSubscriptionCannotRestoreContradictoryActiveState() throws {
+        let suiteName = "PushRegistrationLifecycleTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(false, forKey: "settings.pushSubscriptionEnabled")
+        defaults.set(PushRegistrationState.active.rawValue, forKey: "settings.pushRegistrationState")
+
+        let restored = AppSettings(defaults: defaults)
+        XCTAssertFalse(restored.pushSubscriptionEnabled)
+        XCTAssertEqual(restored.pushRegistrationState, .unregistered)
+        XCTAssertEqual(
+            defaults.string(forKey: "settings.pushRegistrationState"),
+            PushRegistrationState.unregistered.rawValue
+        )
+    }
+
     func testSettingsRegistrationControlRequiresConfirmedRegistrationBeforeOfferingRemoval() {
         XCTAssertEqual(
             PushSubscriptionControlAction.resolve(
@@ -145,6 +162,85 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertTrue(settings.useCurrentLocation)
         XCTAssertEqual(settings.selectedCityId, "tokyo")
         XCTAssertEqual(defaults.string(forKey: "settings.cityId"), "tokyo")
+    }
+
+    func testEveryServerAlertPreferenceAdvancesTheCentralRegistrationRevision() throws {
+        let suiteName = "PushRegistrationLifecycleTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let settings = AppSettings(defaults: defaults)
+        var previousRevision = settings.pushRegistrationPreferencesRevision
+        let mutations: [() -> Void] = [
+            { settings.selectedCityId = "tokyo" },
+            { settings.useCurrentLocation = true },
+            { settings.radiusKm = 300 },
+            { settings.minMagnitude = 4 },
+            { settings.enabledSources = ["jma_eew"] },
+            { settings.includeTestAlerts = true },
+            { settings.notifyAtNight = false },
+            { settings.alertSound = .japaneseVoice },
+        ]
+
+        for mutation in mutations {
+            mutation()
+            XCTAssertEqual(
+                settings.pushRegistrationPreferencesRevision,
+                previousRevision + 1
+            )
+            previousRevision = settings.pushRegistrationPreferencesRevision
+        }
+
+        settings.alertSound = .japaneseVoice
+        XCTAssertEqual(
+            settings.pushRegistrationPreferencesRevision,
+            previousRevision,
+            "Re-selecting an already-active value must not enqueue another server update."
+        )
+    }
+
+    func testSourceSelectionNeverBecomesEmptyOrRestoresAnEmptyLegacyValue() throws {
+        let suiteName = "PushRegistrationLifecycleTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set([], forKey: "settings.sources")
+        let settings = AppSettings(defaults: defaults)
+        XCTAssertEqual(settings.enabledSources, Set(AppSettings.allSources))
+        XCTAssertEqual(
+            Set(defaults.stringArray(forKey: "settings.sources") ?? []),
+            Set(AppSettings.allSources)
+        )
+
+        settings.enabledSources = ["jma_eew"]
+        let revision = settings.pushRegistrationPreferencesRevision
+        settings.enabledSources = []
+        XCTAssertEqual(settings.enabledSources, ["jma_eew"])
+        XCTAssertEqual(settings.pushRegistrationPreferencesRevision, revision)
+        XCTAssertEqual(defaults.stringArray(forKey: "settings.sources"), ["jma_eew"])
+    }
+
+    func testMissingLocationRegistrationErrorIsActionable() {
+        XCTAssertEqual(
+            PushRegistrationPreparationError.locationRequired.errorDescription,
+            String(localized: "settings.pushSubscription.locationRequired")
+        )
+        XCTAssertTrue(MissingLocationRegistrationPolicy.shouldDeleteServerRegistration(
+            registrationState: .active,
+            locationRequestInFlight: false
+        ))
+        XCTAssertFalse(MissingLocationRegistrationPolicy.shouldDeleteServerRegistration(
+            registrationState: .active,
+            locationRequestInFlight: true
+        ))
+        XCTAssertTrue(MissingLocationRegistrationPolicy.shouldDeleteServerRegistration(
+            registrationState: .failed,
+            locationRequestInFlight: false
+        ))
+        XCTAssertFalse(MissingLocationRegistrationPolicy.shouldDeleteServerRegistration(
+            registrationState: .unregistered,
+            locationRequestInFlight: false
+        ))
     }
 
     func testAlertSoundPreferencePersistsAndUsesStableWireValue() throws {
@@ -395,6 +491,34 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertFalse(LocationSelectionStatus.denied.canRequestCurrentLocation)
         XCTAssertTrue(LocationSelectionStatus.permissionRequired.canRequestCurrentLocation)
         XCTAssertTrue(LocationSelectionStatus.current.canRequestCurrentLocation)
+    }
+
+    func testAuthorizationContinuationRequiresExplicitCurrentLocationIntent() {
+        XCTAssertTrue(LocationAuthorizationContinuationPolicy.shouldRequestFix(
+            authorizationStatus: .authorizedWhenInUse,
+            useCurrentLocation: true,
+            pendingPurpose: .subscription
+        ))
+        XCTAssertFalse(LocationAuthorizationContinuationPolicy.shouldRequestFix(
+            authorizationStatus: .authorizedWhenInUse,
+            useCurrentLocation: false,
+            pendingPurpose: .subscription
+        ))
+        XCTAssertTrue(LocationAuthorizationContinuationPolicy.shouldRequestFix(
+            authorizationStatus: .authorizedWhenInUse,
+            useCurrentLocation: false,
+            pendingPurpose: .mapFocus
+        ))
+        XCTAssertFalse(LocationAuthorizationContinuationPolicy.shouldRequestFix(
+            authorizationStatus: .denied,
+            useCurrentLocation: true,
+            pendingPurpose: .subscription
+        ))
+        XCTAssertFalse(LocationAuthorizationContinuationPolicy.shouldRequestFix(
+            authorizationStatus: .authorizedWhenInUse,
+            useCurrentLocation: true,
+            pendingPurpose: nil
+        ))
     }
 
     func testLocationFixRemainingLifetimeUsesOriginalTimestampBoundaries() {

@@ -64,16 +64,17 @@ xcodebuild -project QuakeSignal.xcodeproj -scheme QuakeSignalWatch \
 ```
 
 Use an installed simulator name instead of `iPhone 17 Pro` when that runtime is
-not present. The primary App Store route is the coordinated Xcode Cloud
-workflow with automatic signing. Leave every `QUAKESIGNAL_*_PROFILE_NAME`
-variable absent so Xcode Cloud can resolve an Apple-managed profile for each
-archive action, including the embedded Watch app.
-
-The separately protected GitHub archive workflow is a manual fallback. Only
-that fallback uses the target-scoped `QUAKESIGNAL_IOS_PROFILE_NAME`,
+not present. Action-time inspection on 2026-08-22 found no configured Xcode
+Cloud workflow, and this release forbids local Xcode. The current App Store
+route is therefore the protected GitHub archive workflow, pinned to one frozen
+source commit. It uses the target-scoped `QUAKESIGNAL_IOS_PROFILE_NAME`,
 `QUAKESIGNAL_CATALYST_PROFILE_NAME`, `QUAKESIGNAL_VISION_PROFILE_NAME`,
 `QUAKESIGNAL_TV_PROFILE_NAME`, and `QUAKESIGNAL_WATCH_PROFILE_NAME` values to
 prevent a host profile from signing the wrong target.
+
+The coordinated automatic-signing Xcode Cloud specification remains a future
+alternative. If it is later onboarded by an authorized owner, leave all manual
+profile-name variables absent there and re-audit its server-side workflow.
 
 TV, Watch, and Vision intentionally carry no alert entitlements. Catalyst uses
 `QuakeSignal-Catalyst.entitlements` for App Sandbox, outbound network access,

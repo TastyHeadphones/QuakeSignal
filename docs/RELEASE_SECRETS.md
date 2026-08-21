@@ -19,6 +19,12 @@ represented in this repository.
 
 ## `ios-app-store-release`
 
+Require at least one reviewer and enable **Prevent self-review**. For the hosted
+screenshot finalizer, the approving account must be different from the dispatch
+actor and the three reviewer inputs must be that approved account's exact GitHub
+login. The job uses its read-only Actions token to query the canonical run's
+environment review history and fails closed when this machine binding is absent.
+
 | Name | Kind | Value |
 | --- | --- | --- |
 | `IOS_APP_STORE_CERTIFICATE` | Secret | Base64-encoded Apple Distribution `.p12` for `com.quakesignal.app` |
@@ -44,14 +50,18 @@ represented in this repository.
 The Account Holder must first enable App Store Connect API access. Use a
 least-privilege team key. The workflows only upload when a trusted maintainer
 starts **iOS** or **Native Apple platform release → Run workflow** with
-`upload_to_testflight` enabled. The Catalyst lane requires both the Apple
+`upload_to_testflight` enabled and the exact lowercase protected-main
+`source_commit`. The job checks out that commit without persisted credentials
+and requires it to equal the dispatch head before exposing any signing secret.
+The Catalyst lane requires both the Apple
 Distribution application identity and the separate Mac Installer Distribution
 identity. Because this repository is public, the verified iOS, tvOS, and
 visionOS `.ipa` files and Catalyst `.pkg` are never retained as GitHub Actions
-artifacts. Each workflow records the artifact's SHA-256 digest and, only with
+artifacts. Each workflow retains only a small 30-day JSON attestation binding
+the canonical workflow run/head SHA to the artifact kind and SHA-256 digest and, only with
 explicit upload consent, rehashes and sends that same verified binary directly
-to App Store Connect. An archive-only run retains its log and digest, not the
-signed release binary.
+to App Store Connect. An archive-only run retains its log and attestation, not
+the signed release binary, and is not eligible for final screenshot approval.
 
 The five named profiles above exist in the Apple Developer portal as of
 2026-08-22 and expire on 2027-08-12. The Watch, tvOS, visionOS, and Catalyst

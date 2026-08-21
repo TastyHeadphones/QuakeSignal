@@ -243,6 +243,20 @@ class AppleScreenshotReleaseSetValidator
     "visionos" => 5,
     "maccatalyst" => 5,
   }.freeze
+  SIGNED_RELEASE_WORKFLOW_FILES = {
+    "ios-ipados" => ".github/workflows/ios.yml",
+    "tvos" => ".github/workflows/apple-platforms.yml",
+    "watchos" => ".github/workflows/ios.yml",
+    "visionos" => ".github/workflows/apple-platforms.yml",
+    "maccatalyst" => ".github/workflows/apple-platforms.yml",
+  }.freeze
+  SIGNED_RELEASE_ARTIFACT_KINDS = {
+    "ios-ipados" => "ipa",
+    "tvos" => "ipa",
+    "watchos" => "ipa",
+    "visionos" => "ipa",
+    "maccatalyst" => "pkg",
+  }.freeze
   PLAN_PATHS = {
     "ios-ipados" => "ios/AppStore/screenshot-manifest-v1.1-build8.template.json",
     "tvos" => "ios/AppStore/platforms/tvos/screenshot-manifest-v1.1-build8.json",
@@ -1074,11 +1088,11 @@ class AppleScreenshotReleaseSetValidator
       approval,
       %w[
         schemaVersion status uploadApproved sourceCommit releaseSetManifestSha256
-        dispatchActorGitHubLogin captureRun approvals reviewedAtUtc platforms
+        dispatchActorGitHubLogin environmentApproval captureRun approvals reviewedAtUtc platforms
       ],
       "release approval",
     )
-    require_equal!(approval.fetch("schemaVersion"), 2, "release approval schemaVersion")
+    require_equal!(approval.fetch("schemaVersion"), 3, "release approval schemaVersion")
     require_equal!(approval.fetch("status"), "approved-for-build8-upload", "release approval status")
     require_equal!(approval.fetch("uploadApproved"), true, "release approval uploadApproved")
     require_equal!(approval.fetch("sourceCommit"), source_commit, "release approval sourceCommit")
@@ -1088,14 +1102,20 @@ class AppleScreenshotReleaseSetValidator
       raise AppleScreenshotReleaseSetValidationError,
             "release approval requires the dispatching GitHub login"
     end
-    validate_capture_run_approval!(approval.fetch("captureRun"), source_commit)
+    approved_reviewer_logins = validate_environment_approval!(
+      approval.fetch("environmentApproval"),
+      source_commit,
+      actor,
+    )
+    capture_run_completed_at =
+      validate_capture_run_approval!(approval.fetch("captureRun"), source_commit)
     approvals = approval.fetch("approvals")
     require_exact_keys!(
       approvals,
       %w[visual privacy signedReleaseParity],
       "named release approvals",
     )
-    latest_capture = capture_completed_at.values.max
+    latest_capture = (capture_completed_at.values + [capture_run_completed_at]).max
     approval_reviewed_at = approvals.to_h do |kind, record|
       require_exact_keys!(record, %w[approved reviewer reviewedAtUtc], "#{kind} approval")
       require_equal!(record.fetch("approved"), true, "#{kind} approval")
@@ -1104,6 +1124,10 @@ class AppleScreenshotReleaseSetValidator
              !reviewer.match?(/[\u0000-\u001f\u007f]/)
         raise AppleScreenshotReleaseSetValidationError,
               "#{kind} approval requires a valid named reviewer"
+      end
+      unless approved_reviewer_logins.include?(reviewer) && !reviewer.casecmp?(actor)
+        raise AppleScreenshotReleaseSetValidationError,
+              "#{kind} reviewer must be an approved protected-environment login distinct from the actor"
       end
       review_time = strict_utc_time!(record.fetch("reviewedAtUtc"), "#{kind} reviewedAtUtc")
       unless review_time >= latest_capture
@@ -1119,19 +1143,78 @@ class AppleScreenshotReleaseSetValidator
       raise AppleScreenshotReleaseSetValidationError, "release approval platforms must be an array"
     end
     require_equal!(platforms.map { |record| record.fetch("platform") }, REQUIRED_PLATFORMS.keys, "release approval platform order")
+    signed_run_ids = {}
+    signed_run_attempts = {}
+    signed_hashes = {}
+    attestation_names = {}
+    attestation_digests = {}
     parity_reviewed_at = platforms.to_h do |record|
       platform = record.fetch("platform")
       require_exact_keys!(
         record,
         %w[
-          platform signedReleaseArtifactSha256 signedBuildSourceCommit
-          signedReleaseParityApproved parityReviewedAtUtc
+          platform signedReleaseRunId signedReleaseRunAttempt signedReleaseWorkflowFile
+          signedReleaseAttestationArtifactName signedReleaseAttestationArtifactDigest
+          signedReleaseArtifactKind signedReleaseArtifactSha256 signedMarketingVersion
+          signedBuildNumber signedDistributionMode signedReleaseAttestedAtUtc
+          signedBuildSourceCommit signedRunCompletedAtUtc signedReleaseParityApproved
+          parityReviewedAtUtc
         ],
         "#{platform} release approval",
       )
+      run_id = record.fetch("signedReleaseRunId")
+      unless run_id.is_a?(Integer) && run_id.positive?
+        raise AppleScreenshotReleaseSetValidationError,
+              "#{platform} signed release run ID must be a positive integer"
+      end
+      run_attempt = record.fetch("signedReleaseRunAttempt")
+      unless run_attempt.is_a?(Integer) && run_attempt.positive?
+        raise AppleScreenshotReleaseSetValidationError,
+              "#{platform} signed release run attempt must be a positive integer"
+      end
+      require_equal!(
+        record.fetch("signedReleaseWorkflowFile"),
+        SIGNED_RELEASE_WORKFLOW_FILES.fetch(platform),
+        "#{platform} signed release workflow file",
+      )
+      role = %w[ios-ipados watchos].include?(platform) ? "ios-ipados-watchos" : platform
+      require_equal!(
+        record.fetch("signedReleaseAttestationArtifactName"),
+        "signed-release-attestation-#{role}-#{source_commit}-#{run_id}-#{run_attempt}",
+        "#{platform} signed release attestation artifact name",
+      )
+      digest = record.fetch("signedReleaseAttestationArtifactDigest")
+      unless digest.is_a?(String) && digest.match?(/\Asha256:[0-9a-f]{64}\z/)
+        raise AppleScreenshotReleaseSetValidationError,
+              "#{platform} signed release attestation artifact digest is invalid"
+      end
+      require_equal!(
+        record.fetch("signedReleaseArtifactKind"),
+        SIGNED_RELEASE_ARTIFACT_KINDS.fetch(platform),
+        "#{platform} signed release artifact kind",
+      )
       require_sha256!(record.fetch("signedReleaseArtifactSha256"), "#{platform} signed artifact SHA-256")
+      require_equal!(record.fetch("signedMarketingVersion"), PRODUCT.fetch("marketingVersion"),
+                     "#{platform} signed marketing version")
+      require_equal!(record.fetch("signedBuildNumber"), PRODUCT.fetch("build"),
+                     "#{platform} signed build number")
+      require_equal!(record.fetch("signedDistributionMode"), "testflight-upload",
+                     "#{platform} signed distribution mode")
+      signed_attested_at = strict_utc_time!(
+        record.fetch("signedReleaseAttestedAtUtc"),
+        "#{platform} signedReleaseAttestedAtUtc",
+      )
       signed_commit = record.fetch("signedBuildSourceCommit")
       require_full_commit!(signed_commit, "#{platform} signed build source commit")
+      require_equal!(signed_commit, source_commit, "#{platform} signed build source commit")
+      signed_run_completed_at = strict_utc_time!(
+        record.fetch("signedRunCompletedAtUtc"),
+        "#{platform} signedRunCompletedAtUtc",
+      )
+      unless signed_attested_at <= signed_run_completed_at
+        raise AppleScreenshotReleaseSetValidationError,
+              "#{platform} signed attestation must not postdate signed run completion"
+      end
       require_equal!(record.fetch("signedReleaseParityApproved"), true, "#{platform} signed Release parity")
       parity_time = strict_utc_time!(
         record.fetch("parityReviewedAtUtc"),
@@ -1146,23 +1229,84 @@ class AppleScreenshotReleaseSetValidator
         raise AppleScreenshotReleaseSetValidationError,
               "#{platform} signed parity review must not predate screenshot capture completion"
       end
+      unless parity_time >= signed_run_completed_at
+        raise AppleScreenshotReleaseSetValidationError,
+              "#{platform} signed parity review must not predate signed upload completion"
+      end
       @source_guard.validate_product_equivalent!(source_commit, signed_commit)
+      signed_run_ids[platform] = run_id
+      signed_run_attempts[platform] = run_attempt
+      signed_hashes[platform] = record.fetch("signedReleaseArtifactSha256")
+      attestation_names[platform] = record.fetch("signedReleaseAttestationArtifactName")
+      attestation_digests[platform] = digest
       [platform, parity_time]
     end
-    latest_required_review_time =
-      (capture_completed_at.values + approval_reviewed_at.values + parity_reviewed_at.values).max
-    unless reviewed_at >= latest_required_review_time
+    require_equal!(signed_run_ids.fetch("ios-ipados"), signed_run_ids.fetch("watchos"),
+                   "iOS/iPadOS and watchOS signed release run ID")
+    require_equal!(signed_run_attempts.fetch("ios-ipados"), signed_run_attempts.fetch("watchos"),
+                   "iOS/iPadOS and watchOS signed release run attempt")
+    require_equal!(signed_hashes.fetch("ios-ipados"), signed_hashes.fetch("watchos"),
+                   "iOS/iPadOS and watchOS signed IPA SHA-256")
+    require_equal!(attestation_names.fetch("ios-ipados"), attestation_names.fetch("watchos"),
+                   "iOS/iPadOS and watchOS signed attestation name")
+    require_equal!(attestation_digests.fetch("ios-ipados"), attestation_digests.fetch("watchos"),
+                   "iOS/iPadOS and watchOS signed attestation digest")
+    require_equal!(signed_run_ids.values.uniq.length, 4, "distinct signed release run count")
+    require_equal!(signed_hashes.values.uniq.length, 4, "distinct signed release artifact count")
+    require_equal!(attestation_names.values.uniq.length, 4, "distinct signed attestation name count")
+    require_equal!(attestation_digests.values.uniq.length, 4, "distinct signed attestation digest count")
+    require_equal!(parity_reviewed_at.values.uniq.length, 1,
+                   "signed Release parity completion time count")
+    require_equal!(reviewed_at, approval_reviewed_at.values.max,
+                   "overall release review completion time")
+  end
+
+  def validate_environment_approval!(environment_approval, source_commit, actor)
+    require_exact_keys!(
+      environment_approval,
+      %w[
+        schemaVersion repository runId runAttempt workflowFile headSha environment
+        approvedReviewerGitHubLogins
+      ],
+      "protected environment approval",
+    )
+    require_equal!(environment_approval.fetch("schemaVersion"), 1,
+                   "protected environment approval schemaVersion")
+    require_equal!(environment_approval.fetch("repository"), CANONICAL_REPOSITORY,
+                   "protected environment approval repository")
+    run_id = environment_approval.fetch("runId")
+    run_attempt = environment_approval.fetch("runAttempt")
+    unless run_id.is_a?(Integer) && run_id.positive? &&
+           run_attempt.is_a?(Integer) && run_attempt.positive?
       raise AppleScreenshotReleaseSetValidationError,
-            "overall release review must not predate capture completion or platform parity review"
+            "protected environment approval requires a positive run ID and attempt"
     end
+    require_equal!(environment_approval.fetch("workflowFile"),
+                   ".github/workflows/apple-screenshot-release-ready.yml",
+                   "protected environment approval workflow")
+    require_equal!(environment_approval.fetch("headSha"), source_commit,
+                   "protected environment approval head SHA")
+    require_equal!(environment_approval.fetch("environment"), "ios-app-store-release",
+                   "protected environment approval environment")
+    logins = environment_approval.fetch("approvedReviewerGitHubLogins")
+    unless logins.is_a?(Array) && !logins.empty? && logins == logins.uniq.sort &&
+           logins.all? { |login| login.is_a?(String) && login.match?(/\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\z/) }
+      raise AppleScreenshotReleaseSetValidationError,
+            "protected environment approved reviewer login inventory is invalid"
+    end
+    unless logins.any? { |login| !login.casecmp?(actor) }
+      raise AppleScreenshotReleaseSetValidationError,
+            "protected environment approval requires a reviewer distinct from the actor"
+    end
+    logins
   end
 
   def validate_capture_run_approval!(capture_run, source_commit)
     require_exact_keys!(
       capture_run,
       %w[
-        schemaVersion repository runId workflowFile event headBranch headSha status
-        conclusion artifacts
+        schemaVersion repository runId runAttempt workflowFile event headBranch headSha status
+        conclusion completedAtUtc artifacts
       ],
       "capture run approval",
     )
@@ -1173,6 +1317,10 @@ class AppleScreenshotReleaseSetValidator
     unless run_id.is_a?(Integer) && run_id.positive?
       raise AppleScreenshotReleaseSetValidationError, "capture run ID must be a positive integer"
     end
+    run_attempt = capture_run.fetch("runAttempt")
+    unless run_attempt.is_a?(Integer) && run_attempt.positive?
+      raise AppleScreenshotReleaseSetValidationError, "capture run attempt must be a positive integer"
+    end
     require_equal!(capture_run.fetch("workflowFile"), CAPTURE_WORKFLOW_FILE,
                    "capture run workflow file")
     require_equal!(capture_run.fetch("event"), "workflow_dispatch", "capture run event")
@@ -1180,6 +1328,7 @@ class AppleScreenshotReleaseSetValidator
     require_equal!(capture_run.fetch("headSha"), source_commit, "capture run head SHA")
     require_equal!(capture_run.fetch("status"), "completed", "capture run status")
     require_equal!(capture_run.fetch("conclusion"), "success", "capture run conclusion")
+    completed_at = strict_utc_time!(capture_run.fetch("completedAtUtc"), "capture run completedAtUtc")
     artifacts = capture_run.fetch("artifacts")
     unless artifacts.is_a?(Array)
       raise AppleScreenshotReleaseSetValidationError, "capture run artifacts must be an array"
@@ -1216,6 +1365,7 @@ class AppleScreenshotReleaseSetValidator
     end
     require_equal!(artifact_ids.uniq.length, artifact_ids.length,
                    "capture run unique artifact ID count")
+    completed_at
   end
 
   def validate_release_root_inventory!(release_root, include_approval:)

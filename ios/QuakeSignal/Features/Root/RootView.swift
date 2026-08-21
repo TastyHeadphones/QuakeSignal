@@ -17,6 +17,7 @@ struct RootView: View {
     @State private var store = QuakeStore.shared
     @State private var notifications = NotificationManager.shared
     @State private var locationManager = LocationManager.shared
+    @State private var settings = AppSettings.shared
     @State private var isSynchronizingPushRegistration = false
     @State private var needsPushRegistration = false
     @State private var showingUnavailableAlert = false
@@ -94,11 +95,13 @@ struct RootView: View {
             }
             // AppDelegate configures the notification delegate before launch
             // finishes; callbacks buffered before this task are drained when
-            // these handlers are installed.
-            schedulePushRegistration()
-            if AppSettings.shared.useCurrentLocation {
+            // these handlers are installed. Start a requested GPS renewal
+            // first so registration waits for its success/failure instead of
+            // deleting a still-valid prior row during the brief launch gap.
+            if settings.useCurrentLocation {
                 locationManager.requestCurrentLocation()
             }
+            schedulePushRegistration()
             await store.start()
         }
         .onChange(of: notifications.deviceToken) { _, _ in
@@ -121,12 +124,63 @@ struct RootView: View {
                 // iPhone Settings, then request a fresh fix. The cached status
                 // can otherwise leave the app stuck on the old city fallback.
                 locationManager.requestCurrentLocation()
+                if !locationManager.isRequestingLocation {
+                    // Denied/restricted cannot produce a coordinate callback;
+                    // apply the city fallback or stale-row cleanup now.
+                    schedulePushRegistration()
+                }
             }
         }
-        .onChange(of: coarseCurrentLocation) { _, _ in
+        .onChange(of: coarseCurrentLocation) { _, coordinate in
             // Observing the quantized cell, rather than every GPS fix, keeps
             // re-registration bounded while still resyncing after the first
             // current-location result or a meaningful movement.
+            if settings.useCurrentLocation, coordinate == nil {
+                // Keep the server's last bounded subscription while inactive;
+                // foreground renewal will either replace it or explicitly
+                // delete it after a failed fix.
+                guard scenePhase == .active else { return }
+                if !locationManager.isRequestingLocation {
+                    locationManager.requestCurrentLocation()
+                }
+            }
+            schedulePushRegistration()
+        }
+        .onChange(of: locationManager.lastRequestFailed) { _, didFail in
+            guard didFail,
+                  settings.useCurrentLocation,
+                  scenePhase == .active else { return }
+            // No coordinate callback follows a failed renewal. Run the same
+            // registration path so a city fallback replaces the GPS row, or
+            // an absent fallback deletes the now-stale server registration.
+            schedulePushRegistration()
+        }
+        .onChange(of: locationManager.isRequestingLocation) { _, isRequesting in
+            guard !isRequesting,
+                  settings.useCurrentLocation,
+                  scenePhase == .active else { return }
+            // A fast cached fix can clear and restore the same coarse cell
+            // before SwiftUI observes the intermediate nil coordinate. The
+            // request-completion edge guarantees the deferred registration is
+            // resumed even when the quantized coordinate itself is unchanged.
+            schedulePushRegistration()
+        }
+        .onChange(of: settings.useCurrentLocation) { _, isEnabled in
+            if isEnabled {
+                if scenePhase == .active,
+                   locationManager.currentLocation == nil,
+                   !locationManager.isRequestingLocation {
+                    locationManager.requestCurrentLocation()
+                }
+            } else {
+                locationManager.stopUsingSubscriptionLocation()
+            }
+        }
+        .onChange(of: settings.pushRegistrationPreferencesRevision) { _, _ in
+            // AppSettings owns this trigger so changes from Home, onboarding,
+            // Settings, or any future surface all update the same protected
+            // server registration. The coalescer below retains only the newest
+            // complete preference/location snapshot.
             schedulePushRegistration()
         }
         .alert("notification.unavailable.title", isPresented: $showingUnavailableAlert) {
@@ -162,6 +216,14 @@ struct RootView: View {
               notifications.deviceToken != nil else {
             return
         }
+        if settings.useCurrentLocation,
+           locationManager.currentLocation == nil,
+           locationManager.isRequestingLocation {
+            // A saved city is a failure fallback, not an interim replacement
+            // for the last server-confirmed GPS area. Wait for this explicit
+            // foreground renewal to succeed or fail before changing the row.
+            return
+        }
 
         needsPushRegistration = true
         guard !isSynchronizingPushRegistration else { return }
@@ -180,9 +242,9 @@ struct RootView: View {
                 do {
                     try await store.registerForPush(token: token)
                 } catch {
-                    // `QuakeStore` durably records `.failed` before it
-                    // rethrows. Do not spin on a transient outage here; the
-                    // Settings retry control and the next meaningful APNs,
+                    // `QuakeStore` records the authoritative retryable,
+                    // failed, or still-active-renewal state before rethrowing.
+                    // Do not spin here; Settings and the next meaningful APNs,
                     // location, or preference trigger can attempt it again.
                     return
                 }

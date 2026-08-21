@@ -63,6 +63,7 @@
 "settings.section.sources" = "预警数据源";
 "settings.source.jma_eew" = "日本气象厅 — 地震预警";
 "settings.source.jma_eqlist" = "日本气象厅 — 地震速报";
+"settings.sources.minimum" = "请至少启用一个日本气象厅提醒来源。";
 "settings.section.threshold" = "最小震级";
 "settings.section.notifications" = "通知";
 "settings.openNotificationSettings" = "检查通知设置";
@@ -70,7 +71,7 @@
 "settings.notificationDelivery.degraded.detail" = "请在系统设置中开启提醒、声音和时效性通知，以获得系统允许的最佳送达效果。QuakeSignal 不会绕过静音模式或专注模式。";
 "settings.alertSound.title" = "提醒声音";
 "settings.alertSound.system" = "系统默认";
-"settings.alertSound.system.detail" = "使用 Apple 标准通知声音。";
+"settings.alertSound.system.detail" = "后台使用标准通知声音；QuakeSignal 打开时播放简短的系统提示音。";
 "settings.alertSound.urgentTone" = "QuakeSignal 紧急提示音";
 "settings.alertSound.urgentTone.detail" = "QuakeSignal 原创的醒目双音警示声。";
 "settings.alertSound.japaneseVoice" = "日语安全语音";
@@ -105,6 +106,7 @@
 "settings.pushSubscription.retry.success" = "提醒注册已更新。";
 "settings.pushSubscription.retry.failure" = "无法更新提醒注册：%1$@";
 "settings.pushSubscription.sync.failure" = "无法更新提醒注册：%1$@。请在此页面重试。";
+"settings.pushSubscription.locationRequired" = "请先选择城市或当前位置，再启用附近地震提醒。";
 "settings.pushSubscription.status.unregistered" = "提醒注册尚未同步到 QuakeSignal。";
 "settings.pushSubscription.status.registering" = "正在更新提醒注册…";
 "settings.pushSubscription.status.active" = "提醒注册已启用。";
@@ -145,6 +147,8 @@
 /* 首页 */
 "home.status.normal" = "当前暂无附近地震";
 "home.status.normal.detail" = "%1$d km 内 24 小时无显著事件";
+"home.status.locationRequired" = "请选择提醒区域";
+"home.status.locationRequired.detail" = "选择城市或当前位置，以筛选附近动态并启用地震提醒。";
 "home.status.caution" = "附近有地震信息";
 "home.status.caution.detail" = "%1$d km 处发生 M%2$@ 地震，点击查看";
 "home.status.caution.detail.noDistance" = "最近有 M%1$@ 地震信息，点击查看";

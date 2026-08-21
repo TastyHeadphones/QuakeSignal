@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       visual_reviewer:
-        description: Named reviewer who inspected all 26 full-resolution frames
+        description: Approved environment reviewer GitHub login that inspected all 26 full-resolution frames
         required: true
         type: string
       visual_review_approved:
@@ -21,7 +21,7 @@ on:
         default: false
         type: boolean
       privacy_reviewer:
-        description: Named reviewer who checked privacy and foreground-only claims
+        description: Approved environment reviewer GitHub login that checked privacy and foreground-only claims
         required: true
         type: string
       privacy_review_approved:
@@ -30,7 +30,7 @@ on:
         default: false
         type: boolean
       signed_parity_reviewer:
-        description: Named reviewer who compared every frame with signed Release builds
+        description: Approved environment reviewer GitHub login that compared every frame with signed Release builds
         required: true
         type: string
       signed_release_parity_approved:
@@ -38,8 +38,8 @@ on:
         required: true
         default: false
         type: boolean
-      signed_artifact_sha256s:
-        description: Exact JSON object of five platform keys to verified signed artifact SHA-256 values
+      signed_release_evidence:
+        description: Exact JSON with five platform run references and three real UTC review completion times
         required: true
         type: string
 
@@ -63,10 +63,12 @@ jobs:
       SOURCE_COMMIT: ${{ inputs.source_commit }}
       CONTROL_ROOT: ${{ runner.temp }}/quakesignal-screenshot-release-control-${{ github.run_id }}
       DOWNLOAD_ROOT: ${{ runner.temp }}/quakesignal-screenshot-release-downloads-${{ github.run_id }}
+      SIGNED_DOWNLOAD_ROOT: ${{ runner.temp }}/quakesignal-signed-release-downloads-${{ github.run_id }}
       EVIDENCE_ROOT: ${{ runner.temp }}/quakesignal-screenshot-release-evidence-${{ github.run_id }}
 
     steps:
       - name: Validate exact protected dispatch inputs
+        id: dispatch-evidence
         env:
           REF_PROTECTED: ${{ github.ref_protected }}
           VISUAL_REVIEWER: ${{ inputs.visual_reviewer }}
@@ -75,10 +77,10 @@ jobs:
           PRIVACY_APPROVED: ${{ inputs.privacy_review_approved }}
           SIGNED_PARITY_REVIEWER: ${{ inputs.signed_parity_reviewer }}
           SIGNED_PARITY_APPROVED: ${{ inputs.signed_release_parity_approved }}
-          SIGNED_ARTIFACT_SHA256S_JSON: ${{ inputs.signed_artifact_sha256s }}
+          SIGNED_RELEASE_EVIDENCE_JSON: ${{ inputs.signed_release_evidence }}
         run: |
           set -euo pipefail
-          /usr/bin/ruby -rjson -rpathname -e '
+          /usr/bin/ruby -rjson -rpathname -rtime -e '
             abort "release-ready screenshot handoff requires protected main" unless
               ENV.fetch("GITHUB_REF") == "refs/heads/main" && ENV.fetch("REF_PROTECTED") == "true"
             abort "release-ready screenshot handoff requires the canonical repository" unless
@@ -100,22 +102,128 @@ jobs:
               abort "#{kind} approval reviewer is a placeholder" if placeholder
               abort "#{kind} approval must be explicitly true" unless ENV.fetch("#{kind}_APPROVED") == "true"
             end
-            signed_hashes = JSON.parse(ENV.fetch("SIGNED_ARTIFACT_SHA256S_JSON"))
+            signed_evidence = JSON.parse(ENV.fetch("SIGNED_RELEASE_EVIDENCE_JSON"))
+            abort "signed release evidence must contain only signedRunIds and reviewedAtUtc" unless
+              signed_evidence.is_a?(Hash) && signed_evidence.keys.sort == %w[reviewedAtUtc signedRunIds]
             platforms = %w[ios-ipados tvos watchos visionos maccatalyst]
-            abort "signed artifact SHA-256 JSON must contain exactly five platform keys" unless
-              signed_hashes.is_a?(Hash) && signed_hashes.keys.sort == platforms.sort
+            run_ids = signed_evidence.fetch("signedRunIds")
+            abort "signedRunIds must contain exactly five platform keys" unless
+              run_ids.is_a?(Hash) && run_ids.keys.sort == platforms.sort
             platforms.each do |platform|
-              abort "#{platform} signed artifact SHA-256 is invalid" unless
-                signed_hashes.fetch(platform).is_a?(String) &&
-                signed_hashes.fetch(platform).match?(/\A[0-9a-f]{64}\z/)
+              id = run_ids.fetch(platform)
+              abort "#{platform} signed run ID must be a positive integer" unless
+                id.is_a?(Integer) && id.positive? && id.to_s.length <= 19
+            end
+            abort "iOS/iPadOS and watchOS must bind to the same embedded-Watch IPA run" unless
+              run_ids.fetch("ios-ipados") == run_ids.fetch("watchos")
+            abort "signed release evidence must bind exactly four distinct workflow runs" unless
+              run_ids.values.uniq.length == 4
+            review_keys = %w[visual privacy signedReleaseParity]
+            review_times = signed_evidence.fetch("reviewedAtUtc")
+            abort "reviewedAtUtc must contain exactly three review keys" unless
+              review_times.is_a?(Hash) && review_times.keys.sort == review_keys.sort
+            now = Time.now.utc
+            review_keys.each do |kind|
+              raw = review_times.fetch(kind)
+              begin
+                parsed = Time.iso8601(raw)
+              rescue ArgumentError, TypeError
+                abort "#{kind} review time must be strict UTC ISO-8601"
+              end
+              abort "#{kind} review time must use canonical whole-second UTC" unless
+                parsed.utc.iso8601 == raw
+              abort "#{kind} review time cannot be in the future" if parsed > now
+            end
+            outputs = {
+              "ios_run_id" => run_ids.fetch("ios-ipados"),
+              "tvos_run_id" => run_ids.fetch("tvos"),
+              "visionos_run_id" => run_ids.fetch("visionos"),
+              "maccatalyst_run_id" => run_ids.fetch("maccatalyst"),
+              "visual_reviewed_at" => review_times.fetch("visual"),
+              "privacy_reviewed_at" => review_times.fetch("privacy"),
+              "signed_parity_reviewed_at" => review_times.fetch("signedReleaseParity"),
+            }
+            File.open(ENV.fetch("GITHUB_OUTPUT"), "a", 0o600) do |file|
+              outputs.each { |key, value| file.puts "#{key}=#{value}" }
             end
             runner_temp = Pathname.new(ENV.fetch("RUNNER_TEMP")).realpath
-            %w[CONTROL_ROOT DOWNLOAD_ROOT EVIDENCE_ROOT].each do |name|
+            %w[CONTROL_ROOT DOWNLOAD_ROOT SIGNED_DOWNLOAD_ROOT EVIDENCE_ROOT].each do |name|
               path = Pathname.new(ENV.fetch(name)).expand_path
               abort "#{name} must be a new direct child of RUNNER_TEMP" unless
                 path.dirname == runner_temp && !path.exist? && !path.symlink?
               Dir.mkdir(path, 0o700)
               abort "#{name} was not created canonically" unless path.realpath == path
+            end
+          '
+
+      - name: Bind named reviewers to protected environment approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VISUAL_REVIEWER: ${{ inputs.visual_reviewer }}
+          PRIVACY_REVIEWER: ${{ inputs.privacy_reviewer }}
+          SIGNED_PARITY_REVIEWER: ${{ inputs.signed_parity_reviewer }}
+        run: |
+          set -euo pipefail
+          gh api "repos/TastyHeadphones/QuakeSignal/actions/runs/$GITHUB_RUN_ID" > "$CONTROL_ROOT/finalizer-run.json"
+          gh api "repos/TastyHeadphones/QuakeSignal/actions/runs/$GITHUB_RUN_ID/approvals" > "$CONTROL_ROOT/finalizer-environment-reviews.json"
+          /usr/bin/ruby -rjson -rpathname -e '
+            def fail!(message)
+              abort "protected environment reviewer binding failed: #{message}"
+            end
+            def expected_workflow_path?(actual, expected)
+              [expected, "#{expected}@main"].include?(actual)
+            end
+            control = Pathname.new(ENV.fetch("CONTROL_ROOT")).realpath
+            run = JSON.parse(control.join("finalizer-run.json").read)
+            repository = "TastyHeadphones/QuakeSignal"
+            run_id = Integer(ENV.fetch("GITHUB_RUN_ID"), 10)
+            fail!("run is not canonical") unless
+              run.fetch("id") == run_id &&
+              run.dig("repository", "full_name") == repository &&
+              run.dig("head_repository", "full_name") == repository &&
+              expected_workflow_path?(run.fetch("path"), ".github/workflows/apple-screenshot-release-ready.yml") &&
+              run.fetch("event") == "workflow_dispatch" &&
+              run.fetch("head_branch") == "main" &&
+              run.fetch("head_sha") == ENV.fetch("SOURCE_COMMIT")
+            run_attempt = run.fetch("run_attempt")
+            fail!("run attempt is invalid") unless run_attempt.is_a?(Integer) && run_attempt.positive?
+            reviews = JSON.parse(control.join("finalizer-environment-reviews.json").read)
+            fail!("environment review response must be an array") unless reviews.is_a?(Array)
+            approved_logins = reviews.filter_map do |review|
+              next unless review.fetch("state") == "approved"
+              environments = review.fetch("environments")
+              next unless environments.is_a?(Array) &&
+                environments.any? { |environment| environment.fetch("name") == "ios-app-store-release" }
+              login = review.dig("user", "login")
+              next unless login.is_a?(String) && login.match?(/\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\z/)
+              login
+            end.uniq.sort
+            fail!("ios-app-store-release lacks an approved reviewer distinct from the actor") unless
+              approved_logins.any? { |login| login.casecmp?(ENV.fetch("GITHUB_ACTOR")) == false }
+            supplied = {
+              "visual" => ENV.fetch("VISUAL_REVIEWER"),
+              "privacy" => ENV.fetch("PRIVACY_REVIEWER"),
+              "signedReleaseParity" => ENV.fetch("SIGNED_PARITY_REVIEWER"),
+            }
+            supplied.each do |kind, login|
+              fail!("#{kind} reviewer must exactly match an approved environment reviewer login") unless
+                approved_logins.include?(login)
+              fail!("#{kind} reviewer must differ from the dispatch actor") if
+                login.casecmp?(ENV.fetch("GITHUB_ACTOR"))
+            end
+            attestation = {
+              "schemaVersion" => 1,
+              "repository" => repository,
+              "runId" => run_id,
+              "runAttempt" => run_attempt,
+              "workflowFile" => ".github/workflows/apple-screenshot-release-ready.yml",
+              "headSha" => ENV.fetch("SOURCE_COMMIT"),
+              "environment" => "ios-app-store-release",
+              "approvedReviewerGitHubLogins" => approved_logins,
+            }
+            path = control.join("finalizer-environment-approval.json")
+            File.open(path, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|
+              file.write(JSON.pretty_generate(attestation) + "\n")
             end
           '
 
@@ -133,6 +241,267 @@ jobs:
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
           node .github/scripts/verify-ios-release-contract.mjs --build-number 8
 
+      - name: Verify exact successful signed release runs and attestation artifacts
+        id: signed-runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IOS_RUN_ID: ${{ steps.dispatch-evidence.outputs.ios_run_id }}
+          TVOS_RUN_ID: ${{ steps.dispatch-evidence.outputs.tvos_run_id }}
+          VISIONOS_RUN_ID: ${{ steps.dispatch-evidence.outputs.visionos_run_id }}
+          MACCATALYST_RUN_ID: ${{ steps.dispatch-evidence.outputs.maccatalyst_run_id }}
+        run: |
+          set -euo pipefail
+          for spec in \
+            "ios-ipados-watchos:$IOS_RUN_ID" \
+            "tvos:$TVOS_RUN_ID" \
+            "visionos:$VISIONOS_RUN_ID" \
+            "maccatalyst:$MACCATALYST_RUN_ID"; do
+            role="${spec%%:*}"
+            run_id="${spec#*:}"
+            gh api "repos/TastyHeadphones/QuakeSignal/actions/runs/$run_id" > "$CONTROL_ROOT/signed-$role-run.json"
+            gh api "repos/TastyHeadphones/QuakeSignal/actions/runs/$run_id/artifacts?per_page=100" > "$CONTROL_ROOT/signed-$role-artifacts.json"
+          done
+          /usr/bin/ruby -rjson -rpathname -rtime -e '
+            def fail!(message)
+              abort "signed release run verification failed: #{message}"
+            end
+            def expected_workflow_path?(actual, expected)
+              [expected, "#{expected}@main"].include?(actual)
+            end
+            control = Pathname.new(ENV.fetch("CONTROL_ROOT")).realpath
+            source = ENV.fetch("SOURCE_COMMIT")
+            repository = "TastyHeadphones/QuakeSignal"
+            specs = {
+              "ios-ipados-watchos" => [Integer(ENV.fetch("IOS_RUN_ID"), 10), ".github/workflows/ios.yml"],
+              "tvos" => [Integer(ENV.fetch("TVOS_RUN_ID"), 10), ".github/workflows/apple-platforms.yml"],
+              "visionos" => [Integer(ENV.fetch("VISIONOS_RUN_ID"), 10), ".github/workflows/apple-platforms.yml"],
+              "maccatalyst" => [Integer(ENV.fetch("MACCATALYST_RUN_ID"), 10), ".github/workflows/apple-platforms.yml"],
+            }
+            fail!("exactly four distinct run IDs are required") unless specs.values.map(&:first).uniq.length == 4
+            runs = specs.map do |role, (run_id, workflow_file)|
+              run = JSON.parse(control.join("signed-#{role}-run.json").read)
+              fail!("#{role} run ID is wrong") unless run.fetch("id") == run_id
+              fail!("#{role} repository is not canonical") unless
+                run.dig("repository", "full_name") == repository &&
+                run.dig("head_repository", "full_name") == repository
+              fail!("#{role} workflow is wrong") unless expected_workflow_path?(run.fetch("path"), workflow_file)
+              fail!("#{role} event or branch is wrong") unless
+                run.fetch("event") == "workflow_dispatch" && run.fetch("head_branch") == "main"
+              fail!("#{role} source commit is wrong") unless run.fetch("head_sha") == source
+              fail!("#{role} run is not completed successfully") unless
+                run.fetch("status") == "completed" && run.fetch("conclusion") == "success"
+              run_attempt = run.fetch("run_attempt")
+              fail!("#{role} run attempt is invalid") unless run_attempt.is_a?(Integer) && run_attempt.positive?
+              started_at = Time.iso8601(run.fetch("run_started_at")).utc.iso8601
+              completed_at = Time.iso8601(run.fetch("updated_at")).utc.iso8601
+              fail!("#{role} run completion predates its start") if Time.iso8601(completed_at) < Time.iso8601(started_at)
+              response = JSON.parse(control.join("signed-#{role}-artifacts.json").read)
+              artifacts = response.fetch("artifacts")
+              fail!("#{role} artifact response is incomplete") unless
+                response.fetch("total_count") == artifacts.length && artifacts.length <= 100
+              artifact_name = "signed-release-attestation-#{role}-#{source}-#{run_id}-#{run_attempt}"
+              matches = artifacts.select { |artifact| artifact.fetch("name") == artifact_name }
+              fail!("#{role} attestation artifact must be exact and unique") unless matches.length == 1
+              artifact = matches.fetch(0)
+              fail!("#{role} attestation artifact ID is invalid") unless artifact.fetch("id").is_a?(Integer) && artifact.fetch("id").positive?
+              fail!("#{role} attestation artifact size is unsafe") unless
+                artifact.fetch("size_in_bytes").is_a?(Integer) && artifact.fetch("size_in_bytes").positive? &&
+                artifact.fetch("size_in_bytes") <= 65_536
+              fail!("#{role} attestation artifact is expired") unless artifact.fetch("expired") == false
+              fail!("#{role} attestation artifact digest is invalid") unless
+                artifact.fetch("digest").is_a?(String) && artifact.fetch("digest").match?(/\Asha256:[0-9a-f]{64}\z/)
+              {
+                "role" => role,
+                "runId" => run_id,
+                "runAttempt" => run_attempt,
+                "workflowFile" => workflow_file,
+                "headSha" => source,
+                "startedAtUtc" => started_at,
+                "completedAtUtc" => completed_at,
+                "artifact" => {
+                  "name" => artifact_name,
+                  "id" => artifact.fetch("id"),
+                  "sizeInBytes" => artifact.fetch("size_in_bytes"),
+                  "digest" => artifact.fetch("digest"),
+                  "expired" => false,
+                },
+              }
+            end
+            aggregate = {
+              "schemaVersion" => 1,
+              "repository" => repository,
+              "sourceCommit" => source,
+              "runs" => runs,
+            }
+            path = control.join("signed-runs-api-attestation.json")
+            File.open(path, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|
+              file.write(JSON.pretty_generate(aggregate) + "\n")
+            end
+            attempt_outputs = {
+              "ios_run_attempt" => runs.find { |run| run.fetch("role") == "ios-ipados-watchos" }.fetch("runAttempt"),
+              "tvos_run_attempt" => runs.find { |run| run.fetch("role") == "tvos" }.fetch("runAttempt"),
+              "visionos_run_attempt" => runs.find { |run| run.fetch("role") == "visionos" }.fetch("runAttempt"),
+              "maccatalyst_run_attempt" => runs.find { |run| run.fetch("role") == "maccatalyst" }.fetch("runAttempt"),
+            }
+            File.open(ENV.fetch("GITHUB_OUTPUT"), "a", 0o600) do |file|
+              attempt_outputs.each { |key, value| file.puts "#{key}=#{value}" }
+            end
+          '
+
+      - name: Download exact iOS and watchOS signed attestation
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: signed-release-attestation-ios-ipados-watchos-${{ inputs.source_commit }}-${{ steps.dispatch-evidence.outputs.ios_run_id }}-${{ steps.signed-runs.outputs.ios_run_attempt }}
+          path: ${{ env.SIGNED_DOWNLOAD_ROOT }}/ios-ipados-watchos
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.dispatch-evidence.outputs.ios_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download exact tvOS signed attestation
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: signed-release-attestation-tvos-${{ inputs.source_commit }}-${{ steps.dispatch-evidence.outputs.tvos_run_id }}-${{ steps.signed-runs.outputs.tvos_run_attempt }}
+          path: ${{ env.SIGNED_DOWNLOAD_ROOT }}/tvos
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.dispatch-evidence.outputs.tvos_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download exact visionOS signed attestation
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: signed-release-attestation-visionos-${{ inputs.source_commit }}-${{ steps.dispatch-evidence.outputs.visionos_run_id }}-${{ steps.signed-runs.outputs.visionos_run_attempt }}
+          path: ${{ env.SIGNED_DOWNLOAD_ROOT }}/visionos
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.dispatch-evidence.outputs.visionos_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download exact Mac Catalyst signed attestation
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: signed-release-attestation-maccatalyst-${{ inputs.source_commit }}-${{ steps.dispatch-evidence.outputs.maccatalyst_run_id }}-${{ steps.signed-runs.outputs.maccatalyst_run_attempt }}
+          path: ${{ env.SIGNED_DOWNLOAD_ROOT }}/maccatalyst
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.dispatch-evidence.outputs.maccatalyst_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Validate four signed attestations and exact release topology
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          /usr/bin/ruby -rjson -rpathname -rtime -e '
+            def fail!(message)
+              abort "signed release attestation validation failed: #{message}"
+            end
+            control = Pathname.new(ENV.fetch("CONTROL_ROOT")).realpath
+            downloads = Pathname.new(ENV.fetch("SIGNED_DOWNLOAD_ROOT")).realpath
+            source = ENV.fetch("SOURCE_COMMIT")
+            api = JSON.parse(control.join("signed-runs-api-attestation.json").read)
+            fail!("API attestation repository or source changed") unless
+              api.fetch("repository") == "TastyHeadphones/QuakeSignal" && api.fetch("sourceCommit") == source
+            expected = {
+              "ios-ipados-watchos" => {
+                "workflow" => ".github/workflows/ios.yml",
+                "platforms" => %w[ios-ipados watchos],
+                "kind" => "ipa",
+              },
+              "tvos" => {
+                "workflow" => ".github/workflows/apple-platforms.yml",
+                "platforms" => %w[tvos],
+                "kind" => "ipa",
+              },
+              "visionos" => {
+                "workflow" => ".github/workflows/apple-platforms.yml",
+                "platforms" => %w[visionos],
+                "kind" => "ipa",
+              },
+              "maccatalyst" => {
+                "workflow" => ".github/workflows/apple-platforms.yml",
+                "platforms" => %w[maccatalyst],
+                "kind" => "pkg",
+              },
+            }
+            records = {}
+            api.fetch("runs").each do |run|
+              role = run.fetch("role")
+              spec = expected.fetch(role)
+              root = downloads.join(role)
+              fail!("#{role} download inventory is not exact") unless
+                root.directory? && !root.symlink? && root.children.map { |path| path.basename.to_s } == ["signed-release-attestation.json"]
+              path = root.join("signed-release-attestation.json")
+              fail!("#{role} attestation is not a small plain file") unless
+                path.file? && !path.symlink? && path.lstat.nlink == 1 && path.size.positive? && path.size <= 32_768
+              attestation = JSON.parse(path.read)
+              exact_keys = %w[
+                schemaVersion repository workflowFile runId runAttempt event headBranch headSha
+                sourceCommit marketingVersion buildNumber distributionMode platforms artifact attestedAtUtc
+              ]
+              fail!("#{role} attestation keys are not exact") unless attestation.keys.sort == exact_keys.sort
+              fail!("#{role} attestation identity is wrong") unless
+                attestation.fetch("schemaVersion") == 1 &&
+                attestation.fetch("repository") == "TastyHeadphones/QuakeSignal" &&
+                attestation.fetch("workflowFile") == spec.fetch("workflow") &&
+                attestation.fetch("runId") == run.fetch("runId") &&
+                attestation.fetch("runAttempt") == run.fetch("runAttempt") &&
+                attestation.fetch("event") == "workflow_dispatch" &&
+                attestation.fetch("headBranch") == "main" &&
+                attestation.fetch("headSha") == source &&
+                attestation.fetch("sourceCommit") == source
+              fail!("#{role} release product is wrong") unless
+                attestation.fetch("marketingVersion") == "1.1" &&
+                attestation.fetch("buildNumber") == 8 &&
+                attestation.fetch("distributionMode") == "testflight-upload"
+              fail!("#{role} platform set is wrong") unless attestation.fetch("platforms") == spec.fetch("platforms")
+              artifact = attestation.fetch("artifact")
+              fail!("#{role} artifact record is invalid") unless
+                artifact.is_a?(Hash) && artifact.keys.sort == %w[kind sha256] &&
+                artifact.fetch("kind") == spec.fetch("kind") &&
+                artifact.fetch("sha256").is_a?(String) && artifact.fetch("sha256").match?(/\A[0-9a-f]{64}\z/)
+              attested_at = Time.iso8601(attestation.fetch("attestedAtUtc"))
+              fail!("#{role} attestation time is not canonical UTC") unless
+                attested_at.utc.iso8601 == attestation.fetch("attestedAtUtc")
+              fail!("#{role} attestation postdates completed run") if
+                attested_at > Time.iso8601(run.fetch("completedAtUtc"))
+              records[role] = [run, artifact, attestation.fetch("attestedAtUtc")]
+            end
+            fail!("exactly four signed run attestations are required") unless records.keys.sort == expected.keys.sort
+            fail!("exactly four distinct signed workflow runs are required") unless
+              records.values.map { |run, _artifact| run.fetch("runId") }.uniq.length == 4
+            fail!("exactly four distinct signed attestation artifacts are required") unless
+              records.values.map { |run, _artifact| run.fetch("artifact").fetch("id") }.uniq.length == 4 &&
+              records.values.map { |run, _artifact| run.fetch("artifact").fetch("digest") }.uniq.length == 4
+            fail!("exactly four distinct signed release artifact hashes are required") unless
+              records.values.map { |_run, artifact| artifact.fetch("sha256") }.uniq.length == 4
+            platform_rows = %w[ios-ipados tvos watchos visionos maccatalyst].map do |platform|
+              role = platform == "ios-ipados" || platform == "watchos" ? "ios-ipados-watchos" : platform
+              run, artifact, attested_at_utc = records.fetch(role)
+              {
+                "platform" => platform,
+                "signedReleaseRunId" => run.fetch("runId"),
+                "signedReleaseRunAttempt" => run.fetch("runAttempt"),
+                "signedReleaseWorkflowFile" => run.fetch("workflowFile"),
+                "signedReleaseAttestationArtifactName" => run.fetch("artifact").fetch("name"),
+                "signedReleaseAttestationArtifactDigest" => run.fetch("artifact").fetch("digest"),
+                "signedReleaseArtifactKind" => artifact.fetch("kind"),
+                "signedReleaseArtifactSha256" => artifact.fetch("sha256"),
+                "signedMarketingVersion" => "1.1",
+                "signedBuildNumber" => 8,
+                "signedDistributionMode" => "testflight-upload",
+                "signedReleaseAttestedAtUtc" => attested_at_utc,
+                "signedBuildSourceCommit" => source,
+                "signedRunCompletedAtUtc" => run.fetch("completedAtUtc"),
+              }
+            end
+            fail!("iOS/iPadOS and watchOS run IDs must match") unless
+              platform_rows.fetch(0).fetch("signedReleaseRunId") == platform_rows.fetch(2).fetch("signedReleaseRunId")
+            fail!("iOS/iPadOS and watchOS IPA hashes must match") unless
+              platform_rows.fetch(0).fetch("signedReleaseArtifactSha256") == platform_rows.fetch(2).fetch("signedReleaseArtifactSha256")
+            output = control.join("validated-signed-release-evidence.json")
+            File.open(output, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|
+              file.write(JSON.pretty_generate(platform_rows) + "\n")
+            end
+          '
+
       - name: Verify exact successful capture run and five artifacts
         env:
           GH_TOKEN: ${{ github.token }}
@@ -142,9 +511,12 @@ jobs:
           artifacts_json="$CONTROL_ROOT/capture-artifacts.json"
           gh api "repos/TastyHeadphones/QuakeSignal/actions/runs/$CAPTURE_RUN_ID" > "$run_json"
           gh api "repos/TastyHeadphones/QuakeSignal/actions/runs/$CAPTURE_RUN_ID/artifacts?per_page=100" > "$artifacts_json"
-          /usr/bin/ruby -rjson -rpathname -e '
+          /usr/bin/ruby -rjson -rpathname -rtime -e '
             def fail!(message)
               abort "capture run verification failed: #{message}"
+            end
+            def expected_workflow_path?(actual, expected)
+              [expected, "#{expected}@main"].include?(actual)
             end
             source = ENV.fetch("SOURCE_COMMIT")
             repository = "TastyHeadphones/QuakeSignal"
@@ -156,12 +528,16 @@ jobs:
             fail!("wrong run ID") unless run.fetch("id") == run_id
             fail!("wrong repository") unless run.dig("repository", "full_name") == repository
             fail!("forked head repository") unless run.dig("head_repository", "full_name") == repository
-            fail!("wrong workflow") unless run.fetch("path") == ".github/workflows/apple-platform-screenshots.yml"
+            fail!("wrong workflow") unless
+              expected_workflow_path?(run.fetch("path"), ".github/workflows/apple-platform-screenshots.yml")
             fail!("wrong event") unless run.fetch("event") == "workflow_dispatch"
             fail!("wrong head branch") unless run.fetch("head_branch") == "main"
             fail!("wrong head SHA") unless run.fetch("head_sha") == source
             fail!("run is not completed successfully") unless
               run.fetch("status") == "completed" && run.fetch("conclusion") == "success"
+            run_attempt = run.fetch("run_attempt")
+            fail!("capture run attempt is invalid") unless run_attempt.is_a?(Integer) && run_attempt.positive?
+            completed_at = Time.iso8601(run.fetch("updated_at")).utc.iso8601
             expected = [
               "UNAPPROVED-debug-simulator-ios-ipados-#{source}",
               "UNAPPROVED-debug-simulator-tvos-#{source}",
@@ -191,12 +567,14 @@ jobs:
               "schemaVersion" => 1,
               "repository" => repository,
               "runId" => run_id,
+              "runAttempt" => run_attempt,
               "workflowFile" => ".github/workflows/apple-platform-screenshots.yml",
               "event" => "workflow_dispatch",
               "headBranch" => "main",
               "headSha" => source,
               "status" => "completed",
               "conclusion" => "success",
+              "completedAtUtc" => completed_at,
               "artifacts" => sanitized,
             }
             path = control.join("capture-run-attestation.json")
@@ -224,9 +602,12 @@ jobs:
           post_artifacts_json="$CONTROL_ROOT/post-download-capture-artifacts.json"
           gh api "repos/TastyHeadphones/QuakeSignal/actions/runs/$CAPTURE_RUN_ID" > "$post_run_json"
           gh api "repos/TastyHeadphones/QuakeSignal/actions/runs/$CAPTURE_RUN_ID/artifacts?per_page=100" > "$post_artifacts_json"
-          /usr/bin/ruby -rjson -rpathname -e '
+          /usr/bin/ruby -rjson -rpathname -rtime -e '
             def fail!(message)
               abort "post-download capture verification failed: #{message}"
+            end
+            def expected_workflow_path?(actual, expected)
+              [expected, "#{expected}@main"].include?(actual)
             end
             control = Pathname.new(ENV.fetch("CONTROL_ROOT")).realpath
             attestation = JSON.parse(control.join("capture-run-attestation.json").read)
@@ -235,9 +616,11 @@ jobs:
             fail!("attested repository is not canonical") unless
               attestation.fetch("repository") == canonical_repository
             fail!("run ID changed") unless run.fetch("id") == attestation.fetch("runId")
+            fail!("run attempt changed") unless run.fetch("run_attempt") == attestation.fetch("runAttempt")
             fail!("repository changed") unless run.dig("repository", "full_name") == canonical_repository
             fail!("head repository changed") unless run.dig("head_repository", "full_name") == canonical_repository
-            fail!("workflow changed") unless run.fetch("path") == attestation.fetch("workflowFile")
+            fail!("workflow changed") unless
+              expected_workflow_path?(run.fetch("path"), attestation.fetch("workflowFile"))
             fail!("event changed") unless run.fetch("event") == attestation.fetch("event")
             fail!("head branch changed") unless run.fetch("head_branch") == attestation.fetch("headBranch")
             fail!("head SHA changed") unless run.fetch("head_sha") == attestation.fetch("headSha")
@@ -245,6 +628,8 @@ jobs:
               run.fetch("status") == "completed" && run.fetch("conclusion") == "success" &&
               run.fetch("status") == attestation.fetch("status") &&
               run.fetch("conclusion") == attestation.fetch("conclusion")
+            fail!("run completion time changed") unless
+              Time.iso8601(run.fetch("updated_at")).utc.iso8601 == attestation.fetch("completedAtUtc")
             response = JSON.parse(control.join("post-download-capture-artifacts.json").read)
             artifacts = response.fetch("artifacts")
             fail!("artifact total changed") unless response.fetch("total_count") == 5 && artifacts.length == 5
@@ -372,7 +757,9 @@ jobs:
           VISUAL_REVIEWER: ${{ inputs.visual_reviewer }}
           PRIVACY_REVIEWER: ${{ inputs.privacy_reviewer }}
           SIGNED_PARITY_REVIEWER: ${{ inputs.signed_parity_reviewer }}
-          SIGNED_ARTIFACT_SHA256S_JSON: ${{ inputs.signed_artifact_sha256s }}
+          VISUAL_REVIEWED_AT: ${{ steps.dispatch-evidence.outputs.visual_reviewed_at }}
+          PRIVACY_REVIEWED_AT: ${{ steps.dispatch-evidence.outputs.privacy_reviewed_at }}
+          SIGNED_PARITY_REVIEWED_AT: ${{ steps.dispatch-evidence.outputs.signed_parity_reviewed_at }}
         run: |
           set -euo pipefail
           /usr/bin/ruby -rjson -rdigest -rpathname -rtime -e '
@@ -387,37 +774,61 @@ jobs:
             active = index.fetch("activeReleaseSet")
             manifest_sha256 = Digest::SHA256.file(manifest_path).hexdigest
             abort "assembled manifest/index hash mismatch" unless active.fetch("manifestSha256") == manifest_sha256
-            capture_run = JSON.parse(Pathname.new(ENV.fetch("CONTROL_ROOT")).join("capture-run-attestation.json").read)
-            reviewed_at = Time.now.utc.iso8601
-            named_review = lambda do |reviewer|
-              { "approved" => true, "reviewer" => reviewer, "reviewedAtUtc" => reviewed_at }
+            control = Pathname.new(ENV.fetch("CONTROL_ROOT")).realpath
+            capture_run = JSON.parse(control.join("capture-run-attestation.json").read)
+            environment_approval = JSON.parse(control.join("finalizer-environment-approval.json").read)
+            platform_rows = JSON.parse(control.join("validated-signed-release-evidence.json").read)
+            review_times = {
+              "visual" => ENV.fetch("VISUAL_REVIEWED_AT"),
+              "privacy" => ENV.fetch("PRIVACY_REVIEWED_AT"),
+              "signedReleaseParity" => ENV.fetch("SIGNED_PARITY_REVIEWED_AT"),
+            }
+            parsed_review_times = review_times.transform_values { |value| Time.iso8601(value) }
+            capture_completed_at = Time.iso8601(capture_run.fetch("completedAtUtc"))
+            abort "visual review predates the completed screenshot run" if
+              parsed_review_times.fetch("visual") < capture_completed_at
+            abort "privacy review predates the completed screenshot run" if
+              parsed_review_times.fetch("privacy") < capture_completed_at
+            latest_signed_run = platform_rows.map { |record| Time.iso8601(record.fetch("signedRunCompletedAtUtc")) }.max
+            abort "signed Release parity review predates screenshot capture" if
+              parsed_review_times.fetch("signedReleaseParity") < capture_completed_at
+            abort "signed Release parity review predates a signed upload run" if
+              parsed_review_times.fetch("signedReleaseParity") < latest_signed_run
+            abort "a supplied review completion time is in the future" if
+              parsed_review_times.values.any? { |time| time > Time.now.utc }
+            reviewers = {
+              "visual" => ENV.fetch("VISUAL_REVIEWER"),
+              "privacy" => ENV.fetch("PRIVACY_REVIEWER"),
+              "signedReleaseParity" => ENV.fetch("SIGNED_PARITY_REVIEWER"),
+            }
+            named_review = lambda do |kind|
+              {
+                "approved" => true,
+                "reviewer" => reviewers.fetch(kind),
+                "reviewedAtUtc" => review_times.fetch(kind),
+              }
             end
-            supplied_hashes = JSON.parse(ENV.fetch("SIGNED_ARTIFACT_SHA256S_JSON"))
-            signed_hashes = %w[ios-ipados tvos watchos visionos maccatalyst].to_h do |platform|
-              [platform, supplied_hashes.fetch(platform)]
-            end
+            reviewed_at = parsed_review_times.values.max.utc.iso8601
             approval = {
-              "schemaVersion" => 2,
+              "schemaVersion" => 3,
               "status" => "approved-for-build8-upload",
               "uploadApproved" => true,
               "sourceCommit" => source,
               "releaseSetManifestSha256" => manifest_sha256,
               "dispatchActorGitHubLogin" => ENV.fetch("GITHUB_ACTOR"),
+              "environmentApproval" => environment_approval,
               "captureRun" => capture_run,
               "approvals" => {
-                "visual" => named_review.call(ENV.fetch("VISUAL_REVIEWER")),
-                "privacy" => named_review.call(ENV.fetch("PRIVACY_REVIEWER")),
-                "signedReleaseParity" => named_review.call(ENV.fetch("SIGNED_PARITY_REVIEWER")),
+                "visual" => named_review.call("visual"),
+                "privacy" => named_review.call("privacy"),
+                "signedReleaseParity" => named_review.call("signedReleaseParity"),
               },
               "reviewedAtUtc" => reviewed_at,
-              "platforms" => signed_hashes.map do |platform, sha256|
-                {
-                  "platform" => platform,
-                  "signedReleaseArtifactSha256" => sha256,
-                  "signedBuildSourceCommit" => source,
+              "platforms" => platform_rows.map do |record|
+                record.merge(
                   "signedReleaseParityApproved" => true,
-                  "parityReviewedAtUtc" => reviewed_at,
-                }
+                  "parityReviewedAtUtc" => review_times.fetch("signedReleaseParity"),
+                )
               end,
             }
             File.open(approval_path, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|

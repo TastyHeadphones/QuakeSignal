@@ -522,6 +522,94 @@ class GuardContextTests(unittest.TestCase):
                 with self.assertRaisesRegex(guard.ReleaseGuardError, message):
                     guard.verify_foreground_push_presentation_contract(mutated)
 
+    def test_foreground_ownership_contract_rejects_decentralized_registration_location_or_audio(self):
+        sources = {
+            relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+            for relative in guard.PLATFORM_CAPABILITY_POLICY_PATHS
+        }
+        mutations = (
+            (
+                "ios/QuakeSignal/State/AppSettings.swift",
+                "pushRegistrationPreferencesRevision &+= 1",
+                "pushRegistrationPreferencesRevision = 0",
+                "centralized registration revision",
+            ),
+            (
+                "ios/QuakeSignal/Features/Root/RootView.swift",
+                ".onChange(of: settings.pushRegistrationPreferencesRevision)",
+                ".onChange(of: settings.alertSound)",
+                "centralized registration revision",
+            ),
+            (
+                "ios/QuakeSignal/Features/Root/RootView.swift",
+                "locationManager.currentLocation == nil,\n"
+                "           locationManager.isRequestingLocation {",
+                "store.effectiveCoordinate == nil,\n"
+                "           locationManager.isRequestingLocation {",
+                "centralized registration revision",
+            ),
+            (
+                "ios/QuakeSignal/Features/Root/RootView.swift",
+                ".onChange(of: locationManager.isRequestingLocation)",
+                ".onChange(of: locationManager.lastRequestFailed)",
+                "location-request completion must resume deferred protected registration",
+            ),
+            (
+                "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
+                "locationManager.requestCurrentLocation(purpose: .mapFocus)",
+                "locationManager.requestCurrentLocation()",
+                "location-purpose ownership",
+            ),
+            (
+                "ios/QuakeSignal/State/LocationManager.swift",
+                "guard purpose == .mapFocus || AppSettings.shared.useCurrentLocation else {",
+                "guard purpose == .mapFocus else {",
+                "location-purpose ownership",
+            ),
+            (
+                "ios/QuakeSignal/State/LocationManager.swift",
+                "self.activeRequestPurpose = nil\n"
+                "            guard purpose == .mapFocus || AppSettings.shared.useCurrentLocation else {",
+                "self.activeRequestPurpose = nil\n"
+                "            guard purpose == .mapFocus else {",
+                "location-purpose ownership",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
+                "play(preference, deduplicationKey: nil, owner: .preview)",
+                "play(preference, deduplicationKey: nil, owner: .emergency)",
+                "alert-audio ownership",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
+                "guard playbackOwner == .preview else { return }",
+                "guard playbackOwner != nil else { return }",
+                "alert-audio ownership",
+            ),
+            (
+                "ios/QuakeSignal/Features/Settings/SettingsView.swift",
+                "EmergencyAlertAudio.shared.stopPreview()",
+                "EmergencyAlertAudio.shared.stop()",
+                "alert-audio ownership",
+            ),
+            (
+                "ios/QuakeSignal/State/QuakeStore.swift",
+                "EmergencyAlertAudio.shared.stop()",
+                "_ = presentedAlert // skipped app-owned emergency audio stop",
+                "presented-alert replacement or dismissal",
+            ),
+        )
+        for path, old, new, message in mutations:
+            with self.subTest(path=path):
+                mutated = dict(sources)
+                mutated[path] = mutated[path].replace(old, new, 1)
+                self.assertNotEqual(mutated[path], sources[path])
+                with self.assertRaisesRegex(
+                    guard.ReleaseGuardError,
+                    message,
+                ):
+                    guard.verify_foreground_emergency_parity_contract(mutated)
+
     def test_platform_capability_policy_rejects_lifecycle_and_cache_mutations(self):
         sources = {
             relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
@@ -773,8 +861,10 @@ class LiveWorkerContractTests(unittest.TestCase):
 
     def test_live_release_contract_rejects_stale_or_incomplete_legal_pages(self):
         for target_path, marker in (
-            ("/privacy", "QuakeSignal · Effective 20 August 2026"),
+            ("/privacy", "QuakeSignal · Effective 22 August 2026"),
             ("/privacy", "Only the app when running on an iPhone or iPad can register"),
+            ("/privacy", "last successfully registered bounded alert area remains in use until the next foreground renewal"),
+            ("/privacy", "without a fallback it attempts to delete the stale relay row"),
             ("/privacy", "watches only the jma_eew and jma_eqlist Wolfx feeds"),
             ("/privacy", "does not create an earthquake forecast or predict local intensity or arrival time"),
             ("/support", "support cannot identify the old registration from a public issue"),

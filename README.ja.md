@@ -130,9 +130,10 @@ Apple 各プラットフォームを公開する前に、次を完了してく�
   確認します。別の `workers.dev` hostname は隔離された Debug/staging 用だけであり、
   Release の代替には使いません。
 - 登録済みの `com.quakesignal.app` と Watch App ID、および審査済み capability を確認し、
-  Xcode デスクトップから単一の build-8 Xcode Cloud workflow を初回設定します。
-  Xcode Cloud の自動署名を使い、`QUAKESIGNAL_*_PROFILE_NAME` override はすべて未設定に
-  します。手動 profile ではなく、生成された署名済み archive と entitlement を検証します。
+  2026-08-22 のアカウント監査で Xcode Cloud workflow が未設定であることを確認します。
+  このリリースではローカル Xcode を使えないため、5つの審査済み配布 profile を設定した
+  保護済み GitHub build-8 workflow を使用します。すべての署名 run を凍結した完全な source
+  SHA に固定し、TestFlight QA 前に機械可読な署名 artifact 証明を検証します。
 - Debug と Simulator は本番データや認証情報を共有しない別の staging Worker を使います。
   実機で APNs/App Attest、登録・削除・トークン更新を確認し、その後ユーザー承認済みの
   本番 endpoint に対する TestFlight APNs テストを完了してから reviewer の承認を受けます。

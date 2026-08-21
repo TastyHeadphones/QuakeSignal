@@ -13,9 +13,11 @@ This checklist creates no approval by itself.
   `ios/ScreenshotAutomation/capture-platform-screenshot.sh`. This gated fixture
   cannot run in InternalQA, Release, or a physical-device build; never describe
   its output as a signed Release or build-8 binary capture.
-- [ ] Record the matching signed Release artifact SHA-256 separately when it is
-  available. Before upload, obtain named visual approval and complete any
-  signed-Release parity comparison required by the platform runbook.
+- [ ] Preserve the matching successful signed-upload run ID when it is
+  available. Before screenshot upload, version attachment, or submission,
+  obtain named visual approval and complete the signed-Release parity comparison
+  required by the platform runbook. The finalizer derives the artifact SHA-256
+  from the run attestation.
 - [ ] Install the exact platform runtime or use physical hardware. Record Xcode,
   OS/runtime, device model, device identifier where appropriate, capture time,
   and reviewer. An automated unapproved candidate intentionally keeps
@@ -117,13 +119,16 @@ This checklist creates no approval by itself.
   `Debug.local.xcconfig` drift checks.
 - [ ] After named full-size visual review, named privacy review, and named signed
   public-Release comparison for every platform, dispatch the protected workflow
-  with all three approvals, the exact capture run ID/source SHA, and five signed
-  artifact hashes. It adds the separate hashed `release-approval.json`. Record each
-  signed artifact hash and signed-build source commit; every signed-build
-  commit must be product-source equivalent to the screenshot source commit.
-  Each platform parity-review time must be at or after that platform's capture
-  completion, and the overall named-review time must be at or after every
-  capture completion and parity review.
+  with all three approvals, the exact capture run ID/source SHA, four successful
+  upload-run IDs, and the three actual UTC review completion times. It adds the
+  separate hashed `release-approval.json`. The job derives each artifact kind,
+  hash, exact signed source commit, workflow/run/attempt, attestation digest, and
+  signed-run completion time from the four machine-readable attestations. It
+  requires iOS/iPadOS and embedded watchOS to share one run and IPA, and exactly
+  four distinct runs/hashes overall. Every reviewer identifier must equal an
+  approved `ios-app-store-release` GitHub login distinct from the dispatch actor.
+  Each parity-review time must follow both capture and signed-upload completion;
+  the overall review time is the latest supplied real review completion.
 - [ ] Require the hosted strict mode to fail until the complete exact-commit set,
   successful capture-run binding, and all three named approvals are present:
 
@@ -172,8 +177,8 @@ The build-8 recapture sequence is:
 5. Obtain named visual review and any signed-Release parity evidence required
    by the release runbook before marking or uploading an asset.
 
-No current iPhone, iPad, Apple TV, Apple Vision Pro, or Apple Watch screenshot
-asset is approved for a build-8 App Store upload.
+No current iPhone, iPad, Apple TV, Apple Vision Pro, Apple Watch, or Mac
+Catalyst screenshot asset is approved for a build-8 App Store upload.
 
 The exact native candidates captured from commit
 `b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2` by successful workflow run

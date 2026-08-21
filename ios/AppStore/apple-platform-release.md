@@ -10,7 +10,7 @@ public release.
 | Apple Watch companion | `QuakeSignalWatch` | `com.quakesignal.app.watchkitapp` | Embedded in the `QuakeSignal` iOS IPA |
 | Apple TV | `QuakeSignalTV` | `com.quakesignal.app` | `.github/workflows/apple-platforms.yml`, select `tvos` |
 | Apple Vision Pro | `QuakeSignalVision` | `com.quakesignal.app` | `.github/workflows/apple-platforms.yml`, select `visionos` |
-| Mac Catalyst | `QuakeSignal` | `com.quakesignal.app` | Xcode Cloud macOS → Mac Catalyst Archive action; protected GitHub fallback selects `maccatalyst` |
+| Mac Catalyst | `QuakeSignal` | `com.quakesignal.app` | `.github/workflows/apple-platforms.yml`, select `maccatalyst` |
 
 The native TV, Vision, and Mac Catalyst uploads use the existing shared App
 Store Connect record (Apple ID `6800642443`) and matching bundle ID. Watch
@@ -20,8 +20,8 @@ separate Tauri product (`com.quakesignal.desktop`, Apple ID `6800642853`) and
 not the iPhone/iPad binary offered as Designed for iPad on Mac. Leave the
 separate Tauri record and its historical evidence unchanged.
 Use [`platforms/`](./platforms/) for reviewed copy and screenshot plans. The
-read-only portal contradictions and non-destructive action order are recorded in
-[`app-store-connect-portal-audit-2026-08-20.md`](./app-store-connect-portal-audit-2026-08-20.md).
+current saved portal state, remaining contradictions, and non-destructive action order are recorded in
+[`app-store-connect-portal-audit-2026-08-22.md`](./app-store-connect-portal-audit-2026-08-22.md).
 
 ## Version contract
 
@@ -292,38 +292,64 @@ policy lock. Do not dispatch these commands until the Worker build-8 policy and
 profiles are approved:
 
 ```sh
+QUAKESIGNAL_REPOSITORY=TastyHeadphones/QuakeSignal
+QUAKESIGNAL_SOURCE_COMMIT="$(
+  gh api "repos/$QUAKESIGNAL_REPOSITORY/commits/main" --jq .sha
+)"
+test "${#QUAKESIGNAL_SOURCE_COMMIT}" -eq 40
+case "$QUAKESIGNAL_SOURCE_COMMIT" in
+  *[!0-9a-f]*) echo "main is not a full lowercase Git SHA" >&2; exit 1 ;;
+esac
+
 gh workflow run ios.yml --ref main \
+  --repo "$QUAKESIGNAL_REPOSITORY" \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=8
+  -f build_number=8 \
+  -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 
 gh workflow run apple-platforms.yml --ref main \
+  --repo "$QUAKESIGNAL_REPOSITORY" \
   -f platform=tvos \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=8
+  -f build_number=8 \
+  -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 
 gh workflow run apple-platforms.yml --ref main \
+  --repo "$QUAKESIGNAL_REPOSITORY" \
   -f platform=visionos \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=8
+  -f build_number=8 \
+  -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 
 gh workflow run apple-platforms.yml --ref main \
+  --repo "$QUAKESIGNAL_REPOSITORY" \
   -f platform=maccatalyst \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=8
+  -f build_number=8 \
+  -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 ```
 
-After the signed archives, platform QA, metadata, screenshots, and legal gates
-pass, repeat each run with `archive_only=false` and
-`upload_to_testflight=true`. Archive-only runs never contact App Store Connect.
+The four archive-only dispatches are optional signing rehearsals. Once the exact
+source, Worker build-8 policy, distribution profiles/certificates/API-key
+configuration, and store-complete icon catalogs pass their gates, repeat the
+four commands with `archive_only=false` and `upload_to_testflight=true`.
+Do this before TestFlight/physical-platform QA and signed screenshot comparison:
+the protected upload creates the builds those checks need. It does **not** select
+or attach a build to version `1.1`, add anything to App Review, submit a version,
+or choose a release mode. Those actions remain blocked on the later QA,
+screenshot, metadata, privacy, legal, and approval gates.
+
+Archive-only runs never contact App Store Connect and are not accepted by the
+screenshot finalizer as signed release evidence.
 Each protected lane exports and verifies exactly one regular, non-symlink
 artifact and records its SHA-256 digest. Because this repository is public, the
 workflows never upload the signed iOS, tvOS, or visionOS `.ipa` files or the
 Catalyst `.pkg` as GitHub Actions artifacts. An archive-only run therefore
-retains the verification log and digest, not the binary. With explicit upload
+retains a 30-day machine-readable attestation and digest, not the binary. With explicit upload
 consent, the lane rehashes, validates, and directly uploads the same binary
 with shared Apple ID
 `6800642443`, `com.quakesignal.app` bundle ID, marketing version `1.1`, and the
@@ -332,6 +358,12 @@ the tvOS and visionOS lanes use `appletvos` and `visionos`, respectively.
 A successful upload starts Apple's asynchronous processing; it is not evidence
 that the build is processed, selectable, attached to version `1.1`, or
 submitted for review.
+Only the four successful upload runs (one combined iOS/iPadOS+embedded-Watch
+run, plus tvOS, visionOS, and Mac Catalyst) are eligible for the finalizer. Each
+attestation binds its immutable protected-main head SHA, run ID/attempt,
+workflow, product version/build, platform set, artifact kind/hash, and upload
+mode. Preserve the four canonical run URLs/IDs; iOS/iPadOS and watchOS must use
+the same combined run and IPA evidence.
 
 ## Distribution blockers outside workflow automation
 
@@ -354,7 +386,8 @@ submitted for review.
   use its successful run ID only if it contains the exact five expected
   candidate artifacts. After named visual, privacy, and signed-parity review,
   dispatch `apple-screenshot-release-ready.yml` with that run ID, the full
-  source SHA, and the five verified signed-artifact hashes. It creates one
+  source SHA, four exact successful upload-run IDs, and the three real review
+  completion times. It creates one
   indivisible 26-frame package in an external hosted evidence root while the
   checked-in `screenshot-set-index-v1.1-build8.json` remains pending. The
   protected handoff must run:
@@ -406,22 +439,42 @@ submitted for review.
     *[!0-9a-f]*) echo "capture run headSha is not a full lowercase Git SHA" >&2; exit 1 ;;
   esac
 
-  # Replace every placeholder only with the canonical signed-run digest or
-  # named reviewer recorded by the independent protected-environment approver.
-  QUAKESIGNAL_SIGNED_HASHES_JSON='{"ios-ipados":"<ios-and-watch-ipa-sha256>","tvos":"<tvos-ipa-sha256>","watchos":"<ios-and-watch-ipa-sha256>","visionos":"<visionos-ipa-sha256>","maccatalyst":"<maccatalyst-pkg-sha256>"}'
+  # Replace these placeholders with the four exact successful upload-run IDs,
+  # canonical UTC review completion times, and the GitHub login that will
+  # approve ios-app-store-release. iOS/iPadOS and watchOS intentionally share
+  # one combined signed-run ID.
+  QUAKESIGNAL_IOS_WATCH_SIGNED_RUN_ID='<positive-run-id>'
+  QUAKESIGNAL_TVOS_SIGNED_RUN_ID='<positive-run-id>'
+  QUAKESIGNAL_VISIONOS_SIGNED_RUN_ID='<positive-run-id>'
+  QUAKESIGNAL_MACCATALYST_SIGNED_RUN_ID='<positive-run-id>'
+  QUAKESIGNAL_VISUAL_REVIEWED_AT='<YYYY-MM-DDTHH:MM:SSZ>'
+  QUAKESIGNAL_PRIVACY_REVIEWED_AT='<YYYY-MM-DDTHH:MM:SSZ>'
+  QUAKESIGNAL_SIGNED_PARITY_REVIEWED_AT='<YYYY-MM-DDTHH:MM:SSZ>'
+  QUAKESIGNAL_APPROVED_REVIEWER_LOGIN='<approved-environment-reviewer-login>'
+  QUAKESIGNAL_SIGNED_RELEASE_EVIDENCE_JSON="$(
+    jq -cn \
+      --argjson ios "$QUAKESIGNAL_IOS_WATCH_SIGNED_RUN_ID" \
+      --argjson tvos "$QUAKESIGNAL_TVOS_SIGNED_RUN_ID" \
+      --argjson visionos "$QUAKESIGNAL_VISIONOS_SIGNED_RUN_ID" \
+      --argjson maccatalyst "$QUAKESIGNAL_MACCATALYST_SIGNED_RUN_ID" \
+      --arg visual "$QUAKESIGNAL_VISUAL_REVIEWED_AT" \
+      --arg privacy "$QUAKESIGNAL_PRIVACY_REVIEWED_AT" \
+      --arg parity "$QUAKESIGNAL_SIGNED_PARITY_REVIEWED_AT" \
+      '{signedRunIds:{"ios-ipados":$ios,tvos:$tvos,watchos:$ios,visionos:$visionos,maccatalyst:$maccatalyst},reviewedAtUtc:{visual:$visual,privacy:$privacy,signedReleaseParity:$parity}}'
+  )"
 
   gh workflow run apple-screenshot-release-ready.yml \
     --repo "$QUAKESIGNAL_REPOSITORY" \
     --ref main \
     -f capture_run_id="$QUAKESIGNAL_CAPTURE_RUN_ID" \
     -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT" \
-    -f visual_reviewer="<named-visual-reviewer>" \
+    -f visual_reviewer="$QUAKESIGNAL_APPROVED_REVIEWER_LOGIN" \
     -f visual_review_approved=true \
-    -f privacy_reviewer="<named-privacy-reviewer>" \
+    -f privacy_reviewer="$QUAKESIGNAL_APPROVED_REVIEWER_LOGIN" \
     -f privacy_review_approved=true \
-    -f signed_parity_reviewer="<named-signed-parity-reviewer>" \
+    -f signed_parity_reviewer="$QUAKESIGNAL_APPROVED_REVIEWER_LOGIN" \
     -f signed_release_parity_approved=true \
-    -f signed_artifact_sha256s="$QUAKESIGNAL_SIGNED_HASHES_JSON"
+    -f signed_release_evidence="$QUAKESIGNAL_SIGNED_RELEASE_EVIDENCE_JSON"
   ```
 
   The capture dispatch must return one canonical run URL; absence or ambiguity
@@ -442,15 +495,19 @@ submitted for review.
 
   That command must not pass without exact-current product source and plan
   bytes, all five platform packages, the exact successful capture-run binding,
-  and separate named visual/privacy/signed-parity approvals. Only one
+  four exact successful signed-upload runs, and separate named
+  visual/privacy/signed-parity approvals. Only one
   three-day screenshot artifact is retained; signed `.ipa`/`.pkg` binaries and
   generated screenshots are never committed or uploaded by this handoff.
-  The reviewer names and five signed-artifact hashes are human attestations,
-  not identities or binary hashes discovered by this credential-free job. The
-  canonical `ios-app-store-release` environment must require an independent
-  reviewer, prevent self-review, and require that approver to compare every
-  supplied hash with the matching canonical signed-run summary before allowing
-  the job to start. Placeholder names or hashes are a stop condition.
+  The finalizer downloads only the four small attestation artifacts and derives
+  all four distinct binary hashes from them; it never downloads an IPA or PKG.
+  It requires the iOS/iPadOS and watchOS entries to share one combined run and
+  IPA hash. The canonical `ios-app-store-release` environment must require an
+  independent reviewer and prevent self-review. The job queries its own
+  canonical run approval history and requires every supplied reviewer identifier
+  to equal an approved GitHub login distinct from the dispatch actor. Generic
+  placeholders, archive-only attestations, fabricated/future review times, or
+  fewer/more than four distinct successful upload runs are stop conditions.
 - Exercise iOS/iPadOS notifications and App Attest on physical hardware or
   TestFlight. Simulator/generic builds are not evidence for APNs, App Attest,
   background delivery, Focus, Silent Mode, or alert sounds.

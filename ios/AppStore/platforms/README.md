@@ -112,13 +112,15 @@ owner approves each exact display name, availability, and trademark review.
 ## Required human gates
 
 - [ ] Freeze the exact source commit and build 8 archives.
-- [ ] Let Xcode Cloud automatic signing resolve the registered platform App IDs,
-  then validate every signed archive/profile/entitlement and the embedded Watch
-  signature. Do not treat automatic signing as evidence before inspection.
+- [ ] Use the currently defined protected GitHub signing workflows at the
+  frozen source commit, then validate every signed archive/profile/entitlement,
+  the embedded Watch signature, and each machine-readable signed-run
+  attestation. Xcode Cloud remains unconfigured as of 2026-08-22.
 - [ ] Recapture the complete screenshot set at the exact final build-8 commit,
   then compare those source-matching Debug candidates with the matching signed
-  Release artifacts, record those artifact hashes, and obtain named visual
-  approval before upload. The preserved b461 packages are historical and do
+  Release uploads, preserve the four exact upload-run IDs, and obtain named
+  visual approval before screenshot upload, version attachment, or submission.
+  The preserved b461 packages are historical and do
   not satisfy the current source, signed-parity, or reviewer gates.
 - [ ] Complete platform QA. Generic compilation and source inspection are not
   simulator, Apple TV, Apple Vision Pro, Apple Watch, or signed-device evidence.
@@ -147,8 +149,8 @@ owner approves each exact display name, availability, and trademark review.
 - [ ] For visionOS, assess the final experience and set the required App Motion
   answer. Source inspection suggests a windowed interface with no virtual-camera
   movement, but only final-platform QA can authorize the portal answer.
-- [ ] Follow `../app-store-connect-portal-audit-2026-08-19.md` without deleting
-  or repurposing existing drafts.
+- [ ] Follow `../app-store-connect-portal-audit-2026-08-22.md`; retain the
+  2026-08-19 and 2026-08-20 audits as history without repurposing drafts.
 
 Apple's current field limits are 4,000 characters for descriptions, 170
 characters for promotional text, and 100 bytes for keywords. The source files

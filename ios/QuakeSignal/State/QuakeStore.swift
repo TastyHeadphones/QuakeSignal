@@ -92,6 +92,36 @@ enum PresentedAlertLifecyclePolicy {
     }
 }
 
+/// Couples the lifetime of app-owned warning audio to the emergency surface.
+/// A dismissal, terminal revision, expiry, or replacement must stop the old
+/// voice immediately; an identical assignment must not interrupt playback.
+enum PresentedAlertAudioPolicy {
+    static func shouldStop(previous: PresentedAlert?, next: PresentedAlert?) -> Bool {
+        previous?.mode == .emergency && previous != next
+    }
+}
+
+enum PushRegistrationPreparationError: LocalizedError {
+    case locationRequired
+
+    var errorDescription: String? {
+        switch self {
+        case .locationRequired:
+            String(localized: "settings.pushSubscription.locationRequired")
+        }
+    }
+}
+
+enum MissingLocationRegistrationPolicy {
+    static func shouldDeleteServerRegistration(
+        registrationState: PushRegistrationState,
+        locationRequestInFlight: Bool
+    ) -> Bool {
+        (registrationState == .active || registrationState == .failed) &&
+            !locationRequestInFlight
+    }
+}
+
 @Observable
 @MainActor
 final class QuakeStore {
@@ -100,7 +130,13 @@ final class QuakeStore {
     private(set) var events: [EEWEvent] = []
     private(set) var isLoading = false
     private(set) var loadError: String?
-    var presentedAlert: PresentedAlert?
+    var presentedAlert: PresentedAlert? {
+        didSet {
+            if PresentedAlertAudioPolicy.shouldStop(previous: oldValue, next: presentedAlert) {
+                EmergencyAlertAudio.shared.stop()
+            }
+        }
+    }
 
     private let liveSocket = LiveSocketClient()
     private let api = APIClient.shared
@@ -275,12 +311,40 @@ final class QuakeStore {
             return
         }
 
+        // A missing location must never become an implicit nationwide alert
+        // subscription. Onboarding permits location to be skipped, and a GPS
+        // fix can arrive after APNs, so keep this state retryable until either
+        // the selected-city fallback or a valid coarse GPS coordinate exists.
+        guard let coordinate = effectiveCoordinate.flatMap(CoarseCoordinate.init) else {
+            let locationRequestInFlight = settings.useCurrentLocation &&
+                LocationManager.shared.isRequestingLocation
+            let shouldDelete = MissingLocationRegistrationPolicy.shouldDeleteServerRegistration(
+                registrationState: settings.pushRegistrationState,
+                locationRequestInFlight: locationRequestInFlight
+            )
+            if shouldDelete {
+                do {
+                    // Do not leave a previously confirmed GPS registration
+                    // active at a stale coordinate after permission loss or a
+                    // failed/expired renewal. Keep the person's intent enabled
+                    // so a later city/fix can register again automatically.
+                    try await api.deleteDevice(token: token)
+                    settings.pushRegistrationState = .unregistered
+                } catch {
+                    settings.pushRegistrationState = .failed
+                    throw error
+                }
+            } else if !locationRequestInFlight {
+                settings.pushRegistrationState = .unregistered
+            }
+            throw PushRegistrationPreparationError.locationRequired
+        }
+
         // This is intentionally set before building/sending the request. The
         // status only moves to `.active` below after the server accepts the
         // protected registration, so an optimistic UI state can never claim
         // that background alerts are configured when they are not.
         settings.pushRegistrationState = .registering
-        let coordinate = effectiveCoordinate.flatMap { CoarseCoordinate($0) }
         let request = DeviceRegistrationRequest(
             token: token,
             environment: AppEnvironment.isDebugBuild ? "sandbox" : "production",
@@ -288,9 +352,9 @@ final class QuakeStore {
             sources: Array(settings.enabledSources),
             minMagnitude: settings.minMagnitude,
             cityName: settings.selectedCity?.localizedName,
-            latitude: coordinate?.latitude,
-            longitude: coordinate?.longitude,
-            radiusKm: coordinate != nil ? settings.radiusKm : nil,
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+            radiusKm: settings.radiusKm,
             includeTestAlerts: settings.includeTestAlerts,
             utcOffsetMinutes: TimeZone.current.secondsFromGMT() / 60,
             notifyAtNight: settings.notifyAtNight,
@@ -640,6 +704,7 @@ final class QuakeStore {
     }
 
     var activeWarning: EEWEvent? {
+        guard effectiveCoordinate != nil else { return nil }
         return nearbyEvents.first { event in
             guard event.isActiveWarning, let timestamp = event.reportDate ?? event.originDate else {
                 return false
@@ -661,6 +726,7 @@ final class QuakeStore {
     /// The newest ordinary report from the last 24 hours -- drives the
     /// "caution" banner state.
     var recentNearbyReport: EEWEvent? {
+        guard effectiveCoordinate != nil else { return nil }
         HomeReportSelectionPolicy.newestReport(
             from: nearbyEvents,
             now: clockNow,

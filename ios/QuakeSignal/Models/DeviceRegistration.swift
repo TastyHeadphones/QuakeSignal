@@ -7,9 +7,11 @@ struct DeviceRegistrationRequest: Encodable {
     let sources: [String]
     let minMagnitude: Double
     let cityName: String?
-    let latitude: Double?
-    let longitude: Double?
-    let radiusKm: Double?
+    /// Registration has no all-area mode: the complete coarse-radius filter
+    /// is required on every wire request.
+    let latitude: Double
+    let longitude: Double
+    let radiusKm: Double
     let includeTestAlerts: Bool
     let utcOffsetMinutes: Int
     let notifyAtNight: Bool

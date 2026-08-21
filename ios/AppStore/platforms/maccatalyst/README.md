@@ -5,9 +5,10 @@ Mac Catalyst build of `QuakeSignal`. It contains no captured screenshots and
 does not authorize an App Store Connect upload.
 
 The English (U.S.) description, promotional text, keywords, and review notes
-are source drafts for the same shared-record macOS platform version. They must
-be checked against the signed build and copied to App Store Connect only after
-the remaining gates below pass.
+are the source of the values saved to the shared-record macOS `1.1` draft on
+2026-08-22. Manual release is selected and Designed for iPad on Mac is
+disabled. They still require final comparison with the signed build; the save
+does not authorize submission.
 
 The public Mac route is the `QuakeSignal` scheme built for **My Mac (Mac
 Catalyst)** with bundle ID `com.quakesignal.app` in shared Apple ID
@@ -94,10 +95,13 @@ upload approval. The GitHub-hosted job has no signing or App Store credentials.
 
 The checked-in selector code is available only in Debug on a simulator or a
 native Mac Catalyst host. `InternalQA` and `Release` builds cannot activate
-fixtures. Before upload, a named reviewer must compare every Debug candidate
-with the matching signed Release build 8 behavior, record the signed artifact
-hash and capture provenance, verify an opaque image with no private location
-or user-entered preparedness details, and explicitly approve the final bytes.
+fixtures. Before screenshot upload, version attachment, or submission, a named
+reviewer must compare every Debug candidate with the matching signed Release
+build 8 behavior, preserve the successful upload-run ID and capture provenance,
+verify an opaque image with no private location or user-entered preparedness
+details, and explicitly approve the final bytes. The signed build itself may be
+uploaded earlier to enable this QA; the finalizer derives its hash from the run
+attestation.
 
 ## Privacy manifest scope
 

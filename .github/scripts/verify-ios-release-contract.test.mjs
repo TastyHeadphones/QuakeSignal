@@ -1597,6 +1597,29 @@ test("fails closed when a native signed release job reintroduces Actions retenti
   }
 });
 
+test("fails closed when a signed lane loses its immutable source checkout", async (t) => {
+  for (const relativePath of [
+    ".github/workflows/ios.yml",
+    ".github/workflows/apple-platforms.yml",
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, relativePath);
+      const source = await readFile(path, "utf8");
+      const immutableRef = "          ref: ${{ inputs.source_commit }}\n";
+      assert.ok(source.includes(immutableRef), `fixture must contain immutable source checkout in ${relativePath}`);
+      await writeFile(
+        path,
+        source.replace(immutableRef, "          ref: ${{ github.sha }}\n"),
+        "utf8",
+      );
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /checkout|immutable signed source|protected-release graph|release-job graph/i,
+      );
+    });
+  }
+});
+
 test("fails closed when a sibling job can bypass the protected release lane", async (t) => {
   await withFixture(t, {}, async (root) => {
     const path = join(root, ".github/workflows/ios.yml");
@@ -2371,8 +2394,8 @@ test("fails closed when the credential-free screenshot harness checks drift", as
 test("fails closed when hosted screenshot approval, run binding, or retention drifts", async (t) => {
   for (const [from, to] of [
     [
-      '            fail!("wrong workflow") unless run.fetch("path") == ".github/workflows/apple-platform-screenshots.yml"\n',
-      '            fail!("wrong workflow") unless true\n',
+      '              expected_workflow_path?(run.fetch("path"), ".github/workflows/apple-platform-screenshots.yml")\n',
+      '              true # skipped capture workflow path binding\n',
     ],
     [
       "            --require-build8-screenshot-release-ready \\\n",
@@ -2397,6 +2420,26 @@ test("fails closed when hosted screenshot approval, run binding, or retention dr
     [
       '              abort "#{kind} approval reviewer is a placeholder" if placeholder\n',
       '              abort "#{kind} approval reviewer is a placeholder" if false\n',
+    ],
+    [
+      '              [expected, "#{expected}@main"].include?(actual)\n',
+      '              actual.start_with?(expected) # unsafe workflow path normalization\n',
+    ],
+    [
+      "              run_ids.values.uniq.length == 4\n",
+      "              run_ids.values.uniq.length >= 3\n",
+    ],
+    [
+      "                approved_logins.include?(login)\n",
+      "                true # skipped protected-environment reviewer binding\n",
+    ],
+    [
+      '                attestation.fetch("distributionMode") == "testflight-upload"\n',
+      '                attestation.fetch("distributionMode") != "untrusted"\n',
+    ],
+    [
+      '              records.values.map { |_run, artifact| artifact.fetch("sha256") }.uniq.length == 4\n',
+      '              records.values.map { |_run, artifact| artifact.fetch("sha256") }.length >= 4\n',
     ],
   ]) {
     await withFixture(t, {}, async (root) => {

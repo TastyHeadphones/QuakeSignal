@@ -33,7 +33,7 @@ MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
 APP_ATTEST_FINGERPRINT = "sha256:wQ7bfMyEJST5ySIwLM1Q6HwT4DtbRPR3vanIG-kXCkQ"
 XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:FPPp_gIATLoIgEwcBZj9tufNpZtlB8qw9dm3ZhacE0k"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
-PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:toLX1XB92g900YQMVNdY6b_qs9oHUEVANOZMzpJrM3Q"
+PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:r2OzC5WRhovt0RcKuCER8s7A5_zC5QPetciSS3EfDlY"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
 MAX_RESPONSE_BYTES = 1024 * 1024
 READINESS_TIMEOUT_SECONDS = 180.0
@@ -164,7 +164,7 @@ LEGAL_PAGE_CONTRACTS = (
     {
         "path": "/privacy",
         "title": "Privacy Policy",
-        "effectiveDate": "20 August 2026",
+        "effectiveDate": "22 August 2026",
         "requiredText": (
             "Only the app when running on an iPhone or iPad can register",
             "embedded Apple Watch companion and Apple TV app",
@@ -179,6 +179,8 @@ LEGAL_PAGE_CONTRACTS = (
             "do not provide background emergency alerts",
             "a public support issue cannot privately identify or delete that unreachable registration",
             "An old registration becomes eligible for deletion after it has not been refreshed for 90 days",
+            "last successfully registered bounded alert area remains in use until the next foreground renewal",
+            "without a fallback it attempts to delete the stale relay row",
             "event rows and their revision history become eligible for deletion after 89 days",
             "training-test claim becomes eligible for deletion after 14 days",
             "App Attest challenge becomes invalid in no more than five minutes",
@@ -978,7 +980,13 @@ def verify_foreground_emergency_parity_contract(sources: Mapping[str, str]) -> N
         fail("foreground Watch/TV emergency source inventory is incomplete.")
 
     app_delegate = sources["ios/QuakeSignal/App/AppDelegate.swift"]
+    root = sources["ios/QuakeSignal/Features/Root/RootView.swift"]
+    map_view = sources["ios/QuakeSignal/Features/Map/EpicenterMapView.swift"]
+    settings_view = sources["ios/QuakeSignal/Features/Settings/SettingsView.swift"]
+    alert_audio = sources["ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift"]
     settings = sources["ios/QuakeSignal/State/AppSettings.swift"]
+    location_manager = sources["ios/QuakeSignal/State/LocationManager.swift"]
+    quake_store = sources["ios/QuakeSignal/State/QuakeStore.swift"]
     bridge = sources["ios/QuakeSignalShared/WatchAlertPreferenceBridge.swift"]
     watch_policy = sources["ios/QuakeSignalShared/WatchForegroundEmergencyPolicy.swift"]
     watch_app = sources["ios/QuakeSignalWatch/QuakeSignalWatchApp.swift"]
@@ -990,6 +998,88 @@ def verify_foreground_emergency_parity_contract(sources: Mapping[str, str]) -> N
     tv_monitor = sources["ios/QuakeSignalTV/TVEmergencyMonitor.swift"]
     tv_policy = sources["ios/QuakeSignalTV/TVEmergencyPresentationPolicy.swift"]
     tv_audio = sources["ios/QuakeSignalTV/TVUserInitiatedAlertAudio.swift"]
+
+    for source, marker in (
+        (settings, "private(set) var pushRegistrationPreferencesRevision = 0"),
+        (settings, "private func markPushRegistrationPreferencesChanged()"),
+        (settings, "pushRegistrationPreferencesRevision &+= 1"),
+        (root, ".onChange(of: settings.pushRegistrationPreferencesRevision)"),
+        (
+            root,
+            "if settings.useCurrentLocation,\n"
+            "           locationManager.currentLocation == nil,\n"
+            "           locationManager.isRequestingLocation {",
+        ),
+        (location_manager, "enum LocationRequestPurpose: Equatable, Sendable"),
+        (
+            location_manager,
+            "func requestCurrentLocation(purpose: LocationRequestPurpose = .subscription)",
+        ),
+        (location_manager, "func stopUsingSubscriptionLocation()"),
+        (map_view, "locationManager.requestCurrentLocation(purpose: .mapFocus)"),
+        (root, "locationManager.stopUsingSubscriptionLocation()"),
+        (alert_audio, "private enum PlaybackOwner"),
+        (alert_audio, "play(preference, deduplicationKey: nil, owner: .preview)"),
+        (alert_audio, "playbackOwner = owner"),
+        (alert_audio, "guard playbackOwner == .preview else { return }"),
+        (
+            alert_audio,
+            "play(AppSettings.shared.alertSound, deduplicationKey: key, owner: .emergency)",
+        ),
+        (settings_view, "EmergencyAlertAudio.shared.stopPreview()"),
+    ):
+        if source.count(marker) != 1:
+            fail(
+                "centralized registration revision, location-purpose ownership, or "
+                f"alert-audio ownership lost exact marker {marker!r}."
+            )
+    location_ownership_guard = (
+        "guard purpose == .mapFocus || AppSettings.shared.useCurrentLocation else {"
+    )
+    if location_manager.count(location_ownership_guard) != 2:
+        fail("location-purpose ownership must guard both request and callback paths.")
+    if not re.search(
+        r"func requestCurrentLocation\(purpose: LocationRequestPurpose = \.subscription\)\s*\{"
+        r"\s*guard !ScreenshotAutomation\.isEnabled else \{ return \}\s*"
+        r"guard purpose == \.mapFocus \|\| AppSettings\.shared\.useCurrentLocation else \{"
+        r"\s*stopUsingSubscriptionLocation\(\)\s*return\s*\}",
+        location_manager,
+        re.DOTALL,
+    ):
+        fail("location-purpose ownership must protect the request entry path.")
+    if not re.search(
+        r"guard let purpose = self\.activeRequestPurpose else \{ return \}\s*"
+        r"self\.activeRequestPurpose = nil\s*"
+        r"guard purpose == \.mapFocus \|\| AppSettings\.shared\.useCurrentLocation else \{"
+        r"\s*self\.stopUsingSubscriptionLocation\(\)\s*return\s*\}",
+        location_manager,
+        re.DOTALL,
+    ):
+        fail("location-purpose ownership must protect the location callback path.")
+    if not re.search(
+        r"\.onChange\(of: settings\.pushRegistrationPreferencesRevision\)\s*\{[^}]*"
+        r"schedulePushRegistration\(\)\s*\}",
+        root,
+        re.DOTALL,
+    ):
+        fail("the centralized preference revision observer must schedule protected registration.")
+    if not re.search(
+        r"\.onChange\(of: locationManager\.isRequestingLocation\)\s*"
+        r"\{\s*_,\s*isRequesting\s+in\s*"
+        r"guard\s+!isRequesting,\s*settings\.useCurrentLocation,\s*"
+        r"scenePhase\s*==\s*\.active\s+else\s*\{\s*return\s*\}\s*"
+        r"(?:(?!\.onChange\().)*?schedulePushRegistration\(\)\s*\}",
+        root,
+        re.DOTALL,
+    ):
+        fail("location-request completion must resume deferred protected registration.")
+    if not re.search(
+        r"if PresentedAlertAudioPolicy\.shouldStop\(previous: oldValue, next: presentedAlert\)\s*\{"
+        r"\s*EmergencyAlertAudio\.shared\.stop\(\)\s*\}",
+        quake_store,
+        re.DOTALL,
+    ):
+        fail("presented-alert replacement or dismissal must stop app-owned emergency audio.")
 
     for source, marker in (
         (app_delegate, "WatchAlertPreferenceBridge.activatePhone(current: AppSettings.shared.alertSound)"),

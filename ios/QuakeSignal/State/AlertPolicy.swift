@@ -215,11 +215,13 @@ enum ForegroundAlertPolicy {
             return nil
         }
 
-        if let coordinate = preferences.coordinate {
-            guard let distance = event.distanceKm(from: coordinate),
-                  distance <= preferences.radiusKm else {
-                return nil
-            }
+        // QuakeSignal has no user-visible nationwide alert mode. Until a city
+        // or current-location fix exists, foreground delivery must match the
+        // server's fail-closed nearby-subscription behavior.
+        guard let coordinate = preferences.coordinate,
+              let distance = event.distanceKm(from: coordinate),
+              distance <= preferences.radiusKm else {
+            return nil
         }
 
         if event.isTraining {

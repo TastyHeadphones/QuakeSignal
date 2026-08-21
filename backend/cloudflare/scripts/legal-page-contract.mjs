@@ -2,7 +2,7 @@ export const LEGAL_PAGE_CONTRACTS = [
   {
     path: "/privacy",
     title: "Privacy Policy",
-    effectiveDate: "20 August 2026",
+    effectiveDate: "22 August 2026",
     requiredText: [
       "Only the app when running on an iPhone or iPad can register",
       "embedded Apple Watch companion and Apple TV app",
@@ -17,6 +17,8 @@ export const LEGAL_PAGE_CONTRACTS = [
       "do not provide background emergency alerts",
       "a public support issue cannot privately identify or delete that unreachable registration",
       "An old registration becomes eligible for deletion after it has not been refreshed for 90 days",
+      "last successfully registered bounded alert area remains in use until the next foreground renewal",
+      "without a fallback it attempts to delete the stale relay row",
       "event rows and their revision history become eligible for deletion after 89 days",
       "training-test claim becomes eligible for deletion after 14 days",
       "App Attest challenge becomes invalid in no more than five minutes",

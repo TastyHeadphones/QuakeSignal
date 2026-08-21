@@ -1,6 +1,6 @@
 # QuakeSignal — Privacy Policy
 
-Effective date: 20 August 2026
+Effective date: 22 August 2026
 
 This policy covers every QuakeSignal client: the **Windows desktop app** and
 legacy **Tauri macOS desktop builds** (dormant for Apple release 1.1 build 8),
@@ -142,7 +142,7 @@ stored for your device:
 | Stored | Purpose |
 |---|---|
 | APNs device token | Addressing the notification to your device |
-| An approximate coordinate on a 0.1° grid, derived from either the current location or a selected city's coordinate | Deciding whether an event is near enough to alert you |
+| An approximate coordinate on a 0.1° grid, derived from either a selected city's coordinate or the most recent current-device location that the app successfully registered while open | Deciding whether an event is near enough to alert you |
 | Optional chosen city name | Showing and matching the selected alert area |
 | Alert radius, minimum magnitude, selected JMA feed types | Filtering JMA-issued information against your alert choices; QuakeSignal does not create a new local-intensity or arrival-time forecast |
 | Locale, UTC offset, night-notification preference | Localizing text and honouring quiet hours |
@@ -151,6 +151,9 @@ stored for your device:
 | App Attest integrity record: opaque key identifier, public verification key, Apple attestation receipt, assertion counter, integrity timestamps, and any Apple-supplied build/version distribution category | Proving that a registration, removal, or test-push request came from the signed app instance and preventing forged or replayed requests |
 | Production training-test claim: opaque App Attest key identifier and UTC claim/expiry timestamps after an immediate or reviewed delayed production test | Enforcing one clearly labelled production training attempt per App Attest key per UTC day; this contains no APNs token, proof, or request body |
 | Optional delayed-training scheduler record: opaque App Attest key identifier, fixed due time, and at-most-once attempted state | Scheduling one reviewed background training notification. It contains no APNs token, request body, App Attest proof, preferences, location, or earthquake payload, and is deleted after its one attempt or cancellation; an alarm more than 30 seconds late is deleted without delivery. |
+
+While the app is inactive, its last successfully registered bounded alert area
+remains in use until the next foreground renewal, removal, or retention cleanup.
 
 The subscription data is stored in the `devices` table and the integrity data
 in the `app_attest_keys` and short-lived `app_attest_challenges` tables in
@@ -198,7 +201,11 @@ attempt per key per UTC day. Its optional
 fixed-delay check creates a private scheduler record containing only that key
 ID, a due time, and an at-most-once attempted state. It is deleted after the
 one scheduled attempt or cancellation, and an alarm more than 30 seconds late
-is deleted without delivery. APNs also removes invalidated tokens. Registrations
+is deleted without delivery. APNs also removes invalidated tokens. When
+QuakeSignal is next active, losing a current-location fix replaces it with the
+saved city fallback when available; without a fallback, the app attempts to
+delete the stale relay row and reports a failed registration if deletion cannot
+be confirmed. Registrations
 become eligible for deletion after they have not been refreshed for 90 days,
 together with those orphaned integrity records; the next successful daily
 cleanup removes them, and an operational cleanup failure can delay deletion.
@@ -209,9 +216,9 @@ history become eligible for deletion after 89 days and are removed by the next
 successful daily cleanup; an operational cleanup failure can delay deletion.
 A public support issue cannot privately identify an
 old registration after its App Attest key and APNs token are unavailable.
-Deleting the app or switching off iOS notifications alone cannot reliably
-communicate a deletion request to the service, so use the in-app control before
-deleting the app or resetting its Keychain state.
+Deleting the app or switching off iOS notifications or location access alone
+cannot reliably communicate a deletion request to the service, so use the
+in-app control before deleting the app or resetting its Keychain state.
 
 **If the app's integrity key is reset.** Apple can replace an App Attest key
 after reinstall or device restore. A newly attested signed app instance that

@@ -30,6 +30,13 @@ final class AlertPolicyTests: XCTestCase {
             for: event,
             previous: nil,
             isBackfill: false,
+            preferences: preferences(coordinate: nil),
+            now: now
+        ))
+        XCTAssertNil(ForegroundAlertPolicy.presentationReason(
+            for: event,
+            previous: nil,
+            isBackfill: false,
             preferences: preferences(subscriptionEnabled: false),
             now: now
         ))
@@ -68,6 +75,28 @@ final class AlertPolicyTests: XCTestCase {
             for: makeEvent(reportDate: now.addingTimeInterval(-601), isWarn: true),
             preferences: matching
         ))
+    }
+
+    func testEmergencyAudioLifetimeFollowsDismissalRevisionAndReplacement() {
+        let warning = PresentedAlert(
+            event: makeEvent(reportDate: now, isWarn: true),
+            reason: .new
+        )
+        let updated = PresentedAlert(
+            event: makeEvent(serial: 2, reportDate: now, isWarn: true),
+            reason: .updated
+        )
+        let detail = PresentedAlert(
+            event: warning.event,
+            reason: .report,
+            mode: .detail
+        )
+
+        XCTAssertFalse(PresentedAlertAudioPolicy.shouldStop(previous: nil, next: warning))
+        XCTAssertFalse(PresentedAlertAudioPolicy.shouldStop(previous: warning, next: warning))
+        XCTAssertTrue(PresentedAlertAudioPolicy.shouldStop(previous: warning, next: nil))
+        XCTAssertTrue(PresentedAlertAudioPolicy.shouldStop(previous: warning, next: updated))
+        XCTAssertTrue(PresentedAlertAudioPolicy.shouldStop(previous: warning, next: detail))
     }
 
     func testCompanionHeadlineRejectsStaleAndFutureWarningsForLatestReport() {
@@ -777,7 +806,10 @@ final class AlertPolicyTests: XCTestCase {
         subscriptionEnabled: Bool = true,
         enabledSources: Set<String> = ["jma_eew"],
         minimumMagnitude: Double = 3,
-        coordinate: CLLocationCoordinate2D? = nil,
+        coordinate: CLLocationCoordinate2D? = CLLocationCoordinate2D(
+            latitude: 34.6937,
+            longitude: 135.5023
+        ),
         radiusKm: Double = 100,
         includeTraining: Bool = false
     ) -> AlertPreferenceSnapshot {

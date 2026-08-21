@@ -327,7 +327,7 @@ test("bounds hung APNs operations and clears the success timer", async () => {
   );
 });
 
-test("automatic production delivery skips historical sandbox registrations", async () => {
+test("automatic production delivery skips sandbox and unfiltered registrations", async () => {
   const { dispatchPushPage } = await workerModule();
   const originalFetch = globalThis.fetch;
   const deviceRows = [
@@ -361,6 +361,24 @@ test("automatic production delivery skips historical sandbox registrations", asy
       latitude: null,
       longitude: null,
       radius_km: null,
+      include_test_alerts: 1,
+      utc_offset_minutes: null,
+      notify_at_night: 1,
+      created_at: "2026-08-14T00:00:00.000Z",
+      updated_at: "2026-08-14T00:00:00.000Z",
+    },
+    {
+      cursor: 3,
+      token: "nearby-production-token",
+      environment: "production",
+      locale: null,
+      sources: '["jma_eew"]',
+      min_magnitude: 0,
+      critical_alerts_enabled: 0,
+      city_name: "Test City",
+      latitude: 35,
+      longitude: 135,
+      radius_km: 100,
       include_test_alerts: 1,
       utc_offset_minutes: null,
       notify_at_night: 1,
@@ -455,7 +473,7 @@ test("automatic production delivery skips historical sandbox registrations", asy
       "the production delivery page must filter before page-size pagination",
     );
     assert.deepEqual(apnsUrls, [
-      "https://api.push.apple.com/3/device/current-production-token",
+      "https://api.push.apple.com/3/device/nearby-production-token",
     ]);
     assert.equal(deliveredBatches.length, 1, "only the production delivery is recorded");
   } finally {
@@ -484,9 +502,9 @@ test("dispatches each authenticated app route with its stored allow-listed APNs 
     critical_alerts_enabled: 0,
     alert_sound: "system",
     city_name: null,
-    latitude: null,
-    longitude: null,
-    radius_km: null,
+    latitude: 35,
+    longitude: 135,
+    radius_km: 100,
     include_test_alerts: 1,
     utc_offset_minutes: null,
     notify_at_night: 1,
@@ -606,9 +624,9 @@ test("never sends a tampered stored topic and still completes another platform r
     critical_alerts_enabled: 0,
     alert_sound: "system",
     city_name: null,
-    latitude: null,
-    longitude: null,
-    radius_km: null,
+    latitude: 35,
+    longitude: 135,
+    radius_km: 100,
     include_test_alerts: 1,
     utc_offset_minutes: null,
     notify_at_night: 1,
@@ -6254,10 +6272,25 @@ test("accepts only exact alert-sound registration identifiers and defaults old c
     APNS_RELAY_SOURCES,
     validatedRegistrationValues,
   } = await workerModule();
-  const registration = { token: "0123456789abcdef" };
+  const registration = {
+    token: "0123456789abcdef",
+    latitude: 35,
+    longitude: 135,
+    radiusKm: 100,
+  };
   const legacy = validatedRegistrationValues(registration);
   assert.equal(legacy.alertSound, "system");
   assert.deepEqual(JSON.parse(legacy.sources), ["jma_eew", "jma_eqlist"]);
+  for (const missingLocation of [
+    { token: registration.token },
+    { ...registration, latitude: undefined },
+    { ...registration, longitude: undefined },
+    { ...registration, radiusKm: undefined },
+  ]) {
+    const response = validatedRegistrationValues(missingLocation);
+    assert.ok(response instanceof Response);
+    assert.equal(response.status, 400, "automatic registrations require a complete radius filter");
+  }
   const jmaOnly = validatedRegistrationValues({
     ...registration,
     sources: ["jma_eew", "jma_eqlist"],

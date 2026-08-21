@@ -153,7 +153,7 @@ end
 class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
   SOURCE_ROOT = Pathname.new(__dir__).join("../..").realpath
   SOURCE_COMMIT = "a" * 40
-  SIGNED_COMMIT = "b" * 40
+  SIGNED_COMMIT = SOURCE_COMMIT
 
   class << self
     def realistic_active_release_fixture
@@ -549,6 +549,31 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     assert_match(/capture run canonical repository/, error.message)
   end
 
+  def test_named_reviewers_are_bound_to_protected_environment_approval
+    build_active_release_set
+    add_release_approval
+    approval_path = release_root.join("release-approval.json")
+    approval = JSON.parse(approval_path.read)
+    approval.fetch("approvals").fetch("visual")["reviewer"] = "unapproved-reviewer"
+    write_json(approval_path, approval)
+    rehash_approval!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+    assert_match(/approved protected-environment login/, error.message)
+
+    add_release_approval(reset: true)
+    approval = JSON.parse(approval_path.read)
+    approval.fetch("environmentApproval")["approvedReviewerGitHubLogins"] = ["release-owner"]
+    approval.fetch("approvals").each_value { |record| record["reviewer"] = "release-owner" }
+    write_json(approval_path, approval)
+    rehash_approval!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+    assert_match(/reviewer distinct from the actor/, error.message)
+  end
+
   def test_approval_times_must_follow_capture_and_platform_parity
     build_active_release_set
     add_release_approval
@@ -572,7 +597,36 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     error = assert_raises(AppleScreenshotReleaseSetValidationError) do
       validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
     end
-    assert_match(/overall release review must not predate/, error.message)
+    assert_match(/overall release review completion time/, error.message)
+  end
+
+  def test_signed_release_evidence_requires_embedded_watch_and_four_distinct_artifacts
+    build_active_release_set
+    add_release_approval
+    approval_path = release_root.join("release-approval.json")
+    approval = JSON.parse(approval_path.read)
+    watch = approval.fetch("platforms").find { |record| record.fetch("platform") == "watchos" }
+    watch["signedReleaseRunId"] += 100
+    watch["signedReleaseAttestationArtifactName"] =
+      "signed-release-attestation-ios-ipados-watchos-#{SOURCE_COMMIT}-#{watch.fetch("signedReleaseRunId")}-#{watch.fetch("signedReleaseRunAttempt")}"
+    write_json(approval_path, approval)
+    rehash_approval!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+    assert_match(/iOS\/iPadOS and watchOS signed release run ID/, error.message)
+
+    add_release_approval(reset: true)
+    approval = JSON.parse(approval_path.read)
+    tvos = approval.fetch("platforms").find { |record| record.fetch("platform") == "tvos" }
+    visionos = approval.fetch("platforms").find { |record| record.fetch("platform") == "visionos" }
+    visionos["signedReleaseArtifactSha256"] = tvos.fetch("signedReleaseArtifactSha256")
+    write_json(approval_path, approval)
+    rehash_approval!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+    assert_match(/distinct signed release artifact count/, error.message)
   end
 
   def test_duplicate_json_keys_and_partial_approval_pointer_are_rejected
@@ -1088,22 +1142,34 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     approval_path.delete if reset && approval_path.exist?
     manifest_path = release_root.join("release-set.json")
     approval = {
-      "schemaVersion" => 2,
+      "schemaVersion" => 3,
       "status" => "approved-for-build8-upload",
       "uploadApproved" => true,
       "sourceCommit" => SOURCE_COMMIT,
       "releaseSetManifestSha256" => Digest::SHA256.file(manifest_path).hexdigest,
       "dispatchActorGitHubLogin" => "release-owner",
+      "environmentApproval" => {
+        "schemaVersion" => 1,
+        "repository" => AppleScreenshotReleaseSetValidator::CANONICAL_REPOSITORY,
+        "runId" => 30_001,
+        "runAttempt" => 1,
+        "workflowFile" => ".github/workflows/apple-screenshot-release-ready.yml",
+        "headSha" => SOURCE_COMMIT,
+        "environment" => "ios-app-store-release",
+        "approvedReviewerGitHubLogins" => ["release-reviewer"],
+      },
       "captureRun" => {
         "schemaVersion" => 1,
         "repository" => AppleScreenshotReleaseSetValidator::CANONICAL_REPOSITORY,
         "runId" => 12_345,
+        "runAttempt" => 1,
         "workflowFile" => AppleScreenshotReleaseSetValidator::CAPTURE_WORKFLOW_FILE,
         "event" => "workflow_dispatch",
         "headBranch" => "main",
         "headSha" => SOURCE_COMMIT,
         "status" => "completed",
         "conclusion" => "success",
+        "completedAtUtc" => "2026-08-20T00:50:00Z",
         "artifacts" => [
           "UNAPPROVED-debug-simulator-ios-ipados-#{SOURCE_COMMIT}",
           "UNAPPROVED-debug-simulator-tvos-#{SOURCE_COMMIT}",
@@ -1123,26 +1189,50 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
       "approvals" => {
         "visual" => {
           "approved" => true,
-          "reviewer" => "Visual Reviewer",
+          "reviewer" => "release-reviewer",
           "reviewedAtUtc" => "2026-08-20T00:57:00Z",
         },
         "privacy" => {
           "approved" => true,
-          "reviewer" => "Privacy Reviewer",
+          "reviewer" => "release-reviewer",
           "reviewedAtUtc" => "2026-08-20T00:58:00Z",
         },
         "signedReleaseParity" => {
           "approved" => true,
-          "reviewer" => "Signed Parity Reviewer",
+          "reviewer" => "release-reviewer",
           "reviewedAtUtc" => "2026-08-20T00:55:00Z",
         },
       },
-      "reviewedAtUtc" => "2026-08-20T01:00:00Z",
+      "reviewedAtUtc" => "2026-08-20T00:58:00Z",
       "platforms" => AppleScreenshotReleaseSetValidator::REQUIRED_PLATFORMS.keys.map do |platform|
+        run_id = {
+          "ios-ipados" => 20_001,
+          "watchos" => 20_001,
+          "tvos" => 20_002,
+          "visionos" => 20_003,
+          "maccatalyst" => 20_004,
+        }.fetch(platform)
+        role = %w[ios-ipados watchos].include?(platform) ? "ios-ipados-watchos" : platform
+        signed_hash_platform = platform == "watchos" ? "ios-ipados" : platform
         {
           "platform" => platform,
-          "signedReleaseArtifactSha256" => Digest::SHA256.hexdigest("signed:#{platform}"),
+          "signedReleaseRunId" => run_id,
+          "signedReleaseRunAttempt" => 1,
+          "signedReleaseWorkflowFile" =>
+            AppleScreenshotReleaseSetValidator::SIGNED_RELEASE_WORKFLOW_FILES.fetch(platform),
+          "signedReleaseAttestationArtifactName" =>
+            "signed-release-attestation-#{role}-#{SOURCE_COMMIT}-#{run_id}-1",
+          "signedReleaseAttestationArtifactDigest" =>
+            "sha256:#{Digest::SHA256.hexdigest("attestation:#{role}")}",
+          "signedReleaseArtifactKind" =>
+            AppleScreenshotReleaseSetValidator::SIGNED_RELEASE_ARTIFACT_KINDS.fetch(platform),
+          "signedReleaseArtifactSha256" => Digest::SHA256.hexdigest("signed:#{signed_hash_platform}"),
+          "signedMarketingVersion" => "1.1",
+          "signedBuildNumber" => 8,
+          "signedDistributionMode" => "testflight-upload",
+          "signedReleaseAttestedAtUtc" => "2026-08-20T00:53:00Z",
           "signedBuildSourceCommit" => SIGNED_COMMIT,
+          "signedRunCompletedAtUtc" => "2026-08-20T00:54:00Z",
           "signedReleaseParityApproved" => true,
           "parityReviewedAtUtc" => "2026-08-20T00:55:00Z",
         }

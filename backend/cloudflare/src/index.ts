@@ -2820,21 +2820,22 @@ function shouldNotify(
     return false;
   }
   if (
-    device.radiusKm != null &&
-    device.latitude != null &&
-    device.longitude != null
+    device.radiusKm == null ||
+    device.latitude == null ||
+    device.longitude == null ||
+    event.latitude == null ||
+    event.longitude == null
   ) {
-    if (event.latitude == null || event.longitude == null) return false;
-    return (
-      haversineDistanceKm(
-        device.latitude,
-        device.longitude,
-        event.latitude,
-        event.longitude,
-      ) <= device.radiusKm
-    );
+    return false;
   }
-  return true;
+  return (
+    haversineDistanceKm(
+      device.latitude,
+      device.longitude,
+      event.latitude,
+      event.longitude,
+    ) <= device.radiusKm
+  );
 }
 
 function base64URL(bytes: Uint8Array): string {
@@ -9306,7 +9307,7 @@ export function validatedRegistrationValues(
     !isOptionalBoundedString(body.cityName, MAX_DEVICE_TEXT_LENGTH) ||
     (body.alertSound !== undefined && !isAlertSound(body.alertSound)) ||
     !isOptionalFiniteNumber(body.minMagnitude, 0, 10) ||
-    !isOptionalFiniteNumber(body.radiusKm, 0, 2_000) ||
+    !isOptionalFiniteNumber(body.radiusKm, 1, 2_000) ||
     !isOptionalFiniteNumber(body.utcOffsetMinutes, -840, 840) ||
     !isOptionalBoolean(body.includeTestAlerts) ||
     !isOptionalBoolean(body.notifyAtNight) ||
@@ -9327,6 +9328,13 @@ export function validatedRegistrationValues(
   if (body.radiusKm !== undefined && !hasLatitude) {
     return json(
       { error: "radiusKm requires latitude and longitude" },
+      400,
+      noStoreHeaders(),
+    );
+  }
+  if (!hasLatitude || body.radiusKm === undefined) {
+    return json(
+      { error: "latitude, longitude, and radiusKm are required" },
       400,
       noStoreHeaders(),
     );
@@ -10068,7 +10076,7 @@ async function handleRequest(
         },
         {
           heading: "Data we process",
-          body: "If you enable alert registration on an iPhone or iPad, the service stores the APNs device token, app locale, selected JMA feed types, magnitude threshold, alert preferences (including the exact alert-sound identifier and a test-alert preference), alert radius, optional selected-city label, registration timestamps, and one approximate coordinate on a 0.1° grid. That coordinate is derived from either the selected city's coordinate or the current device location; neither an exact GPS fix nor an unrounded selected-city coordinate is sent. To prevent fraudulent subscription changes, the service also stores an opaque Apple App Attest key identifier, public verification key, attestation receipt, monotonic assertion counter, and integrity timestamps; newer Apple proofs may additionally carry the app build version and distribution category. QuakeSignal does not require an account, name, email address, contacts, photos, or advertising identifier for this registration.",
+          body: "If you enable alert registration on an iPhone or iPad, the service stores the APNs device token, app locale, selected JMA feed types, magnitude threshold, alert preferences (including the exact alert-sound identifier and a test-alert preference), alert radius, optional selected-city label, registration timestamps, and one approximate coordinate on a 0.1° grid. That coordinate is derived from either the selected city's coordinate or the most recent current-device location that the app successfully registered while open; neither an exact GPS fix nor an unrounded selected-city coordinate is sent. While the app is inactive, its last successfully registered bounded alert area remains in use until the next foreground renewal, removal, or retention cleanup. To prevent fraudulent subscription changes, the service also stores an opaque Apple App Attest key identifier, public verification key, attestation receipt, monotonic assertion counter, and integrity timestamps; newer Apple proofs may additionally carry the app build version and distribution category. QuakeSignal does not require an account, name, email address, contacts, photos, or advertising identifier for this registration.",
         },
         {
           heading: "Data kept on your device",
@@ -10080,7 +10088,7 @@ async function handleRequest(
         },
         {
           heading: "Storage and deletion",
-          body: "Subscription settings and the associated App Attest integrity record are stored in Cloudflare D1. Removing notification registration from the app deletes the matching device registration, even when this launch has no APNs token, if an existing App Attest key can prove it owns that subscription. A new key cannot claim a legacy subscription with an empty request. After reinstall or device restore, a fresh Apple attestation plus the exact APNs token may safely rebind that one token and retire its old key record; assertions and tokenless requests cannot transfer another key's subscription. If the old App Attest key and exact APNs token are both unavailable, a public support issue cannot privately identify or delete that unreachable registration; do not post either identifier or any proof there. Support can guide recovery. An old registration becomes eligible for deletion after it has not been refreshed for 90 days, together with its orphaned integrity record; the next successful daily cleanup removes them, and an operational cleanup failure can delay deletion. Normalized earthquake event rows and their revision history become eligible for deletion after 89 days and are removed by the next successful daily cleanup; an operational cleanup failure can delay deletion. If an in-app removal deletes the last registration using an App Attest key, the associated verifier, receipt, and assertion-counter record is deleted too. A reviewed production training test creates a separate token-free claim containing only the opaque App Attest key ID and UTC timestamps. The training-test claim becomes eligible for deletion after 14 days and is removed by the next successful routine cleanup; an operational cleanup failure can delay deletion. Its optional fixed-delay check also creates one private scheduler record containing only that opaque App Attest key ID, a due time, and an at-most-once attempted state; it contains no APNs token, request body, proof, preferences, location, or earthquake payload. That temporary record is deleted after its one scheduled attempt or cancellation; an alarm more than 30 seconds late is deleted without delivery. Each App Attest challenge becomes invalid in no more than five minutes; its expired row is removed by the next successful routine cleanup, and an operational cleanup failure can delay deletion. Sanitized delivery-failure token hashes become eligible for deletion after 14 days and are removed by the next successful routine cleanup; an operational cleanup failure can delay deletion. Disabling notifications or location access stops new collection but does not reliably send a deletion request, so use the in-app removal control before a reset when possible.",
+          body: "Subscription settings and the associated App Attest integrity record are stored in Cloudflare D1. Removing notification registration from the app deletes the matching device registration, even when this launch has no APNs token, if an existing App Attest key can prove it owns that subscription. A new key cannot claim a legacy subscription with an empty request. After reinstall or device restore, a fresh Apple attestation plus the exact APNs token may safely rebind that one token and retire its old key record; assertions and tokenless requests cannot transfer another key's subscription. If the old App Attest key and exact APNs token are both unavailable, a public support issue cannot privately identify or delete that unreachable registration; do not post either identifier or any proof there. Support can guide recovery. An old registration becomes eligible for deletion after it has not been refreshed for 90 days, together with its orphaned integrity record; the next successful daily cleanup removes them, and an operational cleanup failure can delay deletion. Normalized earthquake event rows and their revision history become eligible for deletion after 89 days and are removed by the next successful daily cleanup; an operational cleanup failure can delay deletion. If an in-app removal deletes the last registration using an App Attest key, the associated verifier, receipt, and assertion-counter record is deleted too. A reviewed production training test creates a separate token-free claim containing only the opaque App Attest key ID and UTC timestamps. The training-test claim becomes eligible for deletion after 14 days and is removed by the next successful routine cleanup; an operational cleanup failure can delay deletion. Its optional fixed-delay check also creates one private scheduler record containing only that opaque App Attest key ID, a due time, and an at-most-once attempted state; it contains no APNs token, request body, proof, preferences, location, or earthquake payload. That temporary record is deleted after its one scheduled attempt or cancellation; an alarm more than 30 seconds late is deleted without delivery. Each App Attest challenge becomes invalid in no more than five minutes; its expired row is removed by the next successful routine cleanup, and an operational cleanup failure can delay deletion. Sanitized delivery-failure token hashes become eligible for deletion after 14 days and are removed by the next successful routine cleanup; an operational cleanup failure can delay deletion. When QuakeSignal is next active, losing a current-location fix replaces it with the saved city fallback when available; without a fallback it attempts to delete the stale relay row and reports a failed registration if deletion cannot be confirmed. Disabling notifications or location access cannot guarantee that cleanup runs, so use the in-app removal control before a reset when possible.",
         },
         {
           heading: "Third-party services",
@@ -10091,7 +10099,7 @@ async function handleRequest(
           body: "QuakeSignal is not an official government warning platform. Data and notifications can be delayed, incomplete, or inaccurate. Follow official announcements and local emergency instructions.",
         },
       ],
-      "20 August 2026",
+      "22 August 2026",
     );
   }
   if (url.pathname === "/terms" && request.method === "GET") {

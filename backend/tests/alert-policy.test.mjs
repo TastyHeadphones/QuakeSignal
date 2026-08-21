@@ -39,7 +39,7 @@ test("legacy SQLite upgrades old registrations and persists exact alert sounds",
   legacy.close();
 
   process.env.DB_PATH = databasePath;
-  const { db, getDevice, getEvent, upsertDevice, upsertEvent } = await import(
+  const { db, getDevice, getEvent, listDevicesForSource, upsertDevice, upsertEvent } = await import(
     `../src/db.ts?alert-sound-test=${Date.now()}`
   );
   t.after(() => db.close());
@@ -77,6 +77,39 @@ test("legacy SQLite upgrades old registrations and persists exact alert sounds",
       `UPDATE devices SET alert_sound = 'official-j-alert' WHERE token = ?`,
     ).run("custom-sound-device-token"),
     /constraint/i,
+  );
+
+  const distanceFilterEvent = {
+    magnitude: 5.5,
+    latitude: 35,
+    longitude: 135,
+    isTraining: false,
+    isRoutineReport: false,
+  };
+  assert.deepEqual(
+    listDevicesForSource("jma_eew", distanceFilterEvent),
+    [],
+    "legacy registrations without a radius filter must not receive automatic alerts",
+  );
+  upsertDevice({
+    token: "nearby-device-token",
+    environment: "production",
+    locale: "ja",
+    sources: ["jma_eew"],
+    minMagnitude: 0,
+    criticalAlertsEnabled: false,
+    alertSound: "system",
+    cityName: "Test City",
+    latitude: 35,
+    longitude: 135,
+    radiusKm: 100,
+    includeTestAlerts: false,
+    utcOffsetMinutes: 540,
+    notifyAtNight: true,
+  });
+  assert.deepEqual(
+    listDevicesForSource("jma_eew", distanceFilterEvent).map(({ token }) => token),
+    ["nearby-device-token"],
   );
 
   const activeWarning = {
