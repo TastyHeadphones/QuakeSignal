@@ -2,6 +2,7 @@ import SwiftUI
 
 enum VisionGuideLayoutPolicy {
     static let wideAfterQuakeItemCount = 3
+    static let afterQuakeRowBottomInset: CGFloat = 24
 
     static func usesWideAfterQuakeRow(
         itemCount: Int,
@@ -153,6 +154,7 @@ private struct VisionAfterQuakeItems: View {
                 .accessibilityElement(children: .combine)
             }
         }
+        .padding(.bottom, VisionGuideLayoutPolicy.afterQuakeRowBottomInset)
         .accessibilityElement(children: .contain)
     }
 }
