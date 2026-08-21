@@ -545,11 +545,9 @@ private struct WatchEventDetailView: View {
 
                 Divider()
                 Text("platform.watch.foregroundOnly.detail")
-                    .font(.system(size: 9.5))
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .lineLimit(3)
-                    .minimumScaleFactor(0.9)
-                    .allowsTightening(true)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 10)

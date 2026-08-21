@@ -7,6 +7,7 @@ private struct VisionReadabilitySnapshot {
     var surfaceOpacity: Double
     var rowSurfaceOpacity: Double
     var supportingTextOpacity: Double
+    var minimumControlTargetSize: CGFloat
     var reportRowHeight: CGFloat
     var guideRowHeight: CGFloat
     var alertSoundRowHeight: CGFloat
@@ -18,6 +19,7 @@ private struct VisionReadabilitySnapshot {
             surfaceOpacity: VisionReadabilityMetrics.surfaceOpacity,
             rowSurfaceOpacity: VisionReadabilityMetrics.rowSurfaceOpacity,
             supportingTextOpacity: VisionReadabilityMetrics.supportingTextOpacity,
+            minimumControlTargetSize: VisionReadabilityMetrics.minimumControlTargetSize,
             reportRowHeight: VisionReadabilityMetrics.reportMinimumRowHeight,
             guideRowHeight: VisionReadabilityMetrics.guideMinimumRowHeight,
             alertSoundRowHeight: VisionReadabilityMetrics.alertSoundMinimumRowHeight
@@ -36,6 +38,7 @@ private struct VisionReadabilitySnapshot {
             rowSurfaceOpacity >= surfaceOpacity &&
             rowSurfaceOpacity <= 1.0 &&
             (0.80...0.90).contains(supportingTextOpacity) &&
+            minimumControlTargetSize == 60 &&
             (120...140).contains(reportRowHeight) &&
             (80...96).contains(guideRowHeight) &&
             (100...128).contains(alertSoundRowHeight)
@@ -300,6 +303,7 @@ final class ScreenshotAutomationTests: XCTestCase {
         XCTAssertLessThanOrEqual(metrics.rowSurfaceOpacity, 1.0)
         XCTAssertGreaterThanOrEqual(metrics.supportingTextOpacity, 0.80)
         XCTAssertLessThanOrEqual(metrics.supportingTextOpacity, 0.90)
+        XCTAssertEqual(metrics.minimumControlTargetSize, 60)
         XCTAssertGreaterThanOrEqual(metrics.reportRowHeight, 120)
         XCTAssertLessThanOrEqual(metrics.reportRowHeight, 140)
         XCTAssertGreaterThanOrEqual(metrics.guideRowHeight, 80)
@@ -324,6 +328,8 @@ final class ScreenshotAutomationTests: XCTestCase {
             ("row opacity above one", baseline.replacing(\.rowSurfaceOpacity, with: 1.001)),
             ("supporting opacity below range", baseline.replacing(\.supportingTextOpacity, with: 0.799)),
             ("supporting opacity above range", baseline.replacing(\.supportingTextOpacity, with: 0.901)),
+            ("control target below exact review", baseline.replacing(\.minimumControlTargetSize, with: 59)),
+            ("control target above exact review", baseline.replacing(\.minimumControlTargetSize, with: 61)),
             ("report row below range", baseline.replacing(\.reportRowHeight, with: 119)),
             ("report row above range", baseline.replacing(\.reportRowHeight, with: 141)),
             ("guide row below range", baseline.replacing(\.guideRowHeight, with: 79)),

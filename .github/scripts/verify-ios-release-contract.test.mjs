@@ -793,6 +793,20 @@ test("fails closed when foreground-only Vision capability or localized disclosur
     );
   });
   await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignal/App/QuakeSignalApp.swift");
+    const source = await readFile(path, "utf8");
+    const mutated = source.replace(
+      "static let minimumControlTargetSize: CGFloat = 60",
+      "static let minimumControlTargetSize: CGFloat = 44",
+    );
+    assert.notEqual(mutated, source);
+    await writeFile(path, mutated, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /foreground-only Apple platform policy must match the reviewed fingerprint/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
     const path = join(root, "ios/QuakeSignal/Features/Guide/DisasterGuideView.swift");
     const source = await readFile(path, "utf8");
     const mutated = source.replace(

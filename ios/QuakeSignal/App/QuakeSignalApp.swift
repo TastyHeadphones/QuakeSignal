@@ -9,6 +9,7 @@ enum VisionReadabilityMetrics {
     static let surfaceOpacity = 0.97
     static let rowSurfaceOpacity = 0.98
     static let supportingTextOpacity = 0.82
+    static let minimumControlTargetSize: CGFloat = 60
     static let reportMinimumRowHeight: CGFloat = 128
     static let guideMinimumRowHeight: CGFloat = 84
     static let alertSoundMinimumRowHeight: CGFloat = 112

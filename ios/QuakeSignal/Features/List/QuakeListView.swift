@@ -82,15 +82,32 @@ private struct FilterChip: View {
 
     var body: some View {
         Button(action: action) {
-            Text(labelKey)
-                .font(.subheadline.weight(.medium))
-                .visionFont(.body.weight(.semibold))
-                .padding(.horizontal, chipHorizontalPadding)
-                .padding(.vertical, chipVerticalPadding)
-                .background(Capsule().fill(isSelected ? Color("BrandColor") : Color("CardColor")))
-                .foregroundStyle(isSelected ? .white : .primary)
+            HStack(spacing: 6) {
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .accessibilityHidden(true)
+                }
+                Text(labelKey)
+            }
+            .font(.subheadline.weight(.medium))
+            .visionFont(.body.weight(.semibold))
+            .padding(.horizontal, chipHorizontalPadding)
+            .padding(.vertical, chipVerticalPadding)
+            .frame(minWidth: minimumHitTarget, minHeight: minimumHitTarget)
+            .background(Capsule().fill(isSelected ? Color("BrandColor") : Color("CardColor")))
+            .foregroundStyle(isSelected ? .white : .primary)
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var minimumHitTarget: CGFloat? {
+#if os(visionOS)
+        VisionReadabilityMetrics.minimumControlTargetSize
+#else
+        nil
+#endif
     }
 
     private var chipHorizontalPadding: CGFloat {
