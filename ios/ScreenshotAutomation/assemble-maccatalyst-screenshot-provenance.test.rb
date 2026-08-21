@@ -35,7 +35,7 @@ class MacCatalystScreenshotProvenanceTest < Minitest::Test
   def test_rejects_tampered_hash_window_or_approval
     with_capture_fixture do |capture_root, output|
       capture_root.join("raw-window-captures/maccatalyst-home.png").binwrite("tampered")
-      assert_rejected(capture_root, output, /actual SHA-256/)
+      assert_rejected(capture_root, output, /actual SHA-256|native raw image binding/)
     end
     with_capture_fixture do |capture_root, output|
       mutate_frame_evidence(capture_root, "maccatalyst-map") do |evidence|
