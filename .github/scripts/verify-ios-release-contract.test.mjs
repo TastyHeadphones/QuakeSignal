@@ -837,9 +837,9 @@ test("fails closed when foreground-only Vision capability, layout, or localized 
       "true",
     ],
     [
-      "post-quake row bottom inset",
+      "post-quake row bottom inset regression",
+      "static let afterQuakeRowBottomInset: CGFloat = 44",
       "static let afterQuakeRowBottomInset: CGFloat = 32",
-      "static let afterQuakeRowBottomInset: CGFloat = 0",
     ],
     [
       "post-quake row bottom inset application",
