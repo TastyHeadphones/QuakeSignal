@@ -430,33 +430,99 @@ final class ScreenshotAutomationTests: XCTestCase {
         ))
     }
 
-    func testMacCaptureGeometryRequiresStable1280By800RetinaFrame() {
+    func testMacCaptureGeometryRequiresStable1280By800FrameAndHonestSourceScale() {
         let target = CGRect(x: 40, y: 60, width: 1_280, height: 800)
 
         XCTAssertTrue(ScreenshotAutomation.macCaptureGeometryIsStable(
             systemFrame: target,
             previousSystemFrame: target,
-            backingScale: 2
+            sourceDisplayScale: 1
+        ))
+        XCTAssertTrue(ScreenshotAutomation.macCaptureGeometryIsStable(
+            systemFrame: target,
+            previousSystemFrame: target,
+            sourceDisplayScale: 2
         ))
         XCTAssertFalse(ScreenshotAutomation.macCaptureGeometryIsStable(
             systemFrame: target,
             previousSystemFrame: nil,
-            backingScale: 2
+            sourceDisplayScale: 1
         ))
         XCTAssertFalse(ScreenshotAutomation.macCaptureGeometryIsStable(
             systemFrame: target,
             previousSystemFrame: target.offsetBy(dx: 1, dy: 0),
-            backingScale: 2
+            sourceDisplayScale: 1
         ))
         XCTAssertFalse(ScreenshotAutomation.macCaptureGeometryIsStable(
             systemFrame: CGRect(x: 40, y: 60, width: 1_279, height: 800),
             previousSystemFrame: CGRect(x: 40, y: 60, width: 1_279, height: 800),
-            backingScale: 2
+            sourceDisplayScale: 1
         ))
         XCTAssertFalse(ScreenshotAutomation.macCaptureGeometryIsStable(
             systemFrame: target,
             previousSystemFrame: target,
-            backingScale: 1
+            sourceDisplayScale: 0
+        ))
+    }
+
+    func testMacHierarchyRendererRequiresItsIndependentExactDualGate() {
+        let enabledArguments = [
+            "QuakeSignal",
+            ScreenshotAutomation.launchArgument,
+            ScreenshotAutomation.macHierarchyCaptureArgument,
+        ]
+        let enabledEnvironment = [
+            ScreenshotAutomation.environmentKey: "1",
+            ScreenshotAutomation.macHierarchyCaptureEnvironmentKey: "1",
+        ]
+
+        XCTAssertTrue(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: true,
+            selectedFrame: .macMap,
+            arguments: enabledArguments,
+            environment: enabledEnvironment
+        ))
+        XCTAssertFalse(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: true,
+            selectedFrame: .macMap,
+            arguments: enabledArguments.filter {
+                $0 != ScreenshotAutomation.macHierarchyCaptureArgument
+            },
+            environment: enabledEnvironment
+        ))
+        XCTAssertFalse(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: false,
+            selectedFrame: .macMap,
+            arguments: enabledArguments,
+            environment: enabledEnvironment
+        ))
+        XCTAssertFalse(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: true,
+            selectedFrame: .macMap,
+            arguments: enabledArguments,
+            environment: enabledEnvironment.filter {
+                $0.key != ScreenshotAutomation.macHierarchyCaptureEnvironmentKey
+            }
+        ))
+        XCTAssertFalse(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: true,
+            selectedFrame: .macMap,
+            arguments: enabledArguments + [ScreenshotAutomation.macHierarchyCaptureArgument],
+            environment: enabledEnvironment
+        ))
+        XCTAssertFalse(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: true,
+            selectedFrame: .visionMap,
+            arguments: enabledArguments,
+            environment: enabledEnvironment
+        ))
+        XCTAssertFalse(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: true,
+            selectedFrame: .macMap,
+            arguments: enabledArguments,
+            environment: enabledEnvironment.merging([
+                ScreenshotAutomation.macHierarchyCaptureEnvironmentKey: "true"
+            ]) { _, new in new }
         ))
     }
 

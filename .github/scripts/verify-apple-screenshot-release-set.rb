@@ -759,9 +759,11 @@ class AppleScreenshotReleaseSetValidator
     end
     require_equal!(frames.length, expected_specs.length, "#{platform} provenance frame count")
     frames.zip(expected_specs).each_with_index do |(frame, expected), index|
+      frame_keys = %w[captureSelector file sha256 pixels format hasAlpha]
+      frame_keys << "captureEvidence" if platform == "maccatalyst"
       require_exact_keys!(
         frame,
-        %w[captureSelector file sha256 pixels format hasAlpha],
+        frame_keys,
         "#{platform} provenance frame #{index}",
       )
       %w[captureSelector file pixels format].each do |field|
@@ -777,6 +779,24 @@ class AppleScreenshotReleaseSetValidator
       require_equal!([properties.fetch(:width), properties.fetch(:height)], expected.fetch("pixels"), "#{platform} frame #{index} actual pixels")
       require_equal!(properties.fetch(:format), expected.fetch("format"), "#{platform} frame #{index} actual format")
       require_equal!(properties.fetch(:has_alpha), false, "#{platform} frame #{index} actual alpha")
+      if platform == "maccatalyst"
+        validate_maccatalyst_capture_evidence!(
+          frame.fetch("captureEvidence"),
+          package_root,
+          frame.fetch("captureSelector"),
+          index,
+        )
+      end
+    end
+    if platform == "maccatalyst"
+      nonces = frames.map { |frame| frame.fetch("captureEvidence").fetch("nonce") }
+      require_equal!(nonces.uniq.length, nonces.length, "Mac Catalyst capture nonce uniqueness")
+      frame_scales = frames.map do |frame|
+        frame.fetch("captureEvidence").fetch("sourceDisplayScale")
+      end.uniq
+      require_equal!(frame_scales.length, 1, "Mac Catalyst frame source display-scale inventory")
+      require_equal!(frame_scales.first, metadata.fetch("captureEnvironment").fetch("sourceDisplayScale"),
+                     "Mac Catalyst frame/environment source display scale")
     end
 
     evidence = metadata.fetch("evidenceFiles")
@@ -874,6 +894,50 @@ class AppleScreenshotReleaseSetValidator
   end
 
   def validate_capture_environment!(environment, platform)
+    if platform == "maccatalyst"
+      require_exact_keys!(
+        environment,
+        %w[
+          kind xcodeVersion operatingSystem runtimeIdentifier deviceIdentifier deviceModel
+          captureApi captureSurface logicalViewPoints sourceDisplayScale rasterizationScale
+          pixels afterScreenUpdates postCaptureResizePerformed
+        ],
+        "#{platform} capture environment",
+      )
+      %w[xcodeVersion operatingSystem deviceIdentifier deviceModel].each do |field|
+        value = environment.fetch(field)
+        unless value.is_a?(String) && !value.strip.empty?
+          raise AppleScreenshotReleaseSetValidationError,
+                "#{platform} capture environment #{field} must be nonempty"
+        end
+      end
+      require_equal!(environment.fetch("kind"), "maccatalyst-uikit-hierarchy",
+                     "Mac Catalyst capture kind")
+      require_equal!(environment.fetch("runtimeIdentifier"), nil,
+                     "Mac Catalyst runtimeIdentifier")
+      require_equal!(environment.fetch("captureApi"), "UIKit.UIView.drawHierarchy",
+                     "Mac Catalyst capture API")
+      require_equal!(environment.fetch("captureSurface"), "live-catalyst-uiwindow-hierarchy",
+                     "Mac Catalyst capture surface")
+      require_equal!(environment.fetch("logicalViewPoints"), [1_280, 800],
+                     "Mac Catalyst logicalViewPoints")
+      source_display_scale = environment.fetch("sourceDisplayScale")
+      unless source_display_scale.is_a?(Numeric) && source_display_scale.finite? &&
+             source_display_scale.between?(0.5, 4)
+        raise AppleScreenshotReleaseSetValidationError,
+              "Mac Catalyst sourceDisplayScale must be finite and between 0.5 and 4"
+      end
+      require_equal!(environment.fetch("rasterizationScale"), 2,
+                     "Mac Catalyst rasterizationScale")
+      require_equal!(environment.fetch("pixels"), [2_560, 1_600],
+                     "Mac Catalyst capture pixels")
+      require_equal!(environment.fetch("afterScreenUpdates"), true,
+                     "Mac Catalyst after-screen-updates policy")
+      require_equal!(environment.fetch("postCaptureResizePerformed"), false,
+                     "Mac Catalyst post-capture resize")
+      return
+    end
+
     require_exact_keys!(
       environment,
       %w[
@@ -889,20 +953,82 @@ class AppleScreenshotReleaseSetValidator
               "#{platform} capture environment #{field} must be nonempty"
       end
     end
-    if platform == "maccatalyst"
-      require_equal!(environment.fetch("kind"), "maccatalyst-host", "Mac Catalyst capture kind")
-      require_equal!(environment.fetch("runtimeIdentifier"), nil, "Mac Catalyst runtimeIdentifier")
-      require_equal!(environment.fetch("logicalWindowPoints"), [1280, 800], "Mac Catalyst logicalWindowPoints")
-      require_equal!(environment.fetch("backingScale"), 2, "Mac Catalyst backingScale")
-    else
-      require_equal!(environment.fetch("kind"), "simulator", "#{platform} capture kind")
-      runtime = environment.fetch("runtimeIdentifier")
-      unless runtime.is_a?(String) && !runtime.strip.empty?
+    require_equal!(environment.fetch("kind"), "simulator", "#{platform} capture kind")
+    runtime = environment.fetch("runtimeIdentifier")
+    unless runtime.is_a?(String) && !runtime.strip.empty?
+      raise AppleScreenshotReleaseSetValidationError,
+            "#{platform} capture runtimeIdentifier must be nonempty"
+    end
+    require_equal!(environment.fetch("logicalWindowPoints"), nil, "#{platform} logicalWindowPoints")
+    require_equal!(environment.fetch("backingScale"), nil, "#{platform} backingScale")
+  end
+
+  def validate_maccatalyst_capture_evidence!(evidence, package_root, selector, index)
+    label = "Mac Catalyst frame #{index} capture evidence"
+    require_exact_keys!(
+      evidence,
+      %w[
+        requestFile requestSha256 responseFile responseSha256 rawFile rawSha256 nonce captureApi
+        captureSurface logicalViewPoints sourceDisplayScale rasterizationScale pixels
+        afterScreenUpdates drawHierarchyComplete postCaptureResizePerformed rendererOpaque
+        rendererPreferredRange
+      ],
+      label,
+    )
+    unless evidence.fetch("nonce").is_a?(String) && evidence.fetch("nonce").match?(/\A[0-9a-f]{64}\z/)
+      raise AppleScreenshotReleaseSetValidationError, "#{label} nonce is invalid"
+    end
+    require_equal!(evidence.fetch("captureApi"), "UIKit.UIView.drawHierarchy",
+                   "#{label} capture API")
+    require_equal!(evidence.fetch("captureSurface"), "live-catalyst-uiwindow-hierarchy",
+                   "#{label} capture surface")
+    require_equal!(evidence.fetch("logicalViewPoints"), [1_280, 800],
+                   "#{label} logical view points")
+    source_display_scale = evidence.fetch("sourceDisplayScale")
+    unless source_display_scale.is_a?(Numeric) && source_display_scale.finite? &&
+           source_display_scale.between?(0.5, 4)
+      raise AppleScreenshotReleaseSetValidationError,
+            "#{label} source display scale must be finite and between 0.5 and 4"
+    end
+    require_equal!(evidence.fetch("rasterizationScale"), 2,
+                   "#{label} rasterization scale")
+    require_equal!(evidence.fetch("pixels"), [2_560, 1_600], "#{label} pixels")
+    require_equal!(evidence.fetch("afterScreenUpdates"), true,
+                   "#{label} after-screen-updates policy")
+    require_equal!(evidence.fetch("drawHierarchyComplete"), true,
+                   "#{label} hierarchy completion")
+    require_equal!(evidence.fetch("postCaptureResizePerformed"), false,
+                   "#{label} post-capture resize")
+    require_equal!(evidence.fetch("rendererOpaque"), false, "#{label} renderer opacity")
+    require_equal!(evidence.fetch("rendererPreferredRange"), "standard",
+                   "#{label} renderer preferred range")
+
+    references = [
+      [evidence.fetch("requestFile"), evidence.fetch("requestSha256"), "request"],
+      [evidence.fetch("responseFile"), evidence.fetch("responseSha256"), "response"],
+      [evidence.fetch("rawFile"), evidence.fetch("rawSha256"), "raw PNG"],
+    ]
+    if references.map(&:first).uniq.length != references.length
+      raise AppleScreenshotReleaseSetValidationError,
+            "#{label} request, response, and raw PNG files must be distinct"
+    end
+    expected_paths = [
+      "evidence/raw-capture/capture-request-evidence/#{selector}.json",
+      "evidence/raw-capture/native-capture-evidence/#{selector}.json",
+      "evidence/raw-capture/raw-window-captures/#{selector}.png",
+    ]
+    require_equal!(references.map(&:first), expected_paths, "#{label} source-addressed paths")
+    references.each do |relative, sha256, kind|
+      validate_safe_relative_path!(relative, "#{label} #{kind} file")
+      unless relative.start_with?("evidence/raw-capture/")
         raise AppleScreenshotReleaseSetValidationError,
-              "#{platform} capture runtimeIdentifier must be nonempty"
+              "#{label} #{kind} file must retain source-addressed raw capture evidence"
       end
-      require_equal!(environment.fetch("logicalWindowPoints"), nil, "#{platform} logicalWindowPoints")
-      require_equal!(environment.fetch("backingScale"), nil, "#{platform} backingScale")
+      require_sha256!(sha256, "#{label} #{kind} SHA-256")
+      path = package_root.join(relative)
+      ensure_plain_file!(path, "#{label} #{kind}")
+      require_equal!(Digest::SHA256.file(path).hexdigest, sha256,
+                     "#{label} #{kind} actual SHA-256")
     end
   end
 

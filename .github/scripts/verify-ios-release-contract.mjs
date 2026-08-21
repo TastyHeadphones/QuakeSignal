@@ -1979,8 +1979,8 @@ function verifyScreenshotCandidateWorkflow(workflowSource) {
     fail("native screenshot candidate workflow must remain credential-free.");
   }
   const jobs = record(workflow.jobs, "native screenshot candidate workflow jobs");
-  if (!sameValue(Object.keys(jobs), ["capture"])) {
-    fail("native screenshot candidate workflow must expose only its reviewed capture job.");
+  if (!sameValue(Object.keys(jobs), ["capture", "capture_maccatalyst"])) {
+    fail("native screenshot candidate workflow must expose exactly its reviewed simulator matrix and distinct Mac Catalyst hierarchy jobs.");
   }
   const jobsFingerprint = workflowSequenceFingerprint(jobs);
   if (jobsFingerprint !== SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT) {

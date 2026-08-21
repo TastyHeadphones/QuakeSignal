@@ -15,12 +15,16 @@ enum ScreenshotAutomation {
     static let frameEnvironmentKey = "QUAKESIGNAL_SCREENSHOT_FRAME"
     static let macCaptureEvidenceRootEnvironmentKey =
         "QUAKESIGNAL_CATALYST_SCREENSHOT_EVIDENCE_ROOT"
+    static let macHierarchyCaptureArgument =
+        "--quakesignal-catalyst-hierarchy-capture"
+    static let macHierarchyCaptureEnvironmentKey =
+        "QUAKESIGNAL_CATALYST_HIERARCHY_CAPTURE"
 
-    /// Mac App Store captures use a 1280 × 800-point Catalyst window on a
-    /// Retina display. `screencapture` therefore returns the selected native
-    /// 2560 × 1600 pixels without any resize operation.
+    /// Mac App Store candidates render the exact live 1280 × 800-point
+    /// Catalyst UIWindow directly at two pixels per point. The runner's actual
+    /// display scale is evidence, not a precondition and not the raster scale.
     static let macCaptureLogicalSize = CGSize(width: 1_280, height: 800)
-    static let macCaptureBackingScale: CGFloat = 2
+    static let macCaptureRasterizationScale: CGFloat = 2
     static let macCaptureReadyAccessibilityIdentifier =
         "com.quakesignal.screenshot.maccatalyst.geometry-ready"
     static let macCaptureFailedAccessibilityIdentifier =
@@ -242,23 +246,43 @@ enum ScreenshotAutomation {
         return path
     }
 
-    /// A pure policy used by the Catalyst scene probe. The target size and
-    /// Retina scale must match, and two consecutive full system frames must be
-    /// unchanged before the probe counts an observation as stable.
+    /// A second independent gate protects the in-process hierarchy renderer.
+    /// Ordinary screenshot automation launches can resize the window but can
+    /// never publish image bytes without this exact argument/environment pair.
+    static func macHierarchyCaptureIsEnabled(
+        screenshotAutomationEnabled: Bool,
+        selectedFrame: Frame?,
+        arguments: [String],
+        environment: [String: String]
+    ) -> Bool {
+        guard screenshotAutomationEnabled,
+              let selectedFrame,
+              macCaptureFrames.contains(selectedFrame),
+              environment[macHierarchyCaptureEnvironmentKey] == "1" else {
+            return false
+        }
+        return arguments.filter { $0 == macHierarchyCaptureArgument }.count == 1
+    }
+
+    /// A pure policy used by the Catalyst scene probe. The exact target size
+    /// and two consecutive full system frames must be unchanged before the
+    /// probe counts an observation as stable. The source display scale is only
+    /// required to be a plausible finite value; rendering always uses the
+    /// separately fixed `macCaptureRasterizationScale`.
     static func macCaptureGeometryIsStable(
         systemFrame: CGRect,
         previousSystemFrame: CGRect?,
-        backingScale: CGFloat,
+        sourceDisplayScale: CGFloat,
         tolerance: CGFloat = 0.25
     ) -> Bool {
         guard let previousSystemFrame,
               tolerance >= 0,
               systemFrame.width.isFinite,
               systemFrame.height.isFinite,
-              backingScale.isFinite,
+              sourceDisplayScale.isFinite,
+              (0.5...4).contains(sourceDisplayScale),
               approximatelyEqual(systemFrame.width, macCaptureLogicalSize.width, tolerance: tolerance),
-              approximatelyEqual(systemFrame.height, macCaptureLogicalSize.height, tolerance: tolerance),
-              approximatelyEqual(backingScale, macCaptureBackingScale, tolerance: 0.01) else {
+              approximatelyEqual(systemFrame.height, macCaptureLogicalSize.height, tolerance: tolerance) else {
             return false
         }
 

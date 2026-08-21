@@ -111,9 +111,11 @@ fi
     single.include?("simctl get_app_container") &&
     single.include?("installed_tree == app.fetch(\"bundleTree\")") &&
     single.include?(%q[[ -e "$installed_app_path/Watch" ] || [ -L "$installed_app_path/Watch" ]])
-  abort "install evidence selector interpolation is not shell-quote-safe" unless
+  unsafe_install_log = %q["installLogFile" => "install-logs/#{ENV.fetch(] +
+    39.chr + "IOS_INSTALL_SELECTOR" + 39.chr + %q[)}.log"]
+  abort "install-log selector interpolation is not shell-quote-safe" unless
     single.include?(%q["installLogFile" => "install-logs/#{ENV.fetch("IOS_INSTALL_SELECTOR")}.log"]) &&
-    !single.include?(%q[ENV.fetch('IOS_INSTALL_SELECTOR')])
+    !single.include?(unsafe_install_log)
   abort "single capture lost parent-owned reused-simulator lease" unless
     single.include?("QUAKESIGNAL_IOS_SCREENSHOT_SIMULATOR_LEASE_TOKEN") &&
     single.include?("ios-screenshot-simulator-lease.rb\" verify")

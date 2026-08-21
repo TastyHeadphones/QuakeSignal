@@ -473,3 +473,414 @@ jobs:
             ${{ env.CANDIDATE_ZIP }}
           if-no-files-found: error
           retention-days: 7
+
+  capture_maccatalyst:
+    name: Debug Mac Catalyst direct UIKit candidate
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out source-frozen revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Validate credential-free Mac Catalyst harness
+        env:
+          QUAKESIGNAL_TEST_TEMP_ROOT: ${{ runner.temp }}
+          RUNNER_TEMP: ${{ runner.temp }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          node .github/scripts/verify-ios-release-contract.mjs
+          bash -n ios/ScreenshotAutomation/capture-maccatalyst-screenshot.sh
+          bash -n ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh
+          bash -n ios/ScreenshotAutomation/maccatalyst-capture-interface.test.sh
+          bash -n ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.sh
+          bash -n ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.test.sh
+          bash -n ios/ScreenshotAutomation/maccatalyst-content-validator.test.sh
+          bash -n ios/ScreenshotAutomation/maccatalyst-process-guard.sh
+          bash -n ios/ScreenshotAutomation/maccatalyst-process-guard.test.sh
+          /usr/bin/ruby -c ios/ScreenshotAutomation/maccatalyst-screenshot-plan.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/maccatalyst-screenshot-plan.test.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.rb
+          /usr/bin/ruby -c ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.test.rb
+          /usr/bin/ruby -c .github/scripts/assemble-apple-screenshot-release-set.rb
+          /usr/bin/ruby -c .github/scripts/assemble-apple-screenshot-release-set.test.rb
+          /usr/bin/ruby -c .github/scripts/verify-apple-screenshot-release-set.rb
+          /usr/bin/ruby -c .github/scripts/verify-apple-screenshot-release-set.test.rb
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-capture-window.swift
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-content-validator-fixture.swift
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-flatten-png.swift
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-validate-content.swift
+          xcrun swiftc -typecheck ios/ScreenshotAutomation/maccatalyst-window-evidence.swift
+          /usr/bin/ruby ios/ScreenshotAutomation/maccatalyst-screenshot-plan.test.rb
+          /usr/bin/ruby ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.test.rb
+          /usr/bin/ruby .github/scripts/assemble-apple-screenshot-release-set.test.rb
+          /usr/bin/ruby .github/scripts/verify-apple-screenshot-release-set.test.rb
+          /usr/bin/ruby .github/scripts/verify-apple-screenshot-release-set.rb
+          bash ios/ScreenshotAutomation/maccatalyst-capture-interface.test.sh
+          bash ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.test.sh
+          bash ios/ScreenshotAutomation/maccatalyst-content-validator.test.sh
+          bash ios/ScreenshotAutomation/maccatalyst-process-guard.test.sh
+          test -x ios/ScreenshotAutomation/capture-maccatalyst-screenshot.sh
+          test -x ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh
+          test -x ios/ScreenshotAutomation/maccatalyst-capture-interface.test.sh
+          test -x ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.sh
+          test -x ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.test.sh
+          test -x ios/ScreenshotAutomation/maccatalyst-content-validator.test.sh
+          test -x ios/ScreenshotAutomation/maccatalyst-process-guard.sh
+          test -x ios/ScreenshotAutomation/maccatalyst-process-guard.test.sh
+          test -x ios/ScreenshotAutomation/maccatalyst-screenshot-plan.rb
+          test -x ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.rb
+          if grep -En '\$\{\{[[:space:]]*secrets\.' .github/workflows/apple-platform-screenshots.yml; then
+            echo "::error::Screenshot candidate workflow must not reference secrets"
+            exit 1
+          fi
+
+      - name: Prove exact clean source immediately before Catalyst capture
+        run: |
+          set -euo pipefail
+          debug_local_override="ios/QuakeSignal/Supporting/Debug.local.xcconfig"
+          if [ -e "$debug_local_override" ] || [ -L "$debug_local_override" ]; then
+            echo "::error::Ignored Debug.local.xcconfig must be absent for source-frozen capture"
+            exit 1
+          fi
+          pre_capture_sha="$(git rev-parse --verify HEAD)"
+          if [ "$pre_capture_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::Checked-out HEAD $pre_capture_sha does not match workflow source $GITHUB_SHA"
+            exit 1
+          fi
+          pre_capture_status="$(git status --porcelain=v1 --untracked-files=all)"
+          if [ -n "$pre_capture_status" ]; then
+            printf '%s\n' "$pre_capture_status"
+            echo "::error::Repository must have zero tracked or untracked changes before capture"
+            exit 1
+          fi
+
+      - name: Capture exact planned Mac Catalyst frame set in app
+        env:
+          ARTIFACT_DIR: ${{ runner.temp }}/quakesignal-screenshot-candidates/maccatalyst
+          QUAKESIGNAL_CATALYST_SCREENSHOT_DERIVED_DATA: ${{ runner.temp }}/quakesignal-screenshot-derived-data/maccatalyst
+        run: |
+          set -euo pipefail
+          artifact_dir="$ARTIFACT_DIR"
+          mkdir -p "$(dirname "$artifact_dir")"
+          ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh "$artifact_dir"
+          test -s "$artifact_dir/capture-provenance.json"
+          /usr/bin/ruby -Iios/ScreenshotAutomation -rseal-screenshot-capture-package -e '
+            QuakeSignalScreenshotCapturePackageSeal.validate(
+              platform: "maccatalyst",
+              source_commit: ENV.fetch("GITHUB_SHA"),
+              capture_root: ENV.fetch("ARTIFACT_DIR")
+            )
+          '
+          post_capture_sha="$(git rev-parse --verify HEAD)"
+          if [ "$post_capture_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::Checked-out HEAD $post_capture_sha changed from workflow source $GITHUB_SHA"
+            exit 1
+          fi
+          post_capture_status="$(git status --porcelain=v1 --untracked-files=all)"
+          if [ -n "$post_capture_status" ]; then
+            printf '%s\n' "$post_capture_status"
+            echo "::error::Repository must have zero tracked or untracked changes after capture"
+            exit 1
+          fi
+          debug_local_override="ios/QuakeSignal/Supporting/Debug.local.xcconfig"
+          if [ -e "$debug_local_override" ] || [ -L "$debug_local_override" ]; then
+            echo "::error::Ignored Debug.local.xcconfig appeared during source-frozen capture"
+            exit 1
+          fi
+          echo "CANDIDATE_DIR=$artifact_dir" >> "$GITHUB_ENV"
+
+      - name: Bind direct UIKit evidence to workflow source and archive
+        run: |
+          set -euo pipefail
+          export SOURCE_COMMIT="$GITHUB_SHA"
+          export WORKFLOW_RUN="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          XCODE_VERSION="$(xcodebuild -version | tr '\n' ' ')"
+          export XCODE_VERSION
+          /usr/bin/ruby -Iios/ScreenshotAutomation -rseal-screenshot-capture-package -e '
+            QuakeSignalScreenshotCapturePackageSeal.validate(
+              platform: "maccatalyst",
+              source_commit: ENV.fetch("SOURCE_COMMIT"),
+              capture_root: ENV.fetch("CANDIDATE_DIR")
+            )
+          '
+          manifest="$CANDIDATE_DIR/capture-package-manifest.json"
+          if [ ! -f "$manifest" ] || [ -L "$manifest" ]; then
+            echo "::error::Initial Catalyst capture seal is not a plain file"
+            exit 1
+          fi
+          rm -- "$manifest"
+          if [ -e "$manifest" ] || [ -L "$manifest" ]; then
+            echo "::error::Initial Catalyst capture seal could not be removed before metadata attachment"
+            exit 1
+          fi
+          /usr/bin/ruby -rjson -rdigest -rpathname -e '
+            class DuplicateRejectingHash < Hash
+              def []=(key, value)
+                abort "duplicate JSON object key in Catalyst capture provenance: #{key.inspect}" if key?(key)
+                super
+              end
+            end
+
+            requested_directory = Pathname.new(ENV.fetch("CANDIDATE_DIR"))
+            directory = requested_directory.realpath
+            abort "Catalyst candidate directory is not canonical" unless requested_directory.absolute? &&
+              requested_directory.to_s == directory.to_s && directory.directory? && !directory.symlink?
+            plain_file = lambda do |relative|
+              abort "unsafe Catalyst candidate-relative path" unless relative.is_a?(String) &&
+                !relative.empty? && !relative.start_with?("/") &&
+                Pathname.new(relative).cleanpath.to_s == relative &&
+                relative.split("/").none? { |component| component == "." || component == ".." }
+              path = directory.join(relative)
+              stat = path.lstat
+              abort "Catalyst candidate evidence is not a plain file: #{relative}" unless stat.file? &&
+                !path.symlink? && path.realpath.to_s.start_with?("#{directory}#{File::SEPARATOR}")
+              path
+            end
+            evidence_path = plain_file.call("capture-provenance.json")
+            evidence_source = evidence_path.binread
+            evidence = JSON.parse(
+              evidence_source,
+              object_class: DuplicateRejectingHash,
+              allow_duplicate_key: false
+            )
+            source_commit = ENV.fetch("SOURCE_COMMIT")
+            abort "source commit is not a full lowercase SHA-1" unless source_commit.match?(/\A[0-9a-f]{40}\z/)
+            unless evidence.fetch("schemaVersion") == 1 &&
+                evidence.fetch("status") == "unapproved-debug-maccatalyst-capture-set-evidence" &&
+                evidence.fetch("uploadApproved") == false &&
+                evidence.fetch("releaseBinaryEvidence").nil? &&
+                evidence.fetch("reviewer").nil? &&
+                evidence.fetch("approval").nil?
+              abort "Catalyst capture-set provenance is not the exact explicitly unapproved schema"
+            end
+            unless evidence.fetch("platform") == "maccatalyst" &&
+                evidence.fetch("locale") == "en-US" &&
+                evidence.fetch("fixture") == "finalized-historical-reports"
+              abort "Catalyst capture-set provenance does not match the planned platform and fixture"
+            end
+            source = evidence.fetch("source")
+            unless source == { "commit" => source_commit, "treeState" => "clean" }
+              abort "Catalyst capture source does not match the clean workflow revision"
+            end
+            expected_selectors = %w[
+              maccatalyst-home
+              maccatalyst-reports
+              maccatalyst-map
+              maccatalyst-guide
+              maccatalyst-alert-preferences
+            ]
+            frames = evidence.fetch("frames")
+            unless frames.is_a?(Array) &&
+                frames.map { |frame| frame.fetch("captureSelector") } == expected_selectors
+              abort "Catalyst capture-set selectors do not match the exact ordered plan"
+            end
+            normalized_frames = frames.map do |frame|
+              screenshot = plain_file.call(frame.fetch("file"))
+              screenshot_sha256 = Digest::SHA256.file(screenshot).hexdigest
+              abort "Catalyst screenshot hash mismatch" unless frame.fetch("sha256") == screenshot_sha256
+              request = frame.fetch("captureRequest")
+              response = frame.fetch("nativeCapture")
+              selector = frame.fetch("captureSelector")
+              unless request.fetch("file") == "capture-request-evidence/#{selector}.json" &&
+                  response.fetch("file") == "native-capture-evidence/#{selector}.json"
+                abort "Catalyst app capture request/response paths differ from the selected frame"
+              end
+              request_path = plain_file.call(request.fetch("file"))
+              response_path = plain_file.call(response.fetch("file"))
+              abort "Catalyst capture request hash mismatch" unless
+                request.fetch("sha256") == Digest::SHA256.file(request_path).hexdigest
+              abort "Catalyst capture response hash mismatch" unless
+                response.fetch("sha256") == Digest::SHA256.file(response_path).hexdigest
+              raw_file = "raw-window-captures/#{selector}.png"
+              raw_path = plain_file.call(raw_file)
+              raw_sha256 = Digest::SHA256.file(raw_path).hexdigest
+              unless response.fetch("rawSha256") == raw_sha256 &&
+                  frame.fetch("rawSha256") == raw_sha256
+                abort "Catalyst direct raw hierarchy PNG hash mismatch"
+              end
+              nonce = request.fetch("nonce")
+              abort "Catalyst capture nonce is invalid" unless nonce.is_a?(String) && nonce.match?(/\A[0-9a-f]{64}\z/)
+              unless response.fetch("nonce") == nonce &&
+                  request.fetch("captureSelector") == frame.fetch("captureSelector") &&
+                  response.fetch("captureSelector") == frame.fetch("captureSelector") &&
+                  request.fetch("processId") == frame.fetch("processId") &&
+                  response.fetch("processId") == frame.fetch("processId") &&
+                  request.fetch("windowId") == frame.fetch("windowId") &&
+                  response.fetch("windowId") == frame.fetch("windowId")
+                abort "Catalyst app capture request/response binding differs from the selected live window"
+              end
+              source_display_scale = response.fetch("sourceDisplayScale")
+              unless source_display_scale.is_a?(Numeric) && source_display_scale.finite? &&
+                  source_display_scale.between?(0.5, 4)
+                abort "Catalyst source display scale is invalid"
+              end
+              unless request.fetch("logicalViewPoints") == [1_280, 800] &&
+                  response.fetch("logicalViewPoints") == [1_280, 800] &&
+                  request.fetch("rasterizationScale") == 2 &&
+                  response.fetch("rasterizationScale") == 2 &&
+                  frame.fetch("rasterizationScale") == 2 &&
+                  frame.fetch("sourceDisplayScale") == source_display_scale &&
+                  response.fetch("pixels") == [2_560, 1_600] &&
+                  response.fetch("status") == "captured" &&
+                  response.fetch("reason").nil? &&
+                  response.fetch("captureApi") == "UIKit.UIView.drawHierarchy" &&
+                  response.fetch("captureSurface") == "live-catalyst-uiwindow-hierarchy" &&
+                  response.fetch("afterScreenUpdates") == true &&
+                  response.fetch("drawHierarchyComplete") == true &&
+                  response.fetch("postCaptureResizePerformed") == false &&
+                  response.fetch("rendererOpaque") == false &&
+                  response.fetch("rendererPreferredRange") == "standard" &&
+                  response.fetch("rawOutputFile") == "capture-raw.png"
+                abort "Catalyst candidate is not an exact direct 2x UIKit hierarchy capture"
+              end
+              {
+                captureSelector: frame.fetch("captureSelector"),
+                file: frame.fetch("file"),
+                screen: frame.fetch("screen"),
+                screenshotSha256: screenshot_sha256,
+                pixels: frame.fetch("pixels"),
+                capturedAtUtc: frame.fetch("capturedAtUtc"),
+                sourceDisplayScale: source_display_scale,
+                rasterizationScale: 2,
+                captureRequestFile: request.fetch("file"),
+                captureRequestSha256: request.fetch("sha256"),
+                nativeCaptureFile: response.fetch("file"),
+                nativeCaptureSha256: response.fetch("sha256"),
+                rawFile: raw_file,
+                rawSha256: raw_sha256,
+                nonce: nonce
+              }
+            end
+            capture_nonces = normalized_frames.map { |frame| frame.fetch(:nonce) }
+            abort "Catalyst capture nonce was reused across frames" unless capture_nonces.uniq.length == capture_nonces.length
+            source_display_scales = normalized_frames.map { |frame| frame.fetch(:sourceDisplayScale) }.uniq
+            abort "Catalyst source display scale changed across frames" unless source_display_scales.length == 1
+            capture_environment = evidence.fetch("captureEnvironment")
+            expected_capture_environment = {
+              "kind" => "maccatalyst-uikit-hierarchy",
+              "captureApi" => "UIKit.UIView.drawHierarchy",
+              "captureSurface" => "live-catalyst-uiwindow-hierarchy",
+              "sourceDisplayScale" => source_display_scales.first,
+              "rasterizationScale" => 2,
+              "logicalViewPoints" => [1_280, 800],
+              "pixels" => [2_560, 1_600],
+              "afterScreenUpdates" => true,
+              "postCaptureResizePerformed" => false
+            }
+            unless capture_environment == expected_capture_environment
+              abort "Catalyst aggregate capture environment differs from direct 2x UIKit evidence"
+            end
+            metadata = {
+              schemaVersion: 1,
+              status: "unapproved-debug-maccatalyst-direct-uikit-candidate",
+              uploadApproved: false,
+              reviewer: nil,
+              approval: nil,
+              releaseBinaryEvidence: nil,
+              sourceCommit: source_commit,
+              sourceTreeState: "clean",
+              debugLocalOverridePresent: false,
+              platform: "maccatalyst",
+              locale: "en-US",
+              fixture: "finalized-historical-reports",
+              planManifest: evidence.fetch("planManifest"),
+              product: evidence.fetch("product"),
+              host: evidence.fetch("host"),
+              captureEnvironment: capture_environment,
+              captureWindowUtc: evidence.fetch("captureWindowUtc"),
+              captureMethod: {
+                api: "UIKit.UIView.drawHierarchy",
+                surface: "live-catalyst-uiwindow-hierarchy",
+                logicalViewPoints: [1_280, 800],
+                rasterizationScale: 2,
+                outputPixels: [2_560, 1_600],
+                afterScreenUpdates: true,
+                postCaptureResizePerformed: false
+              },
+              frames: normalized_frames,
+              captureEvidenceFile: File.basename(evidence_path),
+              captureEvidenceSha256: Digest::SHA256.hexdigest(evidence_source),
+              xcodeVersion: ENV.fetch("XCODE_VERSION"),
+              workflowRun: ENV.fetch("WORKFLOW_RUN"),
+              approvalRequired: "Named visual review and signed Release build 8 parity comparison"
+            }
+            directory.join("candidate-metadata.json").write(
+              JSON.pretty_generate(metadata) + "\n",
+              mode: "wx"
+            )
+          '
+          /usr/bin/ruby ios/ScreenshotAutomation/seal-screenshot-capture-package.rb \
+            maccatalyst "$SOURCE_COMMIT" "$CANDIDATE_DIR" "$manifest"
+          /usr/bin/ruby -Iios/ScreenshotAutomation -rseal-screenshot-capture-package -e '
+            QuakeSignalScreenshotCapturePackageSeal.validate(
+              platform: "maccatalyst",
+              source_commit: ENV.fetch("SOURCE_COMMIT"),
+              capture_root: ENV.fetch("CANDIDATE_DIR")
+            )
+          '
+          candidate_zip="${CANDIDATE_DIR}.zip"
+          if [ -e "$candidate_zip" ] || [ -L "$candidate_zip" ]; then
+            echo "::error::Refusing to overwrite Catalyst candidate ZIP: $candidate_zip"
+            exit 1
+          fi
+          /usr/bin/ditto -c -k --norsrc --keepParent "$CANDIDATE_DIR" "$candidate_zip"
+          /usr/bin/ruby -rpathname -r./.github/scripts/assemble-apple-screenshot-release-set -e '
+            root = Pathname.new(ENV.fetch("CANDIDATE_DIR")).realpath
+            archive = Pathname.new(ARGV.fetch(0)).realpath
+            AppleScreenshotReleaseSetAssembler.allocate.send(
+              :validate_zip_archive_equivalence!,
+              artifact_path: archive,
+              capture_path: root,
+              platform: "maccatalyst"
+            )
+          ' "$candidate_zip"
+          echo "CANDIDATE_ZIP=$candidate_zip" >> "$GITHUB_ENV"
+
+      - name: Prove exact Catalyst source and sealed bytes immediately before upload
+        run: |
+          set -euo pipefail
+          /usr/bin/ruby -Iios/ScreenshotAutomation -rseal-screenshot-capture-package -e '
+            QuakeSignalScreenshotCapturePackageSeal.validate(
+              platform: "maccatalyst",
+              source_commit: ENV.fetch("GITHUB_SHA"),
+              capture_root: ENV.fetch("CANDIDATE_DIR")
+            )
+          '
+          /usr/bin/ruby -rpathname -r./.github/scripts/assemble-apple-screenshot-release-set -e '
+            root = Pathname.new(ENV.fetch("CANDIDATE_DIR")).realpath
+            archive = Pathname.new(ENV.fetch("CANDIDATE_ZIP")).realpath
+            AppleScreenshotReleaseSetAssembler.allocate.send(
+              :validate_zip_archive_equivalence!,
+              artifact_path: archive,
+              capture_path: root,
+              platform: "maccatalyst"
+            )
+          '
+          final_sha="$(git rev-parse --verify HEAD)"
+          if [ "$final_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::Checked-out HEAD $final_sha changed from workflow source $GITHUB_SHA before upload"
+            exit 1
+          fi
+          final_status="$(git status --porcelain=v1 --untracked-files=all)"
+          if [ -n "$final_status" ]; then
+            printf '%s\n' "$final_status"
+            echo "::error::Repository must have zero tracked or untracked changes immediately before upload"
+            exit 1
+          fi
+          debug_local_override="ios/QuakeSignal/Supporting/Debug.local.xcconfig"
+          if [ -e "$debug_local_override" ] || [ -L "$debug_local_override" ]; then
+            echo "::error::Ignored Debug.local.xcconfig appeared before screenshot artifact upload"
+            exit 1
+          fi
+
+      - name: Upload short-lived unapproved Mac Catalyst candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: UNAPPROVED-debug-maccatalyst-direct-uikit-${{ github.sha }}
+          path: |
+            ${{ env.CANDIDATE_DIR }}
+            ${{ env.CANDIDATE_ZIP }}
+          if-no-files-found: error
+          retention-days: 7

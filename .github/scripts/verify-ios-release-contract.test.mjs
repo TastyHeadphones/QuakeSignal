@@ -2109,6 +2109,26 @@ test("fails closed when the credential-free screenshot harness checks drift", as
       "              debugLocalOverridePresent: false,\n",
       "              debugLocalOverridePresent: true,\n",
     ],
+    [
+      '          ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh "$artifact_dir"\n',
+      "          true # skipped exact Mac Catalyst hierarchy set capture\n",
+    ],
+    [
+      '                  response.fetch("captureApi") == "UIKit.UIView.drawHierarchy" &&\n',
+      '                  response.fetch("captureApi") == "ScreenCaptureKit.SCScreenshotManager" &&\n',
+    ],
+    [
+      '                  response.fetch("drawHierarchyComplete") == true &&\n',
+      '                  response.fetch("drawHierarchyComplete") == false &&\n',
+    ],
+    [
+      '                  response.fetch("postCaptureResizePerformed") == false &&\n',
+      '                  response.fetch("postCaptureResizePerformed") == true &&\n',
+    ],
+    [
+      '              abort "Catalyst capture request hash mismatch" unless\n',
+      '              true # skipped Catalyst request hash binding\n',
+    ],
   ]) {
     await withFixture(t, {}, async (root) => {
       const path = join(root, ".github/workflows/apple-platform-screenshots.yml");

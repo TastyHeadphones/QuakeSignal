@@ -340,6 +340,47 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     assert_match(/iOS\/iPadOS plan exact ten-frame contract/, error.message)
   end
 
+  def test_catalyst_release_metadata_requires_direct_uikit_hierarchy_at_2x
+    build_active_release_set
+    metadata_path = release_root.join("maccatalyst/package-provenance.json")
+    metadata = JSON.parse(metadata_path.read)
+    metadata.fetch("captureEnvironment")["kind"] = "maccatalyst-host"
+    write_json(metadata_path, metadata)
+    rehash_package!("maccatalyst")
+    rehash_release_manifest!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) { validator.validate! }
+    assert_match(/Mac Catalyst capture kind mismatch/, error.message)
+
+    build_active_release_set(reset: true)
+    metadata = JSON.parse(metadata_path.read)
+    metadata.fetch("frames").first.fetch("captureEvidence")["captureApi"] =
+      "ScreenCaptureKit.SCScreenshotManager"
+    write_json(metadata_path, metadata)
+    rehash_package!("maccatalyst")
+    rehash_release_manifest!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) { validator.validate! }
+    assert_match(/capture API mismatch/, error.message)
+
+    build_active_release_set(reset: true)
+    metadata = JSON.parse(metadata_path.read)
+    metadata.fetch("frames").first.fetch("captureEvidence")["rasterizationScale"] = 1
+    write_json(metadata_path, metadata)
+    rehash_package!("maccatalyst")
+    rehash_release_manifest!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) { validator.validate! }
+    assert_match(/rasterization scale mismatch/, error.message)
+
+    build_active_release_set(reset: true)
+    metadata = JSON.parse(metadata_path.read)
+    first_nonce = metadata.fetch("frames").first.fetch("captureEvidence").fetch("nonce")
+    metadata.fetch("frames").fetch(1).fetch("captureEvidence")["nonce"] = first_nonce
+    write_json(metadata_path, metadata)
+    rehash_package!("maccatalyst")
+    rehash_release_manifest!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) { validator.validate! }
+    assert_match(/capture nonce uniqueness mismatch/, error.message)
+  end
+
   def test_collapsed_or_historical_frame_bytes_are_rejected_after_all_rehashing
     build_active_release_set
 
@@ -858,6 +899,8 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
   def build_package(platform, expected_count)
     package_root = release_root.join(platform)
     package_root.mkpath
+    raw_capture_root = package_root.join("evidence/raw-capture")
+    raw_capture_root.mkpath
     frames = AppleScreenshotReleaseSetValidator::FRAME_SPECS.fetch(platform).map do |spec|
       file = package_root.join(spec.fetch("file"))
       file.dirname.mkpath
@@ -868,14 +911,53 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
         format: spec.fetch("format"),
         has_alpha: false,
       }
-      spec.merge("sha256" => Digest::SHA256.file(file).hexdigest, "hasAlpha" => false)
+      normalized = spec.merge("sha256" => Digest::SHA256.file(file).hexdigest, "hasAlpha" => false)
+      if platform == "maccatalyst"
+        selector = spec.fetch("captureSelector")
+        nonce = Digest::SHA256.hexdigest("fixture capture nonce:#{selector}")
+        request = raw_capture_root.join("capture-request-evidence/#{selector}.json")
+        response = raw_capture_root.join("native-capture-evidence/#{selector}.json")
+        raw = raw_capture_root.join("raw-window-captures/#{selector}.png")
+        write_json(request, { "fixture" => "app request", "nonce" => nonce })
+        write_json(response, { "fixture" => "app response", "nonce" => nonce })
+        raw.dirname.mkpath
+        raw.binwrite("direct hierarchy fixture:#{selector}\n")
+        normalized["captureEvidence"] = {
+          "requestFile" => "evidence/raw-capture/#{request.relative_path_from(raw_capture_root)}",
+          "requestSha256" => Digest::SHA256.file(request).hexdigest,
+          "responseFile" => "evidence/raw-capture/#{response.relative_path_from(raw_capture_root)}",
+          "responseSha256" => Digest::SHA256.file(response).hexdigest,
+          "rawFile" => "evidence/raw-capture/#{raw.relative_path_from(raw_capture_root)}",
+          "rawSha256" => Digest::SHA256.file(raw).hexdigest,
+          "nonce" => nonce,
+          "captureApi" => "UIKit.UIView.drawHierarchy",
+          "captureSurface" => "live-catalyst-uiwindow-hierarchy",
+          "logicalViewPoints" => [1_280, 800],
+          "sourceDisplayScale" => 1.0,
+          "rasterizationScale" => 2,
+          "pixels" => [2_560, 1_600],
+          "afterScreenUpdates" => true,
+          "drawHierarchyComplete" => true,
+          "postCaptureResizePerformed" => false,
+          "rendererOpaque" => false,
+          "rendererPreferredRange" => "standard",
+        }
+      end
+      normalized
     end
     assert_equal expected_count, frames.length
-    evidence_path = package_root.join("evidence/raw-capture/capture.txt")
-    evidence_path.dirname.mkpath
+    evidence_path = raw_capture_root.join("capture.txt")
     evidence_path.binwrite("capture evidence for #{platform}\n")
     artifact_path = package_root.join("evidence/capture-artifact")
     artifact_path.binwrite("debug capture artifact bytes for #{platform}\n")
+    raw_evidence_records = raw_capture_root.glob("**/*", File::FNM_DOTMATCH).select do |path|
+      path.file? && !path.symlink?
+    end.sort_by { |path| path.relative_path_from(raw_capture_root).to_s }.map do |path|
+      {
+        "file" => "evidence/raw-capture/#{path.relative_path_from(raw_capture_root)}",
+        "sha256" => Digest::SHA256.file(path).hexdigest,
+      }
+    end
     metadata = {
       "schemaVersion" => 1,
       "status" => "unapproved-source-frozen-candidate",
@@ -898,10 +980,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
           "file" => "evidence/capture-artifact",
           "sha256" => Digest::SHA256.file(artifact_path).hexdigest,
         },
-        {
-          "file" => "evidence/raw-capture/capture.txt",
-          "sha256" => Digest::SHA256.file(evidence_path).hexdigest,
-        },
+        *raw_evidence_records,
       ],
     }
     metadata_path = package_root.join("package-provenance.json")
@@ -922,15 +1001,34 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
 
   def capture_environment(platform)
     catalyst = platform == "maccatalyst"
+    if catalyst
+      return {
+        "kind" => "maccatalyst-uikit-hierarchy",
+        "xcodeVersion" => "26.6 (17F113)",
+        "operatingSystem" => "macOS 26.6.2 (25G83)",
+        "runtimeIdentifier" => nil,
+        "deviceIdentifier" => "host-mac",
+        "deviceModel" => "Mac",
+        "captureApi" => "UIKit.UIView.drawHierarchy",
+        "captureSurface" => "live-catalyst-uiwindow-hierarchy",
+        "logicalViewPoints" => [1_280, 800],
+        "sourceDisplayScale" => 1.0,
+        "rasterizationScale" => 2,
+        "pixels" => [2_560, 1_600],
+        "afterScreenUpdates" => true,
+        "postCaptureResizePerformed" => false,
+      }
+    end
+
     {
-      "kind" => catalyst ? "maccatalyst-host" : "simulator",
+      "kind" => "simulator",
       "xcodeVersion" => "26.6 (17F113)",
       "operatingSystem" => "macOS 26.6.2 (25G83)",
-      "runtimeIdentifier" => catalyst ? nil : "com.apple.CoreSimulator.SimRuntime.test",
-      "deviceIdentifier" => catalyst ? "host-mac" : "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
-      "deviceModel" => catalyst ? "Mac" : "Simulator",
-      "logicalWindowPoints" => catalyst ? [1280, 800] : nil,
-      "backingScale" => catalyst ? 2 : nil,
+      "runtimeIdentifier" => "com.apple.CoreSimulator.SimRuntime.test",
+      "deviceIdentifier" => "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+      "deviceModel" => "Simulator",
+      "logicalWindowPoints" => nil,
+      "backingScale" => nil,
     }
   end
 
