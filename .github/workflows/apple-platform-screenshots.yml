@@ -526,10 +526,8 @@ jobs:
           test -x ios/ScreenshotAutomation/capture-maccatalyst-screenshot.sh
           test -x ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh
           test -x ios/ScreenshotAutomation/maccatalyst-capture-interface.test.sh
-          test -x ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.sh
           test -x ios/ScreenshotAutomation/maccatalyst-capture-retry-policy.test.sh
           test -x ios/ScreenshotAutomation/maccatalyst-content-validator.test.sh
-          test -x ios/ScreenshotAutomation/maccatalyst-process-guard.sh
           test -x ios/ScreenshotAutomation/maccatalyst-process-guard.test.sh
           test -x ios/ScreenshotAutomation/maccatalyst-screenshot-plan.rb
           test -x ios/ScreenshotAutomation/assemble-maccatalyst-screenshot-provenance.rb
