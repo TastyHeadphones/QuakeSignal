@@ -335,6 +335,16 @@ class IOSScreenshotProvenanceTest < Minitest::Test
     end
   end
 
+  def test_rejects_noncanonical_status_bar_time
+    with_capture_fixture do |capture_root, output|
+      selector = "ios-iphone-6.5-home"
+      mutate_json_artifact(capture_root, selector, "launchEvidence") do |record|
+        record["statusBarTime"] = "2026-01-01T09:41:00Z"
+      end
+      assert_rejected(capture_root, output, /status-bar time/)
+    end
+  end
+
   def test_requires_verified_disposable_simulator_cleanup
     with_capture_fixture do |capture_root, output|
       cleanup_path = capture_root.join("simulator-cleanup-evidence.json")
@@ -769,7 +779,7 @@ class IOSScreenshotProvenanceTest < Minitest::Test
       "appleLocale" => "en_US",
       "timeZone" => "UTC",
       "appearance" => "dark",
-      "statusBarTime" => "2026-01-01T09:41:00Z",
+      "statusBarTime" => "9:41",
       "captureAttemptCount" => 1,
       "retryPerformed" => false,
       "stdoutSha256" => Digest::SHA256.file(stdout_path).hexdigest,

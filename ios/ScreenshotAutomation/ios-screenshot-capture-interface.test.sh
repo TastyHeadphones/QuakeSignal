@@ -82,6 +82,12 @@ fi
   abort "single capture lost no-resize JPEG transform" unless
     single.include?("sips -s format jpeg -s formatOptions 100") &&
     single.include?(%q["resizePerformed" => false])
+  status_time_argument = "--time " + 39.chr + "9:41" + 39.chr
+  abort "single capture lost Apple-documented simulator status-bar time" unless
+    single.scan(%r{--time(?:\s|$)}).length == 1 &&
+    single.include?(status_time_argument) &&
+    single.scan(%q["statusBarTime" => "9:41"]).length == 1 &&
+    !single.match?(%r{--time[^\n]*\d{4}-\d{2}-\d{2}T})
   abort "single capture lost source/Debug.local pre/post checks" unless
     single.scan(%r{git -C "\$repo_root" status --porcelain=v1 --untracked-files=all}).length == 2 &&
     single.scan(%r{\[ -e "\$debug_local_override" \] \|\| \[ -L "\$debug_local_override" \]}).length == 2

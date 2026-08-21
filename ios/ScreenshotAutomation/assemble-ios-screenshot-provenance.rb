@@ -1105,7 +1105,7 @@ module QuakeSignalIOSScreenshotProvenance
     require_equal(record.fetch("appleLocale"), "en_US", "#{selector} Apple locale")
     require_equal(record.fetch("timeZone"), "UTC", "#{selector} time zone")
     require_equal(record.fetch("appearance"), "dark", "#{selector} appearance")
-    require_equal(record.fetch("statusBarTime"), "2026-01-01T09:41:00Z", "#{selector} status-bar time")
+    require_equal(record.fetch("statusBarTime"), "9:41", "#{selector} status-bar time")
     attempts = record.fetch("captureAttemptCount")
     unless [1, 2].include?(attempts)
       raise Error, "#{selector} launch captureAttemptCount must be 1 or 2"
