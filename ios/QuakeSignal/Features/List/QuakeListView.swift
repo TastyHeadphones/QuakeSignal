@@ -16,9 +16,13 @@ struct QuakeListView: View {
                         NavigationLink(value: event) {
                             QuakeRowView(event: event, coordinate: store.effectiveCoordinate)
                         }
+                        .visionReadableRow()
                     }
                 }
                 .listStyle(.plain)
+                .visionReadableListSurface(
+                    minimumRowHeight: VisionReadabilityMetrics.reportMinimumRowHeight
+                )
                 .overlay {
                     if filteredEvents.isEmpty {
                         ContentUnavailableView {
@@ -58,8 +62,16 @@ struct QuakeListView: View {
                 .padding(.horizontal)
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, filterBarVerticalPadding)
         .background(Color("GroupedBGColor"))
+    }
+
+    private var filterBarVerticalPadding: CGFloat {
+#if os(visionOS)
+        14
+#else
+        10
+#endif
     }
 }
 
@@ -72,11 +84,28 @@ private struct FilterChip: View {
         Button(action: action) {
             Text(labelKey)
                 .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
+                .visionFont(.body.weight(.semibold))
+                .padding(.horizontal, chipHorizontalPadding)
+                .padding(.vertical, chipVerticalPadding)
                 .background(Capsule().fill(isSelected ? Color("BrandColor") : Color("CardColor")))
                 .foregroundStyle(isSelected ? .white : .primary)
         }
         .buttonStyle(.plain)
+    }
+
+    private var chipHorizontalPadding: CGFloat {
+#if os(visionOS)
+        18
+#else
+        14
+#endif
+    }
+
+    private var chipVerticalPadding: CGFloat {
+#if os(visionOS)
+        9
+#else
+        7
+#endif
     }
 }

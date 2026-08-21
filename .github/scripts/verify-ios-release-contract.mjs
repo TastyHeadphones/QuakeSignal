@@ -24,7 +24,9 @@ const contractFiles = {
   platformCapabilityPolicy: [
     "ios/QuakeSignal/App/AppDelegate.swift",
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
+    "ios/QuakeSignal/App/QuakeSignalApp.swift",
     "ios/QuakeSignal/Features/Detail/QuakeDetailView.swift",
+    "ios/QuakeSignal/Features/Guide/DisasterGuideView.swift",
     "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
     "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
     "ios/QuakeSignal/Features/Root/RootView.swift",
@@ -400,11 +402,11 @@ const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:gIdap293hpqUJ9U_gKOGiTs
 const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:pyFXJBB9gZ7oyUQR5FTk2qRZe4TlhnJmc0HjteIYnLI";
 const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:1OSObm6_ZnZHbLL7WQR38dWTgK4iR6pr-J5gbFY6y0E";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
-const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:JNEQMrC6ERPFz0noPzgFH0GL-wfKSEWMChfGib5wm54";
+const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:C8ZaWfn9wHMAbRLcmmSGDUrGrjihYYmBqfpIXWNpbA4";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
-const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:KWWQdqZwo-iFcqhKlcIhuezMY8ntSKDnCRHOP1S3n1s";
+const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:BEu879oJnqkYxaUPDcCXvkuKQ38xWtYO9vqa_GQUv4c";
 const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:8EQKMBOl9E4S3crmbhjbcP9FeiMyA2FkB_sJG0hyyhs";
-const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:32MbJwrA2zHhZBPxfCYvYMRnGw4BUjwF2W_C4YOFh70";
+const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:35eFkTAOixRZaCOUJxti2-Ps5Cb2CWQWEZf0OvtZwXI";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:vtAIx8JZ4s9UUN07yItVzVx-po5bFVrgWPH5FV_zhXA";
 const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:FziznhIyMsrK3XG4hiulKdGrLslyBQ0GnhkgxKYdK5c";

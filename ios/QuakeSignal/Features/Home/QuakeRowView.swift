@@ -12,6 +12,7 @@ struct QuakeRowView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(event.hypocenter)
                     .font(.headline)
+                    .visionFont(.title3.weight(.semibold))
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Text(event.reportDate?.formatted(date: .numeric, time: .shortened) ?? "--")
@@ -23,7 +24,8 @@ struct QuakeRowView: View {
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .visionFont(.subheadline)
+                .visionSupportingText()
                 .lineLimit(1)
             }
 
@@ -32,6 +34,7 @@ struct QuakeRowView: View {
             VStack(alignment: .trailing, spacing: 4) {
                 Text(event.reportStatus.labelKey)
                     .font(.caption2.bold())
+                    .visionFont(.caption.bold())
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -39,11 +42,20 @@ struct QuakeRowView: View {
                 if let coordinate, let distance = event.distanceKm(from: coordinate) {
                     Text(L("home.distance", Int(distance.rounded())))
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .visionFont(.caption)
+                        .visionSupportingText()
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, rowVerticalPadding)
+    }
+
+    private var rowVerticalPadding: CGFloat {
+#if os(visionOS)
+        12
+#else
+        4
+#endif
     }
 }
 
@@ -53,8 +65,17 @@ private struct MagnitudeBadge: View {
     var body: some View {
         Text(event.magnitudeText)
             .font(.headline.monospacedDigit())
+            .visionFont(.title3.bold().monospacedDigit())
             .foregroundStyle(.white)
-            .frame(width: 52, height: 52)
+            .frame(width: badgeDiameter, height: badgeDiameter)
             .background(Circle().fill(event.severity.color.opacity(event.isCancel ? 0.35 : 0.9)))
+    }
+
+    private var badgeDiameter: CGFloat {
+#if os(visionOS)
+        68
+#else
+        52
+#endif
     }
 }

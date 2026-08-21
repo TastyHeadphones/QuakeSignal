@@ -1,6 +1,56 @@
 import XCTest
 @testable import QuakeSignal
 
+private struct VisionReadabilitySnapshot {
+    var windowWidth: CGFloat
+    var windowHeight: CGFloat
+    var surfaceOpacity: Double
+    var rowSurfaceOpacity: Double
+    var supportingTextOpacity: Double
+    var reportRowHeight: CGFloat
+    var guideRowHeight: CGFloat
+    var alertSoundRowHeight: CGFloat
+
+    static var current: Self {
+        Self(
+            windowWidth: VisionReadabilityMetrics.defaultWindowWidth,
+            windowHeight: VisionReadabilityMetrics.defaultWindowHeight,
+            surfaceOpacity: VisionReadabilityMetrics.surfaceOpacity,
+            rowSurfaceOpacity: VisionReadabilityMetrics.rowSurfaceOpacity,
+            supportingTextOpacity: VisionReadabilityMetrics.supportingTextOpacity,
+            reportRowHeight: VisionReadabilityMetrics.reportMinimumRowHeight,
+            guideRowHeight: VisionReadabilityMetrics.guideMinimumRowHeight,
+            alertSoundRowHeight: VisionReadabilityMetrics.alertSoundMinimumRowHeight
+        )
+    }
+
+    var aspectRatio: CGFloat {
+        windowWidth / windowHeight
+    }
+
+    var retainsReviewedComposition: Bool {
+        windowWidth == 1_600 &&
+            windowHeight == 800 &&
+            (1.9...2.1).contains(aspectRatio) &&
+            (0.95...0.99).contains(surfaceOpacity) &&
+            rowSurfaceOpacity >= surfaceOpacity &&
+            rowSurfaceOpacity <= 1.0 &&
+            (0.80...0.90).contains(supportingTextOpacity) &&
+            (120...140).contains(reportRowHeight) &&
+            (80...96).contains(guideRowHeight) &&
+            (100...128).contains(alertSoundRowHeight)
+    }
+
+    func replacing<Value>(
+        _ keyPath: WritableKeyPath<Self, Value>,
+        with value: Value
+    ) -> Self {
+        var copy = self
+        copy[keyPath: keyPath] = value
+        return copy
+    }
+}
+
 @MainActor
 final class ScreenshotAutomationTests: XCTestCase {
     func testActivationRequiresApprovedDebugCaptureEnvironmentArgumentAndEnvironmentTogether() {
@@ -235,6 +285,56 @@ final class ScreenshotAutomationTests: XCTestCase {
         XCTAssertFalse(ScreenshotAutomation.isAlertPreferencesFrame(.iPhone65Home))
         XCTAssertFalse(ScreenshotAutomation.isAlertPreferencesFrame(.tvDashboard))
         XCTAssertFalse(ScreenshotAutomation.isAlertPreferencesFrame(nil))
+    }
+
+    func testVisionReadabilityMetricsKeepTheCaptureLargeOpaqueAndLegible() {
+        let metrics = VisionReadabilitySnapshot.current
+
+        XCTAssertEqual(metrics.windowWidth, 1_600)
+        XCTAssertEqual(metrics.windowHeight, 800)
+        XCTAssertGreaterThanOrEqual(metrics.aspectRatio, 1.9)
+        XCTAssertLessThanOrEqual(metrics.aspectRatio, 2.1)
+        XCTAssertGreaterThanOrEqual(metrics.surfaceOpacity, 0.95)
+        XCTAssertLessThanOrEqual(metrics.surfaceOpacity, 0.99)
+        XCTAssertGreaterThanOrEqual(metrics.rowSurfaceOpacity, metrics.surfaceOpacity)
+        XCTAssertLessThanOrEqual(metrics.rowSurfaceOpacity, 1.0)
+        XCTAssertGreaterThanOrEqual(metrics.supportingTextOpacity, 0.80)
+        XCTAssertLessThanOrEqual(metrics.supportingTextOpacity, 0.90)
+        XCTAssertGreaterThanOrEqual(metrics.reportRowHeight, 120)
+        XCTAssertLessThanOrEqual(metrics.reportRowHeight, 140)
+        XCTAssertGreaterThanOrEqual(metrics.guideRowHeight, 80)
+        XCTAssertLessThanOrEqual(metrics.guideRowHeight, 96)
+        XCTAssertGreaterThanOrEqual(metrics.alertSoundRowHeight, 100)
+        XCTAssertLessThanOrEqual(metrics.alertSoundRowHeight, 128)
+        XCTAssertTrue(metrics.retainsReviewedComposition)
+    }
+
+    func testVisionReadabilityBoundsRejectHighAndLowMutations() {
+        let baseline = VisionReadabilitySnapshot.current
+        XCTAssertTrue(baseline.retainsReviewedComposition)
+
+        let invalidMutations: [(String, VisionReadabilitySnapshot)] = [
+            ("window width below exact review", baseline.replacing(\.windowWidth, with: 1_599)),
+            ("window width above exact review", baseline.replacing(\.windowWidth, with: 1_601)),
+            ("window height below exact review", baseline.replacing(\.windowHeight, with: 799)),
+            ("window height above exact review", baseline.replacing(\.windowHeight, with: 801)),
+            ("surface opacity below range", baseline.replacing(\.surfaceOpacity, with: 0.949)),
+            ("surface opacity above range", baseline.replacing(\.surfaceOpacity, with: 0.991)),
+            ("row opacity below surface", baseline.replacing(\.rowSurfaceOpacity, with: 0.969)),
+            ("row opacity above one", baseline.replacing(\.rowSurfaceOpacity, with: 1.001)),
+            ("supporting opacity below range", baseline.replacing(\.supportingTextOpacity, with: 0.799)),
+            ("supporting opacity above range", baseline.replacing(\.supportingTextOpacity, with: 0.901)),
+            ("report row below range", baseline.replacing(\.reportRowHeight, with: 119)),
+            ("report row above range", baseline.replacing(\.reportRowHeight, with: 141)),
+            ("guide row below range", baseline.replacing(\.guideRowHeight, with: 79)),
+            ("guide row above range", baseline.replacing(\.guideRowHeight, with: 97)),
+            ("alert row below range", baseline.replacing(\.alertSoundRowHeight, with: 99)),
+            ("alert row above range", baseline.replacing(\.alertSoundRowHeight, with: 129)),
+        ]
+
+        for (name, mutation) in invalidMutations {
+            XCTAssertFalse(mutation.retainsReviewedComposition, name)
+        }
     }
 
     func testMacCaptureGeometryPolicyAcceptsOnlyReviewedMacSelectors() throws {

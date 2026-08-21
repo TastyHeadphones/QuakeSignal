@@ -1,6 +1,13 @@
 import Foundation
 import SwiftUI
 
+private enum TVDashboardLayout {
+    static let previewEventCount = 2
+    static let dashboardOuterVerticalPadding: CGFloat = 54
+    static let dashboardSectionSpacing: CGFloat = 34
+    static let dashboardRowVerticalPadding: CGFloat = 22
+}
+
 struct TVDashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var store = ForegroundQuakeStore()
@@ -82,13 +89,13 @@ struct TVDashboardView: View {
             ScrollView {
                 dashboardContent
                     .padding(.horizontal, 72)
-                    .padding(.vertical, 54)
+                    .padding(.vertical, TVDashboardLayout.dashboardOuterVerticalPadding)
             }
         }
     }
 
     private var dashboardContent: some View {
-        VStack(alignment: .leading, spacing: 34) {
+        VStack(alignment: .leading, spacing: TVDashboardLayout.dashboardSectionSpacing) {
             header
             headline
             recentEvents
@@ -270,7 +277,7 @@ struct TVDashboardView: View {
             }
 
             LazyVStack(spacing: 14) {
-                ForEach(store.events.prefix(12)) { event in
+                ForEach(store.events.prefix(TVDashboardLayout.previewEventCount)) { event in
                     NavigationLink {
                         TVEventDetailView(event: event)
                     } label: {
@@ -505,7 +512,7 @@ private struct TVEventRow: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 28)
-        .padding(.vertical, 22)
+        .padding(.vertical, TVDashboardLayout.dashboardRowVerticalPadding)
         .background(RoundedRectangle(cornerRadius: 20).fill(Color("CardSecondaryColor")))
     }
 }
@@ -514,40 +521,68 @@ private struct TVEventDetailView: View {
     let event: EEWEvent
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                Label(event.reportStatus.labelKey, systemImage: "waveform.path.ecg")
-                    .font(.headline)
-                    .foregroundStyle(event.severity.color)
-                Text(event.hypocenter)
-                    .font(.largeTitle.bold())
-                HStack(alignment: .firstTextBaseline, spacing: 36) {
-                    Text(event.magnitudeText)
-                        .font(.system(size: 96, weight: .bold, design: .rounded))
-                        .foregroundStyle(event.severity.color)
-                    VStack(alignment: .leading, spacing: 12) {
-                        if let maxIntensity = event.maxIntensity {
-                            Label(L("quake.intensity.label", maxIntensity), systemImage: "gauge.with.dots.needle.67percent")
-                        }
-                        if let depth = event.depth {
-                            Label(localizedDepthLabel(depth), systemImage: "arrow.down")
-                        }
-                        Label(event.sourceLabelKey, systemImage: "antenna.radiowaves.left.and.right")
-                    }
-                    .font(.title3)
-                }
-                if let date = event.reportDate ?? event.originDate {
-                    Label(date.formatted(date: .long, time: .standard), systemImage: "clock")
+        ZStack {
+            LinearGradient(
+                colors: [Color("GroupedBGColor"), Color("TintBGColor")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 26) {
+                    Label("detail.title", systemImage: "info.circle.fill")
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(.primary)
+                        .accessibilityAddTraits(.isHeader)
+
+                    Label(event.reportStatus.labelKey, systemImage: "waveform.path.ecg")
                         .font(.headline)
+                        .foregroundStyle(event.severity.color)
+                    Text(event.hypocenter)
+                        .font(.largeTitle.bold())
+                    HStack(alignment: .firstTextBaseline, spacing: 36) {
+                        Text(event.magnitudeText)
+                            .font(.system(size: 96, weight: .bold, design: .rounded))
+                            .foregroundStyle(event.severity.color)
+                        VStack(alignment: .leading, spacing: 12) {
+                            if let maxIntensity = event.maxIntensity {
+                                Label(L("quake.intensity.label", maxIntensity), systemImage: "gauge.with.dots.needle.67percent")
+                            }
+                            if let depth = event.depth {
+                                Label(localizedDepthLabel(depth), systemImage: "arrow.down")
+                            }
+                            Label(event.sourceLabelKey, systemImage: "antenna.radiowaves.left.and.right")
+                        }
+                        .font(.title3)
+                    }
+                    if let date = event.reportDate ?? event.originDate {
+                        Label(date.formatted(date: .long, time: .standard), systemImage: "clock")
+                            .font(.headline)
+                    }
+                    Label {
+                        Text("shared.disclaimer")
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "exclamationmark.shield.fill")
+                            .foregroundStyle(Color("CautionColor"))
+                    }
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 18)
+                        .background(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(Color("CardSecondaryColor"))
+                        )
                 }
-                Text("shared.disclaimer")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                .frame(maxWidth: 1_100, alignment: .leading)
+                .padding(.horizontal, 72)
+                .padding(.vertical, 44)
             }
-            .frame(maxWidth: 1_100, alignment: .leading)
-            .padding(72)
         }
-        .navigationTitle("detail.title")
+        .navigationTitle("")
     }
 }
 

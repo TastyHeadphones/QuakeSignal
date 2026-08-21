@@ -628,28 +628,33 @@ private struct AlertSoundSelectionView: View {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: preference.systemImage)
                                 .font(.title3)
+                                .visionFont(.title2)
                                 .foregroundStyle(Color("BrandColor"))
-                                .frame(width: 30, height: 30)
+                                .frame(width: optionIconSize, height: optionIconSize)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(LocalizedStringKey(preference.titleKey))
                                     .font(.body.weight(.medium))
+                                    .visionFont(.title3.weight(.semibold))
                                     .foregroundStyle(.primary)
                                 Text(LocalizedStringKey(preference.detailKey))
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .visionFont(.body)
+                                    .visionSupportingText()
                                     .multilineTextAlignment(.leading)
                             }
                             Spacer(minLength: 8)
                             if selectedPreference == preference {
                                 Image(systemName: "checkmark.circle.fill")
+                                    .visionFont(.title3)
                                     .foregroundStyle(Color("BrandColor"))
                                     .accessibilityHidden(true)
                             }
                         }
-                        .padding(.vertical, 5)
+                        .padding(.vertical, optionVerticalPadding)
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(selectedPreference == preference ? .isSelected : [])
+                    .visionReadableRow()
                 }
             }
 
@@ -658,21 +663,44 @@ private struct AlertSoundSelectionView: View {
                     EmergencyAlertAudio.shared.preview(selectedPreference)
                 } label: {
                     Label("settings.alertSound.preview", systemImage: "play.circle.fill")
+                        .visionFont(.title3.weight(.semibold))
                 }
+                .visionReadableRow(minimumHeight: 76)
             }
 
             Section {
                 Label("settings.alertSound.disclosure", systemImage: "info.circle")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .visionFont(.body)
+                    .visionSupportingText()
+                    .visionReadableRow(minimumHeight: 96)
             }
         }
+        .visionReadableListSurface(
+            minimumRowHeight: VisionReadabilityMetrics.alertSoundMinimumRowHeight
+        )
         .navigationTitle("settings.alertSound.title")
         .navigationBarTitleDisplayMode(.inline)
     }
 
     private var selectedPreference: AlertSoundPreference {
         screenshotSelectedPreference ?? settings.alertSound
+    }
+
+    private var optionIconSize: CGFloat {
+#if os(visionOS)
+        38
+#else
+        30
+#endif
+    }
+
+    private var optionVerticalPadding: CGFloat {
+#if os(visionOS)
+        10
+#else
+        5
+#endif
     }
 }
 

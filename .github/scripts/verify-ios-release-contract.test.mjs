@@ -403,7 +403,9 @@ async function writeFixture(options = {}) {
     "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements",
     "ios/QuakeSignal/App/AppDelegate.swift",
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
+    "ios/QuakeSignal/App/QuakeSignalApp.swift",
     "ios/QuakeSignal/Features/Detail/QuakeDetailView.swift",
+    "ios/QuakeSignal/Features/Guide/DisasterGuideView.swift",
     "ios/QuakeSignal/Features/List/QuakeListView.swift",
     "ios/QuakeSignal/Features/Home/QuakeRowView.swift",
     "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
@@ -771,6 +773,34 @@ test("fails closed when foreground-only Vision capability or localized disclosur
       source.replace("#elseif os(visionOS)\n        false", "#elseif os(visionOS)\n        true"),
       "utf8",
     );
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /foreground-only Apple platform policy must match the reviewed fingerprint/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignal/App/QuakeSignalApp.swift");
+    const source = await readFile(path, "utf8");
+    const mutated = source.replace(
+      "static let defaultWindowWidth: CGFloat = 1_600",
+      "static let defaultWindowWidth: CGFloat = 1_200",
+    );
+    assert.notEqual(mutated, source);
+    await writeFile(path, mutated, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /foreground-only Apple platform policy must match the reviewed fingerprint/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignal/Features/Guide/DisasterGuideView.swift");
+    const source = await readFile(path, "utf8");
+    const mutated = source.replace(
+      ".visionReadableListSurface(",
+      ".listStyle(.plain)\n            .visionReadableListSurface(",
+    );
+    assert.notEqual(mutated, source);
+    await writeFile(path, mutated, "utf8");
     await assert.rejects(
       verifyIOSReleaseContract({ root }),
       /foreground-only Apple platform policy must match the reviewed fingerprint/i,

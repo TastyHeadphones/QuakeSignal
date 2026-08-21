@@ -10,9 +10,18 @@ struct DisasterGuideView: View {
                 Section {
                     Label("guide.offlineBadge", systemImage: "checkmark.icloud")
                         .font(.caption)
+                        .visionFont(.body.weight(.semibold))
                         .foregroundStyle(Color("NormalColor"))
+                        .visionReadableRow(minimumHeight: 64)
                 }
+#if os(visionOS)
+                .listRowBackground(
+                    Color("CardColor")
+                        .opacity(VisionReadabilityMetrics.rowSurfaceOpacity)
+                )
+#else
                 .listRowBackground(Color.clear)
+#endif
                 .listRowSeparator(.hidden)
 
                 Section("guide.section.duringQuake") {
@@ -23,11 +32,17 @@ struct DisasterGuideView: View {
                                     .foregroundStyle(Color("BrandColor"))
                                     .frame(width: 28)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(topic.titleKey).font(.subheadline.weight(.medium))
-                                    Text(topic.summaryKey).font(.caption).foregroundStyle(.secondary)
+                                    Text(topic.titleKey)
+                                        .font(.subheadline.weight(.medium))
+                                        .visionFont(.body.weight(.semibold))
+                                    Text(topic.summaryKey)
+                                        .font(.caption)
+                                        .visionFont(.subheadline)
+                                        .visionSupportingText()
                                 }
                             }
                         }
+                        .visionReadableRow()
                     }
                 }
 
@@ -40,6 +55,8 @@ struct DisasterGuideView: View {
                                 .foregroundStyle(Color("NormalColor"))
                         }
                         .font(.subheadline)
+                        .visionFont(.body)
+                        .visionReadableRow()
                     }
                 }
 
@@ -60,6 +77,7 @@ struct DisasterGuideView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        .visionReadableRow()
                     }
 
                     Button {
@@ -67,8 +85,12 @@ struct DisasterGuideView: View {
                     } label: {
                         Label(guide.hasFamilyContact ? "guide.kit.familyContact.edit" : "guide.kit.familyContact.add", systemImage: "person.crop.circle.badge.plus")
                     }
+                    .visionReadableRow()
                 }
             }
+            .visionReadableListSurface(
+                minimumRowHeight: VisionReadabilityMetrics.guideMinimumRowHeight
+            )
             .navigationTitle("tab.guide")
             .navigationDestination(for: String.self) { topicId in
                 if let topic = GuideContent.duringQuakeTopics.first(where: { $0.id == topicId }) {

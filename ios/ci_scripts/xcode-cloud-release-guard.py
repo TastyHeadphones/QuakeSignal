@@ -33,7 +33,7 @@ MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
 APP_ATTEST_FINGERPRINT = "sha256:wQ7bfMyEJST5ySIwLM1Q6HwT4DtbRPR3vanIG-kXCkQ"
 XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:FPPp_gIATLoIgEwcBZj9tufNpZtlB8qw9dm3ZhacE0k"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
-PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:KWWQdqZwo-iFcqhKlcIhuezMY8ntSKDnCRHOP1S3n1s"
+PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:BEu879oJnqkYxaUPDcCXvkuKQ38xWtYO9vqa_GQUv4c"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
 MAX_RESPONSE_BYTES = 1024 * 1024
 READINESS_TIMEOUT_SECONDS = 180.0
@@ -78,7 +78,9 @@ XCODE_SCHEME_PATHS = (
 PLATFORM_CAPABILITY_POLICY_PATHS = (
     "ios/QuakeSignal/App/AppDelegate.swift",
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
+    "ios/QuakeSignal/App/QuakeSignalApp.swift",
     "ios/QuakeSignal/Features/Detail/QuakeDetailView.swift",
+    "ios/QuakeSignal/Features/Guide/DisasterGuideView.swift",
     "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
     "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
     "ios/QuakeSignal/Features/Root/RootView.swift",
