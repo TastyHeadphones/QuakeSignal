@@ -91,8 +91,8 @@ fi
     capture.scan(%q[quakesignal_maccatalyst_run_tracked "$window_helper"]).length == 2
   abort "shell lost exact PID/window/selector/nonce request-response handshake" unless
     capture.include?(%q[capture_request_path="$payload/capture-request-evidence/$frame_selector.json"]) &&
-    capture.include?(%q["capture-request.json"]) &&
-    capture.include?(%q["capture-response.json"]) &&
+    capture.include?(%q[capture_request_source="$geometry_root/capture-request.json"]) &&
+    capture.include?(%q[capture_response_source="$geometry_root/capture-response.json"]) &&
     capture.include?("SecureRandom.hex(32)") &&
     capture.include?(%q[request.fetch("nonce").match?(/\A[0-9a-f]{64}\z/)]) &&
     capture.include?(%q[capture["rawSha256"] == Digest::SHA256.file(raw_path).hexdigest])
