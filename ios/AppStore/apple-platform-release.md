@@ -341,21 +341,34 @@ submitted for review.
   five unapproved `2560 × 1600` frames from a `1280 × 800` point window at 2×,
   using the exact `maccatalyst-*`
   selectors. Existing Tauri screenshots cannot serve as Catalyst evidence.
-- Preserve every existing screenshot tree as historical evidence. Final images
-  are one indivisible 26-frame package under
-  `screenshot-release-sets-v1.1-build8/<source-commit>/`, addressed by
-  `screenshot-set-index-v1.1-build8.json`. Ordinary listing CI may leave its
-  `activeReleaseSet` null. The protected handoff must run:
+- Preserve every existing screenshot tree as historical evidence. Dispatch
+  `apple-platform-screenshots.yml` once at the exact protected-main source and
+  use its successful run ID only if it contains the exact five expected
+  candidate artifacts. After named visual, privacy, and signed-parity review,
+  dispatch `apple-screenshot-release-ready.yml` with that run ID, the full
+  source SHA, and the five verified signed-artifact hashes. It creates one
+  indivisible 26-frame package in an external hosted evidence root while the
+  checked-in `screenshot-set-index-v1.1-build8.json` remains pending. The
+  protected handoff must run:
 
   ```sh
   ruby .github/scripts/verify-store-assets.rb \
     --require-build8-screenshot-release-ready \
-    --expected-source-commit=<40-character-source-commit>
+    --expected-source-commit=<40-character-source-commit> \
+    --screenshot-release-evidence-root="$EVIDENCE_ROOT"
   ```
 
   That command must not pass without exact-current product source and plan
-  bytes, all five platform packages, and a separate named approval proving
-  signed public-Release parity for each platform.
+  bytes, all five platform packages, the exact successful capture-run binding,
+  and separate named visual/privacy/signed-parity approvals. Only one
+  three-day screenshot artifact is retained; signed `.ipa`/`.pkg` binaries and
+  generated screenshots are never committed or uploaded by this handoff.
+  The reviewer names and five signed-artifact hashes are human attestations,
+  not identities or binary hashes discovered by this credential-free job. The
+  canonical `ios-app-store-release` environment must require an independent
+  reviewer, prevent self-review, and require that approver to compare every
+  supplied hash with the matching canonical signed-run summary before allowing
+  the job to start. Placeholder names or hashes are a stop condition.
 - Exercise iOS/iPadOS notifications and App Attest on physical hardware or
   TestFlight. Simulator/generic builds are not evidence for APNs, App Attest,
   background delivery, Focus, Silent Mode, or alert sounds.

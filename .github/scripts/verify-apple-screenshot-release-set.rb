@@ -179,12 +179,14 @@ class AppleScreenshotEmbeddedCapturePackageValidator
 
   def initialize(
     root:,
+    release_evidence_root: nil,
     image_inspector: AppleScreenshotImageInspector.new,
     provenance_repository_root: nil,
     ios_provenance_image_inspector: nil,
     ios_provenance_result_inspector: nil
   )
     @root = Pathname.new(root).realpath
+    @release_evidence_root = release_evidence_root
     @image_inspector = image_inspector
     @provenance_repository_root =
       Pathname.new(provenance_repository_root || @root).realpath
@@ -197,6 +199,7 @@ class AppleScreenshotEmbeddedCapturePackageValidator
     require_relative "assemble-apple-screenshot-release-set" unless defined?(AppleScreenshotReleaseSetAssembler)
     assembler = AppleScreenshotReleaseSetAssembler.new(
       root: @root,
+      release_evidence_root: @release_evidence_root,
       image_inspector: @image_inspector,
       source_guard: Object.new,
       index_validator: -> {},
@@ -222,6 +225,8 @@ end
 class AppleScreenshotReleaseSetValidator
   INDEX_PATH = "ios/AppStore/screenshot-set-index-v1.1-build8.json"
   RELEASE_ROOT = "ios/AppStore/screenshot-release-sets-v1.1-build8"
+  CAPTURE_WORKFLOW_FILE = ".github/workflows/apple-platform-screenshots.yml"
+  CANONICAL_REPOSITORY = "TastyHeadphones/QuakeSignal"
   HISTORICAL_ALGORITHM =
     "sha256 of sorted UTF-8 records: <file-sha256><two spaces><repository-relative-path><newline>"
   PACKAGE_ALGORITHM =
@@ -349,6 +354,7 @@ class AppleScreenshotReleaseSetValidator
 
   def initialize(
     root:,
+    release_evidence_root: nil,
     image_inspector: AppleScreenshotImageInspector.new,
     source_guard: nil,
     historical_commit_guard: nil,
@@ -364,6 +370,20 @@ class AppleScreenshotReleaseSetValidator
             "repository root must not be a symlink: #{requested_root}"
     end
     @root = requested_root.realpath
+    requested_release_evidence_root = Pathname.new(release_evidence_root || @root).expand_path
+    if requested_release_evidence_root.symlink?
+      raise AppleScreenshotReleaseSetValidationError,
+            "release evidence root must not be a symlink: #{requested_release_evidence_root}"
+    end
+    unless requested_release_evidence_root.directory?
+      raise AppleScreenshotReleaseSetValidationError,
+            "release evidence root must be an existing directory: #{requested_release_evidence_root}"
+    end
+    @release_evidence_root = requested_release_evidence_root.realpath
+    if release_evidence_root && within_directory?(@release_evidence_root, @root)
+      raise AppleScreenshotReleaseSetValidationError,
+            "external release evidence root must remain outside the repository"
+    end
     @image_inspector = image_inspector
     @source_guard = source_guard || AppleScreenshotReleaseSourceGuard.new(@root)
     @historical_commit_guard = historical_commit_guard || AppleScreenshotHistoricalCommitGuard.new(@root)
@@ -371,6 +391,7 @@ class AppleScreenshotReleaseSetValidator
     @capture_package_validator = capture_package_validator ||
       AppleScreenshotEmbeddedCapturePackageValidator.new(
         root: @root,
+        release_evidence_root: @release_evidence_root == @root ? nil : @release_evidence_root,
         image_inspector: @image_inspector,
         provenance_repository_root: provenance_repository_root,
         ios_provenance_image_inspector: ios_provenance_image_inspector,
@@ -391,7 +412,7 @@ class AppleScreenshotReleaseSetValidator
             "release-ready screenshot validation requires an expected source commit"
     end
 
-    index_path = @root.join(INDEX_PATH)
+    index_path = @release_evidence_root.join(INDEX_PATH)
     ensure_plain_file!(index_path, "screenshot set index")
     index = parse_json_object!(index_path)
     validate_index_header!(index)
@@ -493,11 +514,11 @@ class AppleScreenshotReleaseSetValidator
 
     expected_root_relative = "#{RELEASE_ROOT}/#{source_commit}"
     require_equal!(active.fetch("rootDirectory"), expected_root_relative, "active release rootDirectory")
-    release_root = @root.join(expected_root_relative)
+    release_root = @release_evidence_root.join(expected_root_relative)
     ensure_plain_directory!(release_root, "active release root")
     expected_manifest_relative = "#{expected_root_relative}/release-set.json"
     require_equal!(active.fetch("manifestFile"), expected_manifest_relative, "active release manifestFile")
-    manifest_path = @root.join(expected_manifest_relative)
+    manifest_path = @release_evidence_root.join(expected_manifest_relative)
     ensure_plain_file!(manifest_path, "active release manifest")
     manifest_sha256 = active.fetch("manifestSha256")
     require_sha256!(manifest_sha256, "active release manifestSha256")
@@ -538,7 +559,7 @@ class AppleScreenshotReleaseSetValidator
     expected_approval_relative = "#{expected_root_relative}/release-approval.json"
     require_equal!(approval_file, expected_approval_relative, "active release approvalFile")
     require_sha256!(approval_sha256, "active release approvalSha256")
-    approval_path = @root.join(expected_approval_relative)
+    approval_path = @release_evidence_root.join(expected_approval_relative)
     ensure_plain_file!(approval_path, "active release approval")
     require_equal!(Digest::SHA256.file(approval_path).hexdigest, approval_sha256, "active release approval actual SHA-256")
     validate_release_approval!(
@@ -1053,18 +1074,43 @@ class AppleScreenshotReleaseSetValidator
       approval,
       %w[
         schemaVersion status uploadApproved sourceCommit releaseSetManifestSha256
-        reviewer reviewedAtUtc platforms
+        dispatchActorGitHubLogin captureRun approvals reviewedAtUtc platforms
       ],
       "release approval",
     )
-    require_equal!(approval.fetch("schemaVersion"), 1, "release approval schemaVersion")
+    require_equal!(approval.fetch("schemaVersion"), 2, "release approval schemaVersion")
     require_equal!(approval.fetch("status"), "approved-for-build8-upload", "release approval status")
     require_equal!(approval.fetch("uploadApproved"), true, "release approval uploadApproved")
     require_equal!(approval.fetch("sourceCommit"), source_commit, "release approval sourceCommit")
     require_equal!(approval.fetch("releaseSetManifestSha256"), manifest_sha256, "release approval manifest SHA-256")
-    reviewer = approval.fetch("reviewer")
-    unless reviewer.is_a?(String) && !reviewer.strip.empty?
-      raise AppleScreenshotReleaseSetValidationError, "release approval requires a named reviewer"
+    actor = approval.fetch("dispatchActorGitHubLogin")
+    unless actor.is_a?(String) && actor.match?(/\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\z/)
+      raise AppleScreenshotReleaseSetValidationError,
+            "release approval requires the dispatching GitHub login"
+    end
+    validate_capture_run_approval!(approval.fetch("captureRun"), source_commit)
+    approvals = approval.fetch("approvals")
+    require_exact_keys!(
+      approvals,
+      %w[visual privacy signedReleaseParity],
+      "named release approvals",
+    )
+    latest_capture = capture_completed_at.values.max
+    approval_reviewed_at = approvals.to_h do |kind, record|
+      require_exact_keys!(record, %w[approved reviewer reviewedAtUtc], "#{kind} approval")
+      require_equal!(record.fetch("approved"), true, "#{kind} approval")
+      reviewer = record.fetch("reviewer")
+      unless reviewer.is_a?(String) && !reviewer.strip.empty? && reviewer.length <= 100 &&
+             !reviewer.match?(/[\u0000-\u001f\u007f]/)
+        raise AppleScreenshotReleaseSetValidationError,
+              "#{kind} approval requires a valid named reviewer"
+      end
+      review_time = strict_utc_time!(record.fetch("reviewedAtUtc"), "#{kind} reviewedAtUtc")
+      unless review_time >= latest_capture
+        raise AppleScreenshotReleaseSetValidationError,
+              "#{kind} review must not predate screenshot capture completion"
+      end
+      [kind, review_time]
     end
     reviewed_at =
       strict_utc_time!(approval.fetch("reviewedAtUtc"), "release approval reviewedAtUtc")
@@ -1091,6 +1137,11 @@ class AppleScreenshotReleaseSetValidator
         record.fetch("parityReviewedAtUtc"),
         "#{platform} parityReviewedAtUtc",
       )
+      require_equal!(
+        parity_time,
+        approval_reviewed_at.fetch("signedReleaseParity"),
+        "#{platform} parity/named signed Release review time",
+      )
       unless parity_time >= capture_completed_at.fetch(platform)
         raise AppleScreenshotReleaseSetValidationError,
               "#{platform} signed parity review must not predate screenshot capture completion"
@@ -1099,11 +1150,72 @@ class AppleScreenshotReleaseSetValidator
       [platform, parity_time]
     end
     latest_required_review_time =
-      (capture_completed_at.values + parity_reviewed_at.values).max
+      (capture_completed_at.values + approval_reviewed_at.values + parity_reviewed_at.values).max
     unless reviewed_at >= latest_required_review_time
       raise AppleScreenshotReleaseSetValidationError,
             "overall release review must not predate capture completion or platform parity review"
     end
+  end
+
+  def validate_capture_run_approval!(capture_run, source_commit)
+    require_exact_keys!(
+      capture_run,
+      %w[
+        schemaVersion repository runId workflowFile event headBranch headSha status
+        conclusion artifacts
+      ],
+      "capture run approval",
+    )
+    require_equal!(capture_run.fetch("schemaVersion"), 1, "capture run schemaVersion")
+    require_equal!(capture_run.fetch("repository"), CANONICAL_REPOSITORY,
+                   "capture run canonical repository")
+    run_id = capture_run.fetch("runId")
+    unless run_id.is_a?(Integer) && run_id.positive?
+      raise AppleScreenshotReleaseSetValidationError, "capture run ID must be a positive integer"
+    end
+    require_equal!(capture_run.fetch("workflowFile"), CAPTURE_WORKFLOW_FILE,
+                   "capture run workflow file")
+    require_equal!(capture_run.fetch("event"), "workflow_dispatch", "capture run event")
+    require_equal!(capture_run.fetch("headBranch"), "main", "capture run head branch")
+    require_equal!(capture_run.fetch("headSha"), source_commit, "capture run head SHA")
+    require_equal!(capture_run.fetch("status"), "completed", "capture run status")
+    require_equal!(capture_run.fetch("conclusion"), "success", "capture run conclusion")
+    artifacts = capture_run.fetch("artifacts")
+    unless artifacts.is_a?(Array)
+      raise AppleScreenshotReleaseSetValidationError, "capture run artifacts must be an array"
+    end
+    expected_names = [
+      "UNAPPROVED-debug-simulator-ios-ipados-#{source_commit}",
+      "UNAPPROVED-debug-simulator-tvos-#{source_commit}",
+      "UNAPPROVED-debug-simulator-watchos-#{source_commit}",
+      "UNAPPROVED-debug-simulator-visionos-#{source_commit}",
+      "UNAPPROVED-debug-maccatalyst-direct-uikit-#{source_commit}",
+    ]
+    require_equal!(artifacts.map { |record| record.fetch("name") }, expected_names,
+                   "capture run artifact order")
+    artifact_ids = artifacts.map.with_index do |record, index|
+      require_exact_keys!(record, %w[name id sizeInBytes digest expired],
+                          "capture run artifact #{index}")
+      artifact_id = record.fetch("id")
+      size = record.fetch("sizeInBytes")
+      unless artifact_id.is_a?(Integer) && artifact_id.positive?
+        raise AppleScreenshotReleaseSetValidationError,
+              "capture run artifact #{index} ID must be a positive integer"
+      end
+      unless size.is_a?(Integer) && size.positive? && size <= 2_147_483_648
+        raise AppleScreenshotReleaseSetValidationError,
+              "capture run artifact #{index} size is outside the safe bound"
+      end
+      digest = record.fetch("digest")
+      unless digest.is_a?(String) && digest.match?(/\Asha256:[0-9a-f]{64}\z/)
+        raise AppleScreenshotReleaseSetValidationError,
+              "capture run artifact #{index} digest must be a GitHub SHA-256"
+      end
+      require_equal!(record.fetch("expired"), false, "capture run artifact #{index} expiration")
+      artifact_id
+    end
+    require_equal!(artifact_ids.uniq.length, artifact_ids.length,
+                   "capture run unique artifact ID count")
   end
 
   def validate_release_root_inventory!(release_root, include_approval:)
@@ -1208,7 +1320,15 @@ class AppleScreenshotReleaseSetValidator
 
   def within_root?(path)
     real = path.realpath.to_s
-    root = @root.to_s
+    [@root, @release_evidence_root].any? do |allowed_root|
+      root = allowed_root.to_s
+      real == root || real.start_with?("#{root}#{File::SEPARATOR}")
+    end
+  end
+
+  def within_directory?(path, directory)
+    real = path.realpath.to_s
+    root = directory.realpath.to_s
     real == root || real.start_with?("#{root}#{File::SEPARATOR}")
   end
 
@@ -1286,19 +1406,26 @@ if $PROGRAM_NAME == __FILE__
   begin
     require_release_ready = false
     expected_source_commit = nil
+    release_evidence_root = nil
     ARGV.each do |argument|
       case argument
       when "--require-release-ready"
         require_release_ready = true
       when /\A--expected-source-commit=([0-9a-f]{40})\z/
         expected_source_commit = Regexp.last_match(1)
+      when /\A--release-evidence-root=(.+)\z/
+        release_evidence_root = Regexp.last_match(1)
       else
-        warn "Usage: #{$PROGRAM_NAME} [--require-release-ready --expected-source-commit=<40-character-sha>]"
+        warn "Usage: #{$PROGRAM_NAME} [--require-release-ready --expected-source-commit=<40-character-sha>] " \
+             "[--release-evidence-root=<absolute-existing-directory>]"
         exit 64
       end
     end
     root = Pathname.new(__dir__).join("../..").realpath
-    result = AppleScreenshotReleaseSetValidator.new(root: root).validate!(
+    result = AppleScreenshotReleaseSetValidator.new(
+      root: root,
+      release_evidence_root: release_evidence_root,
+    ).validate!(
       require_release_ready: require_release_ready,
       expected_source_commit: expected_source_commit,
     )

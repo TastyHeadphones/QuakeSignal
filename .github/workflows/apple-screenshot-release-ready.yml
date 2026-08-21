@@ -1,0 +1,464 @@
+name: Apple screenshot release-ready evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      capture_run_id:
+        description: Exact successful Apple screenshot candidate workflow run ID
+        required: true
+        type: string
+      source_commit:
+        description: Exact 40-character lowercase protected-main capture commit
+        required: true
+        type: string
+      visual_reviewer:
+        description: Named reviewer who inspected all 26 full-resolution frames
+        required: true
+        type: string
+      visual_review_approved:
+        description: Confirm the named visual review approved all 26 frames
+        required: true
+        default: false
+        type: boolean
+      privacy_reviewer:
+        description: Named reviewer who checked privacy and foreground-only claims
+        required: true
+        type: string
+      privacy_review_approved:
+        description: Confirm the named privacy review approved all 26 frames
+        required: true
+        default: false
+        type: boolean
+      signed_parity_reviewer:
+        description: Named reviewer who compared every frame with signed Release builds
+        required: true
+        type: string
+      signed_release_parity_approved:
+        description: Confirm signed Release visual parity for all five platform sets
+        required: true
+        default: false
+        type: boolean
+      signed_artifact_sha256s:
+        description: Exact JSON object of five platform keys to verified signed artifact SHA-256 values
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: apple-screenshot-release-ready-${{ inputs.source_commit }}
+  cancel-in-progress: false
+
+jobs:
+  assemble_and_validate:
+    name: Assemble approved 26-frame upload evidence
+    runs-on: macos-latest
+    timeout-minutes: 45
+    environment:
+      name: ios-app-store-release
+    env:
+      CAPTURE_RUN_ID: ${{ inputs.capture_run_id }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+      CONTROL_ROOT: ${{ runner.temp }}/quakesignal-screenshot-release-control-${{ github.run_id }}
+      DOWNLOAD_ROOT: ${{ runner.temp }}/quakesignal-screenshot-release-downloads-${{ github.run_id }}
+      EVIDENCE_ROOT: ${{ runner.temp }}/quakesignal-screenshot-release-evidence-${{ github.run_id }}
+
+    steps:
+      - name: Validate exact protected dispatch inputs
+        env:
+          REF_PROTECTED: ${{ github.ref_protected }}
+          VISUAL_REVIEWER: ${{ inputs.visual_reviewer }}
+          VISUAL_APPROVED: ${{ inputs.visual_review_approved }}
+          PRIVACY_REVIEWER: ${{ inputs.privacy_reviewer }}
+          PRIVACY_APPROVED: ${{ inputs.privacy_review_approved }}
+          SIGNED_PARITY_REVIEWER: ${{ inputs.signed_parity_reviewer }}
+          SIGNED_PARITY_APPROVED: ${{ inputs.signed_release_parity_approved }}
+          SIGNED_ARTIFACT_SHA256S_JSON: ${{ inputs.signed_artifact_sha256s }}
+        run: |
+          set -euo pipefail
+          /usr/bin/ruby -rjson -rpathname -e '
+            abort "release-ready screenshot handoff requires protected main" unless
+              ENV.fetch("GITHUB_REF") == "refs/heads/main" && ENV.fetch("REF_PROTECTED") == "true"
+            abort "release-ready screenshot handoff requires the canonical repository" unless
+              ENV.fetch("GITHUB_REPOSITORY") == "TastyHeadphones/QuakeSignal"
+            source = ENV.fetch("SOURCE_COMMIT")
+            abort "source_commit must be a full lowercase Git SHA" unless source.match?(/\A[0-9a-f]{40}\z/)
+            abort "source_commit must equal this protected-main dispatch SHA" unless source == ENV.fetch("GITHUB_SHA")
+            run_id = ENV.fetch("CAPTURE_RUN_ID")
+            abort "capture_run_id must be one exact positive run ID" unless run_id.match?(/\A[1-9][0-9]{0,18}\z/)
+            abort "manual dispatch actor is invalid" unless ENV.fetch("GITHUB_ACTOR").match?(/\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\z/)
+            %w[VISUAL PRIVACY SIGNED_PARITY].each do |kind|
+              reviewer = ENV.fetch("#{kind}_REVIEWER")
+              abort "#{kind} approval requires one valid named reviewer" unless
+                !reviewer.strip.empty? && reviewer.length <= 100 && !reviewer.match?(/[\u0000-\u001f\u007f]/)
+              abort "#{kind} approval must be explicitly true" unless ENV.fetch("#{kind}_APPROVED") == "true"
+            end
+            signed_hashes = JSON.parse(ENV.fetch("SIGNED_ARTIFACT_SHA256S_JSON"))
+            platforms = %w[ios-ipados tvos watchos visionos maccatalyst]
+            abort "signed artifact SHA-256 JSON must contain exactly five platform keys" unless
+              signed_hashes.is_a?(Hash) && signed_hashes.keys.sort == platforms.sort
+            platforms.each do |platform|
+              abort "#{platform} signed artifact SHA-256 is invalid" unless
+                signed_hashes.fetch(platform).is_a?(String) &&
+                signed_hashes.fetch(platform).match?(/\A[0-9a-f]{64}\z/)
+            end
+            runner_temp = Pathname.new(ENV.fetch("RUNNER_TEMP")).realpath
+            %w[CONTROL_ROOT DOWNLOAD_ROOT EVIDENCE_ROOT].each do |name|
+              path = Pathname.new(ENV.fetch(name)).expand_path
+              abort "#{name} must be a new direct child of RUNNER_TEMP" unless
+                path.dirname == runner_temp && !path.exist? && !path.symlink?
+              Dir.mkdir(path, 0o700)
+              abort "#{name} was not created canonically" unless path.realpath == path
+            end
+          '
+
+      - name: Check out exact source commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify reviewed contract and clean exact source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse --verify HEAD)" = "$SOURCE_COMMIT"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          node .github/scripts/verify-ios-release-contract.mjs --build-number 8
+
+      - name: Verify exact successful capture run and five artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_json="$CONTROL_ROOT/capture-run.json"
+          artifacts_json="$CONTROL_ROOT/capture-artifacts.json"
+          gh api "repos/TastyHeadphones/QuakeSignal/actions/runs/$CAPTURE_RUN_ID" > "$run_json"
+          gh api "repos/TastyHeadphones/QuakeSignal/actions/runs/$CAPTURE_RUN_ID/artifacts?per_page=100" > "$artifacts_json"
+          /usr/bin/ruby -rjson -rpathname -e '
+            def fail!(message)
+              abort "capture run verification failed: #{message}"
+            end
+            source = ENV.fetch("SOURCE_COMMIT")
+            repository = "TastyHeadphones/QuakeSignal"
+            fail!("workflow is not running in the canonical repository") unless
+              ENV.fetch("GITHUB_REPOSITORY") == repository
+            run_id = Integer(ENV.fetch("CAPTURE_RUN_ID"), 10)
+            control = Pathname.new(ENV.fetch("CONTROL_ROOT")).realpath
+            run = JSON.parse(control.join("capture-run.json").read)
+            fail!("wrong run ID") unless run.fetch("id") == run_id
+            fail!("wrong repository") unless run.dig("repository", "full_name") == repository
+            fail!("forked head repository") unless run.dig("head_repository", "full_name") == repository
+            fail!("wrong workflow") unless run.fetch("path") == ".github/workflows/apple-platform-screenshots.yml"
+            fail!("wrong event") unless run.fetch("event") == "workflow_dispatch"
+            fail!("wrong head branch") unless run.fetch("head_branch") == "main"
+            fail!("wrong head SHA") unless run.fetch("head_sha") == source
+            fail!("run is not completed successfully") unless
+              run.fetch("status") == "completed" && run.fetch("conclusion") == "success"
+            expected = [
+              "UNAPPROVED-debug-simulator-ios-ipados-#{source}",
+              "UNAPPROVED-debug-simulator-tvos-#{source}",
+              "UNAPPROVED-debug-simulator-watchos-#{source}",
+              "UNAPPROVED-debug-simulator-visionos-#{source}",
+              "UNAPPROVED-debug-maccatalyst-direct-uikit-#{source}",
+            ]
+            response = JSON.parse(control.join("capture-artifacts.json").read)
+            artifacts = response.fetch("artifacts")
+            fail!("artifact total must be exactly five") unless response.fetch("total_count") == 5 && artifacts.length == 5
+            grouped = artifacts.group_by { |artifact| artifact.fetch("name") }
+            fail!("artifact names must be exact and unique") unless
+              grouped.keys.sort == expected.sort && grouped.values.all? { |records| records.length == 1 }
+            sanitized = expected.map do |name|
+              artifact = grouped.fetch(name).fetch(0)
+              id = artifact.fetch("id")
+              size = artifact.fetch("size_in_bytes")
+              digest = artifact.fetch("digest")
+              fail!("artifact #{name} ID is invalid") unless id.is_a?(Integer) && id.positive?
+              fail!("artifact #{name} size is unsafe") unless size.is_a?(Integer) && size.positive? && size <= 2_147_483_648
+              fail!("artifact #{name} is expired") unless artifact.fetch("expired") == false
+              fail!("artifact #{name} lacks a SHA-256 digest") unless
+                digest.is_a?(String) && digest.match?(/\Asha256:[0-9a-f]{64}\z/)
+              { "name" => name, "id" => id, "sizeInBytes" => size, "digest" => digest, "expired" => false }
+            end
+            attestation = {
+              "schemaVersion" => 1,
+              "repository" => repository,
+              "runId" => run_id,
+              "workflowFile" => ".github/workflows/apple-platform-screenshots.yml",
+              "event" => "workflow_dispatch",
+              "headBranch" => "main",
+              "headSha" => source,
+              "status" => "completed",
+              "conclusion" => "success",
+              "artifacts" => sanitized,
+            }
+            path = control.join("capture-run-attestation.json")
+            File.open(path, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|
+              file.write(JSON.pretty_generate(attestation) + "\n")
+            end
+          '
+
+      - name: Download exact candidate artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: UNAPPROVED-debug-*-${{ inputs.source_commit }}
+          path: ${{ env.DOWNLOAD_ROOT }}
+          merge-multiple: false
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.capture_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Reverify run and artifact identities after download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          post_run_json="$CONTROL_ROOT/post-download-capture-run.json"
+          post_artifacts_json="$CONTROL_ROOT/post-download-capture-artifacts.json"
+          gh api "repos/TastyHeadphones/QuakeSignal/actions/runs/$CAPTURE_RUN_ID" > "$post_run_json"
+          gh api "repos/TastyHeadphones/QuakeSignal/actions/runs/$CAPTURE_RUN_ID/artifacts?per_page=100" > "$post_artifacts_json"
+          /usr/bin/ruby -rjson -rpathname -e '
+            def fail!(message)
+              abort "post-download capture verification failed: #{message}"
+            end
+            control = Pathname.new(ENV.fetch("CONTROL_ROOT")).realpath
+            attestation = JSON.parse(control.join("capture-run-attestation.json").read)
+            run = JSON.parse(control.join("post-download-capture-run.json").read)
+            canonical_repository = "TastyHeadphones/QuakeSignal"
+            fail!("attested repository is not canonical") unless
+              attestation.fetch("repository") == canonical_repository
+            fail!("run ID changed") unless run.fetch("id") == attestation.fetch("runId")
+            fail!("repository changed") unless run.dig("repository", "full_name") == canonical_repository
+            fail!("head repository changed") unless run.dig("head_repository", "full_name") == canonical_repository
+            fail!("workflow changed") unless run.fetch("path") == attestation.fetch("workflowFile")
+            fail!("event changed") unless run.fetch("event") == attestation.fetch("event")
+            fail!("head branch changed") unless run.fetch("head_branch") == attestation.fetch("headBranch")
+            fail!("head SHA changed") unless run.fetch("head_sha") == attestation.fetch("headSha")
+            fail!("run is no longer completed successfully") unless
+              run.fetch("status") == "completed" && run.fetch("conclusion") == "success" &&
+              run.fetch("status") == attestation.fetch("status") &&
+              run.fetch("conclusion") == attestation.fetch("conclusion")
+            response = JSON.parse(control.join("post-download-capture-artifacts.json").read)
+            artifacts = response.fetch("artifacts")
+            fail!("artifact total changed") unless response.fetch("total_count") == 5 && artifacts.length == 5
+            grouped = artifacts.group_by { |artifact| artifact.fetch("name") }
+            expected_records = attestation.fetch("artifacts")
+            expected_names = expected_records.map { |artifact| artifact.fetch("name") }
+            fail!("artifact names or uniqueness changed") unless
+              grouped.keys.sort == expected_names.sort && grouped.values.all? { |records| records.length == 1 }
+            second_artifacts = expected_names.map do |name|
+              artifact = grouped.fetch(name).fetch(0)
+              {
+                "name" => name,
+                "id" => artifact.fetch("id"),
+                "sizeInBytes" => artifact.fetch("size_in_bytes"),
+                "digest" => artifact.fetch("digest"),
+                "expired" => artifact.fetch("expired"),
+              }
+            end
+            fail!("post-download artifact records changed") unless second_artifacts == expected_records
+            fail!("post-download artifact serialization changed") unless
+              JSON.generate(second_artifacts) == JSON.generate(expected_records)
+          '
+
+      - name: Safely inventory five packages and all 26 frames
+        run: |
+          set -euo pipefail
+          /usr/bin/ruby -rjson -rpathname -rdigest -r./.github/scripts/verify-apple-screenshot-release-set -e '
+            source = ENV.fetch("SOURCE_COMMIT")
+            root = Pathname.new(ENV.fetch("DOWNLOAD_ROOT")).realpath
+            expected = {
+              "UNAPPROVED-debug-simulator-ios-ipados-#{source}" => "ios-ipados",
+              "UNAPPROVED-debug-simulator-tvos-#{source}" => "tvos",
+              "UNAPPROVED-debug-simulator-watchos-#{source}" => "watchos",
+              "UNAPPROVED-debug-simulator-visionos-#{source}" => "visionos",
+              "UNAPPROVED-debug-maccatalyst-direct-uikit-#{source}" => "maccatalyst",
+            }
+            abort "downloaded artifact directory inventory is not exact" unless
+              root.children.map { |entry| entry.basename.to_s }.sort == expected.keys.sort
+            folded_paths = {}
+            entry_count = 0
+            total_bytes = 0
+            forbidden_suffixes = %w[.app .appex .ipa .pkg .dmg .xcarchive .xip .mobileprovision .provisionprofile .p12 .p8 .cer .key]
+            macho_magics = ["\xcf\xfa\xed\xfe", "\xfe\xed\xfa\xcf", "\xca\xfe\xba\xbe", "\xbe\xba\xfe\xca", "\xce\xfa\xed\xfe", "\xfe\xed\xfa\xce"].map(&:b)
+            visit = lambda do |path|
+              relative = path.relative_path_from(root).to_s
+              abort "download contains an unsafe path" unless
+                relative.valid_encoding? && !relative.match?(/[\\\u0000-\u001f\u007f]/) &&
+                Pathname.new(relative).cleanpath.to_s == relative
+              folded = relative.unicode_normalize(:nfc).downcase
+              abort "download contains a Unicode or case-fold path collision" if folded_paths.key?(folded)
+              folded_paths[folded] = relative
+              stat = path.lstat
+              abort "download contains a symlink or special entry: #{relative}" if path.symlink?
+              entry_count += 1
+              abort "download inventory exceeds 100000 entries" if entry_count > 100_000
+              components = relative.split(File::SEPARATOR)
+              abort "download contains a signed-binary container: #{relative}" if
+                components.any? { |component| forbidden_suffixes.any? { |suffix| component.downcase.end_with?(suffix) } }
+              if stat.directory?
+                path.children.sort_by(&:to_s).each { |child| visit.call(child) }
+              elsif stat.file?
+                abort "download contains a hard-linked file: #{relative}" unless stat.nlink == 1
+                abort "download file exceeds the safe bound: #{relative}" if stat.size > 1_100_000_000
+                total_bytes += stat.size
+                abort "download inventory exceeds the safe total byte bound" if total_bytes > 5_368_709_120
+                magic = stat.size >= 4 ? path.binread(4) : "".b
+                abort "download contains a Mach-O executable: #{relative}" if macho_magics.include?(magic)
+              else
+                abort "download contains a non-regular entry: #{relative}"
+              end
+            end
+            root.children.sort_by(&:to_s).each { |entry| visit.call(entry) }
+            frame_hashes = []
+            expected.each do |artifact_name, platform|
+              artifact_root = root.join(artifact_name)
+              children = artifact_root.children.map { |entry| entry.basename.to_s }.sort
+              abort "#{artifact_name} must contain only its package and ZIP" unless children == [platform, "#{platform}.zip"].sort
+              candidate = artifact_root.join(platform)
+              archive = artifact_root.join("#{platform}.zip")
+              abort "#{platform} package is not a plain directory" unless candidate.directory? && !candidate.symlink?
+              abort "#{platform} ZIP is not a plain nonempty file" unless archive.file? && !archive.symlink? && archive.size.positive?
+              provenance = JSON.parse(candidate.join("capture-provenance.json").read)
+              frames = provenance.fetch("frames")
+              specs = AppleScreenshotReleaseSetValidator::FRAME_SPECS.fetch(platform)
+              actual = frames.map { |frame| [frame.fetch("captureSelector"), frame.fetch("file")] }
+              planned = specs.map { |spec| [spec.fetch("captureSelector"), spec.fetch("file")] }
+              abort "#{platform} frame inventory does not match its exact plan" unless actual == planned
+              frames.each do |frame|
+                relative = frame.fetch("file")
+                abort "#{platform} frame path is unsafe" unless
+                  !Pathname.new(relative).absolute? && Pathname.new(relative).cleanpath.to_s == relative
+                screenshot = candidate.join(relative)
+                abort "#{platform} frame is not a plain file: #{relative}" unless screenshot.file? && !screenshot.symlink?
+                sha256 = frame.fetch("sha256")
+                abort "#{platform} frame SHA-256 is invalid" unless sha256.match?(/\A[0-9a-f]{64}\z/)
+                abort "#{platform} frame bytes do not match provenance" unless Digest::SHA256.file(screenshot).hexdigest == sha256
+                frame_hashes << sha256
+              end
+            end
+            abort "exactly 26 byte-distinct frames are required" unless frame_hashes.length == 26 && frame_hashes.uniq.length == 26
+            puts "Safely inventoried #{entry_count} entries, #{total_bytes} bytes, and 26 distinct frames."
+          '
+
+      - name: Assemble source-addressed release evidence outside checkout
+        run: |
+          set -euo pipefail
+          output="$EVIDENCE_ROOT/ios/AppStore/screenshot-release-sets-v1.1-build8/$SOURCE_COMMIT"
+          index="$EVIDENCE_ROOT/ios/AppStore/screenshot-set-index-v1.1-build8.json"
+          /usr/bin/ruby .github/scripts/assemble-apple-screenshot-release-set.rb \
+            "--release-evidence-root=$EVIDENCE_ROOT" \
+            "$SOURCE_COMMIT" "$output" "$index" \
+            "$DOWNLOAD_ROOT/UNAPPROVED-debug-simulator-ios-ipados-$SOURCE_COMMIT/ios-ipados" \
+            "$DOWNLOAD_ROOT/UNAPPROVED-debug-simulator-ios-ipados-$SOURCE_COMMIT/ios-ipados.zip" \
+            "$DOWNLOAD_ROOT/UNAPPROVED-debug-simulator-tvos-$SOURCE_COMMIT/tvos" \
+            "$DOWNLOAD_ROOT/UNAPPROVED-debug-simulator-tvos-$SOURCE_COMMIT/tvos.zip" \
+            "$DOWNLOAD_ROOT/UNAPPROVED-debug-simulator-watchos-$SOURCE_COMMIT/watchos" \
+            "$DOWNLOAD_ROOT/UNAPPROVED-debug-simulator-watchos-$SOURCE_COMMIT/watchos.zip" \
+            "$DOWNLOAD_ROOT/UNAPPROVED-debug-simulator-visionos-$SOURCE_COMMIT/visionos" \
+            "$DOWNLOAD_ROOT/UNAPPROVED-debug-simulator-visionos-$SOURCE_COMMIT/visionos.zip" \
+            "$DOWNLOAD_ROOT/UNAPPROVED-debug-maccatalyst-direct-uikit-$SOURCE_COMMIT/maccatalyst" \
+            "$DOWNLOAD_ROOT/UNAPPROVED-debug-maccatalyst-direct-uikit-$SOURCE_COMMIT/maccatalyst.zip"
+
+      - name: Record named reviews and signed Release parity
+        env:
+          VISUAL_REVIEWER: ${{ inputs.visual_reviewer }}
+          PRIVACY_REVIEWER: ${{ inputs.privacy_reviewer }}
+          SIGNED_PARITY_REVIEWER: ${{ inputs.signed_parity_reviewer }}
+          SIGNED_ARTIFACT_SHA256S_JSON: ${{ inputs.signed_artifact_sha256s }}
+        run: |
+          set -euo pipefail
+          /usr/bin/ruby -rjson -rdigest -rpathname -rtime -e '
+            evidence = Pathname.new(ENV.fetch("EVIDENCE_ROOT")).realpath
+            source = ENV.fetch("SOURCE_COMMIT")
+            index_path = evidence.join("ios/AppStore/screenshot-set-index-v1.1-build8.json")
+            release_root = evidence.join("ios/AppStore/screenshot-release-sets-v1.1-build8", source)
+            manifest_path = release_root.join("release-set.json")
+            approval_path = release_root.join("release-approval.json")
+            abort "approval target already exists" if approval_path.exist? || approval_path.symlink?
+            index = JSON.parse(index_path.read)
+            active = index.fetch("activeReleaseSet")
+            manifest_sha256 = Digest::SHA256.file(manifest_path).hexdigest
+            abort "assembled manifest/index hash mismatch" unless active.fetch("manifestSha256") == manifest_sha256
+            capture_run = JSON.parse(Pathname.new(ENV.fetch("CONTROL_ROOT")).join("capture-run-attestation.json").read)
+            reviewed_at = Time.now.utc.iso8601
+            named_review = lambda do |reviewer|
+              { "approved" => true, "reviewer" => reviewer, "reviewedAtUtc" => reviewed_at }
+            end
+            supplied_hashes = JSON.parse(ENV.fetch("SIGNED_ARTIFACT_SHA256S_JSON"))
+            signed_hashes = %w[ios-ipados tvos watchos visionos maccatalyst].to_h do |platform|
+              [platform, supplied_hashes.fetch(platform)]
+            end
+            approval = {
+              "schemaVersion" => 2,
+              "status" => "approved-for-build8-upload",
+              "uploadApproved" => true,
+              "sourceCommit" => source,
+              "releaseSetManifestSha256" => manifest_sha256,
+              "dispatchActorGitHubLogin" => ENV.fetch("GITHUB_ACTOR"),
+              "captureRun" => capture_run,
+              "approvals" => {
+                "visual" => named_review.call(ENV.fetch("VISUAL_REVIEWER")),
+                "privacy" => named_review.call(ENV.fetch("PRIVACY_REVIEWER")),
+                "signedReleaseParity" => named_review.call(ENV.fetch("SIGNED_PARITY_REVIEWER")),
+              },
+              "reviewedAtUtc" => reviewed_at,
+              "platforms" => signed_hashes.map do |platform, sha256|
+                {
+                  "platform" => platform,
+                  "signedReleaseArtifactSha256" => sha256,
+                  "signedBuildSourceCommit" => source,
+                  "signedReleaseParityApproved" => true,
+                  "parityReviewedAtUtc" => reviewed_at,
+                }
+              end,
+            }
+            File.open(approval_path, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|
+              file.write(JSON.pretty_generate(approval) + "\n")
+              file.flush
+              file.fsync
+            end
+            active["approvalFile"] = "ios/AppStore/screenshot-release-sets-v1.1-build8/#{source}/release-approval.json"
+            active["approvalSha256"] = Digest::SHA256.file(approval_path).hexdigest
+            staged_index = index_path.sub_ext(".staged.json")
+            File.open(staged_index, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|
+              file.write(JSON.pretty_generate(index) + "\n")
+              file.flush
+              file.fsync
+            end
+            File.rename(staged_index, index_path)
+          '
+
+      - name: Prove strict release-ready store asset contract
+        run: |
+          set -euo pipefail
+          /usr/bin/ruby .github/scripts/verify-store-assets.rb \
+            --require-build8-screenshot-release-ready \
+            --expected-source-commit="$SOURCE_COMMIT" \
+            --screenshot-release-evidence-root="$EVIDENCE_ROOT"
+          test "$(git rev-parse --verify HEAD)" = "$SOURCE_COMMIT"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          /usr/bin/ruby -rpathname -e '
+            root = Pathname.new(ENV.fetch("EVIDENCE_ROOT")).realpath.join("ios/AppStore")
+            expected = [
+              "screenshot-set-index-v1.1-build8.json",
+              "screenshot-release-sets-v1.1-build8",
+            ]
+            abort "final evidence upload inventory is not exact" unless
+              root.children.map { |entry| entry.basename.to_s }.sort == expected.sort
+          '
+
+      - name: Upload one short-lived approved screenshot artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: APPROVED-build8-apple-screenshots-${{ inputs.source_commit }}
+          path: |
+            ${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-set-index-v1.1-build8.json
+            ${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-release-sets-v1.1-build8/${{ inputs.source_commit }}
+          if-no-files-found: error
+          include-hidden-files: false
+          compression-level: 0
+          overwrite: false
+          retention-days: 3

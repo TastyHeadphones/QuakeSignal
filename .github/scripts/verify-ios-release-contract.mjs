@@ -82,6 +82,7 @@ const contractFiles = {
   iosWorkflow: ".github/workflows/ios.yml",
   platformWorkflow: ".github/workflows/apple-platforms.yml",
   screenshotWorkflow: ".github/workflows/apple-platform-screenshots.yml",
+  screenshotReleaseWorkflow: ".github/workflows/apple-screenshot-release-ready.yml",
   macCatalystScreenshotPlan: "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build8.json",
   cloudflareWorkflow: ".github/workflows/cloudflare.yml",
   signedArtifactVerifier: "ios/ci_scripts/verify-signed-apple-artifacts.sh",
@@ -96,6 +97,8 @@ const contractFiles = {
     ".github/scripts/assemble-apple-screenshot-release-set.test.rb",
     ".github/scripts/verify-apple-screenshot-release-set.rb",
     ".github/scripts/verify-apple-screenshot-release-set.test.rb",
+    ".github/scripts/verify-store-assets.rb",
+    ".github/scripts/verify-store-assets.test.rb",
     "backend/cloudflare/scripts/legal-page-contract.mjs",
     "backend/cloudflare/scripts/render-staging-config.mjs",
     "backend/cloudflare/scripts/smoke-test-policy.mjs",
@@ -221,6 +224,7 @@ const REVIEWED_WORKFLOW_FILES = [
   ".github/workflows/apns-incident-disposition.yml",
   ".github/workflows/apple-platform-screenshots.yml",
   ".github/workflows/apple-platforms.yml",
+  ".github/workflows/apple-screenshot-release-ready.yml",
   ".github/workflows/cloudflare-staging.yml",
   ".github/workflows/cloudflare.yml",
   ".github/workflows/desktop-build.yml",
@@ -322,6 +326,11 @@ const SCREENSHOT_ROOT_CONCURRENCY = {
   group: "apple-platform-screenshot-candidates-${{ github.ref }}",
   "cancel-in-progress": true,
 };
+const SCREENSHOT_RELEASE_ROOT_PERMISSIONS = { actions: "read", contents: "read" };
+const SCREENSHOT_RELEASE_ROOT_CONCURRENCY = {
+  group: "apple-screenshot-release-ready-${{ inputs.source_commit }}",
+  "cancel-in-progress": false,
+};
 // The production Worker deploy and the TestFlight signing job share this
 // lock. That serializes a policy-changing deploy with the live policy smoke
 // and the subsequent signed upload: a deployment either completes before the
@@ -403,17 +412,18 @@ const WORKFLOW_JOBS_FINGERPRINT = "sha256:-d0wBZyf2k7VY4Cg7wm6mTUqSTznpgg0MB99EF
 const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:kdmNDd9nWmheihycQJl2FGWnO-Y5l5GVqo9a-LspzIg";
 const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:ytjQtZGGTHGr6F-iQ-JjbQ7CFhEAFwd7p5mkDl2WlcY";
 const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:mKE3lLqxtJUhMRw6pIX4gSy4IuKbxI67MCX7UYRVwzg";
+const SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT = "sha256:wF5yAEHWTYOieQ2oAozOkG_YA4h1VLVBRv3RTnEQ48o";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
 const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:676KBpvZr_X34qvSu8sARCkTdyux7qfkzN92e5tPebY";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
 const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:toLX1XB92g900YQMVNdY6b_qs9oHUEVANOZMzpJrM3Q";
-const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:LiQ_GD8IWRxjS7x_EkXZ2JV1SfOlRaWw1_m0DhLxJsg";
+const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:ZtQqkR_S0Vq45k5kTT9odoGOGlRtVKqLdYWmLLRYwOg";
 const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:14FdmmhtuHwHY7yGNg84H7ZI87TjHTAjT1zJsE8RNJY";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:vtAIx8JZ4s9UUN07yItVzVx-po5bFVrgWPH5FV_zhXA";
 const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:QWPW7UmK-pIieBOG-2Ywe2njyUoVoMzzrEiijxo4LIs";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:a-ulY8Wk34PLWq40HKUvaKtr1-dgE60UpbPfVrCxw_c";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:JwidlotVyKOmsSRdRP27JLj_L_CnXDkPSkjc0szzAdI";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:yaHxjPxaZNH8hJSlnzW_Lp8vjGPR4CwH8eStMMykBbE";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:RjNhmRZRlrssKC6P_eR946V_cr87Qd9DBMnOnilpuI8";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:gNHr13EktFUXs0KiPpLYbdaL3I7IApzP4PQjaDmX2Gk";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -1576,6 +1586,7 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
   const mobileReleaseFiles = new Set([
     contractFiles.iosWorkflow,
     contractFiles.platformWorkflow,
+    contractFiles.screenshotReleaseWorkflow,
   ]);
   const appleUploadFiles = new Set([
     ...mobileReleaseFiles,
@@ -2304,6 +2315,216 @@ function verifyScreenshotCandidateWorkflow(workflowSource) {
   }
 }
 
+function verifyScreenshotReleaseWorkflow(workflowSource) {
+  const label = "Apple screenshot release-ready workflow";
+  const workflow = parseEffectiveWorkflow(
+    workflowSource,
+    label,
+    ".github/workflows/apple-screenshot-release-ready.yml",
+  );
+  if (Object.hasOwn(workflow, "defaults")) {
+    fail(`${label} workflow-level defaults are forbidden.`);
+  }
+  exactRecord(workflow.permissions, SCREENSHOT_RELEASE_ROOT_PERMISSIONS, `${label} permissions`);
+  exactRecord(workflow.concurrency, SCREENSHOT_RELEASE_ROOT_CONCURRENCY, `${label} concurrency`);
+  const inputs = workflowDispatch(workflow, label);
+  const stringInputs = [
+    "capture_run_id",
+    "source_commit",
+    "visual_reviewer",
+    "privacy_reviewer",
+    "signed_parity_reviewer",
+    "signed_artifact_sha256s",
+  ];
+  const booleanInputs = [
+    "visual_review_approved",
+    "privacy_review_approved",
+    "signed_release_parity_approved",
+  ];
+  const expectedInputOrder = [
+      "capture_run_id",
+      "source_commit",
+      "visual_reviewer",
+      "visual_review_approved",
+      "privacy_reviewer",
+      "privacy_review_approved",
+      "signed_parity_reviewer",
+      "signed_release_parity_approved",
+      "signed_artifact_sha256s",
+  ];
+  if (!sameValue(Object.keys(inputs), expectedInputOrder)) {
+    fail(`${label} input order must be exactly ${expectedInputOrder.join(", ")}.`);
+  }
+  for (const name of stringInputs) {
+    exactRecordWithAllowedKeys(
+      inputs[name],
+      { required: true, type: "string" },
+      ["description"],
+      `${label} ${name} input`,
+    );
+  }
+  for (const name of booleanInputs) {
+    exactRecordWithAllowedKeys(
+      inputs[name],
+      { required: true, default: false, type: "boolean" },
+      ["description"],
+      `${label} ${name} input`,
+    );
+  }
+  if (/\$\{\{\s*secrets(?:\.|\[)/i.test(JSON.stringify(workflow))) {
+    fail(`${label} must use only the built-in read-only token and never repository secrets.`);
+  }
+  const jobs = record(workflow.jobs, `${label} jobs`);
+  if (!sameValue(Object.keys(jobs), ["assemble_and_validate"])) {
+    fail(`${label} must expose exactly one reviewed assembly job.`);
+  }
+  const job = record(jobs.assemble_and_validate, `${label} assembly job`);
+  exactRecordWithAllowedKeys(
+    job,
+    {
+      name: "Assemble approved 26-frame upload evidence",
+      "runs-on": "macos-latest",
+      "timeout-minutes": 45,
+      environment: { name: "ios-app-store-release" },
+    },
+    ["env", "steps"],
+    `${label} assembly job header`,
+  );
+  const steps = job.steps;
+  if (!Array.isArray(steps)) fail(`${label} steps must be a sequence.`);
+  const dispatchPreflight = stepByName(
+    steps,
+    "Validate exact protected dispatch inputs",
+    `${label} canonical repository dispatch preflight`,
+  );
+  requireText(dispatchPreflight.run, [
+    'ENV.fetch("GITHUB_REPOSITORY") == "TastyHeadphones/QuakeSignal"',
+    'ENV.fetch("GITHUB_REF") == "refs/heads/main"',
+    'ENV.fetch("REF_PROTECTED") == "true"',
+  ], `${label} canonical repository dispatch preflight command`);
+  const checkout = stepByName(steps, "Check out exact source commit", `${label} checkout`);
+  exactRecord(checkout, {
+    name: "Check out exact source commit",
+    uses: CHECKOUT_ACTION,
+    with: {
+      ref: "${{ inputs.source_commit }}",
+      "fetch-depth": 0,
+      "persist-credentials": false,
+    },
+  }, `${label} checkout`);
+  const initialRunAttestation = stepByName(
+    steps,
+    "Verify exact successful capture run and five artifacts",
+    `${label} canonical capture-run attestation`,
+  );
+  requireText(initialRunAttestation.run, [
+    "repos/TastyHeadphones/QuakeSignal/actions/runs/$CAPTURE_RUN_ID",
+    'repository = "TastyHeadphones/QuakeSignal"',
+    'ENV.fetch("GITHUB_REPOSITORY") == repository',
+    'run.dig("repository", "full_name") == repository',
+    'run.dig("head_repository", "full_name") == repository',
+  ], `${label} canonical capture-run attestation command`);
+  const download = stepByName(steps, "Download exact candidate artifacts", `${label} artifact download`);
+  exactRecord(download, {
+    name: "Download exact candidate artifacts",
+    uses: "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+    with: {
+      pattern: "UNAPPROVED-debug-*-${{ inputs.source_commit }}",
+      path: "${{ env.DOWNLOAD_ROOT }}",
+      "merge-multiple": false,
+      repository: "${{ github.repository }}",
+      "run-id": "${{ inputs.capture_run_id }}",
+      "github-token": "${{ github.token }}",
+    },
+  }, `${label} artifact download`);
+  const postDownloadReverify = stepByName(
+    steps,
+    "Reverify run and artifact identities after download",
+    `${label} post-download run revalidation`,
+  );
+  exactRecordWithAllowedKeys(
+    postDownloadReverify,
+    {
+      name: "Reverify run and artifact identities after download",
+      env: { GH_TOKEN: "${{ github.token }}" },
+    },
+    ["run"],
+    `${label} post-download run revalidation`,
+  );
+  requireText(postDownloadReverify.run, [
+    "repos/TastyHeadphones/QuakeSignal/actions/runs/$CAPTURE_RUN_ID",
+    "actions/runs/$CAPTURE_RUN_ID",
+    "actions/runs/$CAPTURE_RUN_ID/artifacts?per_page=100",
+    "capture-run-attestation.json",
+    'run.fetch("status") == "completed"',
+    'run.fetch("conclusion") == "success"',
+    "second_artifacts == expected_records",
+    "JSON.generate(second_artifacts) == JSON.generate(expected_records)",
+  ], `${label} post-download run revalidation command`);
+  const safeInventory = stepByName(
+    steps,
+    "Safely inventory five packages and all 26 frames",
+    `${label} safe downloaded inventory`,
+  );
+  const upload = stepByName(
+    steps,
+    "Upload one short-lived approved screenshot artifact",
+    `${label} final upload`,
+  );
+  exactRecord(upload, {
+    name: "Upload one short-lived approved screenshot artifact",
+    uses: "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+    with: {
+      name: "APPROVED-build8-apple-screenshots-${{ inputs.source_commit }}",
+      path: "${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-set-index-v1.1-build8.json\n${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-release-sets-v1.1-build8/${{ inputs.source_commit }}\n",
+      "if-no-files-found": "error",
+      "include-hidden-files": false,
+      "compression-level": 0,
+      overwrite: false,
+      "retention-days": 3,
+    },
+  }, `${label} final upload`);
+  const allRunSource = steps
+    .filter((step) => isRecord(step) && typeof step.run === "string")
+    .map((step) => step.run)
+    .join("\n");
+  for (const required of [
+    ".github/workflows/apple-platform-screenshots.yml",
+    "UNAPPROVED-debug-simulator-ios-ipados-#{source}",
+    "UNAPPROVED-debug-simulator-tvos-#{source}",
+    "UNAPPROVED-debug-simulator-watchos-#{source}",
+    "UNAPPROVED-debug-simulator-visionos-#{source}",
+    "UNAPPROVED-debug-maccatalyst-direct-uikit-#{source}",
+    "--release-evidence-root=$EVIDENCE_ROOT",
+    "--require-build8-screenshot-release-ready",
+    "--expected-source-commit=\"$SOURCE_COMMIT\"",
+    "--screenshot-release-evidence-root=\"$EVIDENCE_ROOT\"",
+    "release-approval.json",
+    "visual",
+    "privacy",
+    "signedReleaseParity",
+    "post-download capture verification failed",
+    "TastyHeadphones/QuakeSignal",
+  ]) {
+    if (!allRunSource.includes(required)) {
+      fail(`${label} must retain ${JSON.stringify(required)}.`);
+    }
+  }
+  if (/\bxcodebuild\s+(?:archive|-exportArchive)\b|\bxcrun\s+altool\b/.test(allRunSource)) {
+    fail(`${label} must never build, sign, retain, or upload an Apple binary.`);
+  }
+  if (steps.indexOf(checkout) >= steps.indexOf(download) ||
+      steps.indexOf(download) >= steps.indexOf(postDownloadReverify) ||
+      steps.indexOf(postDownloadReverify) >= steps.indexOf(safeInventory) ||
+      steps.indexOf(safeInventory) >= steps.indexOf(upload)) {
+    fail(`${label} checkout, exact-run download, post-download revalidation, safe inventory, and final upload order drifted.`);
+  }
+  const jobsFingerprint = workflowSequenceFingerprint(jobs);
+  if (jobsFingerprint !== SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT) {
+    fail(`${label} jobs must match the reviewed hosted approval graph fingerprint (received ${jobsFingerprint}).`);
+  }
+}
+
 /**
  * Verify the static release boundary shared by the iOS archive and the Worker
  * App Attest policy. The protected workflow separately proves that the live
@@ -2329,6 +2550,7 @@ export async function verifyIOSReleaseContract({
     iosWorkflow,
     platformWorkflow,
     screenshotWorkflow,
+    screenshotReleaseWorkflow,
     macCatalystScreenshotPlan,
     cloudflareWorkflow,
     releaseHooks,
@@ -2355,6 +2577,7 @@ export async function verifyIOSReleaseContract({
     readFile(path(contractFiles.iosWorkflow), "utf8"),
     readFile(path(contractFiles.platformWorkflow), "utf8"),
     readFile(path(contractFiles.screenshotWorkflow), "utf8"),
+    readFile(path(contractFiles.screenshotReleaseWorkflow), "utf8"),
     readFile(path(contractFiles.macCatalystScreenshotPlan), "utf8"),
     readFile(path(contractFiles.cloudflareWorkflow), "utf8"),
     readReviewedCiScriptInventory(root),
@@ -2475,6 +2698,7 @@ export async function verifyIOSReleaseContract({
   verifyArchiveWorkflow(iosWorkflow, buildNumber);
   verifyPlatformArchiveWorkflow(platformWorkflow, buildNumber);
   verifyScreenshotCandidateWorkflow(screenshotWorkflow);
+  verifyScreenshotReleaseWorkflow(screenshotReleaseWorkflow);
   verifyProductionDeploymentSerialization(cloudflareWorkflow);
   verifyWorkflowDirectoryPolicy(workflowFiles);
   return {

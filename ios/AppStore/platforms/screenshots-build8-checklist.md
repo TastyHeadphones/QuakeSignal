@@ -95,8 +95,9 @@ This checklist creates no approval by itself.
 - [ ] Capture all 26 frames from one frozen 40-character commit: 10 iPhone/iPad,
   3 Apple TV, 3 Apple Watch, 5 Apple Vision Pro, and 5 Mac Catalyst. Do not
   activate a partial package or combine commits.
-- [ ] Integrate the packages only below
-  `../screenshot-release-sets-v1.1-build8/<source-commit>/`. Each platform
+- [ ] Let the protected `apple-screenshot-release-ready.yml` workflow integrate
+  the packages only below its external
+  `ios/AppStore/screenshot-release-sets-v1.1-build8/<source-commit>/`. Each platform
   directory contains `package-provenance.json`, its exact planned frame paths,
   and all recorded `evidence/` files. `release-set.json` hashes every package
   byte and remains `source-frozen-unapproved` with `uploadApproved: false`.
@@ -108,28 +109,34 @@ This checklist creates no approval by itself.
   historical screenshot SHA-256. Renaming, relabelling, resizing metadata, or
   recomputing outer manifests must never turn an old/collapsed frame into a
   final-set frame.
-- [ ] Point `activeReleaseSet` at the exact source directory and manifest only
-  after all 26 frames exist. The validator binds each plan both to its current
+- [ ] Keep the checked-in `activeReleaseSet` null. The hosted workflow creates
+  an ephemeral active index only after all 26 frames exist. The validator binds
+  each plan both to its current
   bytes and the same bytes at the source commit, and retains the full native
   product-source guard, including tracked, untracked, ignored, and
   `Debug.local.xcconfig` drift checks.
-- [ ] After named full-size review and signed public-Release comparison for
-  every platform, add the separate hashed `release-approval.json`. Record each
+- [ ] After named full-size visual review, named privacy review, and named signed
+  public-Release comparison for every platform, dispatch the protected workflow
+  with all three approvals, the exact capture run ID/source SHA, and five signed
+  artifact hashes. It adds the separate hashed `release-approval.json`. Record each
   signed artifact hash and signed-build source commit; every signed-build
   commit must be product-source equivalent to the screenshot source commit.
   Each platform parity-review time must be at or after that platform's capture
   completion, and the overall named-review time must be at or after every
   capture completion and parity review.
-- [ ] Run both modes. The first locks historical evidence and may report the
-  active set pending. The second must fail until the complete exact-commit set
-  and separate named signed-parity approval are present:
+- [ ] Require the hosted strict mode to fail until the complete exact-commit set,
+  successful capture-run binding, and all three named approvals are present:
 
   ```sh
-  ruby .github/scripts/verify-apple-screenshot-release-set.rb
   ruby .github/scripts/verify-store-assets.rb \
     --require-build8-screenshot-release-ready \
-    --expected-source-commit=<40-character-source-commit>
+    --expected-source-commit=<40-character-source-commit> \
+    --screenshot-release-evidence-root="$EVIDENCE_ROOT"
   ```
+
+  Run this strict mode only in the hosted release-ready workflow. Its final
+  artifact retains the active evidence for three days; no generated image or
+  active index is committed.
 
 ## Historical build-7 and superseded build-8 candidate evidence
 

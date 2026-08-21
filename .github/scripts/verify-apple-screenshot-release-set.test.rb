@@ -215,6 +215,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
   def setup
     @temporary_directory = Dir.mktmpdir("apple-screenshot-release-set")
     @root = Pathname.new(@temporary_directory).realpath
+    @release_evidence_root = @root
     @inspector = FakeAppleReleaseScreenshotInspector.new
     @source_guard = FakeAppleReleaseSourceGuard.new
     @historical_guard = FakeAppleHistoricalCommitGuard.new
@@ -231,6 +232,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
   def validator
     AppleScreenshotReleaseSetValidator.new(
       root: @root,
+      release_evidence_root: @release_evidence_root == @root ? nil : @release_evidence_root,
       image_inspector: @inspector,
       source_guard: @source_guard,
       historical_commit_guard: @historical_guard,
@@ -246,6 +248,20 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     end
     assert_match(/complete active build-8 screenshot release set/, error.message)
     assert_empty @source_guard.validations
+  end
+
+  def test_external_ephemeral_release_evidence_validates_without_repository_mutation
+    @release_evidence_root = @root.dirname.join("#{@root.basename}-release-evidence")
+    @release_evidence_root.mkpath
+    build_active_release_set
+
+    assert_equal :active_unapproved,
+                 validator.validate!(expected_source_commit: SOURCE_COMMIT)
+    assert @release_evidence_root.join(AppleScreenshotReleaseSetValidator::INDEX_PATH).file?
+    refute @root.join(AppleScreenshotReleaseSetValidator::RELEASE_ROOT, SOURCE_COMMIT).exist?
+  ensure
+    FileUtils.remove_entry(@release_evidence_root) if
+      @release_evidence_root && @release_evidence_root != @root && @release_evidence_root.exist?
   end
 
   def test_complete_active_set_is_source_guarded_but_not_release_ready_without_approval
@@ -485,7 +501,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     add_release_approval
     approval_path = release_root.join("release-approval.json")
     approval = JSON.parse(approval_path.read)
-    approval["reviewer"] = "  "
+    approval.fetch("approvals").fetch("visual")["reviewer"] = "  "
     write_json(approval_path, approval)
     rehash_approval!
     assert_raises(AppleScreenshotReleaseSetValidationError) do
@@ -500,12 +516,47 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     assert_match(/signed source drift/, error.message)
   end
 
+  def test_approval_requires_explicit_privacy_review_and_exact_capture_run_binding
+    build_active_release_set
+    add_release_approval
+    approval_path = release_root.join("release-approval.json")
+    approval = JSON.parse(approval_path.read)
+    approval.fetch("approvals").fetch("privacy")["approved"] = false
+    write_json(approval_path, approval)
+    rehash_approval!
+    assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+
+    add_release_approval(reset: true)
+    approval = JSON.parse(approval_path.read)
+    approval.fetch("captureRun")["workflowFile"] = ".github/workflows/unreviewed.yml"
+    write_json(approval_path, approval)
+    rehash_approval!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+    assert_match(/capture run workflow file/, error.message)
+
+    add_release_approval(reset: true)
+    approval = JSON.parse(approval_path.read)
+    approval.fetch("captureRun")["repository"] = "UntrustedFork/QuakeSignal"
+    write_json(approval_path, approval)
+    rehash_approval!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+    assert_match(/capture run canonical repository/, error.message)
+  end
+
   def test_approval_times_must_follow_capture_and_platform_parity
     build_active_release_set
     add_release_approval
     approval_path = release_root.join("release-approval.json")
     approval = JSON.parse(approval_path.read)
     approval.fetch("platforms").first["parityReviewedAtUtc"] = "2020-01-01T00:00:00Z"
+    approval.fetch("approvals").fetch("signedReleaseParity")["reviewedAtUtc"] =
+      "2020-01-01T00:00:00Z"
     write_json(approval_path, approval)
     rehash_approval!
     error = assert_raises(AppleScreenshotReleaseSetValidationError) do
@@ -833,7 +884,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
   end
 
   def index_path
-    @root.join(AppleScreenshotReleaseSetValidator::INDEX_PATH)
+    @release_evidence_root.join(AppleScreenshotReleaseSetValidator::INDEX_PATH)
   end
 
   def release_root_relative
@@ -841,7 +892,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
   end
 
   def release_root
-    @root.join(release_root_relative)
+    @release_evidence_root.join(release_root_relative)
   end
 
   def base_index
@@ -1037,12 +1088,55 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     approval_path.delete if reset && approval_path.exist?
     manifest_path = release_root.join("release-set.json")
     approval = {
-      "schemaVersion" => 1,
+      "schemaVersion" => 2,
       "status" => "approved-for-build8-upload",
       "uploadApproved" => true,
       "sourceCommit" => SOURCE_COMMIT,
       "releaseSetManifestSha256" => Digest::SHA256.file(manifest_path).hexdigest,
-      "reviewer" => "Release Owner",
+      "dispatchActorGitHubLogin" => "release-owner",
+      "captureRun" => {
+        "schemaVersion" => 1,
+        "repository" => AppleScreenshotReleaseSetValidator::CANONICAL_REPOSITORY,
+        "runId" => 12_345,
+        "workflowFile" => AppleScreenshotReleaseSetValidator::CAPTURE_WORKFLOW_FILE,
+        "event" => "workflow_dispatch",
+        "headBranch" => "main",
+        "headSha" => SOURCE_COMMIT,
+        "status" => "completed",
+        "conclusion" => "success",
+        "artifacts" => [
+          "UNAPPROVED-debug-simulator-ios-ipados-#{SOURCE_COMMIT}",
+          "UNAPPROVED-debug-simulator-tvos-#{SOURCE_COMMIT}",
+          "UNAPPROVED-debug-simulator-watchos-#{SOURCE_COMMIT}",
+          "UNAPPROVED-debug-simulator-visionos-#{SOURCE_COMMIT}",
+          "UNAPPROVED-debug-maccatalyst-direct-uikit-#{SOURCE_COMMIT}",
+        ].map.with_index do |name, index|
+          {
+            "name" => name,
+            "id" => index + 1,
+            "sizeInBytes" => 1024 + index,
+            "digest" => "sha256:#{Digest::SHA256.hexdigest(name)}",
+            "expired" => false,
+          }
+        end,
+      },
+      "approvals" => {
+        "visual" => {
+          "approved" => true,
+          "reviewer" => "Visual Reviewer",
+          "reviewedAtUtc" => "2026-08-20T00:57:00Z",
+        },
+        "privacy" => {
+          "approved" => true,
+          "reviewer" => "Privacy Reviewer",
+          "reviewedAtUtc" => "2026-08-20T00:58:00Z",
+        },
+        "signedReleaseParity" => {
+          "approved" => true,
+          "reviewer" => "Signed Parity Reviewer",
+          "reviewedAtUtc" => "2026-08-20T00:55:00Z",
+        },
+      },
       "reviewedAtUtc" => "2026-08-20T01:00:00Z",
       "platforms" => AppleScreenshotReleaseSetValidator::REQUIRED_PLATFORMS.keys.map do |platform|
         {

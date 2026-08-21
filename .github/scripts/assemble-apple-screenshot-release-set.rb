@@ -137,6 +137,7 @@ class AppleScreenshotReleaseSetAssembler
 
   def initialize(
     root:,
+    release_evidence_root: nil,
     image_inspector: AppleScreenshotImageInspector.new,
     source_guard: nil,
     index_validator: nil,
@@ -152,6 +153,20 @@ class AppleScreenshotReleaseSetAssembler
       raise AppleScreenshotReleaseSetAssemblyError, "repository root must not be a symlink"
     end
     @root = requested_root.realpath
+    requested_release_evidence_root = Pathname.new(release_evidence_root || @root).expand_path
+    if requested_release_evidence_root.symlink?
+      raise AppleScreenshotReleaseSetAssemblyError,
+            "release evidence root must not be a symlink"
+    end
+    unless requested_release_evidence_root.directory?
+      raise AppleScreenshotReleaseSetAssemblyError,
+            "release evidence root must be an existing directory"
+    end
+    @release_evidence_root = requested_release_evidence_root.realpath
+    if release_evidence_root && path_within?(@release_evidence_root, @root)
+      raise AppleScreenshotReleaseSetAssemblyError,
+            "external release evidence root must remain outside the repository"
+    end
     @image_inspector = image_inspector
     @source_guard = source_guard || AppleScreenshotReleaseSourceGuard.new(@root)
     @index_validator = index_validator || lambda do
@@ -176,17 +191,20 @@ class AppleScreenshotReleaseSetAssembler
   end
 
   # packages is an exact platform-keyed hash whose values contain :capture_root
-  # and :artifact. `output` must be the canonical repository release-set path;
-  # `index_candidate` is a separate new file and can never replace the index.
+  # and :artifact. `output` must be the canonical release-evidence path;
+  # `index_candidate` is a separate new file and can never replace the checked-in
+  # index. The default evidence root is the repository for backwards-compatible
+  # offline fixture assembly; hosted release handoff supplies a fresh external
+  # root so generated assets never mutate the checkout.
   def assemble(source_commit:, output:, index_candidate:, packages:)
     require_full_commit!(source_commit, "source commit")
     require_equal!(packages.keys, PLATFORMS, "capture package order")
     output_path = Pathname.new(output).expand_path
-    expected_output = @root.join(RELEASE_ROOT, source_commit)
+    expected_output = @release_evidence_root.join(RELEASE_ROOT, source_commit)
     require_equal!(output_path.cleanpath, expected_output, "release-set output path")
     output_parent_binding = ensure_canonical_directory_chain_under!(
       output_path.dirname,
-      anchor: @root,
+      anchor: @release_evidence_root,
       label: "release-set output parent",
     )
     ensure_new_path!(output_path, "release-set output")
@@ -1186,6 +1204,7 @@ class AppleScreenshotReleaseSetAssembler
   def validate_staged_release!(stage:, release_manifest:, candidate:, source_commit:)
     validator = AppleScreenshotReleaseSetValidator.new(
       root: @root,
+      release_evidence_root: @release_evidence_root == @root ? nil : @release_evidence_root,
       image_inspector: @image_inspector,
       source_guard: @source_guard,
       provenance_repository_root: @ios_provenance_repository_root,
@@ -2030,9 +2049,11 @@ class AppleScreenshotReleaseSetAssembler
   end
 
   def within_repository?(path)
-    root = @root.to_s
     real = path.realpath.to_s
-    real == root || real.start_with?("#{root}#{File::SEPARATOR}")
+    [@root, @release_evidence_root].any? do |allowed_root|
+      root = allowed_root.to_s
+      real == root || real.start_with?("#{root}#{File::SEPARATOR}")
+    end
   end
 
   def within_directory?(path, directory)
@@ -2108,9 +2129,22 @@ end
 
 if $PROGRAM_NAME == __FILE__
   begin
-    unless ARGV.length == 13
+    release_evidence_root = nil
+    arguments = ARGV.reject do |argument|
+      if argument.start_with?("--release-evidence-root=")
+        if release_evidence_root
+          abort "--release-evidence-root may be supplied only once"
+        end
+        release_evidence_root = argument.delete_prefix("--release-evidence-root=")
+        true
+      else
+        false
+      end
+    end
+    unless arguments.length == 13
       abort <<~USAGE
         Usage: assemble-apple-screenshot-release-set.rb \
+          [--release-evidence-root=<absolute-existing-directory>] \
           <source-commit> <canonical-output-directory> <new-index-candidate.json> \
           <ios-ipados-capture-root> <ios-ipados-artifact> \
           <tvos-capture-root> <tvos-artifact> \
@@ -2119,7 +2153,7 @@ if $PROGRAM_NAME == __FILE__
           <maccatalyst-capture-root> <maccatalyst-artifact>
       USAGE
     end
-    source_commit, output, index_candidate, *package_arguments = ARGV
+    source_commit, output, index_candidate, *package_arguments = arguments
     packages = AppleScreenshotReleaseSetAssembler::PLATFORMS.each_with_index.to_h do |platform, index|
       [
         platform,
@@ -2130,7 +2164,10 @@ if $PROGRAM_NAME == __FILE__
       ]
     end
     root = Pathname.new(__dir__).join("../..").realpath
-    AppleScreenshotReleaseSetAssembler.new(root: root).assemble(
+    AppleScreenshotReleaseSetAssembler.new(
+      root: root,
+      release_evidence_root: release_evidence_root,
+    ).assemble(
       source_commit: source_commit,
       output: output,
       index_candidate: index_candidate,

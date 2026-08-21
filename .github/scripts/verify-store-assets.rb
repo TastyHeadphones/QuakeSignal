@@ -356,6 +356,7 @@ if $PROGRAM_NAME == __FILE__
 require_macos_release_ready = false
 require_build8_screenshot_release_ready = false
 expected_source_commit = nil
+screenshot_release_evidence_root = nil
 ARGV.each do |argument|
   case argument
   when "--require-macos-release-ready"
@@ -364,10 +365,17 @@ ARGV.each do |argument|
     require_build8_screenshot_release_ready = true
   when /\A--expected-source-commit=([0-9a-f]{40})\z/
     expected_source_commit = Regexp.last_match(1)
+  when /\A--screenshot-release-evidence-root=(.+)\z/
+    if screenshot_release_evidence_root
+      warn "--screenshot-release-evidence-root may be supplied only once"
+      exit 2
+    end
+    screenshot_release_evidence_root = Regexp.last_match(1)
   else
     warn "Usage: #{$PROGRAM_NAME} [--require-macos-release-ready] " \
          "[--require-build8-screenshot-release-ready] " \
-         "[--expected-source-commit=<40-character-sha>]"
+         "[--expected-source-commit=<40-character-sha>] " \
+         "[--screenshot-release-evidence-root=<absolute-existing-directory>]"
     warn "Unknown argument: #{argument}"
     exit 2
   end
@@ -386,7 +394,10 @@ expected_mac_screenshots = %w[
 total_ios_screenshots = 0
 
 begin
-  AppleScreenshotReleaseSetValidator.new(root: root).validate!(
+  AppleScreenshotReleaseSetValidator.new(
+    root: root,
+    release_evidence_root: screenshot_release_evidence_root,
+  ).validate!(
     require_release_ready: require_build8_screenshot_release_ready,
     expected_source_commit:
       require_build8_screenshot_release_ready ? expected_source_commit : nil,

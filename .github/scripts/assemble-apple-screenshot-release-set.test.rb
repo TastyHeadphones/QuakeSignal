@@ -326,6 +326,24 @@ class AppleScreenshotReleaseSetAssemblerTest < Minitest::Test
     refute @index_candidate.read.include?("signedReleaseParityApproved")
   end
 
+  def test_assembles_into_a_fresh_external_release_evidence_root
+    evidence_root = @temporary_root.join("release-evidence")
+    evidence_root.mkpath
+    output = evidence_root.join(AppleScreenshotReleaseSetAssembler::RELEASE_ROOT, SOURCE_COMMIT)
+    index_candidate = evidence_root.join(AppleScreenshotReleaseSetAssembler::INDEX_PATH)
+
+    assembler(release_evidence_root: evidence_root).assemble(
+      source_commit: SOURCE_COMMIT,
+      output: output,
+      index_candidate: index_candidate,
+      packages: @packages,
+    )
+
+    assert output.directory?
+    assert index_candidate.file?
+    refute @root.join(AppleScreenshotReleaseSetAssembler::RELEASE_ROOT, SOURCE_COMMIT).exist?
+  end
+
   def test_rejects_any_premature_reviewer_approval_or_release_binary_claim
     mutate_aggregate("ios-ipados") { |aggregate| aggregate["reviewer"] = "Premature Reviewer" }
     assert_rejected(/full aggregate provenance mismatch|aggregate reviewer/)
@@ -754,9 +772,15 @@ class AppleScreenshotReleaseSetAssemblerTest < Minitest::Test
 
   private
 
-  def assembler(historical: Set.new, before_stage_copy: nil, publish_hook: nil)
+  def assembler(
+    historical: Set.new,
+    before_stage_copy: nil,
+    publish_hook: nil,
+    release_evidence_root: nil
+  )
     AppleScreenshotReleaseSetAssembler.new(
       root: @root,
+      release_evidence_root: release_evidence_root,
       image_inspector: FakeAppleScreenshotAssemblyInspector.new,
       source_guard: @source_guard,
       index_validator: -> {},

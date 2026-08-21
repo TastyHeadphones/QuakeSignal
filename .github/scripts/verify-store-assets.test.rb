@@ -128,4 +128,22 @@ class StoreAssetScreenshotReleaseModeTest < Minitest::Test
       error_output,
     )
   end
+
+  def test_release_ready_mode_accepts_an_external_evidence_root_option
+    Dir.mktmpdir("store-asset-release-evidence") do |directory|
+      output, error_output, status = Open3.capture3(
+        RbConfig.ruby,
+        SCRIPT.to_s,
+        "--require-build8-screenshot-release-ready",
+        "--expected-source-commit=#{'0' * 40}",
+        "--screenshot-release-evidence-root=#{directory}",
+        chdir: ROOT.to_s,
+      )
+
+      refute status.success?
+      assert_equal "", output
+      refute_match(/Unknown argument/, error_output)
+      assert_match(/screenshot set index.*missing/, error_output)
+    end
+  end
 end

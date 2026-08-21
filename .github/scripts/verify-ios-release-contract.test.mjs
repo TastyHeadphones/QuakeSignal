@@ -465,6 +465,8 @@ async function writeFixture(options = {}) {
     ".github/scripts/assemble-apple-screenshot-release-set.test.rb",
     ".github/scripts/verify-apple-screenshot-release-set.rb",
     ".github/scripts/verify-apple-screenshot-release-set.test.rb",
+    ".github/scripts/verify-store-assets.rb",
+    ".github/scripts/verify-store-assets.test.rb",
     "ios/AppStore/README.md",
     "ios/AppStore/screenshot-manifest-v1.1-build8.template.json",
   ]) {
@@ -2361,6 +2363,46 @@ test("fails closed when the credential-free screenshot harness checks drift", as
       await assert.rejects(
         verifyIOSReleaseContract({ root }),
         /native screenshot candidate workflow jobs must match the reviewed capture graph fingerprint/i,
+      );
+    });
+  }
+});
+
+test("fails closed when hosted screenshot approval, run binding, or retention drifts", async (t) => {
+  for (const [from, to] of [
+    [
+      '            fail!("wrong workflow") unless run.fetch("path") == ".github/workflows/apple-platform-screenshots.yml"\n',
+      '            fail!("wrong workflow") unless true\n',
+    ],
+    [
+      "            --require-build8-screenshot-release-ready \\\n",
+      "            --require-build8-screenshot-release-ready=false \\\n",
+    ],
+    [
+      "          retention-days: 3\n",
+      "          retention-days: 30\n",
+    ],
+    [
+      "          merge-multiple: false\n",
+      "          merge-multiple: true\n",
+    ],
+    [
+      '            fail!("post-download artifact records changed") unless second_artifacts == expected_records\n',
+      '            fail!("post-download artifact records changed") unless true\n',
+    ],
+    [
+      '              ENV.fetch("GITHUB_REPOSITORY") == "TastyHeadphones/QuakeSignal"\n',
+      '              ENV.fetch("GITHUB_REPOSITORY") == "UntrustedFork/QuakeSignal"\n',
+    ],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/apple-screenshot-release-ready.yml");
+      const source = await readFile(path, "utf8");
+      assert.ok(source.includes(from), `release-ready screenshot fixture must contain ${from.trim()}`);
+      await writeFile(path, source.replace(from, to), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /Apple screenshot release-ready workflow|hosted approval graph fingerprint|complete workflow directory/i,
       );
     });
   }

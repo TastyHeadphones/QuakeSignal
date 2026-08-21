@@ -276,18 +276,22 @@ iPad-capable target and the final map/alert-preference UI.
      "$IOS_CAPTURE_ROOT" "${IOS_CAPTURE_ROOT}.zip"
    ```
 
-6. Capture and seal the exact tvOS, watchOS, visionOS, and Mac Catalyst sets
-   from the same source commit using their reviewed atomic harnesses. When all
-   five raw packages and independent archives pass, use
-   `.github/scripts/assemble-apple-screenshot-release-set.rb` to create the
-   new canonical source-addressed 26-frame directory and a *separate* proposed
-   index file outside the repository. The assembler never creates approval,
-   never overwrites the checked-in index, and never touches historical bytes.
+6. Dispatch `.github/workflows/apple-platform-screenshots.yml` at the frozen
+   protected-main commit in the canonical `TastyHeadphones/QuakeSignal`
+   repository. Fork runs are never release evidence, even if a fork copies the
+   protected-environment name. The one canonical successful run must publish exactly five
+   short-lived `UNAPPROVED-debug-*` artifacts containing the 10 iPhone/iPad,
+   3 TV, 3 Watch, 5 Vision Pro, and 5 Mac Catalyst frames. Do not download and
+   assemble these packages on a workstation.
 7. Separately compare every candidate with the matching signed public
-   `Release` archive. Only after five signed-artifact hashes, platform parity
-   evidence, and a later named marketing/release-owner approval may an
-   operator activate the proposed index and upload the complete sequences.
-   Do not mix source commits, display classes, candidates, or signed builds.
+   `Release` archive, retaining only each verified artifact SHA-256. Then
+   dispatch `.github/workflows/apple-screenshot-release-ready.yml` with the
+   exact capture run ID, full source SHA, five signed-artifact hashes, and
+   explicit named visual, privacy, and signed-parity approvals. The protected
+   job verifies the run and exact five artifact names, safely inventories and
+   assembles all 26 frames under `RUNNER_TEMP`, and uploads one approved
+   three-day artifact. It never commits generated images or retains a signed
+   app binary.
 
 Ordinary listing validation locks the historical catalog and permits the final
 pointer to remain null:
@@ -296,15 +300,20 @@ pointer to remain null:
 ruby .github/scripts/verify-apple-screenshot-release-set.rb
 ```
 
-The protected release handoff must instead name the exact commit and fails
-unless the complete source-current set plus a separate named, signed-Release
-parity approval for all five platforms is present:
+The protected release-ready workflow runs the strict handoff against its fresh
+external evidence root; this must fail unless the complete source-current set,
+capture-run binding, and three named approvals are present:
 
 ```sh
 ruby .github/scripts/verify-store-assets.rb \
   --require-build8-screenshot-release-ready \
-  --expected-source-commit="$SOURCE_COMMIT"
+  --expected-source-commit="$SOURCE_COMMIT" \
+  --screenshot-release-evidence-root="$EVIDENCE_ROOT"
 ```
+
+`screenshot-set-index-v1.1-build8.json` remains pending in Git. Only the
+short-lived hosted artifact contains the generated active index, release set,
+and hash-bound `release-approval.json`.
 
 Apple's current [screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/)
 allow one to ten screenshots and list the accepted display-size resolutions.
