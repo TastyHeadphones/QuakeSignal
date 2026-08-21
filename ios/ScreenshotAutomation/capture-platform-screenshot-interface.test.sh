@@ -327,9 +327,10 @@ watch_detail_layout_errors = lambda do |view|
   end
   errors << "one max-intensity field" unless view.scan("event.maxIntensity").length == 1
   errors << "one depth field" unless view.scan("event.depth").length == 1
-  unless view.match?(/Text\("platform\.watch\.foregroundOnly\.detail"\).*?\.font\(\.footnote\).*?\.fixedSize\(horizontal: false, vertical: true\)/m) &&
-         !view.match?(/Text\("platform\.watch\.foregroundOnly\.detail"\).*?\.lineLimit\(/m) &&
-         !view.match?(/Text\("platform\.watch\.foregroundOnly\.detail"\).*?\.minimumScaleFactor\(/m)
+  disclosure = view[/Text\("platform\.watch\.foregroundOnly\.detail"\).*?(?=\n\s*\}\n\s*\.padding\(\.horizontal, 8\))/m]
+  unless disclosure&.match?(/\.font\(\.footnote\).*?\.fixedSize\(horizontal: false, vertical: true\)/m) &&
+         !disclosure.include?(".lineLimit(") &&
+         !disclosure.include?(".minimumScaleFactor(")
     errors << "accessible complete disclosure"
   end
   unless view.match?(/\.fixedSize\(horizontal: false, vertical: true\)\s*\}\s*\.padding\(\.horizontal, 8\)\s*\.padding\(\.bottom, 10\)/m)
