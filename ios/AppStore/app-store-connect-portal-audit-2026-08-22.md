@@ -17,9 +17,13 @@ that screenshots passed final review, or that any platform was submitted.
 - The tvOS `1.1` description and review notes match
   [`platforms/tvos/en-US/description.txt`](./platforms/tvos/en-US/description.txt)
   and [`platforms/tvos/review-notes.txt`](./platforms/tvos/review-notes.txt).
-- The visionOS `1.1` description and review notes match
+- At audit time, the saved visionOS `1.1` description and review notes matched
+  the then-current checked-in copy. The linked
   [`platforms/visionos/en-US/description.txt`](./platforms/visionos/en-US/description.txt)
-  and [`platforms/visionos/review-notes.txt`](./platforms/visionos/review-notes.txt).
+  and [`platforms/visionos/review-notes.txt`](./platforms/visionos/review-notes.txt)
+  were subsequently corrected to distinguish Apple support for App Attest from
+  the unavailable APNs capability. The corrected copy is not yet portal-saved
+  evidence and must be resaved during the final authenticated pass.
 - The shared macOS draft was changed from `1.0` to `1.1`, reconciled to the
   Swift-native Mac Catalyst route, and saved with the exact promotional text,
   description, keywords, and review notes under
@@ -55,6 +59,8 @@ fields were the only additional shared release information changed.
 | visionOS screenshots | `0 of 10` |
 | Mac screenshots | `0 of 10` |
 | Build 8 | Not present or selected on any platform draft |
+| iOS What's New and promotional text | No action-time save/reverification evidence; copy the exact checked-in English fields during the final authenticated pass |
+| Corrected visionOS capability wording | Not yet resaved after the App Attest/APNs clarification |
 | App Review contact | Saved from the authenticated Apple Developer Account Holder membership record; personal values are intentionally not copied into source |
 | Apple TV Privacy Policy | Blank; the checked-in text remains an explicitly unapproved draft |
 | Vision App Motion | `Set Up`; do not answer until final Vision QA |

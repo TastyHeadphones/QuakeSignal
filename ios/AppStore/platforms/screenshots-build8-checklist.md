@@ -5,23 +5,29 @@ family. The current accepted sizes are documented in Apple's
 [Screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/).
 This checklist creates no approval by itself.
 
+All build-8 capture, validation, and packaging commands in this checklist are
+hosted-workflow-internal. Release operators dispatch the canonical GitHub
+Actions workflows and must not run Xcode, Simulator, Ruby, shell, or repository
+scripts on a workstation.
+
 ## Common capture gate
 
 - [ ] Freeze a full 40-character source commit and verify all four schemes are
   version `1.1`, build `8`.
-- [ ] Capture a source-frozen Debug Simulator candidate with
-  `ios/ScreenshotAutomation/capture-platform-screenshot.sh`. This gated fixture
-  cannot run in InternalQA, Release, or a physical-device build; never describe
-  its output as a signed Release or build-8 binary capture.
+- [ ] Dispatch the hosted `apple-platform-screenshots.yml` workflow at the
+  frozen source commit. It captures source-frozen Debug Simulator candidates
+  with the platform harness; those candidates cannot run in InternalQA, Release,
+  or a physical-device build and must never be described as signed Release or
+  build-8 binary captures.
 - [ ] Preserve the matching successful signed-upload run ID when it is
   available. Before screenshot upload, version attachment, or submission,
   obtain named visual approval and complete the signed-Release parity comparison
   required by the platform runbook. The finalizer derives the artifact SHA-256
   from the run attestation.
-- [ ] Install the exact platform runtime or use physical hardware. Record Xcode,
-  OS/runtime, device model, device identifier where appropriate, capture time,
-  and reviewer. An automated unapproved candidate intentionally keeps
-  `reviewer: null` until named review. For Simulator candidates, verify
+- [ ] Confirm the hosted artifact records the exact Xcode, OS/runtime, device
+  model, device identifier where appropriate, capture time, and reviewer. An
+  automated unapproved candidate intentionally keeps `reviewer: null` until
+  named review. For Simulator candidates, verify the hosted
   `candidate-metadata.json` contains the harness-recorded
   `selectedSimulator.runtimeIdentifier`, `deviceTypeIdentifier`, and
   `deviceModel`; the full runtime inventory log alone is not capture evidence.
@@ -159,23 +165,21 @@ The
 `../screenshot-manifest-v1.1-build8.template.json` file remains planning
 history, not evidence.
 
-The build-8 recapture sequence is:
+The hosted build-8 recapture sequence is:
 
-1. Freeze the full source commit, generate the build-8 project, and run the iOS
-   tests and unsigned public Release build.
-2. Launch the source-matching Debug Simulator build with both screenshot gates
-   (`--quakesignal-screenshot-automation` and
-   `QUAKESIGNAL_SCREENSHOT_AUTOMATION=1`) so the finalized historical fixture
-   is deterministic and startup network/permission activity is disabled.
-3. Recreate all five planned frames for both the selected iPhone class and the
-   13-inch iPad class in English (U.S.). Japanese and Simplified Chinese remain
+1. Freeze the full source commit and dispatch the hosted
+   `apple-platform-screenshots.yml` workflow. It generates the complete
+   iPhone/iPad, Apple TV, Apple Watch, Apple Vision Pro, and Mac Catalyst
+   candidate set with the exact source, plan, runtime, and SHA-256 evidence.
+2. Preserve the workflow artifacts without downloading, rewriting, or
+   relabelling them on a workstation. Japanese and Simplified Chinese remain
    unpublished pending localized-name, trademark, and availability approval.
-   Do not overwrite or relabel build-7 files.
-4. Validate the build-8 manifest and provenance against the exact source
-   commit, build-input evidence, native device/runtime evidence, and SHA-256
-   hashes.
-5. Obtain named visual review and any signed-Release parity evidence required
-   by the release runbook before marking or uploading an asset.
+3. Separately compare every candidate with the matching signed public Release
+   upload, then dispatch the protected `apple-screenshot-release-ready.yml`
+   workflow with the exact capture run, source SHA, four upload-run IDs, and
+   named visual, privacy, and signed-parity approvals.
+4. Let the protected workflow validate the build-8 manifest/provenance and
+   assemble the approved upload package in its hosted temporary directory.
 
 No current iPhone, iPad, Apple TV, Apple Vision Pro, Apple Watch, or Mac
 Catalyst screenshot asset is approved for a build-8 App Store upload.

@@ -4,6 +4,11 @@ This directory contains the source-addressed Debug capture harnesses for all
 five Apple listing platforms. They capture real Simulator output or directly
 render the exact live Mac Catalyst UIWindow hierarchy; they do not fabricate,
 decorate, commit, upload, or approve a frame.
+For the build-8 release, every shell, Ruby, Simulator, and Xcode command in this
+document is hosted-workflow-internal reference or harness-maintainer diagnostic
+material. Release operators dispatch the canonical GitHub workflows and must
+not run these commands locally. A diagnostic invocation never produces release
+evidence.
 The checked-in plans require these exact English (U.S.) inventories:
 
 | Platform | Planned frames | Native pixels |
@@ -79,22 +84,23 @@ Apple's current screenshot specification accepts:
 
 Source: [Apple screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/).
 
-## Capture execution
+## Hosted capture execution (job-internal reference)
 
-Use an already-installed runtime whenever possible. If a required runtime is
-absent, the harness exits before building and names the missing platform; it
-never downloads a runtime, changes resolution, or fabricates an image. An
-operator who deliberately chooses to install a missing component can use
-Xcode Settings or Apple's `xcodebuild -downloadPlatform` command separately.
+The hosted workflow first checks for each required Simulator runtime. When a
+reviewed runner image lacks one, its dedicated setup step may use
+`xcodebuild -downloadPlatform` before the capture harness starts. The harness
+itself never downloads a runtime, changes resolution, or fabricates an image;
+runtime setup is CI-managed and must not be performed on a workstation as part
+of this release.
 
-Start from a clean, source-frozen checkout and use the checked-in generated
-project. If the project graph intentionally changed, regenerate and review it
-before freezing the capture commit; do not regenerate as part of capture.
-Use a new external worktree or clone that has never been opened interactively
-in Xcode: ignored per-user `xcuserdata` is deliberately rejected as an
-unarchived working input, even when ordinary Git status reports a clean tree.
-Every set command refuses a destination inside the repository and publishes a
-new output directory only after the full planned inventory validates.
+The hosted job starts from a clean, source-frozen checkout and uses the
+checked-in generated project. If the project graph intentionally changed,
+regenerate and review it in a separately authorized change before freezing the
+capture commit; never regenerate it as part of capture. Ignored per-user
+`xcuserdata` is rejected as an unarchived working input even when ordinary Git
+status reports a clean tree. Every set command refuses a destination inside the
+repository and publishes a new output directory only after the full planned
+inventory validates.
 
 For the exact ten-frame iOS/iPadOS set, create only the destination parent and
 let the harness build once in fresh temporary DerivedData, use exactly one
@@ -191,9 +197,10 @@ QUAKESIGNAL_SCREENSHOT_DERIVED_DATA="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/QuakeSignal
     tvos "$capture_parent/tvos"
 ```
 
-Run the same set command with `visionos` or `watchos` and a distinct, new
-output directory. The command refuses to overwrite an artifact directory and
-publishes it atomically only after every planned frame validates. Its layout is:
+The hosted job repeats the same set command for `visionos` and `watchos`, using
+a distinct, new output directory for each. The command refuses to overwrite an
+artifact directory and publishes it atomically only after every planned frame
+validates. Its layout is:
 
 ```text
 en-US/<all planned native PNGs>
@@ -212,8 +219,9 @@ an absolute directory outside the repository so later frames reuse unsigned
 build products. `QUAKESIGNAL_SCREENSHOT_KEEP_SIMULATOR=1` is only for manual
 visual debugging.
 
-For a diagnostic single frame, call the lower-level command with an exact
-selector and absolute PNG path:
+For hosted harness maintenance only, a diagnostic single frame can call the
+lower-level command with an exact selector and absolute PNG path. This path is
+not release evidence and is not a supported local build-8 action:
 
 ```sh
 debug_parent="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/QuakeSignalScreenshotDebug"
@@ -300,9 +308,10 @@ status 65 is eligible for quarantine and retry; every other validator failure
 is returned as operational status 70 without relaunch. A second semantic
 rejection aborts the complete atomic set without an upload.
 
-Credential-free tests cover the exact plans, build/source binding, aggregate
-provenance, atomic interfaces, semantic validation, process supervision,
-selector preservation, package sealing, and native-window evidence:
+The hosted workflow's credential-free test job covers the exact plans,
+build/source binding, aggregate provenance, atomic interfaces, semantic
+validation, process supervision, selector preservation, package sealing, and
+native-window evidence. The command list is job-internal reference:
 
 ```sh
 /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-plan.test.rb
@@ -362,10 +371,12 @@ credentials.
 
 ## Sealed archive and release-set handoff
 
-Treat a successful set directory as immutable. If an operator must attach
-metadata, delete only its existing `capture-package-manifest.json`, add all
-metadata first, then run the seal helper once more. After that final seal, make
-no further writes in the raw root. Create an independent conventional archive:
+Treat a successful hosted set directory as immutable. If the workflow must
+attach metadata, delete only its existing `capture-package-manifest.json`, add
+all metadata first, then run the seal helper once more. After that final seal,
+make no further writes in the raw root. The following archive and assembly
+commands are finalizer job-internal reference, not workstation instructions.
+Create an independent conventional archive:
 
 ```sh
 /usr/bin/ditto -c -k --norsrc --keepParent \

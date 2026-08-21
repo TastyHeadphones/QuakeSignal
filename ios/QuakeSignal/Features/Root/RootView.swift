@@ -91,7 +91,24 @@ struct RootView: View {
                 Task { await handleTap(payload) }
             }
             notifications.onForegroundNotification = { delivery in
-                Task { await handleForegroundNotification(delivery) }
+                let payload = delivery.payload
+                let reason = AlertPresentationReason(wireValue: payload.reason)
+                if let snapshot = payload.eventSnapshot {
+                    return store.ingestForegroundNotification(
+                        event: snapshot,
+                        reason: reason,
+                        allowsEmergencyPresentation: delivery.allowsEmergencyPresentation
+                    )
+                }
+
+                if let revisionKey = payload.foregroundRevisionKey {
+                    store.reserveSystemPresentation(
+                        for: revisionKey,
+                        receivedAt: delivery.receivedAt
+                    )
+                }
+                Task { await handleSystemPresentedForegroundNotification(payload) }
+                return false
             }
             // AppDelegate configures the notification delegate before launch
             // finishes; callbacks buffered before this task are drained when
@@ -277,23 +294,17 @@ struct RootView: View {
         }
     }
 
-    private func handleForegroundNotification(_ delivery: ForegroundNotificationDelivery) async {
-        let payload = delivery.payload
+    /// Snapshotless pushes cannot be claimed synchronously, so APNs has
+    /// already retained its banner and sound. Resolve their event only to keep
+    /// app state current; never open a duplicate emergency surface afterward.
+    private func handleSystemPresentedForegroundNotification(_ payload: PushPayload) async {
         guard let compositeId = payload.compositeEventId else { return }
         let reason = AlertPresentationReason(wireValue: payload.reason)
-        if let snapshot = payload.eventSnapshot {
-            store.ingestForegroundNotification(
-                event: snapshot,
-                reason: reason,
-                allowsEmergencyPresentation: delivery.shouldPresentEmergencyInApp
-            )
-            return
-        }
         if let cached = store.events.first(where: { $0.id == compositeId }) {
             store.ingestForegroundNotification(
                 event: cached,
                 reason: reason,
-                allowsEmergencyPresentation: delivery.shouldPresentEmergencyInApp
+                allowsEmergencyPresentation: false
             )
             return
         }
@@ -302,7 +313,7 @@ struct RootView: View {
             store.ingestForegroundNotification(
                 event: fetched,
                 reason: reason,
-                allowsEmergencyPresentation: delivery.shouldPresentEmergencyInApp
+                allowsEmergencyPresentation: false
             )
         }
     }

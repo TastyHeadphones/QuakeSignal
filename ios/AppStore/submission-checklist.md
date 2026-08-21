@@ -44,6 +44,11 @@ value.
 - [ ] Visually confirm the complete contact block during the final portal pass.
 - [ ] Copy the exact current `review-notes.txt` content only after checking it
   against the selected public archive.
+- [ ] During the final authenticated portal pass, copy and save the exact
+  `en-US/whats_new_v1.1.txt` and `en-US/promotional_text.txt`, then visually
+  re-open and verify both saved values. Do not infer a successful save from the
+  checked-in files. Keep Japanese and Simplified Chinese What's New text
+  unpublished with their unapproved localizations.
 - [x] Confirm Free public distribution across 175 countries or regions.
 - [ ] Choose final availability timing and any customer-facing Terms/EULA
   option only after release-owner approval.
@@ -56,11 +61,20 @@ value.
   evidence only. It predates the current source. Recapture the exact final
   build-8 commit, then separately obtain named visual approval and signed
   public-Release parity before any upload.
-- [x] Save the exact tvOS, visionOS, and Mac Catalyst `1.1` copy recorded in
-  the 2026-08-22 portal audit.
+- [x] Save the exact tvOS and Mac Catalyst `1.1` copy recorded in the 2026-08-22
+  portal audit.
+- [ ] Resave the corrected visionOS description and review notes that distinguish
+  platform support for App Attest from the unavailable APNs capability; the
+  audit saved the superseded wording and is not evidence of this correction.
 - [ ] Complete Apple Watch/tvOS/visionOS/Mac screenshots, icons, signing,
   remaining privacy/App Motion answers, and platform QA before submission.
   All four remain foreground-only in every independent-notification claim.
+- [ ] Download only the exact source-addressed approved screenshot artifact from
+  the successful finalizer run, upload the six source directories in the order
+  specified by `apple-platform-release.md`, and retain an external receipt with
+  the source SHA, capture/finalizer run URLs and IDs, artifact ID/name/digest,
+  active manifest/approval hashes, upload time, and portal evidence showing all
+  six saved counts and thumbnail order.
 - [ ] Record named visual approval for the exact Watch icon digest pinned by
   `verify-store-assets.rb`; do not infer approval from catalog validity or from
   its deliberate reuse of the canonical iOS signal artwork.

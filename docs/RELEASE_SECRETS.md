@@ -148,9 +148,9 @@ account instead.
 | `CLOUDFLARE_STAGING_WORKER_NAME` | Environment variable | Lowercase Worker name beginning `quakesignal-` and containing a `staging` segment, for example `quakesignal-api-staging`. It is never `quakesignal-api`. |
 | `CLOUDFLARE_STAGING_D1_DATABASE_NAME` | Environment variable | Separate, staging-named D1 database, for example `quakesignal-api-staging`; never `quakesignal-production`. |
 | `CLOUDFLARE_STAGING_D1_DATABASE_ID` | Environment variable | UUID of that separate D1 database. |
-| `CLOUDFLARE_STAGING_DEVICE_API_RATE_LIMIT_NAMESPACE_ID` | Environment variable | New, account-unique namespace ID for the staging `DEVICE_API_RATE_LIMIT` binding. |
+| `CLOUDFLARE_STAGING_DEVICE_API_RATE_LIMIT_NAMESPACE_ID` | Environment variable | New, account-unique namespace ID for the staging 300/minute route-wide `DEVICE_API_RATE_LIMIT` circuit-breaker binding. |
 | `CLOUDFLARE_STAGING_DEVICE_MUTATION_RATE_LIMIT_NAMESPACE_ID` | Environment variable | A different new, account-unique namespace ID for the staging `DEVICE_MUTATION_RATE_LIMIT` binding. |
-| `CLOUDFLARE_STAGING_APP_ATTEST_CHALLENGE_RATE_LIMIT_NAMESPACE_ID` | Environment variable | A third, different account-unique namespace ID for the staging route-wide `APP_ATTEST_CHALLENGE_RATE_LIMIT` binding. |
+| `CLOUDFLARE_STAGING_APP_ATTEST_CHALLENGE_RATE_LIMIT_NAMESPACE_ID` | Environment variable | A third, different account-unique namespace ID for the historically named staging binding that enforces the 60/minute route-scoped client-IP pseudonym budget on every public route; admitted requests then use the higher `DEVICE_API_RATE_LIMIT` route-wide circuit breaker. |
 | `CLOUDFLARE_STAGING_ALLOWED_BUNDLE_VERSIONS` | Environment variable (optional) | Comma-separated Debug `CFBundleVersion` allowlist. Omit or leave blank to use the isolated baseline `1`; set `1,2` for the current build-2 client while build 1 remains installed. |
 | `CLOUDFLARE_STAGING_WORKER_URL` | Environment variable (required only for readiness verification) | Bare `https://<worker>.<account-subdomain>.workers.dev` URL. Set it after the first deployment before running the workflow with `verify_staging_apns=true`. |
 
@@ -405,8 +405,10 @@ with normal public TLS when `workers_dev=true`. It requires no Custom Domain,
 DNS-zone activation, private CA, or client mTLS configuration. Do not
 substitute a different Workers.dev URL in either release environment.
 
-Before public iOS registration is enabled, keep both native Cloudflare
-rate-limit bindings for the device endpoints and complete Apple App Attest
+Before public iOS registration is enabled, keep all three native Cloudflare
+rate-limit bindings: the 60/minute client-pseudonym and 300/minute route-wide
+circuits cover every normalized public method/route family, while the 8/minute
+actor binding covers device mutations. Also complete Apple App Attest
 challenge/assertion verification with replay protection. These controls
 deliberately are not replaced by a client-shipped static secret; see
 [`CLOUDFLARE_PRODUCTION.md`](CLOUDFLARE_PRODUCTION.md#production-deployment-order).

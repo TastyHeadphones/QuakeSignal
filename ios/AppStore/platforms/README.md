@@ -34,7 +34,7 @@ unchanged.
 | Platform | Customer-visible behavior | Notification capability in this release |
 | --- | --- | --- |
 | iPhone / iPad | Full reports, map, preparedness guide, settings, and optional nearby notifications | Protected App Attest + APNs registration. Qualifying fresh warnings may use **Time Sensitive**, subject to system/user settings. There is no Critical Alerts entitlement. |
-| Apple Vision Pro | Full native windowed app with reports, map, guide, settings, and local foreground warning presentation while open | Foreground only. Apple does not list Push Notifications or Time Sensitive Notifications as supported visionOS provisioning capabilities, so this target has no APNs, App Attest, Time Sensitive, Critical Alerts, or background emergency-alert path. |
+| Apple Vision Pro | Full native windowed app with reports, map, guide, settings, and local foreground warning presentation while open | Foreground only. Apple lists App Attest for visionOS, but not Push Notifications or Time Sensitive Notifications. QuakeSignal's protected alert registration requires both App Attest and APNs, so the target does not start that registration path when APNs is unavailable and has no Time Sensitive, Critical Alerts, or background emergency-alert path. |
 | Apple TV | Large-screen headline, recent-report list, event details, active-only live-warning guidance, and a three-choice sound screen | Foreground only. No APNs, App Attest, automatic alert audio, or background emergency alerts. System is visual-only; custom sounds play only after an explicit Siri Remote action. |
 | Apple Watch | Compact headline, recent-report list, event details, active-warning guidance, native warning haptic, and the selected mirrored custom sound while open | Foreground only. The Watch app does not independently register for APNs, App Attest, Time Sensitive/Critical Alerts, or background emergency delivery. Paired-iPhone alerts remain the background path. |
 | Mac Catalyst | Native SwiftUI reports, map, preparedness guide, and settings in a Mac window | Foreground/local only. No independent APNs, App Attest, or background emergency-alert path in this release. |
@@ -92,12 +92,14 @@ frames. Partial, mixed-commit, or historically copied sets are rejected.
 Release readiness additionally requires a separately hashed
 `release-approval.json` with a named reviewer and approved signed-Release
 parity for every platform. Each signed build commit must be product-source
-equivalent to the screenshot commit. Validate that gate with:
+equivalent to the screenshot commit. The protected finalizer validates that
+gate with the following job-internal command; do not run it locally:
 
 ```sh
 ruby .github/scripts/verify-store-assets.rb \
   --require-build8-screenshot-release-ready \
-  --expected-source-commit=<40-character-source-commit>
+  --expected-source-commit=<40-character-source-commit> \
+  --screenshot-release-evidence-root="$EVIDENCE_ROOT"
 ```
 
 Apple Watch has no separate platform description field for this companion.

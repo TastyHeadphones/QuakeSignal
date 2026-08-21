@@ -10,8 +10,8 @@ token, an exact current location, or a test-push result in product-page imagery.
 
 | App Store Connect field | Versioned source |
 | --- | --- |
-| English subtitle / description / promotional text / keywords | `en-US/` |
-| Japanese and Simplified Chinese subtitle and other draft copy | `ja/`, `zh-Hans/` (do not upload without name approval) |
+| English subtitle / description / promotional text / keywords / version 1.1 What's New | `en-US/` |
+| Japanese and Simplified Chinese subtitle, version 1.1 What's New, and other draft copy | `ja/`, `zh-Hans/` (do not upload without name approval) |
 | App Review notes | `review-notes.txt` |
 | Submission-answer worksheet | `submission-answers.md` |
 | Pre-submission checklist | `submission-checklist.md` |
@@ -40,7 +40,7 @@ for this release.
 
 The latest saved portal state is in
 [`app-store-connect-portal-audit-2026-08-22.md`](./app-store-connect-portal-audit-2026-08-22.md).
-The later product decisions are recorded in
+The historical release-owner decisions are recorded in
 [`release-owner-decisions-2026-08-20.md`](./release-owner-decisions-2026-08-20.md).
 Mac Catalyst metadata is saved in the shared `1.1` draft with manual release;
 signed build-8 evidence, QA, screenshots, parity, and named approval remain
@@ -73,7 +73,7 @@ checked-in release candidate is coordinated as version `1.1`,
 `CFBundleVersion` `8`: `CURRENT_PROJECT_VERSION` is `8`, the Worker App Attest
 allow-list is `1,2,3,4,5,6,7,8`, and the protected archive workflows default
 to `8`. Older allowlisted versions remain deliberately available to installed
-clients. Deploy all migrations through `0012` and the matching Worker policy
+clients. Deploy all migrations through `0013` and the matching Worker policy
 before uploading build `8`; each protected archive lane then proves the live
 `/healthz` fingerprint admits that build before certificate import.
 
@@ -222,34 +222,39 @@ iPad-capable target and the final map/alert-preference UI.
 
 ### Capture workflow
 
-1. Freeze and commit the complete product, capture harness, plan, and release
-   contract. Capture only when `HEAD` is that exact full commit, the worktree is
-   clean, and the ignored `ios/QuakeSignal/Supporting/Debug.local.xcconfig`
-   override is absent. Never alter or relabel any historical screenshot tree.
-2. Validate the explicit ten-frame English (U.S.) plan. Every entry binds one
-   reviewed selector to either the 6.5-inch iPhone or 13-inch iPad display
-   class; a missing, duplicate, reordered, cross-class, or pre-approved entry
-   fails before a build or Simulator launch:
+For build 8, release operators use only the two canonical hosted workflows in
+steps 6 and 7. Every repository Ruby, shell, Simulator, and Xcode command shown
+in steps 1–5 or the validation examples below is job-internal reference, not a
+supported local release path. Do not execute those commands on a workstation.
+
+1. The hosted capture job binds the complete product, capture harness, plan, and
+   release contract to exact `GITHUB_SHA`. Capture proceeds only when `HEAD` is
+   that exact full commit, the worktree is clean, and the ignored
+   `ios/QuakeSignal/Supporting/Debug.local.xcconfig` override is absent. Never
+   alter or relabel any historical screenshot tree.
+2. Inside that job, validate the explicit ten-frame English (U.S.) plan. Every
+   entry binds one reviewed selector to either the 6.5-inch iPhone or 13-inch
+   iPad display class; a missing, duplicate, reordered, cross-class, or pre-
+   approved entry fails before a build or Simulator launch:
 
    ```sh
    ruby ios/ScreenshotAutomation/ios-screenshot-plan.test.rb
    ruby ios/ScreenshotAutomation/ios-screenshot-plan.rb --json
    ```
 
-3. Capture the complete iPhone/iPad set atomically into a new absolute
-   directory outside the repository. The harness builds the source-matching
-   Debug Simulator app once, creates exactly two disposable reviewed devices,
+3. Inside that job, capture the complete iPhone/iPad set atomically into a new
+   runner-owned directory outside the repository. The harness builds the
+   source-matching Debug Simulator app once, creates exactly two disposable reviewed devices,
    captures all ten ordered frames, validates the real pixels and visible
    route, records build/install/runtime evidence, seals the complete package,
    and refuses partial or preexisting output:
 
    ```sh
-   SOURCE_COMMIT="$(git rev-parse HEAD)"
-   IOS_CAPTURE_PARENT="/Volumes/RC20/QuakeSignalScreenshotCandidates"
+   SOURCE_COMMIT="$GITHUB_SHA"
+   IOS_CAPTURE_PARENT="$RUNNER_TEMP/QuakeSignalScreenshotCandidates"
    mkdir -p "$IOS_CAPTURE_PARENT"
    IOS_CAPTURE_ROOT="$IOS_CAPTURE_PARENT/ios-ipados-${SOURCE_COMMIT}"
-   TMPDIR=/Volumes/RC20 \
-     ios/ScreenshotAutomation/capture-ios-screenshot-set.sh "$IOS_CAPTURE_ROOT"
+   ios/ScreenshotAutomation/capture-ios-screenshot-set.sh "$IOS_CAPTURE_ROOT"
    ```
 
    Do not navigate manually or substitute the legacy visible-screen helper.
@@ -270,10 +275,10 @@ iPad-capable target and the final map/alert-preference UI.
    `uploadApproved: false`, `reviewer: null`, and all signed-Release fields
    empty. Capture English (U.S.) only until Japanese and Simplified Chinese
    localized-name, trademark, and availability approvals are recorded.
-5. Archive the sealed directory without changing it. The final assembler
-   independently parses the ZIP and requires its complete path and byte
-   inventory to equal the sealed raw package; an arbitrary, partial, mutated,
-   symlinked, or extra-entry archive is rejected:
+5. The hosted job archives the sealed directory without changing it. The final
+   assembler independently parses the ZIP and requires its complete path and
+   byte inventory to equal the sealed raw package; an arbitrary, partial,
+   mutated, symlinked, or extra-entry archive is rejected:
 
    ```sh
    ditto -c -k --norsrc --keepParent \
@@ -301,16 +306,17 @@ iPad-capable target and the final map/alert-preference UI.
    three-day artifact. It never commits generated images or retains/downloads a
    signed app binary.
 
-Ordinary listing validation locks the historical catalog and permits the final
-pointer to remain null:
+The hosted ordinary-listing job runs the following internal validation to lock
+the historical catalog while permitting the final pointer to remain null:
 
 ```sh
 ruby .github/scripts/verify-apple-screenshot-release-set.rb
 ```
 
-The protected release-ready workflow runs the strict handoff against its fresh
-external evidence root; this must fail unless the complete source-current set,
-capture-run binding, and three named approvals are present:
+The protected release-ready workflow runs the following job-internal strict
+handoff against its fresh external evidence root; do not run it locally. It must
+fail unless the complete source-current set, capture-run binding, and three named
+approvals are present:
 
 ```sh
 ruby .github/scripts/verify-store-assets.rb \

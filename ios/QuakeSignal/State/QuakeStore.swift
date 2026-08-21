@@ -151,7 +151,8 @@ final class QuakeStore {
     private var foregroundResumeTask: Task<Void, Never>?
     private var refreshGeneration = 0
     private var clockNow = Date()
-    private var alertedRevisionKeys: Set<String> = []
+    private var alertedRevisionKeys: Set<ForegroundEmergencyRevisionKey> = []
+    private var systemPresentationReservations: [ForegroundEmergencyRevisionKey: Date] = [:]
     private let screenshotAutomationEnabled: Bool
 
     var isConnected: Bool { liveSocket.isConnected }
@@ -228,6 +229,22 @@ final class QuakeStore {
                 performDirectMonitoringAction(action)
             }
         }
+    }
+
+    /// A snapshotless push cannot be resolved before `willPresent` returns, so
+    /// APNs keeps its banner and sound. Reserve the validated revision boundary
+    /// synchronously so a racing newer direct revision remains app-owned while
+    /// an exact or monotonically older active copy remains system-owned.
+    func reserveSystemPresentation(
+        for revisionKey: ForegroundEmergencyRevisionKey,
+        receivedAt: Date
+    ) {
+        ForegroundSystemPresentationReservationPolicy.reserve(
+            revisionKey: revisionKey,
+            receivedAt: receivedAt,
+            now: Date(),
+            reservations: &systemPresentationReservations
+        )
     }
 
     func refresh() async {
@@ -411,28 +428,62 @@ final class QuakeStore {
 
     /// Applies a real push received while the app is foreground. It shares the
     /// same merge and preference policy as direct WebSocket delivery, which
-    /// prevents duplicate full-screen UI and duplicate sound.
+    /// prevents duplicate full-screen UI and duplicate sound. The return value
+    /// confirms that this revision was already handled, is an older active
+    /// revision superseded by one already handled, or was presented now. That
+    /// lets NotificationManager yield the APNs banner atomically.
+    @discardableResult
     func ingestForegroundNotification(
         event: EEWEvent,
         reason requestedReason: AlertPresentationReason,
         allowsEmergencyPresentation: Bool
-    ) {
+    ) -> Bool {
         let now = Date()
         clockNow = now
         let previous = events.first(where: { $0.id == event.id })
+        let systemOwnsPresentation = consumeSystemPresentationReservation(
+            for: event,
+            now: now
+        )
+        let canOwnEmergencyPresentation = allowsEmergencyPresentation &&
+            DirectMonitoringLifecyclePolicy.shouldPresentForegroundEmergency(
+                isForegroundActive: isForegroundActive
+            )
+        let wasAlreadyHandledInApp = ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+            event: event,
+            handledRevisionKeys: alertedRevisionKeys,
+            allowsEmergencyPresentation: canOwnEmergencyPresentation
+        )
         let decision = ForegroundPushPolicy.ingestionDecision(
             for: event,
             previous: previous,
             requestedReason: requestedReason,
-            allowsEmergencyPresentation: allowsEmergencyPresentation,
+            allowsEmergencyPresentation: canOwnEmergencyPresentation,
             preferences: alertPreferenceSnapshot,
             now: now
         )
-        guard decision.shouldMerge else { return }
+        guard decision.shouldMerge else {
+            if !systemOwnsPresentation {
+                recordSystemPresentationOwnership(for: event)
+            }
+            return systemOwnsPresentation || wasAlreadyHandledInApp
+        }
         merge(event)
-        guard let reason = decision.presentationReason else { return }
+        // APNs already owns the visible banner/sound for a snapshotless
+        // delivery. Keep that ownership in the revision set so the
+        // later resolved snapshot (and any duplicate copy) cannot present a
+        // second emergency surface after the one-shot reservation is consumed.
+        guard !systemOwnsPresentation else { return true }
+        guard let reason = decision.presentationReason else {
+            recordSystemPresentationOwnership(for: event)
+            return wasAlreadyHandledInApp
+        }
         let mergedEvent = events.first(where: { $0.id == event.id }) ?? event
-        presentEmergencyIfNeeded(event: mergedEvent, reason: reason)
+        let didPresent = presentEmergencyIfNeeded(event: mergedEvent, reason: reason)
+        if !didPresent {
+            recordSystemPresentationOwnership(for: event)
+        }
+        return didPresent
     }
 
     private func merge(_ event: EEWEvent) {
@@ -461,6 +512,10 @@ final class QuakeStore {
             isForegroundActive: isForegroundActive
         ) else { return }
 
+        let systemOwnsPresentation = consumeSystemPresentationReservation(
+            for: event,
+            now: Date()
+        )
         let previous = events.first(where: { $0.id == event.id })
         guard EventMergePolicy.shouldAccept(event, replacing: previous) else { return }
         let reason = ForegroundAlertPolicy.presentationReason(
@@ -473,23 +528,47 @@ final class QuakeStore {
 
         merge(event)
 
-        if let reason {
+        if let reason, !systemOwnsPresentation {
             presentEmergencyIfNeeded(event: event, reason: reason)
         }
     }
 
+    private func consumeSystemPresentationReservation(
+        for event: EEWEvent,
+        now: Date
+    ) -> Bool {
+        let revisionKey = ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)
+        let consumed = ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: revisionKey,
+            now: now,
+            reservations: &systemPresentationReservations
+        )
+        if consumed {
+            recordSystemPresentationOwnership(for: event)
+        }
+        return consumed
+    }
+
+    private func recordSystemPresentationOwnership(for event: EEWEvent) {
+        alertedRevisionKeys.insert(
+            ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)
+        )
+    }
+
+    @discardableResult
     private func presentEmergencyIfNeeded(
         event: EEWEvent,
         reason: AlertPresentationReason
-    ) {
+    ) -> Bool {
         guard DirectMonitoringLifecyclePolicy.shouldPresentForegroundEmergency(
             isForegroundActive: isForegroundActive
-        ) else { return }
+        ) else { return false }
 
-        let key = "\(event.id)#\(event.serial)#\(event.isWarn)#\(event.isFinal)#\(event.isCancel)#\(event.isTraining)"
-        guard alertedRevisionKeys.insert(key).inserted else { return }
+        let key = ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)
+        guard alertedRevisionKeys.insert(key).inserted else { return true }
         presentedAlert = PresentedAlert(event: event, reason: reason)
         EmergencyAlertAudio.shared.playSelectedSound(for: event, reason: reason)
+        return true
     }
 
     private func performDirectMonitoringAction(_ action: DirectMonitoringLifecycleAction) {
@@ -600,6 +679,7 @@ final class QuakeStore {
     private func applyFetchedEvents(_ fetchedEvents: [EEWEvent]) {
         var newestByID = Dictionary(uniqueKeysWithValues: events.map { ($0.id, $0) })
         for event in fetchedEvents {
+            _ = consumeSystemPresentationReservation(for: event, now: Date())
             if let current = newestByID[event.id],
                !EventMergePolicy.shouldAccept(event, replacing: current) {
                 continue

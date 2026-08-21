@@ -33,7 +33,7 @@ MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
 APP_ATTEST_FINGERPRINT = "sha256:wQ7bfMyEJST5ySIwLM1Q6HwT4DtbRPR3vanIG-kXCkQ"
 XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:FPPp_gIATLoIgEwcBZj9tufNpZtlB8qw9dm3ZhacE0k"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
-PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:r2OzC5WRhovt0RcKuCER8s7A5_zC5QPetciSS3EfDlY"
+PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:poCqZrAKnyRbrX7v4TrsQO8im-bvJp3sbyj0yJp3JEM"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
 MAX_RESPONSE_BYTES = 1024 * 1024
 READINESS_TIMEOUT_SECONDS = 180.0
@@ -920,6 +920,9 @@ def verify_foreground_push_presentation_contract(sources: Mapping[str, str]) -> 
     payload = sources["ios/QuakeSignal/Notifications/PushPayload.swift"]
     policy = sources["ios/QuakeSignal/State/AlertPolicy.swift"]
     manager = sources["ios/QuakeSignal/Notifications/NotificationManager.swift"]
+    root = sources["ios/QuakeSignal/Features/Root/RootView.swift"]
+    store = sources["ios/QuakeSignal/State/QuakeStore.swift"]
+    alert_audio = sources["ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift"]
 
     payload_markers = (
         'Self.nonEmptyString(userInfo["sourceId"]).flatMap {',
@@ -933,29 +936,238 @@ def verify_foreground_push_presentation_contract(sources: Mapping[str, str]) -> 
         "event.reportDate != nil,",
         "event.coordinate != nil,",
         "var hasUsableMatchingEventSnapshot: Bool",
+        "let foregroundRevisionKey: ForegroundEmergencyRevisionKey?",
+        "Self.legacyRevisionKey(",
+        'let kind = nonEmptyString(userInfo["kind"]),',
+        '(sourceID == "jma_eew" && kind == "eew") ||\n'
+        '                (sourceID == "jma_eqlist" && kind == "report"),',
+        'let serial = nonnegativeInteger(userInfo["serial"]),',
+        'let isWarning = strictBoolean(userInfo["isWarn"]),',
+        'let isFinal = strictBoolean(userInfo["isFinal"]),',
+        'let isCancelled = strictBoolean(userInfo["isCancel"]),',
+        'let isTraining = strictBoolean(userInfo["isTraining"]),',
+        'let effectiveTimestamp = parsedTimestamp(userInfo["reportTimeUtc"])',
+        '?? parsedTimestamp(userInfo["originTimeUtc"]) else {',
+        'eventID: "\\(sourceID):\\(eventID)",',
+        "kind: kind,",
+        "CFGetTypeID(number) != CFBooleanGetTypeID()",
+        "CFGetTypeID(number) == CFBooleanGetTypeID()",
     )
     for marker in payload_markers:
         if payload.count(marker) != 1:
             fail(
-                "foreground push snapshots must be structurally usable and exactly "
-                f"match their reviewed JMA source/event envelope; missing marker {marker!r}."
+                "foreground push snapshots and snapshotless revision boundaries must be "
+                "strictly typed and exactly match their reviewed JMA source/event envelope; "
+                f"missing marker {marker!r}."
             )
-    if policy.count(
-        "guard payload.hasUsableMatchingEventSnapshot, isSceneActive else {"
-    ) != 1:
-        fail(
-            "foreground APNs presentation may be suppressed only for an immediately "
-            "usable matching snapshot in an active scene."
-        )
     for marker in (
-        "ForegroundNotificationPresentationPolicy.decision(\n                for: payload,",
+        "static func allowsEmergencyPresentation(",
+        "payload.hasUsableMatchingEventSnapshot && isSceneActive",
+        "static func decision(\n        didHandleEmergencyInApp: Bool",
+        "systemPresentation: didHandleEmergencyInApp ? .listOnly : .alert",
+    ):
+        if policy.count(marker) != 1:
+            fail(
+                "foreground APNs presentation may be attempted only for an immediately "
+                "usable active-scene snapshot and suppressed only after confirmed "
+                f"in-app ownership; missing marker {marker!r}."
+            )
+    for marker in (
+        "struct ForegroundEmergencyRevisionKey: Hashable, Sendable",
+        "let eventID: String",
+        "let serial: Int",
+        "let kind: String",
+        "let isWarning: Bool",
+        "let isFinal: Bool",
+        "let isCancelled: Bool",
+        "let isTraining: Bool",
+        "let effectiveTimestamp: Date?",
+        "eventID: event.id,",
+        "serial: event.serial,",
+        "kind: event.kind,",
+        "isWarning: event.isWarn,",
+        "isFinal: event.isFinal,",
+        "isCancelled: event.isCancel,",
+        "isTraining: event.isTraining,",
+        "effectiveTimestamp: event.reportDate ?? event.originDate",
+    ):
+        if policy.count(marker) != 1:
+            fail(
+                "foreground APNs ownership requires the complete typed revision identity; "
+                f"missing marker {marker!r}."
+            )
+    for marker in (
+        "handledRevisionKeys: Set<ForegroundEmergencyRevisionKey>",
+        "guard allowsEmergencyPresentation else { return false }",
+        "if handledRevisionKeys.contains(incoming) { return true }",
+        "guard event.isActiveWarning else { return false }",
+        "handled.monotonicallyDominates(incoming)",
+        'kind == "eew" && isWarning && !isFinal && !isCancelled && !isTraining',
+        'kind == "eew" && !isTraining && (isFinal || isCancelled)',
+        "if isTerminalWarningLifecycle && incoming.isActiveWarning {",
+        "if serial != incoming.serial {",
+        "return serial > incoming.serial",
+        "return effectiveTimestamp > incomingTimestamp",
+    ):
+        if policy.count(marker) != 1:
+            fail(
+                "foreground APNs ownership must claim exact or monotonically dominated "
+                "active revisions without hiding newer or terminal updates; "
+                f"missing marker {marker!r}."
+            )
+    for marker, count in (
+        ("enum ForegroundSystemPresentationReservationPolicy", 1),
+        ("static let lifetime: TimeInterval = 15", 1),
+        ("revisionKey: ForegroundEmergencyRevisionKey,", 2),
+        ("reservations: inout [ForegroundEmergencyRevisionKey: Date]", 3),
+        ("let expiresAt = receivedAt.addingTimeInterval(lifetime)", 1),
+        ("guard expiresAt >= now else { return }", 1),
+        ("reservations[revisionKey] = expiresAt", 1),
+        ("reservations.removeValue(forKey: revisionKey)", 1),
+        ("reserved.monotonicallyDominates(revisionKey)", 1),
+        ("reservations = reservations.filter { $0.value >= now }", 1),
+    ):
+        if policy.count(marker) != count:
+            fail(
+                "snapshotless foreground APNs requires a short-lived revision-bound system "
+                f"presentation reservation; missing marker {marker!r}."
+            )
+    for marker in (
+        "enum ForegroundEmergencyAudioPolicy",
+        "guard preferences.includeTraining, !isBackfill || previous != nil else { return nil }",
+        "event.isActiveWarning ||",
+        '(event.kind == "eew" && event.isTraining && reason == .training)',
+    ):
+        if policy.count(marker) != 1:
+            fail(
+                "owned foreground audio must include explicitly accepted training without "
+                f"admitting unrelated events; missing marker {marker!r}."
+            )
+    for marker in (
+        "let receivedAt: Date",
+        "var onForegroundNotification: ((ForegroundNotificationDelivery) -> Bool)?",
+        "return onForegroundNotification(delivery)",
+        "receivedAt: delivery.receivedAt",
+        "pendingForegroundPayloads = Array(pendingForegroundPayloads.suffix(5))\n        return false",
+        "let receivedAt = Date()",
+        "let didHandleEmergencyInApp = self.deliverForeground(",
+        "receivedAt: receivedAt",
+        "didHandleEmergencyInApp: allowsEmergencyPresentation && didHandleEmergencyInApp",
+        "allowsEmergencyPresentation: false",
         "return [.banner, .sound, .list]",
         "return [.list]",
     ):
         if manager.count(marker) != 1:
             fail(
-                "foreground notification delivery must preserve the system banner and sound "
-                f"unless the app owns a validated snapshot; missing marker {marker!r}."
+                "foreground notification delivery must synchronously confirm in-app ownership, "
+                "keep buffered delivery system-owned, and preserve the system banner and sound "
+                f"unless the app owns this or a dominating active revision; missing marker {marker!r}."
+            )
+    for marker, count in (
+        ("return store.ingestForegroundNotification(", 1),
+        ("allowsEmergencyPresentation: delivery.allowsEmergencyPresentation", 1),
+        ("store.reserveSystemPresentation(", 1),
+        ("if let revisionKey = payload.foregroundRevisionKey", 1),
+        ("for: revisionKey,", 1),
+        ("receivedAt: delivery.receivedAt", 1),
+        ("Task { await handleSystemPresentedForegroundNotification(payload) }", 1),
+        ("allowsEmergencyPresentation: false", 2),
+    ):
+        if root.count(marker) != count:
+            fail(
+                "RootView must return synchronous snapshot ownership and keep snapshotless "
+                f"fallbacks system-owned; missing exact marker {marker!r}."
+            )
+    if not re.search(
+        r"if let revisionKey = payload\.foregroundRevisionKey\s*\{\s*"
+        r"store\.reserveSystemPresentation\(\s*"
+        r"for: revisionKey,\s*receivedAt: delivery\.receivedAt\s*\)\s*\}\s*"
+        r"Task \{ await handleSystemPresentedForegroundNotification\(payload\) \}",
+        root,
+        re.DOTALL,
+    ):
+        fail(
+            "RootView must synchronously reserve a validated snapshotless revision before "
+            "starting asynchronous event resolution."
+        )
+    for marker in (
+        "private var alertedRevisionKeys: Set<ForegroundEmergencyRevisionKey> = []",
+        "private var systemPresentationReservations: [ForegroundEmergencyRevisionKey: Date] = [:]",
+        "for revisionKey: ForegroundEmergencyRevisionKey,",
+        "ForegroundSystemPresentationReservationPolicy.reserve(",
+        "revisionKey: revisionKey,\n            now: now,",
+        "receivedAt: receivedAt,",
+        "ForegroundSystemPresentationReservationPolicy.consume(",
+        "let revisionKey = ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)",
+        "let consumed = ForegroundSystemPresentationReservationPolicy.consume(",
+        "private func recordSystemPresentationOwnership(for event: EEWEvent)",
+        "let canOwnEmergencyPresentation = allowsEmergencyPresentation &&",
+        "let wasAlreadyHandledInApp = ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(",
+        "if !systemOwnsPresentation {\n                recordSystemPresentationOwnership(for: event)\n            }\n            return systemOwnsPresentation || wasAlreadyHandledInApp",
+        "return systemOwnsPresentation || wasAlreadyHandledInApp",
+        "guard !systemOwnsPresentation else { return true }",
+        "guard let reason = decision.presentationReason else {\n            recordSystemPresentationOwnership(for: event)\n            return wasAlreadyHandledInApp\n        }",
+        "let didPresent = presentEmergencyIfNeeded(event: mergedEvent, reason: reason)",
+        "if !didPresent {\n            recordSystemPresentationOwnership(for: event)\n        }",
+        "if consumed {\n            recordSystemPresentationOwnership(for: event)\n        }",
+        "if let reason, !systemOwnsPresentation {",
+        "_ = consumeSystemPresentationReservation(for: event, now: Date())",
+        "guard alertedRevisionKeys.insert(key).inserted else { return true }",
+    ):
+        if store.count(marker) != 1:
+            fail(
+                "QuakeStore must claim only an exact or dominated previously handled revision, "
+                "consume system-owned reservations, or claim a newly presented emergency, "
+                f"without duplicating banner and cover; missing marker {marker!r}."
+            )
+    if store.count("let systemOwnsPresentation = consumeSystemPresentationReservation(") != 2:
+        fail(
+            "both foreground-push and direct-event merges must consume system presentation "
+            "reservations before any app-owned emergency presentation."
+        )
+    if not re.search(
+        r"func ingestForegroundNotification\([\s\S]*?"
+        r"let previous = events\.first\(where: \{ \$0\.id == event\.id \}\)\s*"
+        r"let systemOwnsPresentation = consumeSystemPresentationReservation\(\s*"
+        r"for: event,\s*now: now\s*\)[\s\S]*?"
+        r"guard decision\.shouldMerge else",
+        store,
+    ):
+        fail(
+            "foreground-push reservations must be consumed on the first matching valid event "
+            "before monotonic merge rejection."
+        )
+    if not re.search(
+        r"private func ingestDirect\(event: EEWEvent, isBackfill: Bool\)[\s\S]*?"
+        r"let systemOwnsPresentation = consumeSystemPresentationReservation\(\s*"
+        r"for: event,\s*now: Date\(\)\s*\)\s*"
+        r"let previous = events\.first\(where: \{ \$0\.id == event\.id \}\)\s*"
+        r"guard EventMergePolicy\.shouldAccept",
+        store,
+    ):
+        fail(
+            "direct-event reservations must be consumed on the first matching valid event "
+            "before monotonic merge rejection."
+        )
+    if not re.search(
+        r"for event in fetchedEvents \{\s*"
+        r"_ = consumeSystemPresentationReservation\(for: event, now: Date\(\)\)\s*"
+        r"if let current = newestByID\[event\.id\]",
+        store,
+    ):
+        fail(
+            "fallback reservations must be consumed on the first matching valid event "
+            "before monotonic merge rejection."
+        )
+    for marker in (
+        "guard ForegroundEmergencyAudioPolicy.shouldPlay(event: event, reason: reason) else {",
+        "let key = ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)",
+        "play(AppSettings.shared.alertSound, deduplicationKey: key, owner: .emergency)",
+    ):
+        if alert_audio.count(marker) != 1:
+            fail(
+                "foreground warning and opted-in training audio must retain typed revision "
+                f"deduplication; missing marker {marker!r}."
             )
 
 
@@ -1022,6 +1234,10 @@ def verify_foreground_emergency_parity_contract(sources: Mapping[str, str]) -> N
         (alert_audio, "play(preference, deduplicationKey: nil, owner: .preview)"),
         (alert_audio, "playbackOwner = owner"),
         (alert_audio, "guard playbackOwner == .preview else { return }"),
+        (
+            alert_audio,
+            "let key = ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)",
+        ),
         (
             alert_audio,
             "play(AppSettings.shared.alertSound, deduplicationKey: key, owner: .emergency)",

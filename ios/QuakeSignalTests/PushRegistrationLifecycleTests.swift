@@ -308,28 +308,100 @@ final class PushRegistrationLifecycleTests: XCTestCase {
 
         XCTAssertEqual(payload.compositeEventId, event.id)
         XCTAssertEqual(payload.eventSnapshot, event)
+        XCTAssertEqual(
+            payload.foregroundRevisionKey,
+            ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)
+        )
         XCTAssertTrue(payload.hasUsableMatchingEventSnapshot)
         XCTAssertEqual(AlertPresentationReason(wireValue: payload.reason), .updated)
+        XCTAssertTrue(ForegroundNotificationPresentationPolicy.allowsEmergencyPresentation(
+            for: payload,
+            isSceneActive: true
+        ))
         XCTAssertEqual(
             ForegroundNotificationPresentationPolicy.decision(
-                for: payload,
-                isSceneActive: true
+                didHandleEmergencyInApp: true
             ),
             ForegroundNotificationPresentationDecision(
                 systemPresentation: .listOnly,
-                shouldPresentEmergencyInApp: true
+                didHandleEmergencyInApp: true
             )
         )
+        XCTAssertFalse(ForegroundNotificationPresentationPolicy.allowsEmergencyPresentation(
+            for: payload,
+            isSceneActive: false
+        ))
+    }
+
+    func testSnapshotlessPushRequiresACompleteTypedRevisionBoundaryForReservation() throws {
+        let payload = PushPayload(userInfo: [
+            "sourceId": "jma_eew",
+            "eventId": "test",
+            "kind": "eew",
+            "serial": 2,
+            "originTimeUtc": "2026-08-19T01:00:00Z",
+            "reportTimeUtc": "2026-08-19T01:00:02.125Z",
+            "isWarn": true,
+            "isFinal": false,
+            "isCancel": false,
+            "isTraining": false,
+        ])
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let expectedTimestamp = try XCTUnwrap(
+            formatter.date(from: "2026-08-19T01:00:02.125Z")
+        )
+
+        XCTAssertNil(payload.eventSnapshot)
         XCTAssertEqual(
-            ForegroundNotificationPresentationPolicy.decision(
-                for: payload,
-                isSceneActive: false
-            ),
-            ForegroundNotificationPresentationDecision(
-                systemPresentation: .alert,
-                shouldPresentEmergencyInApp: false
+            payload.foregroundRevisionKey,
+            ForegroundEmergencyRevisionKey(
+                eventID: "jma_eew:test",
+                serial: 2,
+                kind: "eew",
+                isWarning: true,
+                isFinal: false,
+                isCancelled: false,
+                isTraining: false,
+                effectiveTimestamp: expectedTimestamp
             )
         )
+    }
+
+    func testSnapshotlessPushDoesNotReserveAnIncompleteOrMalformedRevisionBoundary() {
+        let base: [AnyHashable: Any] = [
+            "sourceId": "jma_eew",
+            "eventId": "test",
+            "kind": "eew",
+            "serial": 2,
+            "originTimeUtc": "2026-08-19T01:00:00Z",
+            "reportTimeUtc": "2026-08-19T01:00:02Z",
+            "isWarn": true,
+            "isFinal": false,
+            "isCancel": false,
+            "isTraining": false,
+        ]
+        let mutations: [(String, Any?)] = [
+            ("serial", nil),
+            ("serial", -1),
+            ("serial", true),
+            ("serial", NSNumber(value: Int64.max)),
+            ("isWarn", 1),
+            ("isFinal", nil),
+            ("kind", "report"),
+            ("reportTimeUtc", "not-a-date"),
+        ]
+
+        for (key, replacement) in mutations {
+            var userInfo = base
+            userInfo[key] = replacement
+            if key == "reportTimeUtc" {
+                userInfo["originTimeUtc"] = "also-not-a-date"
+            }
+            let payload = PushPayload(userInfo: userInfo)
+            XCTAssertNil(payload.eventSnapshot, "mutation: \(key)")
+            XCTAssertNil(payload.foregroundRevisionKey, "mutation: \(key)")
+        }
     }
 
     func testForegroundNotificationKeepsSystemAlertForMissingMalformedOrMismatchedSnapshot() throws {
@@ -391,17 +463,12 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         for payload in payloads {
             XCTAssertNotNil(payload.compositeEventId)
             XCTAssertNil(payload.eventSnapshot)
+            XCTAssertNil(payload.foregroundRevisionKey)
             XCTAssertFalse(payload.hasUsableMatchingEventSnapshot)
-            XCTAssertEqual(
-                ForegroundNotificationPresentationPolicy.decision(
-                    for: payload,
-                    isSceneActive: true
-                ),
-                ForegroundNotificationPresentationDecision(
-                    systemPresentation: .alert,
-                    shouldPresentEmergencyInApp: false
-                )
-            )
+            XCTAssertFalse(ForegroundNotificationPresentationPolicy.allowsEmergencyPresentation(
+                for: payload,
+                isSceneActive: true
+            ))
         }
     }
 
@@ -439,6 +506,7 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertNil(payload.sourceId)
         XCTAssertNil(payload.compositeEventId)
         XCTAssertNil(payload.eventSnapshot)
+        XCTAssertNil(payload.foregroundRevisionKey)
         XCTAssertFalse(payload.hasUsableMatchingEventSnapshot)
     }
 

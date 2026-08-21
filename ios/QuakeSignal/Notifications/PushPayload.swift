@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 /// The custom (non-`aps`) keys the backend attaches to every push -- see
@@ -7,6 +8,7 @@ struct PushPayload {
     let sourceId: String?
     let reason: String?
     let eventSnapshot: EEWEvent?
+    let foregroundRevisionKey: ForegroundEmergencyRevisionKey?
 
     init(userInfo: [AnyHashable: Any]) {
         let parsedEventID = Self.nonEmptyString(userInfo["eventId"])
@@ -17,6 +19,7 @@ struct PushPayload {
         sourceId = parsedSourceID
         reason = userInfo["reason"] as? String
         let snapshot = userInfo["event"] ?? userInfo["eventSnapshot"]
+        let parsedSnapshot: EEWEvent?
         if var snapshotObject = snapshot as? [String: Any],
            let parsedEventID,
            let parsedSourceID {
@@ -35,13 +38,21 @@ struct PushPayload {
                    matchingSourceID: parsedSourceID,
                    eventID: parsedEventID
                ) {
-                eventSnapshot = decoded
+                parsedSnapshot = decoded
             } else {
-                eventSnapshot = nil
+                parsedSnapshot = nil
             }
         } else {
-            eventSnapshot = nil
+            parsedSnapshot = nil
         }
+        eventSnapshot = parsedSnapshot
+        foregroundRevisionKey = parsedSnapshot.map {
+            ForegroundEmergencyRevisionOwnershipPolicy.key(for: $0)
+        } ?? Self.legacyRevisionKey(
+            userInfo: userInfo,
+            sourceID: parsedSourceID,
+            eventID: parsedEventID
+        )
     }
 
     /// Matches the backend's `NormalizedEvent.id` format (`${sourceId}:${eventId}`).
@@ -50,10 +61,11 @@ struct PushPayload {
         return "\(sourceId):\(eventId)"
     }
 
-    /// The foreground app may suppress APNs' banner and sound only when this
-    /// snapshot can be consumed immediately. A cache lookup or network refresh
-    /// is deliberately not sufficient: either can fail after `willPresent`
-    /// has already returned its irreversible system-presentation decision.
+    /// A usable snapshot grants the foreground app one synchronous opportunity
+    /// to take ownership; APNs is suppressed only after the store confirms it
+    /// handled that revision or already elevated a newer active revision. A
+    /// cache lookup or network refresh is not sufficient because either can
+    /// fail after `willPresent` returns.
     var hasUsableMatchingEventSnapshot: Bool {
         eventSnapshot != nil
     }
@@ -64,6 +76,65 @@ struct PushPayload {
             return nil
         }
         return value
+    }
+
+    /// Older/smaller backend payloads may omit the typed event snapshot. Only
+    /// a complete, strictly typed top-level revision boundary may then reserve
+    /// system presentation; an event ID alone could hide a newer live warning.
+    private static func legacyRevisionKey(
+        userInfo: [AnyHashable: Any],
+        sourceID: String?,
+        eventID: String?
+    ) -> ForegroundEmergencyRevisionKey? {
+        guard let sourceID,
+              let eventID,
+              let kind = nonEmptyString(userInfo["kind"]),
+              (sourceID == "jma_eew" && kind == "eew") ||
+                (sourceID == "jma_eqlist" && kind == "report"),
+              let serial = nonnegativeInteger(userInfo["serial"]),
+              let isWarning = strictBoolean(userInfo["isWarn"]),
+              let isFinal = strictBoolean(userInfo["isFinal"]),
+              let isCancelled = strictBoolean(userInfo["isCancel"]),
+              let isTraining = strictBoolean(userInfo["isTraining"]),
+              let effectiveTimestamp = parsedTimestamp(userInfo["reportTimeUtc"])
+                ?? parsedTimestamp(userInfo["originTimeUtc"]) else {
+            return nil
+        }
+        return ForegroundEmergencyRevisionKey(
+            eventID: "\(sourceID):\(eventID)",
+            serial: serial,
+            kind: kind,
+            isWarning: isWarning,
+            isFinal: isFinal,
+            isCancelled: isCancelled,
+            isTraining: isTraining,
+            effectiveTimestamp: effectiveTimestamp
+        )
+    }
+
+    private static func nonnegativeInteger(_ value: Any?) -> Int? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let double = number.doubleValue
+        guard double.isFinite,
+              double >= 0,
+              double.rounded(.towardZero) == double,
+              double <= Double(Int.max),
+              let integer = Int(exactly: double) else { return nil }
+        return integer
+    }
+
+    private static func strictBoolean(_ value: Any?) -> Bool? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
+        return number.boolValue
+    }
+
+    private static func parsedTimestamp(_ value: Any?) -> Date? {
+        guard let value = nonEmptyString(value) else { return nil }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: value) ?? ISO8601DateFormatter().date(from: value)
     }
 
     private static func isStructurallyUsable(

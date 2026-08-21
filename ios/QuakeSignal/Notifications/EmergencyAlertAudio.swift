@@ -20,7 +20,7 @@ final class EmergencyAlertAudio {
     private var player: AVAudioPlayer?
     private var playbackCompletionTask: Task<Void, Never>?
     private var playbackOwner: PlaybackOwner?
-    private var recentPlaybackKeys: [String: Date] = [:]
+    private var recentPlaybackKeys: [ForegroundEmergencyRevisionKey: Date] = [:]
     private let duplicateWindow: TimeInterval = 15
 
     private init() {}
@@ -30,8 +30,10 @@ final class EmergencyAlertAudio {
     }
 
     func playSelectedSound(for event: EEWEvent, reason: AlertPresentationReason) {
-        guard event.isActiveWarning else { return }
-        let key = "\(event.id)#\(event.serial)#\(reason.rawValue)"
+        guard ForegroundEmergencyAudioPolicy.shouldPlay(event: event, reason: reason) else {
+            return
+        }
+        let key = ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)
         play(AppSettings.shared.alertSound, deduplicationKey: key, owner: .emergency)
     }
 
@@ -59,7 +61,7 @@ final class EmergencyAlertAudio {
 
     private func play(
         _ preference: AlertSoundPreference,
-        deduplicationKey: String?,
+        deduplicationKey: ForegroundEmergencyRevisionKey?,
         owner: PlaybackOwner
     ) {
         let now = Date()

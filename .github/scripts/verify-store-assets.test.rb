@@ -6,6 +6,68 @@ require "tmpdir"
 require_relative "verify-store-assets"
 require_relative "../../ios/ScreenshotAutomation/screenshot-test-temp-root"
 
+class StoreAssetListingCopyTest < Minitest::Test
+  def with_valid_ios_listing
+    Dir.mktmpdir(
+      "quakesignal-ios-listing-",
+      QuakeSignalScreenshotTestTempRoot.path.to_s,
+    ) do |directory|
+      listing = Pathname.new(directory)
+      {
+        "description.txt" => "Reviewed earthquake information.\n",
+        "promotional_text.txt" => "Review recent earthquake reports.\n",
+        "keywords.txt" => "earthquake,reports,safety\n",
+        "subtitle.txt" => "Earthquake Safety\n",
+        "whats_new_v1.1.txt" => "Version 1.1 adds reviewed Apple platform support.\n",
+      }.each do |name, contents|
+        listing.join(name).write(contents, mode: "wx")
+      end
+      yield listing
+    end
+  end
+
+  def validation_failure(listing)
+    validator = StoreAssetValidator.new
+    validator.validate_ios_listing_copy(listing)
+    _output, error_output = capture_io do
+      assert_raises(SystemExit) { validator.finish! }
+    end
+    error_output
+  end
+
+  def test_accepts_nonempty_whats_new_within_the_character_limit
+    with_valid_ios_listing do |listing|
+      validator = StoreAssetValidator.new
+      validator.validate_ios_listing_copy(listing)
+      assert_nil validator.finish!
+    end
+  end
+
+  def test_rejects_missing_oversized_or_blank_whats_new_mutations
+    mutations = [
+      [
+        ->(path) { path.delete },
+        /missing or empty file: .*whats_new_v1\.1\.txt/,
+      ],
+      [
+        ->(path) { path.write("x" * (StoreAssetValidator::MAX_WHATS_NEW_CHARACTERS + 1)) },
+        /What's New must be at most 4000 characters \(found 4001\)/,
+      ],
+      [
+        ->(path) { path.write(" \n") },
+        /What's New must not be blank/,
+      ],
+    ]
+
+    mutations.each do |mutate, expected_error|
+      with_valid_ios_listing do |listing|
+        mutate.call(listing.join("whats_new_v1.1.txt"))
+        assert_match expected_error, validation_failure(listing)
+      end
+    end
+  end
+end
+
 class WatchAppIconContractTest < Minitest::Test
   def repository_root
     Pathname.new(__dir__).join("..", "..").realpath

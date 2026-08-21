@@ -18,6 +18,14 @@ const iosAppRoute = {
   apnsTopic: "com.quakesignal.app",
   platform: "ios",
 };
+const publicRateEnvironment = {
+  APP_ATTEST_CHALLENGE_RATE_LIMIT: {
+    async limit() { return { success: true }; },
+  },
+  DEVICE_API_RATE_LIMIT: {
+    async limit() { return { success: true }; },
+  },
+};
 let workerModulePromise;
 
 async function workerModule() {
@@ -64,7 +72,7 @@ function schedulerState() {
 
 function productionDeviceRow(keyId) {
   return {
-    token: "production-device-token-not-logged",
+    token: "0123456789abcdef".repeat(4),
     environment: "production",
     locale: null,
     sources: '["jma_eew"]',
@@ -77,7 +85,12 @@ function productionDeviceRow(keyId) {
     include_test_alerts: 1,
     utc_offset_minutes: null,
     notify_at_night: 1,
+    alert_sound: "system",
     app_attest_key_id: keyId,
+    app_identity: iosAppRoute.appIdentity,
+    apns_topic: iosAppRoute.apnsTopic,
+    app_platform: iosAppRoute.platform,
+    registration_revision: `training-${keyId.slice(0, 16)}`,
     created_at: "2026-08-13T00:00:00.000Z",
     updated_at: "2026-08-13T00:00:00.000Z",
   };
@@ -107,7 +120,33 @@ function baseEnvironment(firstDevice) {
         idFromName() { return "global"; },
         get() {
           return {
-            async fetch() { return Response.json({ authorization: "cached.provider.jwt" }); },
+            async fetch(request) {
+              const url = new URL(request.url);
+              if (url.pathname === "/apns/training") {
+                const provider = await globalThis.fetch(
+                  "https://api.push.apple.com/3/device/training-test",
+                );
+                let reason = null;
+                if (!provider.ok) {
+                  reason = (await provider.json().catch(() => null))?.reason ?? null;
+                }
+                return Response.json({
+                  result: provider.ok
+                    ? {
+                        ok: true,
+                        apnsId: null,
+                        acceptedAtUtc: new Date().toISOString(),
+                      }
+                    : {
+                        ok: false,
+                        apnsId: null,
+                        status: provider.status,
+                        apnsReason: reason,
+                      },
+                });
+              }
+              return Response.json({ authorization: "cached.provider.jwt" });
+            },
           };
         },
       },
@@ -148,6 +187,9 @@ test("the public route and handler cannot reach delayed scheduling without the o
       body: JSON.stringify(payload.body),
     }),
     {
+      APP_ATTEST_CHALLENGE_RATE_LIMIT: {
+        async limit() { return { success: true }; },
+      },
       DEVICE_API_RATE_LIMIT: { async limit() { return { success: true }; } },
       get DB() { throw new Error("missing App Attest headers must fail before D1"); },
       get TRAINING_PUSH_SCHEDULER() {
@@ -215,7 +257,7 @@ test("the public route and handler cannot reach delayed scheduling without the o
 
   const internalRoute = await worker.fetch(
     new Request("https://quakesignal-api.example/schedule", { method: "POST" }),
-    {},
+    publicRateEnvironment,
   );
   assert.equal(internalRoute.status, 404, "the Worker has no public scheduler route");
 });
@@ -237,7 +279,7 @@ test("legal pages disclose the platform boundaries and delayed scheduler behavio
   for (const contract of LEGAL_PAGE_CONTRACTS) {
     const response = await worker.fetch(
       new Request(`https://quakesignal-api.example${contract.path}`),
-      {},
+      publicRateEnvironment,
     );
     assert.equal(response.status, 200);
     const body = await response.text();
@@ -476,4 +518,44 @@ test("a rejected APNs response is one attempted delayed delivery and never retri
   assert.equal(apnsCalls, 1, "a non-2xx APNs result is not treated as a success or retried");
   assert.deepEqual(logs, [], "the delayed test path emits no token or request-data logs");
   assert.equal(state.records.size, 0);
+});
+
+test("production relay fences the exact training revision across APNs and bounds crash recovery", async () => {
+  const source = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(join(cloudflareDirectory, "src/index.ts"), "utf8")
+  );
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(
+      join(
+        cloudflareDirectory,
+        "migrations/0013_alert_lifecycle_and_incident_retention.sql",
+      ),
+      "utf8",
+    )
+  );
+  assert.match(
+    source,
+    /trainingAttemptId = `training:\$\{crypto\.randomUUID\(\)\}`[\s\S]*?INSERT INTO apns_provider_attempts[\s\S]*?RETURNING registration_revision[\s\S]*?sendPushRequest/,
+    "the exact training registration is admitted in D1 as the final awaited boundary before APNs",
+  );
+  assert.match(
+    source,
+    /sendPushRequest\([\s\S]*?outcome_reconciled_at_utc = COALESCE[\s\S]*?applyTrainingTerminalApnsCleanup\(\s*this\.env\.DB,\s*finalDevice/,
+    "provider settlement precedes exact-revision cleanup so a later renewal is never quarantined by an old training response",
+  );
+  assert.match(
+    source,
+    /DELETE FROM apns_provider_attempts[\s\S]*?admitted_at_utc < \?[\s\S]*?outcome_reconciled_at_utc IS NOT NULL/,
+    "resolved training provider-attempt fences share the bounded 14-day admission-retention cleanup",
+  );
+  assert.match(
+    source,
+    /TRAINING_APNS_ATTEMPT_RECOVERY_MS = 60_000[\s\S]*?attempt_id LIKE 'training:%'[\s\S]*?outcome_reconciled_at_utc = admitted_at_utc/,
+    "a crash after APNs cannot leave the synthetic training mutation fence active indefinitely",
+  );
+  assert.match(
+    migration,
+    /devices_block_training_apns_attempt_update[\s\S]*?devices_block_training_apns_attempt_delete/,
+    "renewal and deletion both serialize after the training response marker",
+  );
 });
