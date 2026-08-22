@@ -116,7 +116,7 @@ history, detail, and public live-relay routes return `410 Gone`.
 
 APNs is mandatory for a notification-capable iOS release. The production
 deployment workflow verifies the four Worker secret names before it migrates
-or deploys, and `/healthz` is unhealthy until all four exist:
+or deploys, and the private relay status is unhealthy until all four exist:
 
 ```bash
 npx wrangler secret put APNS_PRIVATE_KEY
@@ -187,7 +187,7 @@ as volumes. Never deploy this Compose service or mount a production APNs key.
 | `POST` | `/v1/devices` | Register/update a device: `{ token, environment, locale, sources[], minMagnitude, alertSound?, cityName?, latitude?, longitude?, radiusKm?, includeTestAlerts?, utcOffsetMinutes?, notifyAtNight? }` |
 | `DELETE` | `/v1/devices` | Unregister a device: `{ token }` in the JSON body |
 | `POST` | `/v1/devices/test` | Local-only training-push experiment: `{ token }` in the JSON body |
-| `GET` | `/healthz` | Notification watcher + per-source connection status |
+| `GET` | the private relay status | Notification watcher + per-source connection status |
 | `GET` | `/privacy`, `/terms`, `/support` | App Store legal and support pages |
 
 `/v1/quakes/recent`, `/v1/quakes/:id`, and `/v1/live` are intentionally

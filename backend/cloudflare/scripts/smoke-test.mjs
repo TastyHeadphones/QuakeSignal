@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  assertAppAttestPolicyHealth,
-  assertReadyDeliveryHealth,
-  assertReadyWolfxSourceHealth,
+  assertAppAttestPolicyMetadata,
   fetchWithoutRedirect,
   parseSmokeTestArguments,
 } from "./smoke-test-policy.mjs";
@@ -22,55 +20,23 @@ const {
   requiredAppAttestBundleVersion,
 } = smokeArguments;
 
-const health = await fetchWithoutRedirect(fetch, `${baseURL}/healthz`);
-assert.equal(health.status, 200, "health endpoint must return 200");
+const root = await fetchWithoutRedirect(fetch, baseURL);
+assert.equal(root.status, 200, "service metadata must return 200");
 assert.equal(
-  health.headers.get("cache-control"),
+  root.headers.get("cache-control"),
   "no-store",
-  "health endpoint must not be cached",
+  "service metadata must not be cached",
 );
-const healthBody = await health.json();
-assert.equal(healthBody.ok, true, "health response must report ok");
-const appAttestPolicy = assertAppAttestPolicyHealth(healthBody, {
+const rootBody = await root.json();
+const appAttestPolicy = assertAppAttestPolicyMetadata(rootBody, {
   expectedAppAttestPolicyFingerprint,
   requiredAppAttestBundleVersion,
 });
 assert.equal(
-  healthBody.mode,
-  "notification-only",
-  "health endpoint must identify the notification-only service",
+  rootBody.purpose,
+  "APNs alert delivery only",
+  "metadata must identify the notification-only service",
 );
-assert.equal(
-  healthBody.delivery?.activeDlqIncidents,
-  0,
-  "production health must have no active alert-delivery DLQ incidents",
-);
-assert.notEqual(
-  healthBody.delivery?.status,
-  "degraded",
-  "delivery health must not be degraded",
-);
-assertReadyDeliveryHealth(healthBody.delivery);
-assert.equal(
-  healthBody.upstream?.status,
-  "ready",
-  "production health must not pass with a stale or closed required source",
-);
-assert.deepEqual(
-  healthBody.upstream?.staleSources,
-  [],
-  "production health must not have stale required sources",
-);
-assert.ok(
-  ["websocket", "http-polling", "mixed"].includes(healthBody.upstream?.transport),
-  "production health must report an allowed aggregate Wolfx transport",
-);
-assertReadyWolfxSourceHealth(healthBody.upstream);
-
-const root = await fetchWithoutRedirect(fetch, baseURL);
-assert.equal(root.status, 200, "service metadata must return 200");
-const rootBody = await root.json();
-assert.equal(rootBody.purpose, "APNs alert delivery only");
 assert.equal(rootBody.earthquakeData, "Clients fetch directly from Wolfx");
 assert.equal(rootBody.recent, undefined, "metadata must not advertise data APIs");
 assert.equal(rootBody.live, undefined, "metadata must not advertise a live relay");
@@ -226,7 +192,7 @@ console.log(
     {
       ok: true,
       baseURL,
-      upstreams: healthBody.upstreams,
+      metadata: "available",
       appAttest: "enforced",
       appAttestPolicy,
       earthquakeDataEndpoints: "disabled",

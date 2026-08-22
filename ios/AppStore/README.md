@@ -75,7 +75,7 @@ allow-list is `1,2,3,4,5,6,7,8`, and the protected archive workflows default
 to `8`. Older allowlisted versions remain deliberately available to installed
 clients. Deploy all migrations through `0013` and the matching Worker policy
 before uploading build `8`; each protected archive lane then proves the live
-`/healthz` fingerprint admits that build before certificate import.
+the service-metadata fingerprint admits that build before certificate import.
 
 Upload, processing, and internal group assignment do not by themselves
 establish physical-device evidence, Content Rights, protected launch
@@ -350,7 +350,7 @@ allow one to ten screenshots and list the accepted display-size resolutions.
 4. Verify the user-approved production Worker
    `https://quakesignal-api.hopeso.workers.dev` and its public Cloudflare TLS,
    then make the protected TestFlight-bootstrap deployment
-   before the Release archive. That deployment verifies `/healthz`, `/privacy`,
+   before the Release archive. That deployment verifies service metadata at `/`, `/privacy`,
    `/support`, and `/terms`; the archive workflow pins this exact
    `workers.dev` origin. Do not use a private CA or client mTLS. The
    Debug/Simulator client may use only a different isolated staging Worker in

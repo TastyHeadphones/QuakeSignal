@@ -3,61 +3,38 @@ import { resolve } from "node:path";
 import {
   SMOKE_MAX_RESPONSE_BYTES,
   fetchWithoutRedirect,
-  hasReadyWolfxSourceHealth,
 } from "./smoke-test-policy.mjs";
 
 const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_INTERVAL_MS = 5_000;
 
-function healthUrl(baseUrl) {
+function metadataUrl(baseUrl) {
   const url = new URL(baseUrl);
   if (url.protocol !== "https:" || url.pathname !== "/" || url.search || url.hash) {
     throw new Error("Worker origin must be a bare HTTPS URL");
   }
-  return new URL("/healthz", url).toString();
+  return new URL("/", url).toString();
 }
 
 function readinessSummary(response, body) {
   return {
     status: response.status,
-    ok: body?.ok === true,
-    deliveryStatus: typeof body?.delivery?.status === "string"
-      ? body.delivery.status
-      : null,
-    apnsConfigured: body?.delivery?.apnsConfigured === true,
-    upstreamStatus: typeof body?.upstream?.status === "string"
-      ? body.upstream.status
-      : null,
-    upstreamTransport: typeof body?.upstream?.transport === "string"
-      ? body.upstream.transport
-      : null,
-    websocketStatus: typeof body?.upstream?.websocketStatus === "string"
-      ? body.upstream.websocketStatus
-      : null,
-    staleSources: Array.isArray(body?.upstream?.staleSources)
-      ? body.upstream.staleSources
-      : null,
-    readySourceCount: body?.upstream?.sources && typeof body.upstream.sources === "object"
-      ? Object.keys(body.upstream.sources).length
-      : null,
+    purpose: body?.purpose ?? null,
+    policyFormat: body?.appAttestPolicy?.format ?? null,
+    policyFingerprint: body?.appAttestPolicy?.fingerprint ?? null,
   };
 }
 
 function isReady(response, body) {
   return (
     response.status === 200 &&
-    body?.ok === true &&
-    body?.delivery?.status === "ready" &&
-    body?.delivery?.apnsConfigured === true &&
-    body?.upstream?.status === "ready" &&
-    Array.isArray(body?.upstream?.staleSources) &&
-    body.upstream.staleSources.length === 0 &&
-    ["websocket", "http-polling", "mixed"].includes(body?.upstream?.transport) &&
-    hasReadyWolfxSourceHealth(body?.upstream)
+    body?.purpose === "APNs alert delivery only" &&
+    body?.earthquakeData === "Clients fetch directly from Wolfx" &&
+    body?.appAttestPolicy?.format === "quakesignal-app-attest-policy/v2"
   );
 }
 
-async function probeHealthWithinDeadline(fetchImpl, url, timeoutMs) {
+async function probeMetadataWithinDeadline(fetchImpl, url, timeoutMs) {
   const response = await fetchWithoutRedirect(
     fetchImpl,
     url,
@@ -80,9 +57,8 @@ async function probeHealthWithinDeadline(fetchImpl, url, timeoutMs) {
 }
 
 /**
- * Wait through the relay's intentional 90-second WebSocket-to-HTTP fallback
- * grace. A 200 is accepted only when the full delivery/upstream readiness
- * contract is healthy; a legacy/superficial 200 is never enough.
+ * Wait through a rolling deployment until the Worker metadata contract is
+ * available. Alert-feed and delivery state remain private relay telemetry.
  */
 export async function waitForWorkerReadiness(baseUrl, {
   timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -98,7 +74,7 @@ export async function waitForWorkerReadiness(baseUrl, {
   if (!Number.isSafeInteger(intervalMs) || intervalMs <= 0) {
     throw new RangeError("intervalMs must be a positive safe integer");
   }
-  const url = healthUrl(baseUrl);
+  const url = metadataUrl(baseUrl);
   const deadline = now() + timeoutMs;
   let last = null;
   while (true) {
@@ -107,7 +83,7 @@ export async function waitForWorkerReadiness(baseUrl, {
       throw new Error(`Worker readiness did not converge within ${timeoutMs}ms: ${JSON.stringify(last)}`);
     }
     try {
-      const { response, body } = await probeHealthWithinDeadline(
+      const { response, body } = await probeMetadataWithinDeadline(
         fetchImpl,
         url,
         remainingBeforeAttempt,
@@ -115,13 +91,7 @@ export async function waitForWorkerReadiness(baseUrl, {
       last = readinessSummary(response, body);
       onAttempt(last);
       if (isReady(response, body)) return last;
-      if (body?.delivery?.apnsConfigured === false) {
-        throw new Error("Worker reports APNs signing material is not configured");
-      }
     } catch (error) {
-      if (error instanceof Error && error.message === "Worker reports APNs signing material is not configured") {
-        throw error;
-      }
       last = { errorName: error instanceof Error ? error.name : "UnknownError" };
       onAttempt(last);
     }

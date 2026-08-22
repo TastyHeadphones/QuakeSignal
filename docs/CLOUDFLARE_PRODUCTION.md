@@ -79,7 +79,7 @@ release evidence; repeat the production proof against
    The user-approved public origin is exactly
    `https://quakesignal-api.hopeso.workers.dev`; there is no Custom Domain,
    route, DNS zone, or zone-WAF prerequisite. After the protected deployment,
-   verify its public Cloudflare TLS and `GET /healthz` at that exact URL.
+   verify its public Cloudflare TLS and service metadata at `/` on that exact URL.
 3. Create all three Cloudflare Queue resources named in
    [`backend/cloudflare/wrangler.jsonc`](../backend/cloudflare/wrangler.jsonc)
    before deploying the queue-enabled Worker: the primary delivery Queue, its
@@ -96,7 +96,7 @@ release evidence; repeat the production proof against
    each source request at least 600 ms apart, and also checkpoints HTTP
    freshness at most once per minute. A source with no current durable
    WebSocket or HTTP freshness proof is stale after three minutes, so
-   `/healthz` fails closed rather than claiming an unverified alert path.
+   the private relay status fails closed rather than claiming an unverified alert path.
    A bare WebSocket Upgrade is not treated as source freshness or a reconnect
    success. The relay requires a valid Wolfx frame and waits one stable minute
    before clearing exponential reconnect state, so an upgrade-then-close flap
@@ -203,7 +203,7 @@ release evidence; repeat the production proof against
    selected above. It validates TypeScript, the native rate-limit configuration,
    APNs secret names, and the exact Workers.dev/App Attest gate for that phase;
    it also confirms the deployment account owns `hopeso.workers.dev`, then
-   applies migrations, deploys, and verifies `/healthz`, `/privacy`, `/support`,
+   applies migrations, deploys, and verifies service metadata at `/`, `/privacy`, `/support`,
    and `/terms` through the exact approved public origin. This protected
    workflow is the sole normal way to apply remote D1 migrations or run
    `wrangler deploy`; do not make a routine production release from a
@@ -237,7 +237,7 @@ database UUID. First dispatch the
 workflow from protected `main` with its apply checkbox off and confirm its
 aggregate-only dry-run result. A reviewer may then rerun it with the checkbox
 on. It rechecks every compare-and-set predicate and fails closed on any drift.
-Afterward, recheck `/healthz`; a cleared historical record does not excuse any
+Afterward, recheck the private relay status; a cleared historical record does not excuse any
 new delivery failure or replace staging/physical TestFlight APNs proof.
 
 ## Terminal DLQ fallback recovery
@@ -254,7 +254,7 @@ Earlier GitHub-only scheduled probes are useful secondary evidence, but are not
 enough by themselves because GitHub can delay or drop schedules. Deploying
 without this monitor is an explicit acceptance of the resulting missed-backlog
 and missed-Cron risk; it does not make the consumerless Queue observable from
-`/healthz`.
+the private relay status.
 
 1. The separate `quakesignal-terminal-dlq-monitor` Worker has no public route,
    delivery binding, D1, Queue, APNs, or deployment binding. It is deployed in
@@ -297,15 +297,14 @@ When the monitor alerts:
    page incident, apply the same guarded status/timestamp update to
    `alert_delivery_page_failures` by exact `outbox_id`. Never set only `status`:
    `resolved_at_utc` starts the disclosed 14-day retention clock. Recheck
-   `/healthz`, record the recovery/disposition, then manually close the labelled
+   the private relay status, record the recovery/disposition, then manually close the labelled
    GitHub issue. The monitor deliberately never auto-closes an incident or
    removes retained evidence.
 
 ## Operational controls before public launch
 
-- Configure an external GET monitor for `/healthz` at a normal monitor cadence
-  (do not use it as a high-frequency liveness loop); it is route-rate-limited
-  before the global relay. Alert on a stale
+- Monitor Worker logs and Cloudflare metrics at a normal cadence (do not use a
+  high-frequency liveness loop). Alert on a stale
   upstream timestamp/closed route, missing APNs configuration, pending D1
   outbox growth, DLQ/Durable-Object-persistence-fallback/quarantined-delivery
   incidents, or failed delivery rate. A pending fallback marker is exposed as
@@ -322,12 +321,12 @@ When the monitor alerts:
   DLQ-fallback recovery. The separate
   Cloudflare Cron terminal-DLQ monitor alerts on the terminal consumerless
   Queue's aggregate Cloudflare backlog metric—this is not exposed through
-  `/healthz`; the GitHub schedule is a secondary audit only.
+  the private relay status; the GitHub schedule is a secondary audit only.
   The monitor is an optional operational control, not a Queue-depth check or a
   deployment attestation. If it is absent or unverified, accept the resulting
   missed-backlog and missed-Cron risk explicitly and retain the recovery
   procedure for manual incident handling.
-  A generic HEAD probe is not sufficient. `/healthz` intentionally returns
+  A generic HEAD probe is not sufficient. The private relay status intentionally records
   `503` for any required source that is stale across both transports. It can
   return `200` with `upstream.transport: "http-polling"` and
   `upstream.websocketStatus: "degraded"` only after the relay's bounded,

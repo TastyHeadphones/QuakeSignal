@@ -113,24 +113,24 @@ export function hasReadyWolfxSourceHealth(upstream) {
   });
 }
 
-export function assertReadyWolfxSourceHealth(upstream) {
+export function assertReadyWolfxSourceTelemetry(upstream) {
   assert.equal(
     hasReadyWolfxSourceHealth(upstream),
     true,
-    "production health must expose the two approved JMA sources as fresh on an allowed transport",
+    "private relay telemetry must expose the two approved JMA sources as fresh on an allowed transport",
   );
 }
 
-export function assertReadyDeliveryHealth(delivery) {
+export function assertReadyDeliveryTelemetry(delivery) {
   assert.equal(
     delivery?.status,
     "ready",
-    "production health must not pass without APNs readiness",
+    "private relay telemetry must not pass without APNs readiness",
   );
   assert.equal(
     delivery?.apnsConfigured,
     true,
-    "production health must explicitly confirm APNs signing configuration",
+    "private relay telemetry must explicitly confirm APNs signing configuration",
   );
 }
 
@@ -201,44 +201,44 @@ export function parseSmokeTestArguments(
 }
 
 /**
- * Health exposes a deployment fingerprint rather than a claim that every
+ * Service metadata exposes a deployment fingerprint rather than a claim that every
  * iOS App Attest proof carries Apple release metadata. The build-membership
  * check therefore proves the deployed allow-list agrees with the release
  * contract; it is not a substitute for cryptographic metadata enforcement.
  */
-export function assertAppAttestPolicyHealth(
-  healthBody,
+export function assertAppAttestPolicyMetadata(
+  metadataBody,
   {
     expectedAppAttestPolicyFingerprint,
     requiredAppAttestBundleVersion,
   } = {},
 ) {
-  const policy = healthBody?.appAttestPolicy;
+  const policy = metadataBody?.appAttestPolicy;
   assert.equal(
     policy?.format,
     APP_ATTEST_POLICY_FORMAT,
-    "health endpoint must identify its App Attest policy fingerprint format",
+    "service metadata must identify its App Attest policy fingerprint format",
   );
   assert.match(
     policy?.fingerprint ?? "",
     APP_ATTEST_POLICY_FINGERPRINT_PATTERN,
-    "health endpoint must expose a SHA-256 App Attest policy fingerprint",
+    "service metadata must expose a SHA-256 App Attest policy fingerprint",
   );
   assert.ok(
     Array.isArray(policy?.allowedBundleVersions) &&
       policy.allowedBundleVersions.length > 0,
-    "health endpoint must expose a non-empty effective App Attest bundle-version allow-list",
+    "service metadata must expose a non-empty effective App Attest bundle-version allow-list",
   );
   assert.ok(
     policy.allowedBundleVersions.every(
       (version) => typeof version === "string" && BUNDLE_VERSION_PATTERN.test(version),
     ),
-    "health endpoint must expose only valid App Attest bundle versions",
+    "service metadata must expose only valid App Attest bundle versions",
   );
   assert.deepEqual(
     policy.allowedBundleVersions,
     [...new Set(policy.allowedBundleVersions)].sort(),
-    "health endpoint must expose a sorted, de-duplicated App Attest bundle-version allow-list",
+    "service metadata must expose a sorted, de-duplicated App Attest bundle-version allow-list",
   );
 
   if (expectedAppAttestPolicyFingerprint !== undefined) {
