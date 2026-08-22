@@ -1233,7 +1233,7 @@ class LiveWorkerContractTests(unittest.TestCase):
 
     def test_live_release_contract_requires_exact_mime_essences(self):
         for target_path, mutated_content_type, message in (
-            ("/", "application/jsonp", "metadata contract"),
+            ("/", "application/jsonp", "service metadata"),
             ("/privacy", "text/html-malware", "legal/support page"),
         ):
             with self.subTest(target_path=target_path):
