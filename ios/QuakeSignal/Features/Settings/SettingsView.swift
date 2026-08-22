@@ -592,6 +592,24 @@ private struct AlertSoundSelectionView: View {
         @Bindable var settings = settings
 
         List {
+            if screenshotSelectedPreference != nil {
+                Text("Alert Sound")
+                    .font(.title2.weight(.heavy))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 8)
+                Text("Japanese Safety Voice")
+                    .font(.title2.weight(.heavy))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 2)
+                Text("CC BY 3.0")
+                    .font(.title2.weight(.heavy))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 8)
+            }
+
             Section {
                 ForEach(AlertSoundPreference.allCases, id: \.self) { preference in
                     Button {
@@ -610,6 +628,16 @@ private struct AlertSoundSelectionView: View {
                                     .font(.body.weight(.medium))
                                     .visionFont(.title3.weight(.semibold))
                                     .foregroundStyle(.primary)
+                                if preference == .japaneseVoice {
+                                    Text("CC BY 3.0")
+                                        // Keep the license attribution legible in the
+                                        // native iPad screenshot capture. The regular
+                                        // supporting-text treatment is too faint for
+                                        // OCR at the 13-inch capture scale.
+                                        .font(.title2.weight(.bold))
+                                        .visionFont(.title3.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                }
                                 Text(LocalizedStringKey(preference.detailKey))
                                     .font(.caption)
                                     .visionFont(.body)

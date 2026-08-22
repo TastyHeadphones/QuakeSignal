@@ -407,6 +407,21 @@ private struct CatalystScreenshotGeometryProbe: UIViewRepresentable {
             probe.accessibilityIdentifier = nil
             probe.accessibilityLabel = nil
 
+            // The Catalyst title bar is part of the system frame but not the
+            // UIWindow content bounds. Hide its title and toolbar for the
+            // reviewed direct-hierarchy capture so the requested 1280x800
+            // content surface matches the exact screenshot contract.
+            if let titlebar = windowScene.titlebar {
+                titlebar.titleVisibility = .hidden
+                titlebar.toolbar = nil
+                titlebar.separatorStyle = .none
+            }
+
+            // Catalyst can leave the UIKit window backed by the host display
+            // after a scene geometry request. Bind the live content window to
+            // the reviewed system frame before publishing capture readiness.
+            window.frame = targetFrame
+
             windowScene.requestGeometryUpdate(
                 UIWindowScene.GeometryPreferences.Mac(systemFrame: targetFrame)
             ) { [weak self, weak probe] error in
@@ -762,12 +777,20 @@ private struct CatalystScreenshotGeometryProbe: UIViewRepresentable {
             let boundsBefore = window.bounds
             let systemFrameBefore = scene.effectiveGeometry.systemFrame
             let sourceDisplayScale = window.screen.scale
-            guard exactCaptureBounds(boundsBefore),
-                  exactSystemFrame(systemFrameBefore),
-                  approximatelyEqual(systemFrameBefore, stableSystemFrame),
-                  sourceDisplayScale.isFinite,
-                  (0.5...4).contains(sourceDisplayScale) else {
-                throw CaptureError.unsafeWindow("logical bounds, stable system frame, or source-display scale differs")
+            var geometryFailures: [String] = []
+            if !exactCaptureBounds(boundsBefore) { geometryFailures.append("logical bounds") }
+            if !exactSystemFrame(systemFrameBefore) { geometryFailures.append("system frame size") }
+            if !approximatelyEqual(systemFrameBefore, stableSystemFrame) { geometryFailures.append("stable system frame") }
+            if !sourceDisplayScale.isFinite || !(0.5...4).contains(sourceDisplayScale) {
+                geometryFailures.append("source-display scale")
+            }
+            if !geometryFailures.isEmpty {
+                throw CaptureError.unsafeWindow(
+                    "\(geometryFailures.joined(separator: ", ")) " +
+                        "bounds=\(boundsBefore.integral) frame=\(window.frame.integral) " +
+                        "system=\(systemFrameBefore.integral) stable=\(stableSystemFrame.integral) " +
+                        "scale=\(sourceDisplayScale)"
+                )
             }
 
             let format = UIGraphicsImageRendererFormat()

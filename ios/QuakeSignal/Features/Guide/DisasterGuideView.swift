@@ -17,9 +17,37 @@ struct DisasterGuideView: View {
     @State private var guide = GuideStore.shared
     @State private var showingFamilyCheckIn = false
 
+    private var usesScreenshotSummary: Bool {
+#if DEBUG && targetEnvironment(macCatalyst)
+        ScreenshotAutomation.selectedFrame == .macGuide
+#elseif DEBUG && os(visionOS)
+        ScreenshotAutomation.selectedFrame == .visionGuide
+#else
+        false
+#endif
+    }
+
     var body: some View {
         NavigationStack {
-            List {
+            if usesScreenshotSummary {
+                ScreenshotGuideSummary()
+            } else {
+                guideList
+            }
+        }
+        .navigationTitle("tab.guide")
+        .navigationDestination(for: String.self) { topicId in
+            if let topic = GuideContent.duringQuakeTopics.first(where: { $0.id == topicId }) {
+                GuideTopicDetailView(topic: topic)
+            }
+        }
+        .sheet(isPresented: $showingFamilyCheckIn) {
+            FamilyCheckInView()
+        }
+    }
+
+    private var guideList: some View {
+        List {
                 Section {
                     Label("guide.offlineBadge", systemImage: "checkmark.icloud")
                         .font(.caption)
@@ -109,16 +137,53 @@ struct DisasterGuideView: View {
             .visionReadableListSurface(
                 minimumRowHeight: VisionReadabilityMetrics.guideMinimumRowHeight
             )
-            .navigationTitle("tab.guide")
-            .navigationDestination(for: String.self) { topicId in
-                if let topic = GuideContent.duringQuakeTopics.first(where: { $0.id == topicId }) {
-                    GuideTopicDetailView(topic: topic)
+    }
+}
+
+private struct ScreenshotGuideSummary: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Label("guide.offlineBadge", systemImage: "checkmark.icloud")
+                    .font(.headline)
+                    .foregroundStyle(Color("NormalColor"))
+
+                VStack(alignment: .leading, spacing: 14) {
+                    guideRow(
+                        title: "guide.section.duringQuake",
+                        symbol: "figure.wave",
+                        detail: "Drop, cover, and hold on."
+                    )
+                    guideRow(
+                        title: "guide.section.afterQuake",
+                        symbol: "checkmark.circle",
+                        detail: "Check injuries and aftershocks."
+                    )
+                    guideRow(
+                        title: "guide.section.kit",
+                        symbol: "cross.case",
+                        detail: "Water, first aid, flashlight."
+                    )
                 }
+                .padding(24)
+                .background(Color("CardColor"), in: RoundedRectangle(cornerRadius: 22))
             }
-            .sheet(isPresented: $showingFamilyCheckIn) {
-                FamilyCheckInView()
-            }
+            .padding(24)
         }
+        .background(Color("GroupedBGColor"))
+    }
+
+    private func guideRow(title: LocalizedStringKey, symbol: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: symbol)
+                .font(.title3.weight(.semibold))
+            Text(detail)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
     }
 }
 
