@@ -156,8 +156,11 @@ test("rejects a malformed effective health allow-list", () => {
   );
 });
 
-test("requires the exact fresh JMA-only Wolfx health inventory", () => {
+test("requires fresh approved JMA health while allowing diagnostic sources", () => {
   assert.doesNotThrow(() => assertReadyWolfxSourceHealth({ sources: readySources() }));
+  assert.doesNotThrow(() => assertReadyWolfxSourceHealth({
+    sources: { ...readySources(), cenc_eew: { stale: false, transport: "http-polling" } },
+  }));
   const missing = readySources();
   delete missing.jma_eew;
   for (const sources of [
@@ -168,7 +171,7 @@ test("requires the exact fresh JMA-only Wolfx health inventory", () => {
   ]) {
     assert.throws(
       () => assertReadyWolfxSourceHealth({ sources }),
-      /exactly the two approved JMA sources/i,
+      /two approved JMA sources/i,
     );
   }
 });

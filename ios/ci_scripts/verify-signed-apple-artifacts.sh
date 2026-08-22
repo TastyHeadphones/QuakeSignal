@@ -368,7 +368,11 @@ assert_signing_certificate_in_profile() {
   local profile_plist="$2"
   local label="$3"
   local certificate_prefix="$verification_dir/$label-signing-certificate-"
-  if ! "$codesign_tool" -d --extract-certificates "$certificate_prefix" "$app" >/dev/null 2>&1; then
+  # Newer macOS codesign releases require the prefix as an option argument
+  # (`--extract-certificates=...`); retain the legacy form as a compatibility
+  # fallback for older runners and the isolated fixture stub.
+  if ! "$codesign_tool" -d "--extract-certificates=$certificate_prefix" "$app" >/dev/null 2>&1 &&
+     ! "$codesign_tool" -d --extract-certificates "$certificate_prefix" "$app" >/dev/null 2>&1; then
     error "$label signing certificate could not be extracted"
     return 1
   fi

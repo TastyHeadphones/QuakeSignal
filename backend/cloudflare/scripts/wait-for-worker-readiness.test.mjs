@@ -97,7 +97,24 @@ test("does not accept missing or non-Boolean APNs readiness", async () => {
   }
 });
 
-test("requires the exact fresh JMA-only Wolfx inventory", async () => {
+test("requires fresh approved JMA health while allowing diagnostic sources", async () => {
+  const expandedSources = { ...readySources(), cenc_eew: { stale: false, transport: "http-polling" } };
+  let expandedClock = 0;
+  const expanded = await waitForWorkerReadiness("https://example.workers.dev", {
+    timeoutMs: 10,
+    intervalMs: 10,
+    now: () => expandedClock,
+    sleep: async (milliseconds) => { expandedClock += milliseconds; },
+    fetchImpl: async () => health({
+      status: 200,
+      ok: true,
+      upstreamStatus: "ready",
+      transport: "mixed",
+      staleSources: [],
+      sources: expandedSources,
+    }),
+  });
+  assert.equal(expanded.readySourceCount, 3);
   const missingSource = readySources();
   delete missingSource.jma_eew;
   const mutations = [
