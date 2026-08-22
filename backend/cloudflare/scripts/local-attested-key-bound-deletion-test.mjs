@@ -402,6 +402,22 @@ try {
   // This script explicitly targets a disposable local state directory. Remove
   // only the exact random fixture records so repeated local runs stay clean.
   await runLocalD1(`
+    INSERT OR IGNORE INTO apns_registration_revision_fences (
+      registration_revision, token_hash, app_attest_key_id,
+      decision_id, decision_kind, blocks_lifecycle_replay, processed_at_utc
+    )
+    SELECT
+      registration_revision,
+      CASE token
+        WHEN ${sqlLiteral(ownedToken)} THEN ${sqlLiteral(ownedTokenHash)}
+        WHEN ${sqlLiteral(foreignToken)} THEN ${sqlLiteral(foreignTokenHash)}
+        WHEN ${sqlLiteral(priorRotatedToken)} THEN ${sqlLiteral(priorRotatedTokenHash)}
+      END,
+      app_attest_key_id,
+      'local-cleanup-' || registration_revision,
+      'test_cleanup', 0, ${sqlLiteral(new Date().toISOString())}
+    FROM devices
+    WHERE token IN (${sqlLiteral(ownedToken)}, ${sqlLiteral(foreignToken)}, ${sqlLiteral(priorRotatedToken)});
     DELETE FROM alert_delivery_failures
     WHERE delivery_id IN (${sqlLiteral(ownedDeliveryID)}, ${sqlLiteral(foreignDeliveryID)}, ${sqlLiteral(rotatedDeliveryID)});
     DELETE FROM notification_deliveries
