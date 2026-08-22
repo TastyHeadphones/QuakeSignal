@@ -73,9 +73,13 @@ function localD1Adapter(databaseFile) {
   const sqlite = new DatabaseSync(databaseFile);
   const database = {
     prepare(sql) {
-      return {
+      const prepared = {
         sql,
         bindings: [],
+        async first(column) {
+          const row = sqlite.prepare(sql).get();
+          return typeof column === "string" ? row?.[column] : row;
+        },
         bind(...bindings) {
           return {
             sql,
@@ -96,6 +100,7 @@ function localD1Adapter(databaseFile) {
           };
         },
       };
+      return prepared;
     },
     async batch(statements) {
       sqlite.exec("BEGIN IMMEDIATE");
@@ -106,22 +111,12 @@ function localD1Adapter(databaseFile) {
             "string",
             `registration-batch entry ${index} must be a prepared SQL statement`,
           );
-          try {
-            if (/\bRETURNING\b/i.test(statement.sql)) {
-              const results = sqlite.prepare(statement.sql).all(...statement.bindings);
-              return { results, meta: { changes: results.length } };
-            }
-            const output = sqlite.prepare(statement.sql).run(...statement.bindings);
-            return { results: [], meta: { changes: Number(output.changes) } };
-          } catch (error) {
-            if (error instanceof Error) {
-              const fences = sqlite.prepare(
-                "SELECT registration_revision, decision_kind FROM apns_registration_revision_fences",
-              ).all();
-              error.message = `${error.message}; statement=${statement.sql}; fences=${JSON.stringify(fences)}`;
-            }
-            throw error;
+          if (/\bRETURNING\b/i.test(statement.sql)) {
+            const results = sqlite.prepare(statement.sql).all(...statement.bindings);
+            return { results, meta: { changes: results.length } };
           }
+          const output = sqlite.prepare(statement.sql).run(...statement.bindings);
+          return { results: [], meta: { changes: Number(output.changes) } };
         });
         sqlite.exec("COMMIT");
         return results;
@@ -1149,8 +1144,13 @@ test("same-key APNs token rotation preserves the stale-response fence", async ()
     );
     assert.deepEqual(
       adapter.all("SELECT COUNT(*) AS count FROM notification_deliveries"),
-      [{ count: 0 }],
-      "deduplication evidence for the retired token must be removed",
+      [{ count: 1 }],
+      "retired-token deduplication remains bounded evidence for intent recovery",
+    );
+    assert.deepEqual(
+      adapter.all("SELECT lifecycle_reconciled FROM notification_deliveries"),
+      [{ lifecycle_reconciled: 1 }],
+      "rotated-token deduplication is marked lifecycle-reconciled before retention",
     );
     assert.deepEqual(
       adapter.all(
