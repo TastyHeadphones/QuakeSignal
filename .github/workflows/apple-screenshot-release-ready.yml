@@ -61,12 +61,18 @@ jobs:
     env:
       CAPTURE_RUN_ID: ${{ inputs.capture_run_id }}
       SOURCE_COMMIT: ${{ inputs.source_commit }}
-      CONTROL_ROOT: ${{ runner.temp }}/quakesignal-screenshot-release-control-${{ github.run_id }}
-      DOWNLOAD_ROOT: ${{ runner.temp }}/quakesignal-screenshot-release-downloads-${{ github.run_id }}
-      SIGNED_DOWNLOAD_ROOT: ${{ runner.temp }}/quakesignal-signed-release-downloads-${{ github.run_id }}
-      EVIDENCE_ROOT: ${{ runner.temp }}/quakesignal-screenshot-release-evidence-${{ github.run_id }}
 
     steps:
+      - name: Initialize isolated release evidence paths
+        run: |
+          set -euo pipefail
+          {
+            printf 'CONTROL_ROOT=%s\n' "$RUNNER_TEMP/quakesignal-screenshot-release-control-$GITHUB_RUN_ID"
+            printf 'DOWNLOAD_ROOT=%s\n' "$RUNNER_TEMP/quakesignal-screenshot-release-downloads-$GITHUB_RUN_ID"
+            printf 'SIGNED_DOWNLOAD_ROOT=%s\n' "$RUNNER_TEMP/quakesignal-signed-release-downloads-$GITHUB_RUN_ID"
+            printf 'EVIDENCE_ROOT=%s\n' "$RUNNER_TEMP/quakesignal-screenshot-release-evidence-$GITHUB_RUN_ID"
+          } >> "$GITHUB_ENV"
+
       - name: Validate exact protected dispatch inputs
         id: dispatch-evidence
         env:
