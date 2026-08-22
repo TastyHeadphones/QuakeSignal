@@ -610,6 +610,12 @@ private struct AlertSoundSelectionView: View {
                                     .font(.body.weight(.medium))
                                     .visionFont(.title3.weight(.semibold))
                                     .foregroundStyle(.primary)
+                                if preference == .japaneseVoice {
+                                    Text("CC BY 3.0")
+                                        .font(.body.weight(.semibold))
+                                        .visionFont(.title3.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                }
                                 Text(LocalizedStringKey(preference.detailKey))
                                     .font(.caption)
                                     .visionFont(.body)
