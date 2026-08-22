@@ -762,12 +762,15 @@ private struct CatalystScreenshotGeometryProbe: UIViewRepresentable {
             let boundsBefore = window.bounds
             let systemFrameBefore = scene.effectiveGeometry.systemFrame
             let sourceDisplayScale = window.screen.scale
-            guard exactCaptureBounds(boundsBefore),
-                  exactSystemFrame(systemFrameBefore),
-                  approximatelyEqual(systemFrameBefore, stableSystemFrame),
-                  sourceDisplayScale.isFinite,
-                  (0.5...4).contains(sourceDisplayScale) else {
-                throw CaptureError.unsafeWindow("logical bounds, stable system frame, or source-display scale differs")
+            var geometryFailures: [String] = []
+            if !exactCaptureBounds(boundsBefore) { geometryFailures.append("logical bounds") }
+            if !exactSystemFrame(systemFrameBefore) { geometryFailures.append("system frame size") }
+            if !approximatelyEqual(systemFrameBefore, stableSystemFrame) { geometryFailures.append("stable system frame") }
+            if !sourceDisplayScale.isFinite || !(0.5...4).contains(sourceDisplayScale) {
+                geometryFailures.append("source-display scale")
+            }
+            if !geometryFailures.isEmpty {
+                throw CaptureError.unsafeWindow(geometryFailures.joined(separator: ", "))
             }
 
             let format = UIGraphicsImageRendererFormat()
