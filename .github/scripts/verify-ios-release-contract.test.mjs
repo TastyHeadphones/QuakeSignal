@@ -908,8 +908,8 @@ test("fails closed when foreground lifecycle or nonpersistent Wolfx transport po
   for (const [relativePath, from, to] of [
     [
       "ios/QuakeSignal/State/AlertPolicy.swift",
-      "guard payload.hasUsableMatchingEventSnapshot, isSceneActive else {",
-      "guard isSceneActive else {",
+      "payload.hasUsableMatchingEventSnapshot && isSceneActive",
+      "isSceneActive",
     ],
     [
       "ios/QuakeSignal/State/AlertPolicy.swift",
@@ -1388,7 +1388,7 @@ test("fails closed on quoted keys and intervening steps in the pre-secret sequen
       ),
       "utf8",
     );
-    await assert.rejects(verifyIOSReleaseContract({ root }), /must run checkout, static release contract, and remote policy smoke consecutively/i);
+      await assert.rejects(verifyIOSReleaseContract({ root }), /must run exact checkout, immutable-source validation, static release contract, and remote policy smoke consecutively/i);
   });
 });
 
@@ -2596,7 +2596,7 @@ test("fails closed when the normal lint runner's pinned Go toolchain is missing 
   const setupGo = `      - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.24.13"
+          go-version: "1.25.0"
           cache: false
 
 `;
@@ -2606,7 +2606,7 @@ test("fails closed when the normal lint runner's pinned Go toolchain is missing 
         run: |
           set -euo pipefail
           go version
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 .github/workflows/*.yml
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
 
 `;
   const mutations = [
