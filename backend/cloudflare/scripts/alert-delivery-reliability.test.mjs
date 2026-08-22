@@ -117,9 +117,10 @@ function mutableApnsDeviceDatabase(initialRow) {
             ) {
               badDeviceTokenQuarantines.delete(tokenHash);
             }
-          } else if (sql.includes(
-            "DELETE FROM devices WHERE token = ? AND registration_revision = ?",
-          )) {
+          } else if (
+            sql.includes("DELETE FROM devices") &&
+            sql.includes("registration_revision = ?")
+          ) {
             const [token, registrationRevision] = bindings;
             if (
               currentRow !== null &&
@@ -635,10 +636,10 @@ test("automatic production delivery skips sandbox and unfiltered registrations",
     );
     assert.ok(lifecycleUpsert, "an APNs-accepted active warning records terminal continuity");
     assert.equal(
-      lifecycleUpsert.bindings[0],
+      lifecycleUpsert.bindings[1],
       await sha256Hex("nearby-production-token"),
     );
-    assert.equal(lifecycleUpsert.bindings[1], null);
+    assert.equal(lifecycleUpsert.bindings[2], null);
     assert.ok(lifecycleUpsert.bindings.includes("jma_eew:automatic-filter-test"));
     assert.equal(
       lifecycleUpsert.bindings.includes("nearby-production-token"),
@@ -1145,7 +1146,11 @@ test("a durable pre-send intent survives the APNs-2xx-to-D1 crash window", async
           return { storageKey: "prepared", writeId: "write" };
         },
         async () => {},
-        undefined,
+        async (_intent, deliveries) => deliveries.map((delivery, originDeliveryIndex) => ({
+          delivery,
+          originDeliveryIndex,
+          snapshotRegistrationRevision: delivery.device.registrationRevision,
+        })),
         async () => false,
       ),
       /simulated crash before accepted evidence commit/,
@@ -5063,7 +5068,7 @@ test("HTTP report lists resume in D1-safe slices and remain health-stale until c
 
 test("routine alarms keep a bounded outbox hand-off budget before HTTP fallback", async () => {
   const { QuakeRelay } = await workerModule();
-  const values = new Map();
+  const values = new Map([["last-device-purge-ms", Date.now()]]);
   const state = {
     storage: {
       async get(key) { return values.get(key); },
@@ -6826,7 +6831,7 @@ test("a marker-only live-list overload remains stale without starving ordinary m
 
     assert.deepEqual(
       maintenance,
-      ["dlq", "legacy", "journal", "outbox", "purge"],
+      ["purge"],
       "marker-only state must not block unrelated recovery or alert delivery",
     );
     assert.ok(harness.values.has(`live-snapshot-overload:${route}`));
@@ -9378,7 +9383,7 @@ test("the global APNs lane durably admits work before delivery and terminal deci
   );
   assert.match(
     source,
-    /prepareApnsBatch:\s*\(deliveries\)\s*=>\s*this\.persistApnsDeliveryIntent\(message, deliveries\)[\s\S]*?completeApnsBatch:\s*\(intent\)\s*=>\s*this\.completeApnsDeliveryIntent\(intent\)/,
+    /\(deliveries\)\s*=>\s*this\.persistApnsDeliveryIntent\(message, deliveries\)[\s\S]*?async \(intent, _failure\)[\s\S]*?reconcileObservedApnsDeliveryIntentBatch\(intent\.storageKey, current\)/,
     "the production lane must retain the exact prepared intent through durable outcome handling",
   );
   assert.match(
@@ -9450,9 +9455,9 @@ test("a strict final-admission subset keeps the Queue page pending", async () =>
     critical_alerts_enabled: 0,
     alert_sound: "system",
     city_name: null,
-    latitude: null,
-    longitude: null,
-    radius_km: null,
+    latitude: 35,
+    longitude: 135,
+    radius_km: 100,
     include_test_alerts: 1,
     utc_offset_minutes: null,
     notify_at_night: 1,

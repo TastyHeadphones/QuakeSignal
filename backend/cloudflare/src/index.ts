@@ -9479,7 +9479,7 @@ export class QuakeRelay {
     const eventCutoff = new Date(
       Date.now() - RELAY_EVENT_RETENTION_CUTOFF_MS,
     ).toISOString();
-    const purgeObservedAt = new Date().toISOString();
+    const purgeObservedAt = new Date(Date.now()).toISOString();
     await this.env.DB.batch([
       // SQLite cannot SHA-256 unbound raw tokens. Move each consent-ending
       // stale deletion into the bounded handoff first; reconciliation below
