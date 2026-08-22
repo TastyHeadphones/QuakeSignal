@@ -1169,17 +1169,6 @@ def verify_foreground_push_presentation_contract(sources: Mapping[str, str]) -> 
                 "foreground warning and opted-in training audio must retain typed revision "
                 f"deduplication; missing marker {marker!r}."
             )
-    if not re.search(
-        r"let key = ForegroundEmergencyRevisionOwnershipPolicy\.key\(for: event\)\s*"
-        r"play\(AppSettings\.shared\.alertSound, deduplicationKey: key, owner: \.emergency\)",
-        alert_audio,
-    ):
-        fail(
-            "foreground emergency audio must pass the complete typed revision key "
-            "without projecting or weakening its ownership identity."
-        )
-
-
 def verify_foreground_emergency_parity_contract(sources: Mapping[str, str]) -> None:
     required_paths = {
         "ios/QuakeSignal/App/AppDelegate.swift",
@@ -1258,6 +1247,15 @@ def verify_foreground_emergency_parity_contract(sources: Mapping[str, str]) -> N
                 "centralized registration revision, location-purpose ownership, or "
                 f"alert-audio ownership lost exact marker {marker!r}."
             )
+    if not re.search(
+        r"let key = ForegroundEmergencyRevisionOwnershipPolicy\.key\(for: event\)\s*"
+        r"play\(AppSettings\.shared\.alertSound, deduplicationKey: key, owner: \.emergency\)",
+        alert_audio,
+    ):
+        fail(
+            "foreground emergency audio must pass the complete typed revision key "
+            "without projecting or weakening its ownership identity."
+        )
     location_ownership_guard = (
         "guard purpose == .mapFocus || AppSettings.shared.useCurrentLocation else {"
     )
