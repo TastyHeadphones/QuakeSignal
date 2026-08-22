@@ -407,6 +407,16 @@ private struct CatalystScreenshotGeometryProbe: UIViewRepresentable {
             probe.accessibilityIdentifier = nil
             probe.accessibilityLabel = nil
 
+            // The Catalyst title bar is part of the system frame but not the
+            // UIWindow content bounds. Hide its title and toolbar for the
+            // reviewed direct-hierarchy capture so the requested 1280x800
+            // content surface matches the exact screenshot contract.
+            if let titlebar = windowScene.titlebar {
+                titlebar.titleVisibility = .hidden
+                titlebar.toolbar = nil
+                titlebar.separatorStyle = .none
+            }
+
             windowScene.requestGeometryUpdate(
                 UIWindowScene.GeometryPreferences.Mac(systemFrame: targetFrame)
             ) { [weak self, weak probe] error in
