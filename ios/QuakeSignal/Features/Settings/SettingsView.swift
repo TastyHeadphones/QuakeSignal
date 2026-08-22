@@ -593,13 +593,18 @@ private struct AlertSoundSelectionView: View {
 
         List {
             if screenshotSelectedPreference != nil {
-                Text("Japanese Safety Voice")
-                    .font(.largeTitle.weight(.heavy))
+                Text("Alert Sound")
+                    .font(.title2.weight(.heavy))
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 8)
+                Text("Japanese Safety Voice")
+                    .font(.title2.weight(.heavy))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 2)
                 Text("CC BY 3.0")
-                    .font(.largeTitle.weight(.heavy))
+                    .font(.title2.weight(.heavy))
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 8)
