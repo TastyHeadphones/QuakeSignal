@@ -17,9 +17,11 @@ struct DisasterGuideView: View {
     @State private var guide = GuideStore.shared
     @State private var showingFamilyCheckIn = false
 
-    private var usesCatalystScreenshotSummary: Bool {
+    private var usesScreenshotSummary: Bool {
 #if DEBUG && targetEnvironment(macCatalyst)
         ScreenshotAutomation.selectedFrame == .macGuide
+#elseif DEBUG && os(visionOS)
+        ScreenshotAutomation.selectedFrame == .visionGuide
 #else
         false
 #endif
@@ -27,8 +29,8 @@ struct DisasterGuideView: View {
 
     var body: some View {
         NavigationStack {
-            if usesCatalystScreenshotSummary {
-                CatalystGuideScreenshotSummary()
+            if usesScreenshotSummary {
+                ScreenshotGuideSummary()
             } else {
                 guideList
             }
@@ -138,7 +140,7 @@ struct DisasterGuideView: View {
     }
 }
 
-private struct CatalystGuideScreenshotSummary: View {
+private struct ScreenshotGuideSummary: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {

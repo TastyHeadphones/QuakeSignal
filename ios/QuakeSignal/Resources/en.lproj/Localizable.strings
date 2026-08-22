@@ -74,7 +74,7 @@
 "settings.alertSound.system.detail" = "The normal notification sound in the background and a short system alert while QuakeSignal is open.";
 "settings.alertSound.urgentTone" = "QuakeSignal Urgent Tone";
 "settings.alertSound.urgentTone.detail" = "An original, distinctive two-note warning tone.";
-"settings.alertSound.japaneseVoice" = "Japanese Safety Voice";
+"settings.alertSound.japaneseVoice" = "Japanese Safety Voice (CC BY 3.0)";
 "settings.alertSound.japaneseVoice.detail" = "CC BY 3.0 · Japanese HTS Voice Mei.";
 "settings.alertSound.preview" = "Preview Selected Sound";
 "settings.alertSound.disclosure" = "The urgent tone and wording are original. Japanese speech uses HTS Voice ‘Mei’ by Nagoya Institute of Technology (CC BY 3.0). None are J-Alert or JMA recordings. Sounds follow volume, Silent Mode, Focus, and notification settings; delivery is not guaranteed.";
