@@ -98,11 +98,16 @@ final class AppSettings {
             if enabledSources != normalizedSources {
                 // At least one reviewed JMA source is required by both the
                 // foreground policy and protected registration contract.
+                isNormalizingSources = true
                 enabledSources = normalizedSources
+                isNormalizingSources = false
+                return
             }
             guard oldValue != enabledSources else { return }
             defaults.set(enabledSources.sorted(), forKey: Keys.sources)
-            markPushRegistrationPreferencesChanged()
+            if !isNormalizingSources {
+                markPushRegistrationPreferencesChanged()
+            }
         }
     }
     var includeTestAlerts: Bool {
@@ -169,6 +174,7 @@ final class AppSettings {
     }
 
     private let defaults: UserDefaults
+    private var isNormalizingSources = false
 
     private func markPushRegistrationPreferencesChanged() {
         pushRegistrationPreferencesRevision &+= 1
