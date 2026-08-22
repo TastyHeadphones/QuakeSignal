@@ -9,13 +9,14 @@ usage() {
 Usage: verify-signed-apple-artifacts.sh \
   --platform <ios|maccatalyst|tvos|visionos> \
   --archive <path.xcarchive> \
-  --exported <path.ipa|path.zip|export-directory|path.app|path.xcarchive> \
+  --exported <path.ipa|path.pkg|path.zip|export-directory|path.app|path.xcarchive> \
   --build-number <CFBundleVersion> \
   --marketing-version <CFBundleShortVersionString> \
   --team-id <Apple-Team-ID> \
   --archive-signing <strict-distribution|structure-only> \
   [--host-profile-name <exact-name>] \
-  [--watch-profile-name <exact-name>]
+  [--watch-profile-name <exact-name>] \
+  [--installer-identity <exact-name>]
 USAGE
   exit 64
 }
@@ -29,6 +30,7 @@ team_id=""
 archive_signing=""
 host_profile_name=""
 watch_profile_name=""
+installer_identity=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -41,6 +43,7 @@ while [ "$#" -gt 0 ]; do
     --archive-signing) [ "$#" -ge 2 ] || usage; archive_signing="$2"; shift 2 ;;
     --host-profile-name) [ "$#" -ge 2 ] || usage; host_profile_name="$2"; shift 2 ;;
     --watch-profile-name) [ "$#" -ge 2 ] || usage; watch_profile_name="$2"; shift 2 ;;
+    --installer-identity) [ "$#" -ge 2 ] || usage; installer_identity="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -53,10 +56,18 @@ case "$archive_signing" in strict-distribution|structure-only) ;; *) usage ;; es
 [[ "$build_number" =~ ^[1-9][0-9]*$ ]] || usage
 [[ "$marketing_version" =~ ^[0-9]+([.][0-9]+){1,2}$ ]] || usage
 [[ "$team_id" =~ ^[A-Z0-9]{10}$ ]] || usage
+if [ "$platform" != maccatalyst ] && [ -n "$installer_identity" ]; then
+  usage
+fi
 
 codesign_tool=/usr/bin/codesign
 security_tool=/usr/bin/security
-if [ -n "${QUAKESIGNAL_TEST_CODESIGN_BIN:-}" ] || [ -n "${QUAKESIGNAL_TEST_SECURITY_BIN:-}" ]; then
+pkgutil_tool=/usr/sbin/pkgutil
+lsbom_tool=/usr/bin/lsbom
+if [ -n "${QUAKESIGNAL_TEST_CODESIGN_BIN:-}" ] || \
+   [ -n "${QUAKESIGNAL_TEST_SECURITY_BIN:-}" ] || \
+   [ -n "${QUAKESIGNAL_TEST_PKGUTIL_BIN:-}" ] || \
+   [ -n "${QUAKESIGNAL_TEST_LSBOM_BIN:-}" ]; then
   if [ "${QUAKESIGNAL_ARTIFACT_VERIFIER_TEST_MODE:-}" != fixture-v1 ] || \
      [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${CI_XCODE_CLOUD:-}" ]; then
     echo "::error::Artifact-verifier tool overrides are forbidden outside isolated fixture mode" >&2
@@ -64,8 +75,12 @@ if [ -n "${QUAKESIGNAL_TEST_CODESIGN_BIN:-}" ] || [ -n "${QUAKESIGNAL_TEST_SECUR
   fi
   codesign_tool="${QUAKESIGNAL_TEST_CODESIGN_BIN:?fixture mode requires QUAKESIGNAL_TEST_CODESIGN_BIN}"
   security_tool="${QUAKESIGNAL_TEST_SECURITY_BIN:?fixture mode requires QUAKESIGNAL_TEST_SECURITY_BIN}"
+  pkgutil_tool="${QUAKESIGNAL_TEST_PKGUTIL_BIN:?fixture mode requires QUAKESIGNAL_TEST_PKGUTIL_BIN}"
+  lsbom_tool="${QUAKESIGNAL_TEST_LSBOM_BIN:?fixture mode requires QUAKESIGNAL_TEST_LSBOM_BIN}"
   [ "${codesign_tool#/}" != "$codesign_tool" ] && [ -x "$codesign_tool" ] || usage
   [ "${security_tool#/}" != "$security_tool" ] && [ -x "$security_tool" ] || usage
+  [ "${pkgutil_tool#/}" != "$pkgutil_tool" ] && [ -x "$pkgutil_tool" ] || usage
+  [ "${lsbom_tool#/}" != "$lsbom_tool" ] && [ -x "$lsbom_tool" ] || usage
 elif [ -n "${QUAKESIGNAL_ARTIFACT_VERIFIER_TEST_MODE:-}" ]; then
   echo "::error::Artifact-verifier fixture mode requires explicit isolated tool paths" >&2
   exit 64
@@ -625,6 +640,282 @@ verify_bundle_inventory() {
   done
 }
 
+assert_app_bundle_permissions() {
+  local label="$1"
+  local app="$2"
+  local path
+  local failed=false
+
+  while IFS= read -r -d '' path; do
+    error "$label contains a regular file that is unreadable after installation"
+    failed=true
+    break
+  done < <(find "$app" -type f ! -perm -0004 -print0)
+  while IFS= read -r -d '' path; do
+    error "$label contains a directory that is not searchable after installation"
+    failed=true
+    break
+  done < <(find "$app" -type d ! -perm -0001 -print0)
+  [ "$failed" = false ]
+}
+
+assert_package_payload_permissions() {
+  local package="$1"
+  local main_executable="$2"
+  local bom
+  local bom_listing="$verification_dir/exported-package-boms.txt"
+  local bom_index=0
+  local listing
+  local boms=()
+  local listings=()
+
+  if ! "$pkgutil_tool" --bom "$package" > "$bom_listing"; then
+    error "Exported Mac Catalyst installer package BOM inventory could not be read"
+    return 1
+  fi
+  while IFS= read -r bom; do
+    [ -n "$bom" ] || continue
+    [ -f "$bom" ] && [ ! -L "$bom" ] || {
+      error "Exported Mac Catalyst installer package exposed an invalid BOM"
+      return 1
+    }
+    boms[${#boms[@]}]="$bom"
+  done < "$bom_listing"
+  if [ "${#boms[@]}" -eq 0 ]; then
+    error "Exported Mac Catalyst installer package does not expose a payload BOM"
+    return 1
+  fi
+
+  for bom in "${boms[@]}"; do
+    listing="$verification_dir/exported-package-bom-$bom_index.txt"
+    if ! "$lsbom_tool" -p mf "$bom" > "$listing"; then
+      error "Exported Mac Catalyst installer package entry types and permissions could not be read"
+      return 1
+    fi
+    listings[${#listings[@]}]="$listing"
+    bom_index=$((bom_index + 1))
+  done
+
+  if ! /usr/bin/python3 -I - "$main_executable" "${listings[@]}" <<'PY'
+import re
+import stat
+import sys
+
+main_executable, *listing_paths = sys.argv[1:]
+expected_executable = f"QuakeSignal.app/Contents/MacOS/{main_executable}"
+files_seen = 0
+directories_seen = 0
+main_executable_entries = 0
+
+def normalized_path(raw):
+    if not raw or any(ord(character) < 32 or ord(character) == 127 for character in raw):
+        raise SystemExit("package BOM contains an empty or control-bearing path")
+    if raw in {".", "./"}:
+        return "."
+    value = raw[2:] if raw.startswith("./") else raw
+    if value.startswith("/"):
+        raise SystemExit("package BOM contains an absolute path")
+    parts = value.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        raise SystemExit("package BOM contains an unsafe path component")
+    if parts[0] == "Applications":
+        parts = parts[1:]
+        if not parts:
+            return "Applications"
+    normalized = "/".join(parts)
+    if normalized != "QuakeSignal.app" and not normalized.startswith("QuakeSignal.app/"):
+        raise SystemExit("package BOM contains content outside QuakeSignal.app")
+    return normalized
+
+for listing_path in listing_paths:
+    with open(listing_path, encoding="utf-8") as handle:
+        for raw_record in handle:
+            record = raw_record.rstrip("\n")
+            if not record:
+                continue
+            if record.count("\t") != 1:
+                raise SystemExit("package BOM contains a malformed entry")
+            raw_mode, raw_path = record.split("\t")
+            if not re.fullmatch(r"0*[0-7]+", raw_mode):
+                raise SystemExit("package BOM contains an invalid entry mode")
+            mode = int(raw_mode, 8)
+            path = normalized_path(raw_path)
+            # pkgutil exposes the component's synthetic, non-installed root as
+            # `.` with mode 0 on real product packages. It is inventory
+            # scaffolding rather than a payload filesystem entry.
+            if path == ".":
+                continue
+            kind = stat.S_IFMT(mode)
+            if kind == stat.S_IFREG:
+                files_seen += 1
+                if mode & stat.S_IROTH == 0:
+                    raise SystemExit("package BOM contains a payload file unreadable after installation")
+                if path == expected_executable:
+                    main_executable_entries += 1
+                    if mode & stat.S_IXOTH == 0:
+                        raise SystemExit("package BOM main executable is not executable after installation")
+            elif kind == stat.S_IFDIR:
+                if path not in {".", "Applications"}:
+                    directories_seen += 1
+                if path != "." and mode & stat.S_IXOTH == 0:
+                    raise SystemExit("package BOM contains a payload directory unsearchable after installation")
+            else:
+                raise SystemExit(f"package BOM contains an unapproved entry type with mode {raw_mode}")
+
+if files_seen == 0 or directories_seen == 0:
+    raise SystemExit("package BOM has an incomplete payload inventory")
+if main_executable_entries != 1:
+    raise SystemExit("package BOM must contain exactly one regular main executable entry")
+PY
+  then
+    error "Exported Mac Catalyst installer package has unsafe entry types, paths, or install-time permissions"
+    return 1
+  fi
+}
+
+resolve_installer_package_app() {
+  local package="$1"
+  local signature
+  local signature_listing="$verification_dir/exported-package-signature.txt"
+  local expanded="$verification_dir/exported-package"
+  local payload_listing="$verification_dir/exported-package-payload-files.txt"
+  local payload_root="$verification_dir/exported-package-payload"
+  local candidate
+  local main_executable
+  local main_executable_path
+  local payloads=()
+  local apps=()
+
+  [ "$platform" = maccatalyst ] || {
+    error "Only the Mac Catalyst route may supply an exported installer package"
+    return 1
+  }
+  [ -f "$package" ] && [ ! -L "$package" ] || {
+    error "Exported Mac Catalyst installer must be a regular package file"
+    return 1
+  }
+  case "$installer_identity" in
+    "Mac Installer Distribution: "*" ($team_id)"|"3rd Party Mac Developer Installer: "*" ($team_id)") ;;
+    *) error "Mac Catalyst package verification requires an exact Mac Installer Distribution identity"; return 1 ;;
+  esac
+  if ! signature="$("$pkgutil_tool" --check-signature "$package" 2>&1)"; then
+    error "Exported Mac Catalyst installer package has an invalid or untrusted signature"
+    return 1
+  fi
+  printf '%s\n' "$signature" > "$signature_listing"
+  if ! /usr/bin/python3 -I - "$installer_identity" "$signature_listing" <<'PY'
+import re
+import sys
+
+expected_identity = sys.argv[1]
+lines = open(sys.argv[2], encoding="utf-8").read().splitlines()
+trusted_statuses = {
+    "Status: signed by a certificate trusted by macOS",
+    "Status: signed by a certificate trusted by Mac OS X",
+}
+statuses = [line.strip() for line in lines if line.strip().startswith("Status:")]
+if len(statuses) != 1 or statuses[0] not in trusted_statuses:
+    raise SystemExit("package signature status is missing, ambiguous, or untrusted")
+leaf_identities = []
+for line in lines:
+    match = re.fullmatch(r"\s*1\.\s+(.+?)\s*", line)
+    if match:
+        leaf_identities.append(match.group(1))
+if leaf_identities != [expected_identity]:
+    raise SystemExit("package leaf installer identity does not match")
+PY
+  then
+    error "Exported Mac Catalyst installer package does not have the expected trusted installer signature"
+    return 1
+  fi
+
+  if ! "$pkgutil_tool" --payload-files "$package" > "$payload_listing"; then
+    error "Exported Mac Catalyst installer package payload inventory could not be read"
+    return 1
+  fi
+  if ! /usr/bin/python3 -I - "$payload_listing" <<'PY'
+import sys
+
+lines = [line.rstrip("\n") for line in open(sys.argv[1], encoding="utf-8")]
+if not lines:
+    raise SystemExit("package payload inventory is empty")
+seen_app = False
+for raw in lines:
+    if not raw or any(ord(character) < 32 or ord(character) == 127 for character in raw):
+        raise SystemExit("package payload inventory contains an empty or control-bearing path")
+    if raw in {".", "./"}:
+        continue
+    value = raw[2:] if raw.startswith("./") else raw
+    if value.startswith("/"):
+        raise SystemExit("package payload inventory contains an absolute path")
+    parts = value.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        raise SystemExit("package payload inventory contains an unsafe path component")
+    normalized = "/".join(parts)
+    if normalized == "Applications":
+        continue
+    if normalized.startswith("Applications/"):
+        normalized = normalized[len("Applications/"):]
+    if normalized != "QuakeSignal.app" and not normalized.startswith("QuakeSignal.app/"):
+        raise SystemExit("package payload contains content outside QuakeSignal.app")
+    seen_app = True
+if not seen_app:
+    raise SystemExit("package payload does not contain QuakeSignal.app")
+PY
+  then
+    error "Exported Mac Catalyst installer package has an unsafe or unexpected payload inventory"
+    return 1
+  fi
+  if ! "$pkgutil_tool" --expand "$package" "$expanded"; then
+    error "Exported Mac Catalyst installer package could not be expanded"
+    return 1
+  fi
+  if [ -n "$(find "$expanded" \( -type f -o -type d -o -type l \) -name Scripts -print -quit)" ]; then
+    error "Exported Mac Catalyst installer package must not contain installer scripts"
+    return 1
+  fi
+  while IFS= read -r -d '' candidate; do
+    payloads[${#payloads[@]}]="$candidate"
+  done < <(find "$expanded" -type f -name Payload -print0)
+  if [ "${#payloads[@]}" -ne 1 ]; then
+    error "Exported Mac Catalyst installer package must contain exactly one regular payload"
+    return 1
+  fi
+
+  mkdir -p "$payload_root"
+  if ! /usr/bin/ditto -x --noqtn "${payloads[0]}" "$payload_root"; then
+    error "Exported Mac Catalyst installer package payload could not be extracted"
+    return 1
+  fi
+  while IFS= read -r -d '' candidate; do
+    apps[${#apps[@]}]="$candidate"
+  done < <(find "$payload_root" -type d -name '*.app' -prune -print0)
+  if [ "${#apps[@]}" -ne 1 ] || [ "${apps[0]##*/}" != QuakeSignal.app ]; then
+    error "Exported Mac Catalyst installer package must contain exactly QuakeSignal.app"
+    return 1
+  fi
+  if [ -n "$(find "$payload_root" -type l -print -quit)" ]; then
+    error "Exported Mac Catalyst installer package payload must not contain symbolic links"
+    return 1
+  fi
+  assert_app_bundle_permissions "exported Mac Catalyst package app" "${apps[0]}"
+  if ! main_executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "${apps[0]}/Contents/Info.plist" 2>/dev/null)" || \
+     [ -z "$main_executable" ] || [[ "$main_executable" == */* ]] || \
+     [[ "$main_executable" == *$'\t'* ]] || [[ "$main_executable" == *$'\n'* ]] || \
+     [[ "$main_executable" == *$'\r'* ]] || \
+     [ "$main_executable" = . ] || [ "$main_executable" = .. ]; then
+    error "Exported Mac Catalyst package app has an invalid or missing CFBundleExecutable"
+    return 1
+  fi
+  main_executable_path="${apps[0]}/Contents/MacOS/$main_executable"
+  if [ ! -f "$main_executable_path" ] || [ -L "$main_executable_path" ] || [ ! -x "$main_executable_path" ]; then
+    error "Exported Mac Catalyst package app CFBundleExecutable is not a regular non-symlink executable"
+    return 1
+  fi
+  assert_package_payload_permissions "$package" "$main_executable"
+  exported_app="${apps[0]}"
+}
+
 shopt -s nullglob
 archive_apps=("$archive"/Products/Applications/*.app)
 if [ ! -d "$archive" ] || [ "${#archive_apps[@]}" -ne 1 ]; then
@@ -633,6 +924,7 @@ if [ ! -d "$archive" ] || [ "${#archive_apps[@]}" -ne 1 ]; then
 fi
 
 exported_app=""
+exported_is_installer=false
 if [ -f "$exported" ]; then
   case "$exported" in
     *.ipa|*.zip)
@@ -643,7 +935,11 @@ if [ -f "$exported" ]; then
       [ "${#exported_apps[@]}" -eq 1 ] || { error "Expected exactly one app in exported archive $exported"; exit 1; }
       exported_app="${exported_apps[0]}"
       ;;
-    *) error "Exported artifact must be an IPA, ZIP, app bundle, or directory"; exit 1 ;;
+    *.pkg)
+      resolve_installer_package_app "$exported"
+      exported_is_installer=true
+      ;;
+    *) error "Exported artifact must be an IPA, PKG, ZIP, app bundle, or directory"; exit 1 ;;
   esac
 elif [ -d "$exported" ]; then
   if [[ "$exported" == *.app ]]; then
@@ -673,6 +969,10 @@ elif [ -d "$exported" ]; then
   fi
 else
   error "Exported App Store artifact $exported is missing"
+  exit 1
+fi
+if [ -n "$installer_identity" ] && [ "$exported_is_installer" != true ]; then
+  error "An installer identity may only accompany an exported Mac Catalyst package"
   exit 1
 fi
 

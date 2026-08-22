@@ -17,7 +17,7 @@ private enum WindowEvidenceError: Error, CustomStringConvertible {
         case let .processMismatch(reason):
             return "launched process validation failed: \(reason)"
         case .timeout:
-            return "timed out waiting for one ready 1280x800-point Catalyst window"
+            return "timed out waiting for one uniquely visible 1280x800-point Catalyst window"
         }
     }
 }
@@ -46,7 +46,7 @@ private func string(_ dictionary: [String: Any], key: CFString) -> String? {
     dictionary[key as String] as? String
 }
 
-private func matchingWindows(processID: pid_t) -> [WindowRecord] {
+private func visibleWindows(processID: pid_t) -> [WindowRecord] {
     guard let windowInfo = CGWindowListCopyWindowInfo(
         [.optionOnScreenOnly, .excludeDesktopElements],
         kCGNullWindowID
@@ -67,23 +67,17 @@ private func matchingWindows(processID: pid_t) -> [WindowRecord] {
             return nil
         }
 
-        let frame = CGRect(
-            x: x.doubleValue,
-            y: y.doubleValue,
-            width: width.doubleValue,
-            height: height.doubleValue
-        )
-        guard abs(frame.width - 1_280) <= 0.25,
-              abs(frame.height - 800) <= 0.25 else {
-            return nil
-        }
-
         return WindowRecord(
             id: identifier,
             ownerPID: processID,
             ownerName: string(dictionary, key: kCGWindowOwnerName) ?? "",
             title: string(dictionary, key: kCGWindowName),
-            frame: frame
+            frame: CGRect(
+                x: x.doubleValue,
+                y: y.doubleValue,
+                width: width.doubleValue,
+                height: height.doubleValue
+            )
         )
     }
 }
@@ -106,7 +100,7 @@ private func validateGeometryEvidence(
         throw WindowEvidenceError.processMismatch("geometry evidence is missing, indirect, or invalid")
     }
     let expectedKeys: Set<String> = [
-        "backingScale", "captureSelector", "logicalFrame", "processId",
+        "captureSelector", "logicalFrame", "processId", "sourceDisplayScale",
         "reason", "recordedAtUtc", "schemaVersion", "status",
     ]
     guard Set(record.keys) == expectedKeys,
@@ -115,7 +109,9 @@ private func validateGeometryEvidence(
           record["reason"] is NSNull,
           (record["processId"] as? NSNumber)?.int32Value == processID,
           record["captureSelector"] as? String == captureSelector,
-          (record["backingScale"] as? NSNumber)?.doubleValue == 2,
+          let sourceDisplayScale = (record["sourceDisplayScale"] as? NSNumber)?.doubleValue,
+          sourceDisplayScale.isFinite,
+          (0.5...4).contains(sourceDisplayScale),
           let frame = record["logicalFrame"] as? [String: Any],
           Set(frame.keys) == Set(["x", "y", "width", "height"]),
           let width = (frame["width"] as? NSNumber)?.doubleValue,
@@ -123,7 +119,7 @@ private func validateGeometryEvidence(
           abs(width - 1_280) <= 0.25,
           abs(height - 800) <= 0.25 else {
         throw WindowEvidenceError.processMismatch(
-            "geometry evidence does not bind the exact PID, selector, 1280x800 frame, and 2x scale"
+            "geometry evidence does not bind the exact PID, selector, 1280x800 frame, and honest source-display scale"
         )
     }
 }
@@ -163,8 +159,10 @@ private func run() throws {
             throw WindowEvidenceError.processMismatch("PID \(processID) exited before capture")
         }
 
-        let windows = matchingWindows(processID: processID)
-        if windows.count == 1 {
+        let windows = visibleWindows(processID: processID)
+        if windows.count == 1,
+           abs(windows[0].frame.width - 1_280) <= 0.25,
+           abs(windows[0].frame.height - 800) <= 0.25 {
             let window = windows[0]
             let result: [String: Any] = [
                 "captureSelector": captureSelector,

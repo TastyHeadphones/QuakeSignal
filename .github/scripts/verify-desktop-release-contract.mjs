@@ -50,6 +50,8 @@ const MACOS_DIRECT_HEADER = {
 };
 const MACOS_APP_STORE_VERSION = "1.1.0";
 const MACOS_APP_STORE_BUNDLE_IDENTIFIER = "com.quakesignal.desktop";
+const MACOS_APP_STORE_APPLE_ID = "6800642853";
+const MACOS_APP_STORE_ALTOOL_PLATFORM = "macos";
 const MACOS_APP_STORE_HEADER = {
   name: "macOS App Store universal",
   if: "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.ref_protected && (inputs.build_macos_app_store == true || inputs.upload_macos_to_app_store_connect == true)",
@@ -91,7 +93,7 @@ const DESKTOP_JOB_IDS = [
 // The explicit frontend gate below also covers every npm-based desktop build
 // job, including Windows and the Mac App Store lane.
 const MACOS_DIRECT_STEPS_FINGERPRINT = "sha256:9_cZ-KeTzLZFiOlAwbIJw4av4Zlihs9Xr2eXsQfnbmA";
-const MACOS_APP_STORE_STEPS_FINGERPRINT = "sha256:RfLhsMpFJdK9JCx7AT0KvvvfuHb2YSV1YwWonSaPgAE";
+const MACOS_APP_STORE_STEPS_FINGERPRINT = "sha256:hTaWK2GTIrrEc34RKsSVTM0n4llBmdOqS9KNelgqgF4";
 const RELEASE_STEPS_FINGERPRINT = "sha256:3dX8Og0fyNOioMHFK-Jt8FiTZTqwkc8dhXjbovwV2qI";
 const HOMEBREW_PUBLISH_STEPS_FINGERPRINT = "sha256:NuwuAFiTLY6LC19V3jx8XcjFSwpafYQVpgHgnveCywY";
 
@@ -301,7 +303,7 @@ function verifyDesktopWorkflow(workflow) {
       type: "boolean",
     },
     build_macos_app_store: {
-      description: "Build a private signed Mac App Store evidence package without uploading it",
+      description: "Build and verify a signed Mac App Store package, retaining hash and log evidence only",
       required: false,
       default: false,
       type: "boolean",
@@ -339,6 +341,13 @@ function verifyDesktopWorkflow(workflow) {
     MACOS_APP_STORE_HEADER,
     "macos-app-store job",
   );
+  if (macAppStoreSteps.some((candidate) =>
+    isRecord(candidate) &&
+    typeof candidate.uses === "string" &&
+    /^actions\/upload-artifact@/.test(candidate.uses)
+  )) {
+    fail("macos-app-store must not retain its signed package as a GitHub Actions artifact in this public repository.");
+  }
   exactNames(macAppStoreSteps, [
     "Check out repository",
     "Validate mutually exclusive Mac App Store mode",
@@ -357,7 +366,6 @@ function verifyDesktopWorkflow(workflow) {
     "Package and verify Mac App Store artifact",
     "Materialize App Store Connect API key immediately before upload",
     "Validate and upload Mac App Store package",
-    "Upload private Mac App Store package artifact",
     "Remove App Store signing material",
   ], "macos-app-store steps");
   exactRecord(macAppStoreSteps[0], {
@@ -369,13 +377,13 @@ function verifyDesktopWorkflow(workflow) {
     name: "Validate mutually exclusive Mac App Store mode",
     shell: "bash",
     env: {
-      BUILD_ARTIFACT_ONLY: "${{ inputs.build_macos_app_store }}",
+      HASH_LOG_ONLY: "${{ inputs.build_macos_app_store }}",
       UPLOAD_TO_APP_STORE_CONNECT: "${{ inputs.upload_macos_to_app_store_connect }}",
     },
     run: [
       "set -euo pipefail",
-      "if [ \"$BUILD_ARTIFACT_ONLY\" = \"true\" ] && [ \"$UPLOAD_TO_APP_STORE_CONNECT\" = \"true\" ]; then",
-      "  echo \"::error::Select exactly one Mac App Store mode; build-only and upload cannot both be true\"",
+      "if [ \"$HASH_LOG_ONLY\" = \"true\" ] && [ \"$UPLOAD_TO_APP_STORE_CONNECT\" = \"true\" ]; then",
+      "  echo \"::error::Select exactly one Mac App Store mode; hash/log-only and upload cannot both be true\"",
       "  exit 1",
       "fi",
       "",
@@ -384,7 +392,7 @@ function verifyDesktopWorkflow(workflow) {
   exactRecord(macAppStoreSteps[2], {
     name: "Validate Mac App Store listing assets",
     run: "ruby .github/scripts/verify-store-assets.rb",
-  }, "macos-app-store artifact-only listing-assets gate");
+  }, "macos-app-store hash/log-only listing-assets gate");
   const screenshotUploadGate = macAppStoreSteps[3];
   exactRecord(screenshotUploadGate, {
     name: "Require exact-source release-approved screenshot provenance before upload",
@@ -419,6 +427,16 @@ function verifyDesktopWorkflow(workflow) {
     "--target ${{ env.RUST_TARGET }} --features macos-app-store",
     "--config src-tauri/tauri.macos-app-store.conf.json",
   ], "macos-app-store unsigned build step.run");
+  const validateAppStoreConfiguration = step(
+    macAppStoreSteps,
+    "Validate protected Mac App Store configuration",
+    "macos-app-store protected configuration step",
+  );
+  requireText(validateAppStoreConfiguration.run, [
+    'case "$INSTALLER_IDENTITY" in',
+    "'Mac Installer Distribution: '*' (5TT564H883)'|'3rd Party Mac Developer Installer: '*' (5TT564H883)'",
+    "Mac App Store packaging requires an exact Installer Distribution identity for team 5TT564H883",
+  ], "macos-app-store protected configuration step.run");
   const packageAppStoreArtifact = step(
     macAppStoreSteps,
     "Package and verify Mac App Store artifact",
@@ -427,11 +445,20 @@ function verifyDesktopWorkflow(workflow) {
   requireText(packageAppStoreArtifact.run, [
     `expected_short_version="${MACOS_APP_STORE_VERSION}"`,
     `expected_bundle_version="${MACOS_APP_STORE_VERSION}"`,
+    'expected_team="5TT564H883"',
+    `expected_bundle_identifier="${MACOS_APP_STORE_BUNDLE_IDENTIFIER}"`,
     "assert_plist_value \"$app/Contents/Info.plist\" \"CFBundleIdentifier\" \"$expected_bundle_identifier\"",
     "assert_plist_value \"$app/Contents/Info.plist\" \"CFBundleShortVersionString\" \"$expected_short_version\"",
     "assert_plist_value \"$app/Contents/Info.plist\" \"CFBundleVersion\" \"$expected_bundle_version\"",
+    "echo 'MACOS_APP_STORE_PACKAGE_VERIFIED=false' >> \"$GITHUB_ENV\"",
     "xcrun productbuild --sign \"$MACOS_APP_STORE_INSTALLER_IDENTITY\"",
-    "pkgutil --check-signature \"$package\"",
+    'case "$MACOS_APP_STORE_INSTALLER_IDENTITY" in',
+    'pkgutil --check-signature "$package" > "$signature_listing" 2>&1',
+    '"Status: signed by a certificate trusted by macOS"',
+    'leaf_identities != [expected_identity]',
+    'package_sha256="$(/usr/bin/shasum -a 256 "$package")"',
+    'echo "MACOS_APP_STORE_PACKAGE_SHA256=$package_sha256" >> "$GITHUB_ENV"',
+    "echo 'MACOS_APP_STORE_PACKAGE_VERIFIED=true' >> \"$GITHUB_ENV\"",
   ], "macos-app-store signed artifact version/build verification step.run");
   const materializeAppStoreKey = step(
     macAppStoreSteps,
@@ -454,6 +481,30 @@ function verifyDesktopWorkflow(workflow) {
   if (uploadAppStorePackage.if !== "github.event_name == 'workflow_dispatch' && inputs.upload_macos_to_app_store_connect") {
     fail("macos-app-store upload step must remain conditional on explicit upload consent.");
   }
+  exactRecord(uploadAppStorePackage.env, {
+    MACOS_APP_STORE_ALTOOL_PLATFORM,
+    MACOS_APP_STORE_APPLE_ID,
+    MACOS_APP_STORE_BUNDLE_IDENTIFIER,
+    MACOS_APP_STORE_SHORT_VERSION: MACOS_APP_STORE_VERSION,
+    MACOS_APP_STORE_BUNDLE_VERSION: MACOS_APP_STORE_VERSION,
+    APP_STORE_CONNECT_KEY_ID: "${{ vars.MACOS_APP_STORE_CONNECT_API_KEY_ID }}",
+    APP_STORE_CONNECT_ISSUER: "${{ vars.MACOS_APP_STORE_CONNECT_API_ISSUER }}",
+  }, "macos-app-store upload step.env");
+  requireText(uploadAppStorePackage.run, [
+    'if [ "${MACOS_APP_STORE_PACKAGE_VERIFIED:-false}" != true ]; then',
+    'upload_sha256="$(/usr/bin/shasum -a 256 "${MACOS_APP_STORE_PACKAGE:?Mac App Store package path is missing}")"',
+    'if [ "$upload_sha256" != "${MACOS_APP_STORE_PACKAGE_SHA256:?Verified Mac App Store package SHA-256 is missing}" ]; then',
+    '--platform "$MACOS_APP_STORE_ALTOOL_PLATFORM"',
+    '--apple-id "$MACOS_APP_STORE_APPLE_ID"',
+    '--bundle-id "$MACOS_APP_STORE_BUNDLE_IDENTIFIER"',
+    '--bundle-version "$MACOS_APP_STORE_BUNDLE_VERSION"',
+    '--bundle-short-version-string "$MACOS_APP_STORE_SHORT_VERSION"',
+    '--api-key "$APP_STORE_CONNECT_KEY_ID"',
+    '--api-issuer "$APP_STORE_CONNECT_ISSUER"',
+    '--output-format json',
+    'xcrun altool --validate-app "$MACOS_APP_STORE_PACKAGE" "${upload_arguments[@]}"',
+    'xcrun altool --upload-package "$MACOS_APP_STORE_PACKAGE" "${upload_arguments[@]}"',
+  ], "macos-app-store upload step.run");
   const cleanupAppStoreSecrets = step(
     macAppStoreSteps,
     "Remove App Store signing material",
@@ -462,6 +513,10 @@ function verifyDesktopWorkflow(workflow) {
   if (cleanupAppStoreSecrets.if !== "always()") {
     fail("macos-app-store cleanup step must run with if: always().");
   }
+  requireText(cleanupAppStoreSecrets.run, [
+    'rm -f "$RUNNER_TEMP/quakesignal-macos-app-store-package-signature.txt"',
+    "rm -f artifacts/macos-app-store/*.pkg",
+  ], "macos-app-store cleanup step.run");
   if (fingerprint(macAppStoreSteps) !== MACOS_APP_STORE_STEPS_FINGERPRINT) {
     fail("macos-app-store steps must match the reviewed provenance, safe-build, signing, artifact verification, upload-consent, and cleanup sequence.");
   }

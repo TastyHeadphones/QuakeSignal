@@ -289,6 +289,34 @@ class AppleScreenshotReleaseSetAssemblerTest < Minitest::Test
       assert_equal package.fetch("contentManifestSha256"), package_content_sha(package_root)
     end
 
+    catalyst_metadata = JSON.parse(
+      @output.join("maccatalyst/package-provenance.json").read,
+    )
+    catalyst_environment = catalyst_metadata.fetch("captureEnvironment")
+    assert_equal "maccatalyst-uikit-hierarchy", catalyst_environment.fetch("kind")
+    assert_equal "UIKit.UIView.drawHierarchy", catalyst_environment.fetch("captureApi")
+    assert_equal "live-catalyst-uiwindow-hierarchy", catalyst_environment.fetch("captureSurface")
+    assert_equal [1_280, 800], catalyst_environment.fetch("logicalViewPoints")
+    assert catalyst_environment.fetch("sourceDisplayScale").positive?
+    assert_equal 2, catalyst_environment.fetch("rasterizationScale")
+    assert_equal [2_560, 1_600], catalyst_environment.fetch("pixels")
+    assert_equal true, catalyst_environment.fetch("afterScreenUpdates")
+    assert_equal false, catalyst_environment.fetch("postCaptureResizePerformed")
+    catalyst_metadata.fetch("frames").each do |frame|
+      evidence = frame.fetch("captureEvidence")
+      assert_equal "UIKit.UIView.drawHierarchy", evidence.fetch("captureApi")
+      assert_equal "live-catalyst-uiwindow-hierarchy", evidence.fetch("captureSurface")
+      assert_equal [1_280, 800], evidence.fetch("logicalViewPoints")
+      assert_equal [2_560, 1_600], evidence.fetch("pixels")
+      assert_equal 2, evidence.fetch("rasterizationScale")
+      assert_equal false, evidence.fetch("postCaptureResizePerformed")
+      assert_equal "standard", evidence.fetch("rendererPreferredRange")
+      %w[requestFile responseFile rawFile].each do |field|
+        assert_match(%r{\Aevidence/raw-capture/}, evidence.fetch(field))
+        assert @output.join("maccatalyst", evidence.fetch(field)).file?
+      end
+    end
+
     candidate = JSON.parse(@index_candidate.read)
     active = candidate.fetch("activeReleaseSet")
     assert_equal SOURCE_COMMIT, active.fetch("sourceCommit")
@@ -296,6 +324,24 @@ class AppleScreenshotReleaseSetAssemblerTest < Minitest::Test
     assert_nil active.fetch("approvalSha256")
     refute @index_candidate.read.include?("approved-for-build8-upload")
     refute @index_candidate.read.include?("signedReleaseParityApproved")
+  end
+
+  def test_assembles_into_a_fresh_external_release_evidence_root
+    evidence_root = @temporary_root.join("release-evidence")
+    evidence_root.mkpath
+    output = evidence_root.join(AppleScreenshotReleaseSetAssembler::RELEASE_ROOT, SOURCE_COMMIT)
+    index_candidate = evidence_root.join(AppleScreenshotReleaseSetAssembler::INDEX_PATH)
+
+    assembler(release_evidence_root: evidence_root).assemble(
+      source_commit: SOURCE_COMMIT,
+      output: output,
+      index_candidate: index_candidate,
+      packages: @packages,
+    )
+
+    assert output.directory?
+    assert index_candidate.file?
+    refute @root.join(AppleScreenshotReleaseSetAssembler::RELEASE_ROOT, SOURCE_COMMIT).exist?
   end
 
   def test_rejects_any_premature_reviewer_approval_or_release_binary_claim
@@ -538,6 +584,38 @@ class AppleScreenshotReleaseSetAssemblerTest < Minitest::Test
     assert_rejected(/maccatalyst full aggregate provenance validation failed/)
   end
 
+  def test_catalyst_release_projection_rejects_screen_capture_and_non_2x_rasterization
+    capture_root = @captures.join("maccatalyst")
+    aggregate = JSON.parse(capture_root.join("capture-provenance.json").read)
+    frame = aggregate.fetch("frames").first
+
+    screen_capture = Marshal.load(Marshal.dump(frame))
+    screen_capture.fetch("nativeCapture")["captureApi"] = "ScreenCaptureKit.SCScreenshotManager"
+    error = assert_raises(AppleScreenshotReleaseSetAssemblyError) do
+      assembler.send(
+        :normalize_maccatalyst_capture_evidence!,
+        screen_capture,
+        capture_root,
+        0,
+      )
+    end
+    assert_match(/capture API mismatch/, error.message)
+
+    resized = Marshal.load(Marshal.dump(frame))
+    resized["rasterizationScale"] = 1
+    resized.fetch("captureRequest")["rasterizationScale"] = 1
+    resized.fetch("nativeCapture")["rasterizationScale"] = 1
+    error = assert_raises(AppleScreenshotReleaseSetAssemblyError) do
+      assembler.send(
+        :normalize_maccatalyst_capture_evidence!,
+        resized,
+        capture_root,
+        0,
+      )
+    end
+    assert_match(/rasterization scale mismatch/, error.message)
+  end
+
   def test_rejects_forbidden_approval_sentinel_in_rehashed_non_json_evidence
     selector = "maccatalyst-home"
     log = @captures.join("maccatalyst/app-logs/#{selector}.log")
@@ -694,9 +772,15 @@ class AppleScreenshotReleaseSetAssemblerTest < Minitest::Test
 
   private
 
-  def assembler(historical: Set.new, before_stage_copy: nil, publish_hook: nil)
+  def assembler(
+    historical: Set.new,
+    before_stage_copy: nil,
+    publish_hook: nil,
+    release_evidence_root: nil
+  )
     AppleScreenshotReleaseSetAssembler.new(
       root: @root,
+      release_evidence_root: release_evidence_root,
       image_inspector: FakeAppleScreenshotAssemblyInspector.new,
       source_guard: @source_guard,
       index_validator: -> {},

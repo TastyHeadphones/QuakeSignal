@@ -18,7 +18,8 @@ and the release runbook's signed-artifact parity gate. The adjacent platform
 manifests remain immutable capture plans; their pending/null values are
 intentional because these packages hash those exact plan bytes.
 
-Run the fail-closed validator before review or handoff:
+The hosted screenshot workflow runs the fail-closed validator before review or
+handoff. Do not run this repository script locally:
 
 ```sh
 ruby .github/scripts/verify-native-apple-screenshot-candidates.rb

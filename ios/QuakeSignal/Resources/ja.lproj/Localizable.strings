@@ -63,6 +63,7 @@
 "settings.section.sources" = "警報の情報源";
 "settings.source.jma_eew" = "気象庁 — 緊急地震速報";
 "settings.source.jma_eqlist" = "気象庁 — 地震情報";
+"settings.sources.minimum" = "気象庁の通知ソースを1つ以上有効にしてください。";
 "settings.section.threshold" = "最小マグニチュード";
 "settings.section.notifications" = "通知";
 "settings.openNotificationSettings" = "通知設定を確認";
@@ -70,7 +71,7 @@
 "settings.notificationDelivery.degraded.detail" = "可能な限り確実に受信するには、システムの「設定」で通知、サウンド、時間指定通知をオンにしてください。QuakeSignalは消音モードや集中モードを回避しません。";
 "settings.alertSound.title" = "通知音";
 "settings.alertSound.system" = "システム標準";
-"settings.alertSound.system.detail" = "Apple標準の通知音を使用します。";
+"settings.alertSound.system.detail" = "バックグラウンドでは標準通知音を使用し、QuakeSignalを開いている間は短いシステム音を再生します。";
 "settings.alertSound.urgentTone" = "QuakeSignal緊急トーン";
 "settings.alertSound.urgentTone.detail" = "QuakeSignal独自の聞き分けやすい2音の警告音です。";
 "settings.alertSound.japaneseVoice" = "日本語安全案内";
@@ -105,6 +106,7 @@
 "settings.pushSubscription.retry.success" = "通知登録を更新しました。";
 "settings.pushSubscription.retry.failure" = "通知登録を更新できませんでした: %1$@";
 "settings.pushSubscription.sync.failure" = "通知登録を更新できませんでした: %1$@。この画面から再試行してください。";
+"settings.pushSubscription.locationRequired" = "周辺の地震通知を有効にする前に、都市または現在地を選択してください。";
 "settings.pushSubscription.status.unregistered" = "通知登録はまだQuakeSignalに届いていません。";
 "settings.pushSubscription.status.registering" = "通知登録を更新しています…";
 "settings.pushSubscription.status.active" = "通知登録は有効です。";
@@ -145,6 +147,8 @@
 /* ホーム */
 "home.status.normal" = "近くに地震情報はありません";
 "home.status.normal.detail" = "%1$d km 圏内で過去24時間、大きな地震はありません";
+"home.status.locationRequired" = "通知エリアを選択してください";
+"home.status.locationRequired.detail" = "都市または現在地を選択すると、周辺情報を絞り込み、地震通知を有効にできます。";
 "home.status.caution" = "近くで地震情報があります";
 "home.status.caution.detail" = "%1$d km 圏内で M%2$@ の地震が発生 ・タップして確認";
 "home.status.caution.detail.noDistance" = "最近 M%1$@ の地震情報があります・タップして確認";

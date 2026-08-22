@@ -17,6 +17,7 @@ require_relative "verify-apple-screenshot-release-set"
 
 class StoreAssetValidator
   MAX_DESCRIPTION_CHARACTERS = 4000
+  MAX_WHATS_NEW_CHARACTERS = 4000
   MAX_PROMOTIONAL_TEXT_CHARACTERS = 170
   MAX_SUBTITLE_CHARACTERS = 30
   MAX_KEYWORD_BYTES = 100
@@ -93,7 +94,7 @@ class StoreAssetValidator
     end
   end
 
-  def validate_ios_listing_copy(directory, require_subtitle: false)
+  def validate_listing_copy(directory, require_subtitle: false, require_whats_new: false)
     description = listing_text(directory.join("description.txt"))
     promotional_text = listing_text(directory.join("promotional_text.txt"))
     keywords_path = directory.join("keywords.txt")
@@ -113,6 +114,20 @@ class StoreAssetValidator
     )
     validate_keywords(keywords_path, keywords)
 
+    if require_whats_new
+      whats_new_path = directory.join("whats_new_v1.1.txt")
+      whats_new = listing_text(whats_new_path)
+      if whats_new_path.file? && whats_new_path.size.positive? && whats_new.strip.empty?
+        error("#{whats_new_path}: What's New must not be blank")
+      end
+      validate_character_limit(
+        whats_new_path,
+        whats_new,
+        MAX_WHATS_NEW_CHARACTERS,
+        "What's New",
+      )
+    end
+
     return unless require_subtitle
 
     subtitle_path = directory.join("subtitle.txt")
@@ -123,6 +138,14 @@ class StoreAssetValidator
       MAX_SUBTITLE_CHARACTERS,
       "subtitle",
     )
+  end
+
+  def validate_ios_listing_copy(directory)
+    validate_listing_copy(directory, require_subtitle: true, require_whats_new: true)
+  end
+
+  def validate_platform_listing_copy(directory)
+    validate_listing_copy(directory)
   end
 
   def validate_macos_listing_copy(directory)
@@ -356,6 +379,7 @@ if $PROGRAM_NAME == __FILE__
 require_macos_release_ready = false
 require_build8_screenshot_release_ready = false
 expected_source_commit = nil
+screenshot_release_evidence_root = nil
 ARGV.each do |argument|
   case argument
   when "--require-macos-release-ready"
@@ -364,10 +388,17 @@ ARGV.each do |argument|
     require_build8_screenshot_release_ready = true
   when /\A--expected-source-commit=([0-9a-f]{40})\z/
     expected_source_commit = Regexp.last_match(1)
+  when /\A--screenshot-release-evidence-root=(.+)\z/
+    if screenshot_release_evidence_root
+      warn "--screenshot-release-evidence-root may be supplied only once"
+      exit 2
+    end
+    screenshot_release_evidence_root = Regexp.last_match(1)
   else
     warn "Usage: #{$PROGRAM_NAME} [--require-macos-release-ready] " \
          "[--require-build8-screenshot-release-ready] " \
-         "[--expected-source-commit=<40-character-sha>]"
+         "[--expected-source-commit=<40-character-sha>] " \
+         "[--screenshot-release-evidence-root=<absolute-existing-directory>]"
     warn "Unknown argument: #{argument}"
     exit 2
   end
@@ -386,7 +417,10 @@ expected_mac_screenshots = %w[
 total_ios_screenshots = 0
 
 begin
-  AppleScreenshotReleaseSetValidator.new(root: root).validate!(
+  AppleScreenshotReleaseSetValidator.new(
+    root: root,
+    release_evidence_root: screenshot_release_evidence_root,
+  ).validate!(
     require_release_ready: require_build8_screenshot_release_ready,
     expected_source_commit:
       require_build8_screenshot_release_ready ? expected_source_commit : nil,
@@ -454,12 +488,12 @@ begin
   validator.error("duplicate iOS screenshot frames: #{duplicate_frames.join(', ')}") unless duplicate_frames.empty?
 
   locales.each do |locale|
-    validator.validate_ios_listing_copy(ios_store.join(locale), require_subtitle: true)
+    validator.validate_ios_listing_copy(ios_store.join(locale))
   end
 
   platform_store = ios_store.join("platforms")
   %w[tvos visionos maccatalyst].each do |platform|
-    validator.validate_ios_listing_copy(platform_store.join(platform, "en-US"))
+    validator.validate_platform_listing_copy(platform_store.join(platform, "en-US"))
     validator.validate_submission_document(
       platform_store.join(platform, "review-notes.txt"),
       "#{platform} App Review notes",

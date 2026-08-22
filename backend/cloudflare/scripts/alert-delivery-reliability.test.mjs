@@ -37,6 +37,151 @@ async function workerModule() {
   return workerModulePromise;
 }
 
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Buffer.from(digest).toString("hex");
+}
+
+function mutableApnsDeviceDatabase(initialRow) {
+  let currentRow = { ...initialRow };
+  let appAttestKeyPresent = true;
+  const badDeviceTokenQuarantines = new Set();
+  const processedRegistrationRevisions = new Set();
+  const batches = [];
+  return {
+    database: {
+      prepare(sql) {
+        const prepared = {
+          sql,
+          bindings: [],
+          bind(...bindings) {
+            return {
+              sql,
+              bindings,
+              async all() {
+                if (sql.includes("SELECT rowid AS cursor, * FROM devices")) {
+                  return { results: currentRow === null ? [] : [{ ...currentRow }] };
+                }
+                if (
+                  sql.includes("FROM notification_deliveries")
+                ) return { results: [] };
+                if (sql.includes("FROM alert_delivery_failures")) {
+                  return {
+                    results: [...badDeviceTokenQuarantines]
+                      .filter((tokenHash) => bindings.includes(tokenHash))
+                      .map((token_hash) => ({ token_hash })),
+                  };
+                }
+                throw new Error(`unexpected APNs device query: ${sql}`);
+              },
+              async first() {
+                if (sql.includes("SELECT updated_at FROM devices")) {
+                  return currentRow === null
+                    ? null
+                    : { updated_at: currentRow.updated_at };
+                }
+                throw new Error(`unexpected APNs device lookup: ${sql}`);
+              },
+            };
+          },
+        };
+        return prepared;
+      },
+      async batch(statements) {
+        batches.push(statements);
+        const claimedRegistrationRevisions = new Set();
+        return statements.map(({ sql, bindings = [] }) => {
+          let changes = 0;
+          if (
+            sql.includes("INSERT INTO apns_registration_revision_fences") &&
+            sql.includes("VALUES (?, ?, ?, ?, 'bad_device_token'")
+          ) {
+            const registrationRevision = bindings[1];
+            if (!processedRegistrationRevisions.has(registrationRevision)) {
+              processedRegistrationRevisions.add(registrationRevision);
+              claimedRegistrationRevisions.add(registrationRevision);
+              changes = 1;
+            }
+          } else if (
+            sql.includes("DELETE FROM alert_delivery_failures") &&
+            sql.includes("registration_revision = ?")
+          ) {
+            const [tokenHash, token, registrationRevision] = bindings;
+            if (
+              currentRow !== null &&
+              currentRow.token === token &&
+              currentRow.registration_revision === registrationRevision
+            ) {
+              badDeviceTokenQuarantines.delete(tokenHash);
+            }
+          } else if (
+            sql.includes("DELETE FROM devices") &&
+            sql.includes("registration_revision = ?")
+          ) {
+            const [token, registrationRevision] = bindings;
+            if (
+              currentRow !== null &&
+              currentRow.token === token &&
+              currentRow.registration_revision === registrationRevision
+            ) {
+              currentRow = null;
+              changes = 1;
+            }
+          } else if (
+            sql.includes("INSERT INTO alert_delivery_failures") &&
+            sql.includes("FROM devices") &&
+            sql.includes("registration_revision <> ?")
+          ) {
+            const token = bindings.at(-4);
+            const sentRegistrationRevision = bindings.at(-3);
+            if (
+              currentRow !== null &&
+              currentRow.token === token &&
+              currentRow.registration_revision !== sentRegistrationRevision &&
+              claimedRegistrationRevisions.has(sentRegistrationRevision)
+            ) {
+              badDeviceTokenQuarantines.add(bindings[2]);
+              changes = 1;
+            }
+          } else if (sql.includes("DELETE FROM app_attest_keys")) {
+            if (currentRow === null && appAttestKeyPresent) {
+              appAttestKeyPresent = false;
+              changes = 1;
+            }
+          }
+          return { meta: { changes } };
+        });
+      },
+    },
+    get currentRow() {
+      return currentRow;
+    },
+    set currentRow(value) {
+      currentRow = value === null ? null : { ...value };
+    },
+    get appAttestKeyPresent() {
+      return appAttestKeyPresent;
+    },
+    get badDeviceTokenQuarantineCount() {
+      return badDeviceTokenQuarantines.size;
+    },
+    authenticatedRenewal(updatedAt) {
+      currentRow = currentRow === null
+        ? null
+        : {
+            ...currentRow,
+            updated_at: updatedAt,
+            registration_revision: `renewed:${updatedAt}`,
+          };
+      badDeviceTokenQuarantines.clear();
+    },
+    batches,
+  };
+}
+
 function sqlLiteral(value) {
   if (value === null || value === undefined) return "NULL";
   if (typeof value === "number") return String(value);
@@ -76,6 +221,7 @@ async function captureDlqBatch(worker, queueNames, {
   attempts = 5,
   incidentChanges = 1,
 }) {
+  const { QuakeRelay } = await workerModule();
   const batches = [];
   const logs = [];
   let acknowledged = 0;
@@ -84,6 +230,31 @@ async function captureDlqBatch(worker, queueNames, {
   console.error = (entry) => logs.push({ level: "error", entry });
   console.info = (entry) => logs.push({ level: "info", entry });
   try {
+    const database = {
+      prepare(sql) {
+        return {
+          bind(...bindings) {
+            return { sql, bindings };
+          },
+        };
+      },
+      async batch(statements) {
+        batches.push(statements);
+        return statements.map((_, index) => ({
+          meta: { changes: index === 1 ? incidentChanges : 1 },
+        }));
+      },
+    };
+    const relay = new QuakeRelay(
+      {
+        storage: {
+          async list() {
+            return new Map();
+          },
+        },
+      },
+      { DB: database },
+    );
     await worker.queue(
       {
         queue: queueNames.ALERT_DELIVERY_DLQ_NAME,
@@ -101,33 +272,15 @@ async function captureDlqBatch(worker, queueNames, {
       },
       {
         ...queueNames,
-        DB: {
-          prepare(sql) {
-            return {
-              bind(...bindings) {
-                return { sql, bindings };
-              },
-            };
-          },
-          async batch(statements) {
-            batches.push(statements);
-            // Match the conditional D1 incident statement's real change
-            // count. A stale terminal outbox produces no incident row and
-            // must therefore exercise the discard log path, rather than a
-            // fabricated incident-recorded result from this SQL capture fake.
-            return statements.map((_, index) => ({
-              meta: { changes: index === 1 ? incidentChanges : 1 },
-            }));
-          },
-        },
+        DB: database,
         RELAY: {
           idFromName() {
             return "global";
           },
           get() {
             return {
-              async fetch() {
-                throw new Error("D1 success must not call the fallback relay");
+              async fetch(request) {
+                return relay.fetch(request);
               },
             };
           },
@@ -327,7 +480,7 @@ test("bounds hung APNs operations and clears the success timer", async () => {
   );
 });
 
-test("automatic production delivery skips historical sandbox registrations", async () => {
+test("automatic production delivery skips sandbox and unfiltered registrations", async () => {
   const { dispatchPushPage } = await workerModule();
   const originalFetch = globalThis.fetch;
   const deviceRows = [
@@ -367,6 +520,24 @@ test("automatic production delivery skips historical sandbox registrations", asy
       created_at: "2026-08-14T00:00:00.000Z",
       updated_at: "2026-08-14T00:00:00.000Z",
     },
+    {
+      cursor: 3,
+      token: "nearby-production-token",
+      environment: "production",
+      locale: null,
+      sources: '["jma_eew"]',
+      min_magnitude: 0,
+      critical_alerts_enabled: 0,
+      city_name: "Test City",
+      latitude: 35,
+      longitude: 135,
+      radius_km: 100,
+      include_test_alerts: 1,
+      utc_offset_minutes: null,
+      notify_at_night: 1,
+      created_at: "2026-08-14T00:00:00.000Z",
+      updated_at: "2026-08-14T00:00:00.000Z",
+    },
   ];
   const pageQueries = [];
   const deliveredBatches = [];
@@ -376,6 +547,8 @@ test("automatic production delivery skips historical sandbox registrations", asy
       return {
         bind(...bindings) {
           return {
+            sql,
+            bindings,
             async all() {
               if (sql.includes("SELECT rowid AS cursor, * FROM devices")) {
                 pageQueries.push({ sql, bindings });
@@ -451,16 +624,1001 @@ test("automatic production delivery skips historical sandbox registrations", asy
     assert.match(pageQueries[0].sql, /WHERE rowid > \? AND environment = \?/);
     assert.deepEqual(
       pageQueries[0].bindings,
-      [0, "production", 20],
+      [0, "production", 1],
       "the production delivery page must filter before page-size pagination",
     );
     assert.deepEqual(apnsUrls, [
-      "https://api.push.apple.com/3/device/current-production-token",
+      "https://api.push.apple.com/3/device/nearby-production-token",
     ]);
     assert.equal(deliveredBatches.length, 1, "only the production delivery is recorded");
+    const lifecycleUpsert = deliveredBatches[0].find(({ sql }) =>
+      sql.includes("INSERT INTO alert_lifecycle_recipients")
+    );
+    assert.ok(lifecycleUpsert, "an APNs-accepted active warning records terminal continuity");
+    assert.equal(
+      lifecycleUpsert.bindings[1],
+      await sha256Hex("nearby-production-token"),
+    );
+    assert.equal(lifecycleUpsert.bindings[5], null);
+    assert.ok(lifecycleUpsert.bindings.includes("jma_eew:automatic-filter-test"));
+    assert.equal(
+      lifecycleUpsert.bindings.slice(0, 4).includes("nearby-production-token"),
+      false,
+      "the lifecycle table must never receive a raw APNs token",
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("final and cancelled revisions preserve lifecycle across revised estimates but honor current source consent", async () => {
+  const { dispatchPushPage } = await workerModule();
+  const originalFetch = globalThis.fetch;
+  const sameToken = "0011223344556677";
+  const rotatedToken = "8899aabbccddeeff";
+  const unrelatedToken = "1021324354657687";
+  const continuityKey = "opaque-continuity-key";
+  const rows = [
+    {
+      cursor: 1,
+      token: sameToken,
+      environment: "production",
+      locale: null,
+      sources: '["jma_eqlist"]',
+      min_magnitude: 9,
+      critical_alerts_enabled: 0,
+      city_name: "Old selection",
+      latitude: -30,
+      longitude: -30,
+      radius_km: 1,
+      include_test_alerts: 0,
+      utc_offset_minutes: null,
+      notify_at_night: 1,
+      app_attest_key_id: null,
+      created_at: "2026-08-14T00:00:00.000Z",
+      updated_at: "2026-08-14T00:00:00.000Z",
+    },
+    {
+      cursor: 2,
+      token: rotatedToken,
+      environment: "production",
+      locale: null,
+      sources: '["jma_eew"]',
+      min_magnitude: 9,
+      critical_alerts_enabled: 0,
+      city_name: "Rotated token",
+      latitude: -30,
+      longitude: -30,
+      radius_km: 1,
+      include_test_alerts: 0,
+      utc_offset_minutes: null,
+      notify_at_night: 1,
+      app_attest_key_id: continuityKey,
+      created_at: "2026-08-14T00:00:00.000Z",
+      updated_at: "2026-08-14T00:05:00.000Z",
+    },
+    {
+      cursor: 3,
+      token: unrelatedToken,
+      environment: "production",
+      locale: null,
+      sources: '["jma_eew"]',
+      min_magnitude: 0,
+      critical_alerts_enabled: 0,
+      city_name: "Never warned",
+      latitude: 35,
+      longitude: 135,
+      radius_km: 100,
+      include_test_alerts: 1,
+      utc_offset_minutes: null,
+      notify_at_night: 1,
+      app_attest_key_id: "unrelated-key",
+      created_at: "2026-08-14T00:00:00.000Z",
+      updated_at: "2026-08-14T00:00:00.000Z",
+    },
+  ];
+  const sameTokenHash = await sha256Hex(sameToken);
+  const requests = [];
+  const recordedBatches = [];
+  const database = {
+    prepare(sql) {
+      return {
+        bind(...bindings) {
+          return {
+            sql,
+            bindings,
+            async all() {
+              if (sql.includes("SELECT rowid AS cursor, * FROM devices")) {
+                return { results: rows };
+              }
+              if (sql.includes("FROM alert_lifecycle_recipients")) {
+                assert.equal(bindings[0], "jma_eew:lifecycle-continuity");
+                assert.equal(
+                  bindings.includes(sameTokenHash),
+                  false,
+                  "removing the EEW source must exclude the device before lifecycle lookup",
+                );
+                return {
+                  results: [
+                    {
+                      token_hash: await sha256Hex("retired-apns-token"),
+                      app_attest_key_id: continuityKey,
+                    },
+                  ],
+                };
+              }
+              if (
+                sql.includes("FROM notification_deliveries") ||
+                sql.includes("FROM alert_delivery_failures")
+              ) return { results: [] };
+              throw new Error(`unexpected lifecycle query: ${sql}`);
+            },
+          };
+        },
+      };
+    },
+    async batch(statements) {
+      recordedBatches.push(statements);
+      return statements.map(() => ({ meta: { changes: 1 } }));
+    },
+  };
+  globalThis.fetch = async (url) => {
+    requests.push(String(url));
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const environment = {
+      APP_ATTEST_ENFORCEMENT: "required",
+      DB: database,
+      APNS_PRIVATE_KEY: "configured-lifecycle-test-key",
+      APNS_KEY_ID: "ABCDEFGHIJ",
+      APNS_TEAM_ID: "ABCDEFGHIJ",
+      APNS_BUNDLE_ID: "com.quakesignal.app",
+    };
+    const terminalEvent = {
+        id: "jma_eew:lifecycle-continuity",
+        eventId: "lifecycle-continuity",
+        sourceId: "jma_eew",
+        serial: 9,
+        kind: "eew",
+        originTimeUtc: "2026-08-14T00:00:00.000Z",
+        reportTimeUtc: "2026-08-14T00:10:00.000Z",
+        hypocenter: "Revised far away",
+        latitude: 60,
+        longitude: 10,
+        magnitude: 1,
+        depth: 10,
+        maxIntensity: "1",
+        isWarn: false,
+        isFinal: true,
+        isCancel: false,
+        isTraining: false,
+        tsunami: null,
+        raw: null,
+    };
+    for (const [reason, flags] of [
+      ["final", { isFinal: true, isCancel: false }],
+      ["cancelled", { isFinal: false, isCancel: true }],
+    ]) {
+      const page = await dispatchPushPage(
+        environment,
+        { ...terminalEvent, ...flags },
+        reason,
+        "cached.provider.jwt",
+        `lifecycle-${reason}-delivery`,
+      );
+      assert.equal(page.retryRequired, false);
+    }
+    assert.deepEqual(requests, [
+      `https://api.push.apple.com/3/device/${rotatedToken}`,
+      `https://api.push.apple.com/3/device/${rotatedToken}`,
+    ], "the opted-in rotated token receives closure despite downgraded magnitude/location; the source-removed token does not");
+    assert.equal(recordedBatches.length, 2);
+    assert.equal(
+      recordedBatches.flat().some(({ sql }) =>
+        sql.includes("INSERT INTO alert_lifecycle_recipients")
+      ),
+      false,
+      "terminal delivery must not manufacture recipient eligibility",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("BadDeviceToken removes the exact invalid registration and stops future event fanout", async () => {
+  const { deactivateBadDeviceToken, dispatchPushPage } = await workerModule();
+  const originalFetch = globalThis.fetch;
+  const originalConsoleWarn = console.warn;
+  const token = "abcdef0123456789";
+  const harness = mutableApnsDeviceDatabase({
+    cursor: 1,
+    token,
+    environment: "production",
+    locale: null,
+    sources: '["jma_eew"]',
+    min_magnitude: 0,
+    critical_alerts_enabled: 0,
+    alert_sound: "system",
+    city_name: "Test City",
+    latitude: 35,
+    longitude: 135,
+    radius_km: 100,
+    include_test_alerts: 0,
+    utc_offset_minutes: null,
+    notify_at_night: 1,
+    app_attest_key_id: "bad-token-key",
+    registration_revision: "bad-token-sent-revision",
+    created_at: "2026-08-20T00:00:00.000Z",
+    updated_at: "2026-08-20T00:00:00.000Z",
+  });
+  const event = {
+    id: "jma_eew:bad-device-token",
+    eventId: "bad-device-token",
+    sourceId: "jma_eew",
+    serial: 1,
+    kind: "eew",
+    originTimeUtc: "2026-08-20T00:00:00.000Z",
+    reportTimeUtc: "2026-08-20T00:00:00.000Z",
+    hypocenter: "Test Region",
+    latitude: 35,
+    longitude: 135,
+    magnitude: 5,
+    depth: 10,
+    maxIntensity: "4",
+    isWarn: true,
+    isFinal: false,
+    isCancel: false,
+    isTraining: false,
+    tsunami: null,
+    raw: null,
+  };
+  let apnsRequests = 0;
+  const warnings = [];
+  console.warn = (entry) => warnings.push(JSON.parse(String(entry)));
+  globalThis.fetch = async () => {
+    apnsRequests += 1;
+    return Response.json(
+      { reason: "BadDeviceToken" },
+      { status: 400, headers: { "apns-id": "bad-token-response" } },
+    );
+  };
+  const environment = {
+    APP_ATTEST_ENFORCEMENT: "required",
+    DB: harness.database,
+    APNS_PRIVATE_KEY: "configured-bad-token-test-key",
+    APNS_KEY_ID: "ABCDEFGHIJ",
+    APNS_TEAM_ID: "ABCDEFGHIJ",
+    APNS_BUNDLE_ID: "com.quakesignal.app",
+  };
+  try {
+    const first = await dispatchPushPage(
+      environment,
+      event,
+      "new",
+      "cached.provider.jwt",
+      "bad-token-delivery-1",
+    );
+    assert.equal(first.retryRequired, false, "Apple's terminal token response is not retried");
+    assert.equal(first.pageFailure, null);
+    assert.equal(harness.currentRow, null, "the exact invalid registration is removed");
+    assert.equal(
+      harness.appAttestKeyPresent,
+      false,
+      "orphan cleanup removes the verifier so the next client registration re-attests",
+    );
+    const cleanupStatements = harness.batches.flat();
+    assert.ok(cleanupStatements.some(({ sql }) =>
+      sql.includes("DELETE FROM devices") &&
+      sql.includes("registration_revision = ?")
+    ));
+    assert.ok(cleanupStatements.some(({ sql }) =>
+      sql.includes("DELETE FROM alert_delivery_failures") &&
+      sql.includes("registration_revision = ?")
+    ));
+    assert.ok(
+      cleanupStatements.some(({ sql }) =>
+        sql.includes("INSERT OR IGNORE INTO apns_registration_revision_fences") &&
+        sql.includes("'bad_device_token'") &&
+        sql.includes("blocks_lifecycle_replay")
+      ),
+      "exact cleanup retains a dedicated processed-revision fence without degrading health",
+    );
+    assert.equal(harness.badDeviceTokenQuarantineCount, 0);
+    assert.equal(warnings[0].deactivated, true);
+    assert.equal(warnings[0].disposition, "terminal");
+
+    const second = await dispatchPushPage(
+      environment,
+      { ...event, serial: 2, reportTimeUtc: "2026-08-20T00:01:00.000Z" },
+      "updated",
+      "cached.provider.jwt",
+      "bad-token-delivery-2",
+    );
+    assert.equal(second.retryRequired, false);
+    assert.equal(apnsRequests, 1, "a deleted bad token cannot re-enter later event fanout");
+
+    harness.currentRow = {
+      cursor: 2,
+      token,
+      environment: "production",
+      locale: null,
+      sources: '["jma_eew"]',
+      min_magnitude: 0,
+      critical_alerts_enabled: 0,
+      alert_sound: "system",
+      city_name: "Test City",
+      latitude: 35,
+      longitude: 135,
+      radius_km: 100,
+      include_test_alerts: 0,
+      utc_offset_minutes: null,
+      notify_at_night: 1,
+      app_attest_key_id: "reincarnated-token-key",
+      registration_revision: "reincarnated-registration-revision",
+      created_at: "2026-08-20T00:00:00.000Z",
+      updated_at: "2026-08-20T00:00:00.000Z",
+    };
+    const reincarnatedOutcome = await deactivateBadDeviceToken(
+      harness.database,
+      { token, registrationRevision: "reincarnated-registration-revision" },
+      event,
+      "new",
+      "bad-token-delivery-1",
+    );
+    assert.equal(
+      reincarnatedOutcome,
+      "deleted",
+      "the same deterministic delivery ID can independently process a second opaque revision",
+    );
+    harness.currentRow = {
+      cursor: 3,
+      token,
+      environment: "production",
+      locale: null,
+      sources: '["jma_eew"]',
+      min_magnitude: 0,
+      critical_alerts_enabled: 0,
+      alert_sound: "system",
+      city_name: "Test City",
+      latitude: 35,
+      longitude: 135,
+      radius_km: 100,
+      include_test_alerts: 0,
+      utc_offset_minutes: null,
+      notify_at_night: 1,
+      app_attest_key_id: "third-token-key",
+      registration_revision: "third-registration-revision",
+      created_at: "2026-08-20T00:00:00.000Z",
+      updated_at: "2026-08-20T00:00:00.000Z",
+    };
+    const staleDuplicate = await deactivateBadDeviceToken(
+      harness.database,
+      { token, registrationRevision: "reincarnated-registration-revision" },
+      event,
+      "new",
+      "bad-token-delivery-1",
+    );
+    assert.equal(staleDuplicate, "not_found");
+    assert.equal(
+      harness.currentRow.registration_revision,
+      "third-registration-revision",
+      "a second old response must not delete the re-registered row",
+    );
+    assert.equal(
+      harness.badDeviceTokenQuarantineCount,
+      0,
+      "the processed-revision fence must not renew quarantine for a re-registered row",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.warn = originalConsoleWarn;
+  }
+});
+
+test("production training terminal cleanup cannot quarantine a post-response renewal", async () => {
+  const { applyTrainingTerminalApnsCleanup } = await workerModule();
+  const token = "d".repeat(64);
+  const sentRevision = "training-sent-r1";
+  const harness = mutableApnsDeviceDatabase({
+    cursor: 1,
+    token,
+    environment: "production",
+    locale: null,
+    sources: '["jma_eew"]',
+    min_magnitude: 0,
+    critical_alerts_enabled: 0,
+    alert_sound: "system",
+    city_name: null,
+    latitude: null,
+    longitude: null,
+    radius_km: null,
+    include_test_alerts: 1,
+    utc_offset_minutes: null,
+    notify_at_night: 1,
+    app_attest_key_id: "training-r1-key",
+    registration_revision: sentRevision,
+    created_at: "2026-08-22T00:00:00.000Z",
+    updated_at: "2026-08-22T00:00:00.000Z",
+  });
+  harness.currentRow = {
+    ...harness.currentRow,
+    app_attest_key_id: "training-r2-key",
+    registration_revision: "training-renewed-r2",
+    updated_at: "2026-08-22T00:00:01.000Z",
+  };
+  const cleaned = await applyTrainingTerminalApnsCleanup(
+    harness.database,
+    { token, registrationRevision: sentRevision },
+    {
+      ok: false,
+      apnsId: "training-bdt",
+      status: 400,
+      apnsReason: "BadDeviceToken",
+      terminalInvalidToken: true,
+    },
+  );
+  assert.equal(cleaned.terminalResolved, true);
+  assert.equal(cleaned.deactivated, false);
+  assert.equal(cleaned.badDeviceTokenQuarantined, false);
+  assert.equal(
+    harness.currentRow.registration_revision,
+    "training-renewed-r2",
+    "cleanup is exact-revision only after the provider-response admission marker",
+  );
+  assert.equal(harness.badDeviceTokenQuarantineCount, 0,
+    "a training rejection never upgrades the old renewal fence into cross-event quarantine");
+});
+
+test("a durable pre-send intent survives the APNs-2xx-to-D1 crash window", async () => {
+  const { dispatchPushPage } = await workerModule();
+  const token = "a".repeat(64);
+  const row = {
+    cursor: 1,
+    token,
+    environment: "production",
+    locale: null,
+    sources: '["jma_eew"]',
+    min_magnitude: 0,
+    critical_alerts_enabled: 0,
+    alert_sound: "system",
+    city_name: null,
+    latitude: 35,
+    longitude: 139,
+    radius_km: 100,
+    include_test_alerts: 0,
+    utc_offset_minutes: null,
+    notify_at_night: 1,
+    app_attest_key_id: "pre-send-intent-key",
+    registration_revision: "pre-send-intent-revision",
+    app_identity: "5TT564H883.com.quakesignal.app",
+    apns_topic: "com.quakesignal.app",
+    app_platform: "ios",
+    created_at: "2026-08-20T00:00:00.000Z",
+    updated_at: "2026-08-20T00:00:00.000Z",
+  };
+  const database = {
+    prepare(sql) {
+      return {
+        bind() {
+          return {
+            async all() {
+              if (sql.includes("SELECT rowid AS cursor, * FROM devices")) {
+                return { results: [row] };
+              }
+              return { results: [] };
+            },
+          };
+        },
+      };
+    },
+  };
+  const order = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    order.push("apns-accepted");
+    return new Response(null, { status: 200 });
+  };
+  try {
+    await assert.rejects(
+      dispatchPushPage(
+        {
+          DB: database,
+          APNS_PRIVATE_KEY: "configured-pre-send-intent-key",
+          APNS_KEY_ID: "ABCDEFGHIJ",
+          APNS_TEAM_ID: "ABCDEFGHIJ",
+          APNS_BUNDLE_ID: "com.quakesignal.app",
+        },
+        message(1).event,
+        "new",
+        "cached.provider.jwt",
+        "pre-send-intent-delivery",
+        undefined,
+        undefined,
+        async () => {},
+        async (deliveries) => {
+          assert.deepEqual(deliveries.map(({ device }) => device.token), [token]);
+          order.push("intent-durable");
+          return { storageKey: "prepared", writeId: "write" };
+        },
+        async () => {},
+        async (_intent, deliveries) => deliveries.map((delivery, originDeliveryIndex) => ({
+          delivery,
+          originDeliveryIndex,
+          snapshotRegistrationRevision: delivery.device.registrationRevision,
+        })),
+        async () => {
+          order.push("accepted-d1-attempt");
+          throw new Error("simulated crash before accepted evidence commit");
+        },
+      ),
+      /simulated crash before accepted evidence commit/,
+    );
+    assert.deepEqual(
+      order,
+      ["intent-durable", "apns-accepted", "accepted-d1-attempt"],
+      "a crash after provider acceptance leaves the pre-send record for recovery",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a peer APNs 2xx is journaled before BadDeviceToken D1 cleanup begins", async () => {
+  const { dispatchPushPage } = await workerModule();
+  const originalFetch = globalThis.fetch;
+  const order = [];
+  const row = (cursor, token) => ({
+    cursor,
+    token,
+    environment: "production",
+    locale: null,
+    sources: '["jma_eew"]',
+    min_magnitude: 0,
+    critical_alerts_enabled: 0,
+    alert_sound: "system",
+    city_name: null,
+    latitude: 35,
+    longitude: 139,
+    radius_km: 100,
+    include_test_alerts: 0,
+    utc_offset_minutes: null,
+    notify_at_night: 1,
+    app_attest_key_id: `key-${cursor}`,
+    registration_revision: `revision-${cursor}`,
+    app_identity: "5TT564H883.com.quakesignal.app",
+    apns_topic: "com.quakesignal.app",
+    app_platform: "ios",
+    created_at: "2026-08-20T00:00:00.000Z",
+    updated_at: "2026-08-20T00:00:00.000Z",
+  });
+  const rows = [row(1, "accepted-peer-token"), row(2, "bad-peer-token")];
+  const database = {
+    prepare(sql) {
+      return {
+        bind(...bindings) {
+          return {
+            sql,
+            bindings,
+            async all() {
+              if (sql.includes("SELECT rowid AS cursor, * FROM devices")) {
+                return { results: rows };
+              }
+              if (
+                sql.includes("FROM notification_deliveries") ||
+                sql.includes("FROM alert_delivery_failures")
+              ) return { results: [] };
+              throw new Error(`unexpected query: ${sql}`);
+            },
+            async run() {
+              order.push("fallback-failure-record");
+              return { meta: { changes: 1 } };
+            },
+          };
+        },
+      };
+    },
+    async batch() {
+      order.push("bad-device-cleanup");
+      throw new Error("simulated D1 cleanup outage");
+    },
+  };
+  globalThis.fetch = async (request) =>
+    String(typeof request === "string" ? request : request.url).includes("accepted-peer-token")
+      ? new Response(null, { status: 200 })
+      : Response.json({ reason: "BadDeviceToken" }, { status: 400 });
+  try {
+    const page = await dispatchPushPage(
+      {
+        DB: database,
+        APNS_PRIVATE_KEY: "configured-peer-ordering-key",
+        APNS_KEY_ID: "ABCDEFGHIJ",
+        APNS_TEAM_ID: "ABCDEFGHIJ",
+        APNS_BUNDLE_ID: "com.quakesignal.app",
+      },
+      message(1).event,
+      "new",
+      "cached.provider.jwt",
+      "peer-ordering-delivery",
+      undefined,
+      undefined,
+      async (accepted) => {
+        assert.deepEqual(
+          accepted.map(({ device }) => device.token),
+          ["accepted-peer-token"],
+        );
+        order.push("acceptance-journal");
+      },
+    );
+    assert.equal(page.retryRequired, true);
+    assert.deepEqual(order, [
+      "acceptance-journal",
+      "bad-device-cleanup",
+      "fallback-failure-record",
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a post-2xx journal failure stops every later APNs batch", async () => {
+  const { dispatchPushPage } = await workerModule();
+  const originalFetch = globalThis.fetch;
+  const rows = Array.from({ length: 3 }, (_, index) => ({
+    cursor: index + 1,
+    token: `journal-stop-token-${index + 1}`,
+    environment: "production",
+    locale: null,
+    sources: '["jma_eew"]',
+    min_magnitude: 0,
+    critical_alerts_enabled: 0,
+    alert_sound: "system",
+    city_name: null,
+    latitude: 35,
+    longitude: 139,
+    radius_km: 100,
+    include_test_alerts: 0,
+    utc_offset_minutes: null,
+    notify_at_night: 1,
+    app_attest_key_id: `journal-stop-key-${index + 1}`,
+    registration_revision: `journal-stop-revision-${index + 1}`,
+    app_identity: "5TT564H883.com.quakesignal.app",
+    apns_topic: "com.quakesignal.app",
+    app_platform: "ios",
+    created_at: "2026-08-20T00:00:00.000Z",
+    updated_at: "2026-08-20T00:00:00.000Z",
+  }));
+  const database = {
+    prepare(sql) {
+      return {
+        bind() {
+          return {
+            async all() {
+              if (sql.includes("SELECT rowid AS cursor, * FROM devices")) {
+                return { results: rows };
+              }
+              return { results: [] };
+            },
+          };
+        },
+      };
+    },
+  };
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests += 1;
+    return new Response(null, { status: 200 });
+  };
+  try {
+    await assert.rejects(
+      dispatchPushPage(
+        {
+          DB: database,
+          APNS_PRIVATE_KEY: "configured-journal-stop-key",
+          APNS_KEY_ID: "ABCDEFGHIJ",
+          APNS_TEAM_ID: "ABCDEFGHIJ",
+          APNS_BUNDLE_ID: "com.quakesignal.app",
+        },
+        message(1).event,
+        "new",
+        "cached.provider.jwt",
+        "journal-stop-delivery",
+        undefined,
+        undefined,
+        async () => {
+          throw new Error("simulated journal write failure");
+        },
+      ),
+      /simulated journal write failure/,
+    );
+    assert.equal(
+      requests,
+      2,
+      "only the already-settled two-recipient batch may reach APNs",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("BadDeviceToken revision fence preserves a same-millisecond in-flight authenticated refresh", async () => {
+  const { dispatchPushPage } = await workerModule();
+  const originalFetch = globalThis.fetch;
+  const originalConsoleWarn = console.warn;
+  const token = "fedcba9876543210";
+  const harness = mutableApnsDeviceDatabase({
+    cursor: 1,
+    token,
+    environment: "production",
+    locale: null,
+    sources: '["jma_eew"]',
+    min_magnitude: 0,
+    critical_alerts_enabled: 0,
+    alert_sound: "system",
+    city_name: "Test City",
+    latitude: 35,
+    longitude: 135,
+    radius_km: 100,
+    include_test_alerts: 0,
+    utc_offset_minutes: null,
+    notify_at_night: 1,
+    app_attest_key_id: "refreshed-token-key",
+    registration_revision: "refresh-race-sent-revision",
+    created_at: "2026-08-20T00:00:00.000Z",
+    updated_at: "2026-08-20T00:00:00.000Z",
+  });
+  const event = {
+    id: "jma_eew:bad-token-refresh-race",
+    eventId: "bad-token-refresh-race",
+    sourceId: "jma_eew",
+    serial: 1,
+    kind: "eew",
+    originTimeUtc: "2026-08-20T00:00:00.000Z",
+    reportTimeUtc: "2026-08-20T00:00:00.000Z",
+    hypocenter: "Test Region",
+    latitude: 35,
+    longitude: 135,
+    magnitude: 5,
+    depth: 10,
+    maxIntensity: "4",
+    isWarn: true,
+    isFinal: false,
+    isCancel: false,
+    isTraining: false,
+    tsunami: null,
+    raw: null,
+  };
+  let apnsRequests = 0;
+  const warnings = [];
+  console.warn = (entry) => warnings.push(JSON.parse(String(entry)));
+  globalThis.fetch = async () => {
+    apnsRequests += 1;
+    if (apnsRequests === 1) {
+      harness.currentRow = {
+        ...harness.currentRow,
+        registration_revision: "refresh-race-inflight-revision",
+      };
+      return Response.json({ reason: "BadDeviceToken" }, { status: 400 });
+    }
+    return new Response(null, { status: 200 });
+  };
+  const environment = {
+    APP_ATTEST_ENFORCEMENT: "required",
+    DB: harness.database,
+    APNS_PRIVATE_KEY: "configured-bad-token-race-key",
+    APNS_KEY_ID: "ABCDEFGHIJ",
+    APNS_TEAM_ID: "ABCDEFGHIJ",
+    APNS_BUNDLE_ID: "com.quakesignal.app",
+  };
+  try {
+    const first = await dispatchPushPage(
+      environment,
+      event,
+      "new",
+      "cached.provider.jwt",
+      "bad-token-race-delivery-1",
+    );
+    assert.equal(first.retryRequired, false);
+    assert.equal(
+      harness.currentRow.updated_at,
+      "2026-08-20T00:00:00.000Z",
+      "same-millisecond registration timestamps must not affect D1 ordering",
+    );
+    assert.equal(
+      harness.currentRow.registration_revision,
+      "refresh-race-inflight-revision",
+    );
+    assert.equal(harness.appAttestKeyPresent, true);
+    assert.equal(warnings[0].deactivated, false);
+    assert.equal(warnings[0].disposition, "quarantine");
+    assert.equal(harness.badDeviceTokenQuarantineCount, 1);
+    const quarantineStatement = harness.batches.flat().find(({ sql }) =>
+      sql.includes("INSERT INTO alert_delivery_failures") &&
+      sql.includes("FROM devices")
+    );
+    assert.ok(quarantineStatement);
+    assert.match(
+      quarantineStatement.sql,
+      /MAX\(\?, updated_at\)[\s\S]*MAX\(\?, updated_at\)/,
+      "active quarantine retention cannot start before the preserved device refresh",
+    );
+
+    const second = await dispatchPushPage(
+      environment,
+      { ...event, serial: 2, reportTimeUtc: "2026-08-20T00:01:00.000Z" },
+      "updated",
+      "cached.provider.jwt",
+      "bad-token-race-delivery-2",
+    );
+    assert.equal(second.retryRequired, false);
+    assert.equal(
+      apnsRequests,
+      1,
+      "a refresh that predates the APNs rejection must stay out of later-event fanout",
+    );
+
+    harness.authenticatedRenewal("2026-08-20T00:00:02.000Z");
+    const third = await dispatchPushPage(
+      environment,
+      { ...event, serial: 3, reportTimeUtc: "2026-08-20T00:02:00.000Z" },
+      "updated",
+      "cached.provider.jwt",
+      "bad-token-race-delivery-3",
+    );
+    assert.equal(third.retryRequired, false);
+    assert.equal(
+      apnsRequests,
+      2,
+      "a registration serialized after quarantine clears it before later fanout",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.warn = originalConsoleWarn;
+  }
+});
+
+test("APNs 410 cleanup uses the sent revision after timestamp eligibility and preserves same-ms or skewed renewals", async () => {
+  const { dispatchPushPage } = await workerModule();
+  const originalFetch = globalThis.fetch;
+  const invalidationTime = "2026-08-20T00:00:01.000Z";
+  try {
+    const unchanged = mutableApnsDeviceDatabase({
+      cursor: 1,
+      token: "unregistered-unchanged-revision",
+      environment: "production",
+      locale: null,
+      sources: '["jma_eew"]',
+      min_magnitude: 0,
+      critical_alerts_enabled: 0,
+      alert_sound: "system",
+      city_name: null,
+      latitude: 35,
+      longitude: 139,
+      radius_km: 100,
+      include_test_alerts: 0,
+      utc_offset_minutes: null,
+      notify_at_night: 1,
+      app_attest_key_id: "unregistered-revision-key",
+      registration_revision: "unregistered-sent-revision",
+      created_at: "2026-08-20T00:00:00.000Z",
+      updated_at: "2026-08-20T00:00:00.000Z",
+    });
+    globalThis.fetch = async () => Response.json(
+      {
+        reason: "Unregistered",
+        // Production accepts APNs' documented millisecond Unix timestamp.
+        timestamp: Date.parse(invalidationTime),
+      },
+      { status: 410 },
+    );
+    const unchangedPage = await dispatchPushPage(
+      {
+        DB: unchanged.database,
+        APNS_PRIVATE_KEY: "configured-unregistered-key",
+        APNS_KEY_ID: "ABCDEFGHIJ",
+        APNS_TEAM_ID: "ABCDEFGHIJ",
+        APNS_BUNDLE_ID: "com.quakesignal.app",
+      },
+      message(1).event,
+      "new",
+      "cached.provider.jwt",
+      "unregistered-unchanged",
+    );
+    assert.equal(unchangedPage.retryRequired, false);
+    assert.equal(unchanged.currentRow, null, "the exact sent revision is removed");
+    assert.ok(
+      unchanged.batches.flat().some(({ sql, bindings = [] }) =>
+        sql.includes("apns_registration_revision_fences") &&
+        bindings.includes("apns_unregistration")
+      ),
+      "410 cleanup fences the exact sent revision before deletion",
+    );
+
+    for (const [label, refreshedAt] of [
+      ["same millisecond", "2026-08-20T00:00:00.000Z"],
+      ["skewed earlier", "2026-08-19T23:59:59.000Z"],
+    ]) {
+      const token = `unregistered-revision-${label.replaceAll(" ", "-")}`;
+      const harness = mutableApnsDeviceDatabase({
+        cursor: 1,
+        token,
+        environment: "production",
+        locale: null,
+        sources: '["jma_eew"]',
+        min_magnitude: 0,
+        critical_alerts_enabled: 0,
+        alert_sound: "system",
+        city_name: null,
+        latitude: 35,
+        longitude: 139,
+        radius_km: 100,
+        include_test_alerts: 0,
+        utc_offset_minutes: null,
+        notify_at_night: 1,
+        app_attest_key_id: "unregistered-revision-key",
+        registration_revision: "unregistered-sent-revision",
+        created_at: "2026-08-20T00:00:00.000Z",
+        updated_at: "2026-08-20T00:00:00.000Z",
+      });
+      globalThis.fetch = async () => {
+        harness.currentRow = {
+          ...harness.currentRow,
+          registration_revision: `unregistered-renewed-${label}`,
+          updated_at: refreshedAt,
+        };
+        return Response.json(
+          {
+            reason: "Unregistered",
+            timestamp: Date.parse(invalidationTime),
+          },
+          { status: 410 },
+        );
+      };
+      const page = await dispatchPushPage(
+        {
+          DB: harness.database,
+          APNS_PRIVATE_KEY: "configured-unregistered-key",
+          APNS_KEY_ID: "ABCDEFGHIJ",
+          APNS_TEAM_ID: "ABCDEFGHIJ",
+          APNS_BUNDLE_ID: "com.quakesignal.app",
+        },
+        message(1).event,
+        "new",
+        "cached.provider.jwt",
+        `unregistered-${label}`,
+      );
+      assert.equal(page.retryRequired, false);
+      assert.equal(
+        harness.currentRow.registration_revision,
+        `unregistered-renewed-${label}`,
+        `${label} renewal must survive independently of its wall-clock value`,
+      );
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("active failure retention is pinned to at least the registration refresh clock", async () => {
+  const { deliveryFailureLastSeenUtc } = await workerModule();
+  assert.equal(
+    deliveryFailureLastSeenUtc(
+      "2026-08-20T00:00:00.000Z",
+      "2026-08-20T00:00:01.000Z",
+    ),
+    "2026-08-20T00:00:01.000Z",
+  );
+  assert.equal(
+    deliveryFailureLastSeenUtc(
+      "2026-08-20T00:00:01.000Z",
+      "2026-08-20T00:00:00.000Z",
+    ),
+    "2026-08-20T00:00:01.000Z",
+  );
+  assert.equal(
+    deliveryFailureLastSeenUtc("2026-08-20T00:00:01.000Z", "malformed"),
+    "2026-08-20T00:00:01.000Z",
+  );
 });
 
 test("dispatches each authenticated app route with its stored allow-listed APNs topic", async () => {
@@ -484,9 +1642,9 @@ test("dispatches each authenticated app route with its stored allow-listed APNs 
     critical_alerts_enabled: 0,
     alert_sound: "system",
     city_name: null,
-    latitude: null,
-    longitude: null,
-    radius_km: null,
+    latitude: 35,
+    longitude: 135,
+    radius_km: 100,
     include_test_alerts: 1,
     utc_offset_minutes: null,
     notify_at_night: 1,
@@ -584,7 +1742,11 @@ test("dispatches each authenticated app route with its stored allow-listed APNs 
         topic: "com.quakesignal.app.watchkitapp",
       },
     ]);
-    assert.equal(deliveredBatches.length, 1);
+    assert.equal(
+      deliveredBatches.length,
+      2,
+      "each authenticated APNs route owns its own durable acceptance batch",
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -606,9 +1768,9 @@ test("never sends a tampered stored topic and still completes another platform r
     critical_alerts_enabled: 0,
     alert_sound: "system",
     city_name: null,
-    latitude: null,
-    longitude: null,
-    radius_km: null,
+    latitude: 35,
+    longitude: 135,
+    radius_km: 100,
     include_test_alerts: 1,
     utc_offset_minutes: null,
     notify_at_night: 1,
@@ -783,7 +1945,7 @@ test("rejects an over-limit health probe before it can activate the global relay
   const response = await worker.fetch(
     new Request("https://quakesignal-api.example/healthz"),
     {
-      DEVICE_API_RATE_LIMIT: {
+      APP_ATTEST_CHALLENGE_RATE_LIMIT: {
         async limit() {
           return { success: false };
         },
@@ -909,6 +2071,11 @@ test("health exposes a stable non-secret App Attest policy fingerprint without e
     new Request("https://quakesignal-api.example/healthz"),
     {
       ...policyEnvironment,
+      APP_ATTEST_CHALLENGE_RATE_LIMIT: {
+        async limit() {
+          return { success: true };
+        },
+      },
       DEVICE_API_RATE_LIMIT: {
         async limit() {
           return { success: true };
@@ -962,6 +2129,11 @@ test("health returns a no-store structured 503 when the relay status call fails"
     new Request("https://quakesignal-api.example/healthz"),
     {
       ...policyEnvironment,
+      APP_ATTEST_CHALLENGE_RATE_LIMIT: {
+        async limit() {
+          return { success: true };
+        },
+      },
       DEVICE_API_RATE_LIMIT: {
         async limit() {
           return { success: true };
@@ -1149,7 +2321,11 @@ test("a first status probe still performs operational bootstrap when no alarm ex
       },
     );
     await relay.fetch(new Request("https://relay.internal/status"));
-    assert.ok(d1Batches > 0, "first status retains durable startup work");
+    assert.equal(
+      d1Batches,
+      0,
+      "first status defers durable maintenance to the alarm",
+    );
     assert.equal(
       httpSeedRequests,
       0,
@@ -2631,15 +3807,21 @@ test("a cold Queue-facing relay defers its first HTTP baseline to the alarm", as
 
   assert.equal(response.status, 400);
   assert.deepEqual(modes, []);
-  assert.deepEqual(maintenance, ["dlq", "legacy", "journal", "outbox", "purge"]);
+  assert.deepEqual(
+    maintenance,
+    [],
+    "the legacy upgrade endpoint leaves routine maintenance to the alarm",
+  );
 });
 
-test("routine retention uses an 89-day event and revision cutoff", async () => {
+test("routine retention separates event, ordinary evidence, and active invalid-token cutoffs", async () => {
   const { QuakeRelay } = await workerModule();
   const batches = [];
   const stored = new Map();
   const state = {
     storage: {
+      async getAlarm() { return null; },
+      async setAlarm() {},
       async get(key) {
         return stored.get(key);
       },
@@ -2681,14 +3863,69 @@ test("routine retention uses an 89-day event and revision cutoff", async () => {
   const eventIndex = statements.findIndex(({ sql }) =>
     sql === "DELETE FROM events WHERE last_updated_utc < ?"
   );
+  const lifecycleRetention = statements.find(({ sql }) =>
+    sql.includes("DELETE FROM alert_lifecycle_recipients")
+  );
+  const staleDeviceFence = statements.find(({ sql }) =>
+    sql.includes("INSERT INTO apns_registration_revision_fences") &&
+    sql.includes("'stale_registration_retention'")
+  );
+  const fenceRetention = statements.find(({ sql }) =>
+    sql.includes("DELETE FROM apns_registration_revision_fences")
+  );
+  const deviceDeletionIndex = statements.findIndex(({ sql }) =>
+    sql.includes("DELETE FROM devices WHERE updated_at < ?")
+  );
+  const failureRetention = statements.find(({ sql }) =>
+    sql.includes("DELETE FROM alert_delivery_failures")
+  );
+  const incidentRetention = statements.find(({ sql }) =>
+    sql.includes("DELETE FROM alert_delivery_incidents")
+  );
+  const pageFailureRetention = statements.find(({ sql }) =>
+    sql.includes("DELETE FROM alert_delivery_page_failures")
+  );
   assert.ok(revisionIndex >= 0, "revision retention must be explicit and bounded");
   assert.ok(eventIndex > revisionIndex, "revisions must be pruned before events");
   // The sweep uses the disclosed 89-day eligibility cutoff. Public copy also
   // states that the next successful daily cleanup performs deletion and that
   // operational failures can delay it.
   const expectedCutoff = new Date(now - (89 * 24 * 60 * 60_000)).toISOString();
+  const expectedDeviceCutoff = new Date(now - (90 * 24 * 60 * 60_000)).toISOString();
+  const expectedDeliveryCutoff = new Date(now - (14 * 24 * 60 * 60_000)).toISOString();
   assert.deepEqual(statements[revisionIndex].bindings, [expectedCutoff]);
   assert.deepEqual(statements[eventIndex].bindings, [expectedCutoff]);
+  assert.ok(staleDeviceFence, "stale revisions must be fenced before bulk deletion");
+  assert.ok(
+    statements.indexOf(staleDeviceFence) < deviceDeletionIndex,
+    "the revision-only removal fence and device deletion share one ordered batch",
+  );
+  assert.deepEqual(
+    staleDeviceFence.bindings,
+    [new Date(now).toISOString(), expectedDeviceCutoff],
+  );
+  assert.match(staleDeviceFence.sql, /token_hash[\s\S]*SELECT registration_revision, NULL/);
+  assert.match(staleDeviceFence.sql, /blocks_lifecycle_replay = 1/);
+  assert.deepEqual(lifecycleRetention.bindings, [expectedDeliveryCutoff]);
+  assert.match(lifecycleRetention.sql, /last_evidence_at_utc < \?/);
+  assert.deepEqual(
+    failureRetention.bindings,
+    [expectedDeviceCutoff, expectedDeliveryCutoff],
+  );
+  assert.match(failureRetention.sql, /apns_reason = 'BadDeviceToken'/);
+  assert.match(failureRetention.sql, /status = 'active'/);
+  assert.deepEqual(fenceRetention.bindings, [expectedDeliveryCutoff]);
+  for (const retention of [incidentRetention, pageFailureRetention]) {
+    assert.deepEqual(retention.bindings, [expectedDeliveryCutoff]);
+    assert.match(retention.sql, /status = 'resolved'/);
+    assert.match(retention.sql, /resolved_at_utc IS NOT NULL/);
+    assert.match(retention.sql, /resolved_at_utc < \?/);
+    assert.doesNotMatch(
+      retention.sql,
+      /last_seen_utc < \?/,
+      "active incidents must not age out before explicit resolution",
+    );
+  }
   assert.equal(
     stored.get("last-device-purge-ms"),
     now,
@@ -3830,7 +5067,7 @@ test("HTTP report lists resume in D1-safe slices and remain health-stale until c
 
 test("routine alarms keep a bounded outbox hand-off budget before HTTP fallback", async () => {
   const { QuakeRelay } = await workerModule();
-  const values = new Map();
+  const values = new Map([["last-device-purge-ms", Date.now()]]);
   const state = {
     storage: {
       async get(key) { return values.get(key); },
@@ -5593,7 +6830,7 @@ test("a marker-only live-list overload remains stale without starving ordinary m
 
     assert.deepEqual(
       maintenance,
-      ["dlq", "legacy", "journal", "outbox", "purge"],
+      ["purge"],
       "marker-only state must not block unrelated recovery or alert delivery",
     );
     assert.ok(harness.values.has(`live-snapshot-overload:${route}`));
@@ -5654,13 +6891,16 @@ test("the early live-snapshot alarm is replaced by its five-second cursor retry"
   }
 });
 
-test("App Attest challenge quota is route-wide before D1 and ignores caller key rotation", async () => {
+test("App Attest challenge quota is per-client before D1 and ignores caller key rotation", async () => {
   const { default: worker } = await workerModule();
   const challengeKeys = [];
+  const logs = [];
+  let routeCircuitCalls = 0;
   let d1Touched = false;
   const environment = {
     DEVICE_API_RATE_LIMIT: {
       async limit() {
+        routeCircuitCalls += 1;
         return { success: true };
       },
     },
@@ -5675,11 +6915,14 @@ test("App Attest challenge quota is route-wide before D1 and ignores caller key 
       throw new Error("an over-limit challenge must not touch D1");
     },
   };
-  const requestForKey = (keyId) => new Request(
+  const requestForKey = (keyId, clientIp) => new Request(
     "https://quakesignal-api.example/v1/app-attest/challenge",
     {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(clientIp === undefined ? {} : { "cf-connecting-ip": clientIp }),
+      },
       body: JSON.stringify({
         version: "1",
         keyId,
@@ -5690,23 +6933,298 @@ test("App Attest challenge quota is route-wide before D1 and ignores caller key 
       }),
     },
   );
-  const first = await worker.fetch(
-    requestForKey(Buffer.alloc(32).toString("base64url")),
-    environment,
-  );
-  const second = await worker.fetch(
-    requestForKey(Buffer.alloc(32, 1).toString("base64url")),
-    environment,
-  );
-  assert.equal(first.status, 429);
-  assert.equal(second.status, 429);
+  const originalConsoleError = console.error;
+  console.error = (entry) => logs.push(String(entry));
+  try {
+    const responses = [];
+    for (const request of [
+        requestForKey(Buffer.alloc(32).toString("base64url"), "203.0.113.10"),
+        requestForKey(Buffer.alloc(32, 1).toString("base64url"), "203.0.113.10"),
+        requestForKey(Buffer.alloc(32, 2).toString("base64url"), "203.0.113.11"),
+        requestForKey(Buffer.alloc(32, 3).toString("base64url")),
+        requestForKey(Buffer.alloc(32, 4).toString("base64url")),
+    ]) {
+      responses.push(await worker.fetch(request, environment));
+    }
+    assert.deepEqual(responses.map(({ status }) => status), [429, 429, 429, 429, 429]);
+  } finally {
+    console.error = originalConsoleError;
+  }
   assert.equal(d1Touched, false);
-  assert.equal(challengeKeys.length, 2);
-  assert.equal(
-    challengeKeys[0],
-    challengeKeys[1],
-    "the challenge limiter key must remain stable across untrusted key IDs",
+  assert.equal(routeCircuitCalls, 0, "blocked client requests must not consume shared capacity");
+  assert.equal(challengeKeys.length, 5);
+  assert.equal(challengeKeys[0], challengeKeys[1],
+    "the client limiter key must remain stable across untrusted App Attest key IDs");
+  assert.notEqual(challengeKeys[0], challengeKeys[2],
+    "independent Cloudflare-authenticated client IPs need independent buckets");
+  assert.equal(challengeKeys[3], challengeKeys[4],
+    "missing headers must share one bounded fallback bucket");
+  assert.ok(challengeKeys.every((key) => /^[0-9a-f]{64}$/.test(key)));
+  const endpointKeys = [];
+  const health = await worker.fetch(
+    new Request("https://quakesignal-api.example/healthz", {
+      headers: { "cf-connecting-ip": "203.0.113.10" },
+    }),
+    {
+      APP_ATTEST_CHALLENGE_RATE_LIMIT: {
+        async limit({ key }) {
+          endpointKeys.push(key);
+          return { success: false };
+        },
+      },
+    },
   );
+  assert.equal(health.status, 429);
+  assert.notEqual(
+    endpointKeys[0],
+    challengeKeys[0],
+    "the same authenticated client IP must receive independent route-scoped keys",
+  );
+  assert.doesNotMatch(
+    JSON.stringify({ challengeKeys, endpointKeys, logs }),
+    /203\.0\.113\.(?:10|11)/,
+    "neither limiter keys nor logs may expose a raw client IP",
+  );
+});
+
+test("Cloudflare client IP rate-limit identity rejects malformed values and canonicalizes aliases", async () => {
+  const { cloudflareAuthenticatedClientIp } = await workerModule();
+  const request = (value) => new Request("https://quakesignal-api.example/healthz", {
+    headers: value === undefined ? {} : { "cf-connecting-ip": value },
+  });
+  assert.equal(cloudflareAuthenticatedClientIp(request("203.000.113.010")), "203.0.113.10");
+  assert.equal(cloudflareAuthenticatedClientIp(request("2001:0DB8:0:0:0:0:0:7")), "2001:db8::7");
+  assert.equal(cloudflareAuthenticatedClientIp(request("2001:db8::7")), "2001:db8::7");
+  for (const malformed of [undefined, "A", "...", "::::", "256.0.0.1", "1.2.3", "2001:::7"]) {
+    assert.equal(
+      cloudflareAuthenticatedClientIp(request(malformed)),
+      null,
+      `${String(malformed)} must share the bounded malformed-header fallback`,
+    );
+  }
+});
+
+test("App Attest challenge client quota runs before the higher route-wide circuit breaker", async () => {
+  const { default: worker } = await workerModule();
+  const calls = [];
+  let d1Touched = false;
+  const response = await worker.fetch(
+    new Request("https://quakesignal-api.example/v1/app-attest/challenge", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "cf-connecting-ip": "2001:db8::7",
+      },
+      body: "{}",
+    }),
+    {
+      APP_ATTEST_CHALLENGE_RATE_LIMIT: {
+        async limit({ key }) {
+          calls.push({ limiter: "client", key });
+          return { success: true };
+        },
+      },
+      DEVICE_API_RATE_LIMIT: {
+        async limit({ key }) {
+          calls.push({ limiter: "route", key });
+          return { success: false };
+        },
+      },
+      get DB() {
+        d1Touched = true;
+        throw new Error("the route circuit breaker must run before D1");
+      },
+    },
+  );
+  assert.equal(response.status, 429);
+  assert.equal(d1Touched, false);
+  assert.deepEqual(calls.map(({ limiter }) => limiter), ["client", "route"]);
+  assert.notEqual(calls[0].key, calls[1].key, "client and route counters are independent");
+
+  const wrangler = await readFile(join(cloudflareDirectory, "wrangler.jsonc"), "utf8");
+  assert.match(
+    wrangler,
+    /"name": "DEVICE_API_RATE_LIMIT"[\s\S]*?"limit": 300/,
+  );
+  assert.match(
+    wrangler,
+    /"name": "APP_ATTEST_CHALLENGE_RATE_LIMIT"[\s\S]*?"limit": 60/,
+  );
+});
+
+test("public device mutations admit the client bucket before a shared route circuit breaker", async () => {
+  const { default: worker } = await workerModule();
+  const calls = [];
+  const environment = {
+    APP_ATTEST_ENFORCEMENT: "required",
+    APP_ATTEST_CHALLENGE_RATE_LIMIT: {
+      async limit({ key }) {
+        calls.push({ limiter: "client", key });
+        return { success: true };
+      },
+    },
+    DEVICE_API_RATE_LIMIT: {
+      async limit({ key }) {
+        calls.push({ limiter: "route", key });
+        return { success: true };
+      },
+    },
+  };
+  for (const clientIp of ["203.0.113.31", "203.0.113.32"]) {
+    const response = await worker.fetch(
+      new Request("https://quakesignal-api.example/v1/devices", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "cf-connecting-ip": clientIp,
+        },
+        body: "{}",
+      }),
+      environment,
+    );
+    assert.equal(response.status, 401);
+  }
+  assert.deepEqual(
+    calls.map(({ limiter }) => limiter),
+    ["client", "route", "client", "route"],
+  );
+  assert.notEqual(
+    calls[0].key,
+    calls[2].key,
+    "independent clients retain independent 60/minute budgets",
+  );
+  assert.equal(
+    calls[1].key,
+    calls[3].key,
+    "admitted distributed requests share the 300/minute route circuit breaker",
+  );
+  assert.notEqual(
+    calls[0].key,
+    calls[1].key,
+    "the client and circuit keys remain domain-separated",
+  );
+});
+
+test("every public branch is client-limited before its normalized route circuit", async () => {
+  const { default: worker } = await workerModule();
+  const calls = [];
+  const environment = {
+    APP_ATTEST_CHALLENGE_RATE_LIMIT: {
+      async limit({ key }) {
+        calls.push({ limiter: "client", key });
+        return { success: true };
+      },
+    },
+    DEVICE_API_RATE_LIMIT: {
+      async limit({ key }) {
+        calls.push({ limiter: "route", key });
+        return { success: true };
+      },
+    },
+  };
+  const requests = [
+    new Request("https://quakesignal-api.example/"),
+    new Request("https://quakesignal-api.example/privacy"),
+    new Request("https://quakesignal-api.example/terms"),
+    new Request("https://quakesignal-api.example/support"),
+    new Request("https://quakesignal-api.example/anything", { method: "OPTIONS" }),
+    new Request("https://quakesignal-api.example/unmatched-one"),
+    new Request("https://quakesignal-api.example/unmatched-two"),
+  ];
+  for (const request of requests) {
+    const response = await worker.fetch(request, environment);
+    assert.ok([200, 404, 405].includes(response.status));
+  }
+  assert.equal(calls.length, requests.length * 2);
+  assert.deepEqual(
+    calls.map(({ limiter }) => limiter),
+    requests.flatMap(() => ["client", "route"]),
+    "every branch enters the 60/client gate before the 300/route circuit",
+  );
+  assert.equal(
+    calls.at(-3).key,
+    calls.at(-1).key,
+    "arbitrary 404 paths share one bounded normalized unmatched circuit",
+  );
+});
+
+test("a missing server verifier requests fresh attestation after automatic token cleanup", async () => {
+  const { default: worker } = await workerModule();
+  const wireKeyId = Buffer.alloc(32, 7).toString("base64url");
+  const storedKeyId = Buffer.alloc(32, 7).toString("base64");
+  const prepared = [];
+  const batches = [];
+  const environment = {
+    APP_ATTEST_ENFORCEMENT: "required",
+    APP_ATTEST_CHALLENGE_RATE_LIMIT: {
+      async limit() {
+        return { success: true };
+      },
+    },
+    DEVICE_API_RATE_LIMIT: {
+      async limit() {
+        return { success: true };
+      },
+    },
+    DEVICE_MUTATION_RATE_LIMIT: {
+      async limit() {
+        return { success: true };
+      },
+    },
+    DB: {
+      prepare(sql) {
+        return {
+          bind(...bindings) {
+            const statement = { sql, bindings };
+            prepared.push(statement);
+            return {
+              ...statement,
+              async first() {
+                assert.match(sql, /SELECT key_id, app_id FROM app_attest_keys/);
+                return null;
+              },
+            };
+          },
+        };
+      },
+      async batch(statements) {
+        batches.push(statements);
+        return statements.map(() => ({ meta: { changes: 1 } }));
+      },
+    },
+  };
+
+  const response = await worker.fetch(
+    new Request("https://quakesignal-api.example/v1/app-attest/challenge", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "cf-connecting-ip": "203.0.113.25",
+      },
+      body: JSON.stringify({
+        version: "1",
+        keyId: wireKeyId,
+        operation: "device-registration",
+        method: "POST",
+        path: "/v1/devices",
+        bodySHA256: Buffer.alloc(32).toString("base64url"),
+      }),
+    }),
+    environment,
+  );
+
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).proofType, "attestation");
+  assert.equal(
+    prepared.find(({ sql }) => sql.includes("SELECT key_id, app_id"))?.bindings[0],
+    storedKeyId,
+  );
+  const insertChallenge = batches.flat().find(({ sql }) =>
+    sql.includes("INSERT INTO app_attest_challenges")
+  );
+  assert.ok(insertChallenge);
+  assert.equal(insertChallenge.bindings[1], storedKeyId);
+  assert.equal(insertChallenge.bindings[8], "attestation");
 });
 
 test("training pushes obtain APNs authorization from the relay cache and fail closed", async () => {
@@ -5716,7 +7234,7 @@ test("training pushes obtain APNs authorization from the relay cache and fail cl
   const apnsAuthorizations = [];
   const apnsSources = [];
   const device = {
-    token: "sandbox-training-device-token",
+    token: "abcdef0123456789".repeat(4),
     environment: "sandbox",
     locale: null,
     // Simulate a registration created before build 8. Its old selection must
@@ -6203,6 +7721,14 @@ test("builds bounded typed APNs snapshots and reserves custom Time Sensitive sou
     assert.deepEqual(payload.event, expectedSnapshot);
     assert.deepEqual(JSON.parse(JSON.stringify(payload)).event, expectedSnapshot);
     assert.equal(payload.eventId, warning.eventId, "legacy payload fields remain available");
+    assert.equal(payload.serial, warning.serial);
+    assert.equal(payload.kind, warning.kind);
+    assert.equal(payload.originTimeUtc, warning.originTimeUtc);
+    assert.equal(payload.reportTimeUtc, warning.reportTimeUtc);
+    assert.equal(payload.isWarn, warning.isWarn);
+    assert.equal(payload.isFinal, warning.isFinal);
+    assert.equal(payload.isCancel, warning.isCancel);
+    assert.equal(payload.isTraining, warning.isTraining);
     assert.equal("raw" in payload.event, false);
   }
 
@@ -6252,18 +7778,93 @@ test("accepts only exact alert-sound registration identifiers and defaults old c
   const {
     APNS_RELAY_DISABLED_SOURCES,
     APNS_RELAY_SOURCES,
+    registrationStatement,
     validatedRegistrationValues,
   } = await workerModule();
-  const registration = { token: "0123456789abcdef" };
+  const registration = {
+    token: "0123456789abcdef",
+    latitude: 35,
+    longitude: 135,
+    radiusKm: 100,
+  };
   const legacy = validatedRegistrationValues(registration);
   assert.equal(legacy.alertSound, "system");
   assert.deepEqual(JSON.parse(legacy.sources), ["jma_eew", "jma_eqlist"]);
+  for (const invalidToken of [
+    "0123456789abcde",
+    "0123456789ABCDEf",
+    "0123456789abcdeg",
+    "01234567 89abcdef",
+  ]) {
+    const response = validatedRegistrationValues({
+      ...registration,
+      token: invalidToken,
+    });
+    assert.ok(response instanceof Response);
+    assert.equal(
+      response.status,
+      400,
+      "APNs tokens must use even-length canonical lowercase hexadecimal without assuming a fixed byte length",
+    );
+  }
+  for (const missingLocation of [
+    { token: registration.token },
+    { ...registration, latitude: undefined },
+    { ...registration, longitude: undefined },
+    { ...registration, radiusKm: undefined },
+  ]) {
+    const response = validatedRegistrationValues(missingLocation);
+    assert.ok(response instanceof Response);
+    assert.equal(response.status, 400, "automatic registrations require a complete radius filter");
+  }
   const jmaOnly = validatedRegistrationValues({
     ...registration,
     sources: ["jma_eew", "jma_eqlist"],
   });
   assert.ok(!(jmaOnly instanceof Response));
   assert.deepEqual(JSON.parse(jmaOnly.sources), APNS_RELAY_SOURCES);
+  const registrationCapture = capturedStatementDatabase();
+  registrationStatement(
+    registrationCapture.database,
+    jmaOnly,
+    "registration-generation-key",
+    {
+      appIdentity: "5TT564H883.com.quakesignal.app",
+      apnsTopic: "com.quakesignal.app",
+      platform: "ios",
+    },
+  );
+  assert.match(
+    registrationCapture.captured.sql,
+    /registration_revision = excluded\.registration_revision/,
+    "every successful same-token UPSERT must replace the sent-snapshot identity",
+  );
+  assert.match(
+    registrationCapture.captured.bindings[17],
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
+  const secondRegistrationCapture = capturedStatementDatabase();
+  registrationStatement(
+    secondRegistrationCapture.database,
+    jmaOnly,
+    "registration-generation-key",
+    {
+      appIdentity: "5TT564H883.com.quakesignal.app",
+      apnsTopic: "com.quakesignal.app",
+      platform: "ios",
+    },
+  );
+  assert.notEqual(
+    secondRegistrationCapture.captured.bindings[17],
+    registrationCapture.captured.bindings[17],
+    "a fresh row revision prevents delete-and-reinsert ABA reuse",
+  );
+  const noSources = validatedRegistrationValues({
+    ...registration,
+    sources: [],
+  });
+  assert.ok(noSources instanceof Response);
+  assert.equal(noSources.status, 400, "a registration must select at least one source");
   for (const source of APNS_RELAY_DISABLED_SOURCES) {
     const response = validatedRegistrationValues({
       ...registration,
@@ -6546,6 +8147,643 @@ test("migration 0012 indexes the bounded event-revision retention cutoff", async
   );
 });
 
+test("migration 0013 adds revision fencing, pseudonymous lifecycle continuity, and resolution-based retention", async (t) => {
+  const { terminalAlertLifecycleDevices } = await workerModule();
+  const directory = await mkdtemp(join(tmpdir(), "quakesignal-migration-0013-"));
+  const databasePath = join(directory, "migration.sqlite");
+  const sqlite = new DatabaseSync(databasePath);
+  t.after(async () => {
+    sqlite.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const migrationEntries = await readdir(join(cloudflareDirectory, "migrations"));
+  for (let version = 1; version <= 12; version += 1) {
+    const filename = migrationEntries.find((entry) =>
+      entry.startsWith(String(version).padStart(4, "0")),
+    );
+    assert.ok(filename, `migration ${version} must exist`);
+    sqlite.exec(await readFile(join(cloudflareDirectory, "migrations", filename), "utf8"));
+  }
+  sqlite.exec(`
+    INSERT INTO app_attest_keys (
+      key_id, public_key_pem, sign_count, app_id, environment,
+      receipt_base64, attested_at_utc
+    ) VALUES
+    (
+      'empty-source-key', 'empty-source-pem', 1,
+      '5TT564H883.com.quakesignal.app', 'production',
+      'empty-source-receipt', '2026-08-01T00:00:00.000Z'
+    ),
+    (
+      'valid-source-key', 'valid-source-pem', 1,
+      '5TT564H883.com.quakesignal.app', 'production',
+      'valid-source-receipt', '2026-08-01T00:00:00.000Z'
+    );
+    INSERT INTO app_attest_challenges (
+      id, key_id, wire_key_id, operation, method, path, body_sha256,
+      challenge, required_proof, environment, created_at_utc, expires_at_utc,
+      consumed_at_utc
+    ) VALUES (
+      '00000000-0000-0000-0000-000000000013', 'empty-source-key',
+      'empty-source-wire-key', 'device-registration', 'POST', '/v1/devices',
+      'empty-source-body-hash', 'empty-source-challenge', 'assertion',
+      'production', '2026-08-01T00:00:00.000Z', '2099-01-01T00:00:00.000Z',
+      '2026-08-01T00:01:00.000Z'
+    );
+    INSERT INTO devices (
+      token, environment, sources, min_magnitude, critical_alerts_enabled,
+      include_test_alerts, notify_at_night, app_attest_key_id,
+      created_at, updated_at
+    ) VALUES
+      ('empty-source-token', 'production', '[]', 0, 0, 0, 1,
+       'empty-source-key', '2026-08-01T00:00:00.000Z',
+       '2026-08-01T00:00:00.000Z'),
+      ('valid-source-token', 'production', '["jma_eew"]', 0, 0, 0, 1,
+       'valid-source-key', '2026-08-01T00:00:00.000Z',
+       '2026-08-01T00:00:00.000Z'),
+      ('malformed-source-token', 'production', 'not-json', 0, 0, 0, 1,
+       NULL, '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z');
+    INSERT INTO notification_deliveries (
+      delivery_id, device_token, delivered_at_utc
+    ) VALUES (
+      'empty-source-delivery', 'empty-source-token',
+      '2026-08-01T00:00:00.000Z'
+    );
+    INSERT INTO alert_delivery_failures (
+      delivery_id, token_hash, event_ref, source_id, notification_reason,
+      apns_status, apns_reason, disposition, first_seen_utc, last_seen_utc
+    ) VALUES
+      (
+        'empty-source-delivery', '${"a".repeat(64)}', 'jma_eew:empty-source',
+        'jma_eew', 'new', NULL, NULL, 'quarantine',
+        '2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z'
+      ),
+      (
+        'legacy-bad-token-delivery', '${"b".repeat(64)}', 'jma_eew:legacy-bad',
+        'jma_eew', 'new', 400, 'BadDeviceToken', 'quarantine',
+        '2026-08-05T00:00:00.000Z', '2026-08-06T00:00:00.000Z'
+      );
+    INSERT INTO alert_delivery_incidents (
+      queue_message_id, queue_attempts, status, first_seen_utc, last_seen_utc
+    ) VALUES
+      ('resolved-incident', 5, 'resolved',
+       '2026-08-01T00:00:00.000Z', '2026-08-02T00:00:00.000Z'),
+      ('active-incident', 5, 'active',
+       '2026-08-01T00:00:00.000Z', '2026-08-02T00:00:00.000Z');
+    INSERT INTO alert_delivery_page_failures (
+      outbox_id, delivery_id, root_delivery_id, event_ref, source_id,
+      event_serial, notification_reason, status, first_seen_utc, last_seen_utc
+    ) VALUES
+      ('resolved-page', 'resolved-delivery', 'resolved-root', 'jma_eew:resolved',
+       'jma_eew', 1, 'new', 'resolved',
+       '2026-08-03T00:00:00.000Z', '2026-08-04T00:00:00.000Z'),
+      ('active-page', 'active-delivery', 'active-root', 'jma_eew:active',
+       'jma_eew', 1, 'new', 'active',
+       '2026-08-03T00:00:00.000Z', '2026-08-04T00:00:00.000Z');
+  `);
+  const migrationStartedAtMs = Date.now();
+  sqlite.exec(await readFile(
+    join(
+      cloudflareDirectory,
+      "migrations/0013_alert_lifecycle_and_incident_retention.sql",
+    ),
+    "utf8",
+  ));
+  const migrationFinishedAtMs = Date.now();
+
+  const survivingDevices = sqlite.prepare(
+    "SELECT token, registration_revision FROM devices ORDER BY token",
+  ).all().map((row) => ({ ...row }));
+  assert.deepEqual(
+    survivingDevices.map(({ token }) => token),
+    ["malformed-source-token", "valid-source-token"],
+    "the guarded predicate deletes an explicit empty array without throwing on or widening malformed legacy JSON",
+  );
+  for (const { registration_revision: revision } of survivingDevices) {
+    assert.match(revision, /^[0-9a-f]{32}$/);
+  }
+  assert.notEqual(
+    survivingDevices[0].registration_revision,
+    survivingDevices[1].registration_revision,
+    "legacy registrations receive unique opaque revisions",
+  );
+  const revisionBeforeLegacyRefresh = survivingDevices[1].registration_revision;
+  sqlite.exec(
+    `UPDATE devices SET updated_at = updated_at
+     WHERE token = 'valid-source-token'`,
+  );
+  assert.notEqual(
+    sqlite.prepare(
+      `SELECT registration_revision FROM devices
+       WHERE token = 'valid-source-token'`,
+    ).get().registration_revision,
+    revisionBeforeLegacyRefresh,
+    "a rolling pre-0013 UPSERT advances the revision even at the same timestamp",
+  );
+  const trainingFencedRevision = sqlite.prepare(
+    `SELECT registration_revision FROM devices
+     WHERE token = 'valid-source-token'`,
+  ).get().registration_revision;
+  sqlite.prepare(
+    `INSERT INTO apns_provider_attempts (
+       attempt_id, registration_revision, token_hash, event_ref, outbox_id,
+       admitted_at_utc
+     ) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    "training:migration-contract",
+    trainingFencedRevision,
+    "c".repeat(64),
+    "jma_eew:training-contract",
+    "training:migration-contract",
+    "2026-08-22T00:00:00.000Z",
+  );
+  assert.throws(
+    () => sqlite.exec(
+      `UPDATE devices SET locale = 'ja'
+       WHERE token = 'valid-source-token'`,
+    ),
+    /training APNs outcome/i,
+    "a registration mutation cannot serialize through an unresolved production-training response",
+  );
+  sqlite.exec(
+    `UPDATE apns_provider_attempts
+     SET outcome_reconciled_at_utc = '2026-08-22T00:00:01.000Z'
+     WHERE attempt_id = 'training:migration-contract';
+     UPDATE devices SET locale = 'ja'
+     WHERE token = 'valid-source-token';`,
+  );
+  assert.equal(
+    sqlite.prepare(
+      "SELECT COUNT(*) AS count FROM notification_deliveries",
+    ).get().count,
+    0,
+    "raw-token delivery deduplication state is removed with the invalid row",
+  );
+  assert.equal(
+    sqlite.prepare("SELECT COUNT(*) AS count FROM app_attest_keys").get().count,
+    1,
+    "only the invalid row's now-orphaned App Attest verifier is removed",
+  );
+  assert.equal(
+    sqlite.prepare("SELECT COUNT(*) AS count FROM app_attest_challenges").get().count,
+    0,
+    "consumed challenges for the orphaned verifier are removed",
+  );
+  assert.equal(
+    sqlite.prepare("SELECT COUNT(*) AS count FROM alert_delivery_failures").get().count,
+    2,
+    "one-way failure hashes cannot be safely joined during migration and retain their ordinary/resolved 14-day or active BadDeviceToken 90-day policy",
+  );
+  assert.deepEqual(
+    sqlite.prepare("PRAGMA table_info(apns_provider_attempts)").all()
+      .map(({ name }) => name),
+    [
+      "attempt_id",
+      "registration_revision",
+      "token_hash",
+      "event_ref",
+      "outbox_id",
+      "admitted_at_utc",
+      "outcome_reconciled_at_utc",
+    ],
+    "provider admission keeps a durable outcome marker across a DO-clear crash",
+  );
+  assert.deepEqual(
+    sqlite.prepare(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'trigger' AND name LIKE 'devices_block_training_apns_attempt_%'
+       ORDER BY name`,
+    ).all().map(({ name }) => name),
+    [
+      "devices_block_training_apns_attempt_delete",
+      "devices_block_training_apns_attempt_update",
+    ],
+    "training provider admission fences both renewal and deletion until its exact response boundary",
+  );
+  assert.deepEqual(
+    sqlite.prepare("PRAGMA table_info(alert_lifecycle_possible_attempts)").all()
+      .map(({ name }) => name),
+    [
+      "attempt_id",
+      "event_ref",
+      "token_hash",
+      "app_attest_key_id",
+      "registration_revision",
+      "evidence_at_utc",
+    ],
+    "possible-contact continuity is attempt-owned and stores no raw APNs token",
+  );
+  assert.deepEqual(
+    sqlite.prepare("PRAGMA table_info(legacy_device_removal_tokens)").all()
+      .map(({ name }) => name),
+    [
+      "token",
+      "registration_revision",
+      "app_attest_key_id",
+      "decision_kind",
+      "removed_at_utc",
+    ],
+    "SQL-only consent withdrawal has one explicit bounded raw-token handoff for Worker hashing",
+  );
+  assert.deepEqual(
+    sqlite.prepare(
+      `SELECT token, decision_kind FROM legacy_device_removal_tokens
+       ORDER BY token`,
+    ).all().map((row) => ({ ...row })),
+    [{
+      token: "empty-source-token",
+      decision_kind: "empty_source_removal",
+    }],
+    "migration preserves only the removed token until the current Worker can hash and retire its unbound lifecycle lineage",
+  );
+  assert.deepEqual(
+    sqlite.prepare(
+      `SELECT delivery_id, status, resolved_at_utc
+       FROM alert_delivery_failures
+       WHERE apns_reason = 'BadDeviceToken'`,
+    ).all().map((row) => ({ ...row })),
+    [{
+      delivery_id: "legacy-bad-token-delivery",
+      status: "active",
+      resolved_at_utc: null,
+    }],
+    "pre-rollout BadDeviceToken evidence remains a safe global block until authenticated recovery",
+  );
+  assert.ok(
+    Date.parse(sqlite.prepare(
+      `SELECT last_seen_utc FROM alert_delivery_failures
+       WHERE delivery_id = 'legacy-bad-token-delivery'`,
+    ).get().last_seen_utc) >= migrationStartedAtMs - 1_000,
+    "legacy active BadDeviceToken retention restarts at rollout so it cannot expire before a currently retained device",
+  );
+  assert.deepEqual(
+    sqlite.prepare(
+      `SELECT token_hash, app_attest_key_id, decision_kind,
+              blocks_lifecycle_replay
+       FROM apns_registration_revision_fences
+       ORDER BY decision_kind`,
+    ).all().map((row) => ({ ...row })),
+    [
+      {
+        token_hash: null,
+        app_attest_key_id: "empty-source-key",
+        decision_kind: "empty_source_removal",
+        blocks_lifecycle_replay: 1,
+      },
+      {
+        token_hash: null,
+        app_attest_key_id: "valid-source-key",
+        decision_kind: "registration_renewal",
+        blocks_lifecycle_replay: 0,
+      },
+    ],
+    "migration fences empty-source removal and retains the rolling refresh's retired revision as nonblocking continuity",
+  );
+  const rehabilitatedEventRef = "jma_eew:reopted-lifecycle";
+  const rehabilitatedTokenHash = await sha256Hex("valid-source-token");
+  sqlite.prepare(
+    `INSERT INTO alert_lifecycle_recipients (
+       event_ref, token_hash, app_attest_key_id, registration_revision,
+       evidence_kind, first_evidence_at_utc, last_evidence_at_utc
+     ) VALUES (?, ?, ?, ?, 'apns_accepted', ?, ?)`,
+  ).run(
+    rehabilitatedEventRef,
+    rehabilitatedTokenHash,
+    "valid-source-key",
+    "removed-r1",
+    "2026-08-22T00:00:02.000Z",
+    "2026-08-22T00:00:02.000Z",
+  );
+  sqlite.prepare(
+    `INSERT INTO apns_registration_revision_fences (
+       registration_revision, token_hash, app_attest_key_id, decision_id,
+       decision_kind, blocks_lifecycle_replay, processed_at_utc
+     ) VALUES (?, ?, ?, ?, 'explicit_removal', 1, ?)`,
+  ).run(
+    "removed-r1",
+    rehabilitatedTokenHash,
+    "valid-source-key",
+    "removed-r1-decision",
+    "2026-08-22T00:00:01.000Z",
+  );
+  const d1 = {
+    prepare(sql) {
+      return {
+        bind(...bindings) {
+          return {
+            async all() {
+              return {
+                results: sqlite.prepare(sql).all(...bindings)
+                  .map((row) => ({ ...row })),
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  const currentDevice = {
+    token: "valid-source-token",
+    environment: "production",
+    locale: "ja",
+    sources: ["jma_eew"],
+    minMagnitude: 0,
+    criticalAlertsEnabled: false,
+    alertSound: "system",
+    cityName: null,
+    latitude: null,
+    longitude: null,
+    radiusKm: null,
+    includeTestAlerts: false,
+    utcOffsetMinutes: null,
+    notifyAtNight: true,
+    appAttestKeyId: "valid-source-key",
+    registrationRevision: trainingFencedRevision,
+    appIdentity: "5TT564H883.com.quakesignal.app",
+    apnsTopic: "com.quakesignal.app",
+    platform: "ios",
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  };
+  assert.equal(
+    (await terminalAlertLifecycleDevices(
+      d1,
+      rehabilitatedEventRef,
+      [currentDevice],
+    )).length,
+    1,
+    "fresh accepted evidence after re-opt-in rehabilitates an older matching removal fence",
+  );
+  sqlite.exec(
+    `UPDATE apns_registration_revision_fences
+     SET processed_at_utc = '2026-08-22T00:00:03.000Z'
+     WHERE registration_revision = 'removed-r1'`,
+  );
+  assert.equal(
+    (await terminalAlertLifecycleDevices(
+      d1,
+      rehabilitatedEventRef,
+      [currentDevice],
+    )).length,
+    0,
+    "a consent fence causally later than the lifecycle evidence still blocks terminal replay",
+  );
+  const resolvedIncidentAt = sqlite.prepare(
+    `SELECT resolved_at_utc FROM alert_delivery_incidents
+     WHERE queue_message_id = 'resolved-incident'`,
+  ).get().resolved_at_utc;
+  const resolvedPageAt = sqlite.prepare(
+    `SELECT resolved_at_utc FROM alert_delivery_page_failures
+     WHERE outbox_id = 'resolved-page'`,
+  ).get().resolved_at_utc;
+  for (const migrationResolvedAt of [resolvedIncidentAt, resolvedPageAt]) {
+    assert.match(migrationResolvedAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+    assert.ok(Date.parse(migrationResolvedAt) >= migrationStartedAtMs - 1_000);
+    assert.ok(Date.parse(migrationResolvedAt) <= migrationFinishedAtMs + 1_000);
+  }
+  assert.deepEqual(
+    sqlite.prepare(
+      `SELECT queue_message_id, resolved_at_utc
+       FROM alert_delivery_incidents ORDER BY queue_message_id`,
+    ).all().map((row) => ({ ...row })),
+    [
+      { queue_message_id: "active-incident", resolved_at_utc: null },
+      {
+        queue_message_id: "resolved-incident",
+        resolved_at_utc: resolvedIncidentAt,
+      },
+    ],
+  );
+  assert.deepEqual(
+    sqlite.prepare(
+      `SELECT outbox_id, resolved_at_utc
+       FROM alert_delivery_page_failures ORDER BY outbox_id`,
+    ).all().map((row) => ({ ...row })),
+    [
+      { outbox_id: "active-page", resolved_at_utc: null },
+      { outbox_id: "resolved-page", resolved_at_utc: resolvedPageAt },
+    ],
+  );
+  assert.deepEqual(
+    sqlite.prepare("PRAGMA table_info(alert_lifecycle_recipients)").all()
+      .map(({ name }) => name),
+    [
+      "event_ref",
+      "token_hash",
+      "app_attest_key_id",
+      "registration_revision",
+      "evidence_kind",
+      "first_evidence_at_utc",
+      "last_evidence_at_utc",
+    ],
+    "lifecycle storage must contain a hash/key pseudonym and no raw APNs token",
+  );
+  assert.ok(
+    sqlite.prepare("PRAGMA table_info(notification_deliveries)").all()
+      .some(({ name }) => name === "lifecycle_reconciled"),
+    "old-Worker APNs acceptances must remain explicitly pending lifecycle reconciliation",
+  );
+  assert.ok(
+    sqlite.prepare("PRAGMA table_info(alert_delivery_failures)").all()
+      .some(({ name }) => name === "registration_revision"),
+    "processed invalidation fences store the opaque sent revision, never the raw token",
+  );
+  assert.ok(
+    sqlite.prepare("PRAGMA table_info(alert_delivery_failures)").all()
+      .some(({ name }) => name === "origin_delivery_id"),
+    "revision-scoped BadDeviceToken rows retain their logical delivery ID separately",
+  );
+  assert.deepEqual(
+    sqlite.prepare("PRAGMA table_info(apns_registration_revision_fences)").all()
+      .map(({ name }) => name),
+    [
+      "registration_revision",
+      "token_hash",
+      "app_attest_key_id",
+      "decision_id",
+      "decision_kind",
+      "blocks_lifecycle_replay",
+      "processed_at_utc",
+    ],
+  );
+  assert.deepEqual(
+    sqlite.prepare(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'trigger' AND name IN (
+         'alert_failures_reject_legacy_bdt_insert',
+         'alert_failures_reject_legacy_bdt_update',
+         'devices_reject_unbound_legacy_update',
+         'devices_registration_revision_legacy_insert',
+         'devices_registration_revision_legacy_update',
+         'devices_require_revision_fence',
+         'devices_empty_sources_legacy_insert',
+         'devices_empty_sources_legacy_update'
+       ) ORDER BY name`,
+    ).all().map(({ name }) => name),
+    [
+      "alert_failures_reject_legacy_bdt_insert",
+      "alert_failures_reject_legacy_bdt_update",
+      "devices_empty_sources_legacy_insert",
+      "devices_empty_sources_legacy_update",
+      "devices_registration_revision_legacy_insert",
+      "devices_registration_revision_legacy_update",
+      "devices_reject_unbound_legacy_update",
+      "devices_require_revision_fence",
+    ],
+    "rolling old-Worker writes must advance bound revisions, reject unowned invalid-token evidence/unbound renewal/unfenced deletes, and remediate exact empty-source opt-outs",
+  );
+  assert.deepEqual(
+    sqlite.prepare(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'index' AND name IN (
+         'idx_alert_lifecycle_recipients_key',
+         'idx_alert_lifecycle_recipients_retention',
+         'idx_alert_delivery_failures_registration_revision',
+         'idx_alert_delivery_failures_token_hash',
+         'idx_alert_delivery_incidents_resolved_retention',
+         'idx_alert_delivery_page_failures_resolved_retention',
+         'idx_apns_registration_revision_fences_key',
+         'idx_apns_registration_revision_fences_retention',
+         'idx_apns_registration_revision_fences_token_hash',
+         'idx_devices_registration_revision'
+       ) ORDER BY name`,
+    ).all().map(({ name }) => name),
+    [
+      "idx_alert_delivery_failures_registration_revision",
+      "idx_alert_delivery_failures_token_hash",
+      "idx_alert_delivery_incidents_resolved_retention",
+      "idx_alert_delivery_page_failures_resolved_retention",
+      "idx_alert_lifecycle_recipients_key",
+      "idx_alert_lifecycle_recipients_retention",
+      "idx_apns_registration_revision_fences_key",
+      "idx_apns_registration_revision_fences_retention",
+      "idx_apns_registration_revision_fences_token_hash",
+      "idx_devices_registration_revision",
+    ],
+  );
+  const legacyDeletedRevision = sqlite.prepare(
+    `SELECT registration_revision FROM devices
+     WHERE token = 'malformed-source-token'`,
+  ).get().registration_revision;
+  assert.throws(
+    () => sqlite.exec("DELETE FROM devices WHERE token = 'malformed-source-token'"),
+    /device revision fence required/,
+    "a rolling old-Worker timestamp/key delete fails closed instead of erasing a revision it never observed",
+  );
+  assert.equal(
+    sqlite.prepare(
+      `SELECT registration_revision FROM devices
+       WHERE token = 'malformed-source-token'`,
+    ).get().registration_revision,
+    legacyDeletedRevision,
+    "the unfenced legacy delete leaves the renewed row intact",
+  );
+  sqlite.prepare(
+    `INSERT INTO apns_registration_revision_fences (
+       registration_revision, token_hash, app_attest_key_id,
+       decision_id, decision_kind, blocks_lifecycle_replay, processed_at_utc
+     ) VALUES (?, NULL, NULL, 'fixture-explicit-delete',
+       'explicit_removal', 1, '2026-08-22T00:00:00.000Z')`,
+  ).run(legacyDeletedRevision);
+  sqlite.exec("DELETE FROM devices WHERE token = 'malformed-source-token'");
+  sqlite.exec(`
+    INSERT INTO devices (
+      token, environment, sources, min_magnitude, critical_alerts_enabled,
+      include_test_alerts, notify_at_night, created_at, updated_at
+    ) VALUES (
+      'malformed-source-token', 'production', '["jma_eew"]', 0, 0, 0, 1,
+      '2026-08-22T00:00:00.000Z', '2026-08-22T00:00:00.000Z'
+    );
+  `);
+  assert.notEqual(
+    sqlite.prepare(
+      `SELECT registration_revision FROM devices
+       WHERE token = 'malformed-source-token'`,
+    ).get().registration_revision,
+    legacyDeletedRevision,
+    "same-token re-registration cannot reuse the deletion-fenced revision",
+  );
+  assert.throws(
+    () => sqlite.exec(
+      `UPDATE devices SET updated_at = updated_at
+       WHERE token = 'malformed-source-token'`,
+    ),
+    /unbound legacy registration renewal requires current worker/,
+    "a rolling old Worker cannot create an unlinkable unbound renewal revision",
+  );
+  sqlite.exec(
+    `UPDATE devices SET sources = '[]', updated_at = updated_at
+     WHERE token = 'malformed-source-token'`,
+  );
+  assert.equal(
+    sqlite.prepare(
+      `SELECT COUNT(*) AS count FROM devices
+       WHERE token = 'malformed-source-token'`,
+    ).get().count,
+    0,
+    "the unbound rolling-worker guard exempts exact empty-source consent withdrawal so deletion still wins",
+  );
+  assert.throws(
+    () => sqlite.exec(`
+      INSERT INTO alert_delivery_failures (
+        delivery_id, token_hash, event_ref, source_id, notification_reason,
+        apns_status, apns_reason, disposition, first_seen_utc, last_seen_utc
+      ) VALUES (
+        'rolling-old-bdt', '${"c".repeat(64)}', 'jma_eew:rolling-old-bdt',
+        'jma_eew', 'new', 400, 'BadDeviceToken', 'quarantine',
+        '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'
+      );
+    `),
+    /legacy BadDeviceToken evidence requires current worker/,
+    "a rolling old Worker cannot create unowned invalid-token evidence after the one-shot retention pin",
+  );
+  const pinnedLegacyBadDeviceAt = sqlite.prepare(
+    `SELECT last_seen_utc FROM alert_delivery_failures
+     WHERE delivery_id = 'legacy-bad-token-delivery'`,
+  ).get().last_seen_utc;
+  sqlite.exec(
+    `UPDATE devices SET updated_at = '2098-01-01T00:00:00.000Z'
+     WHERE token = 'valid-source-token'`,
+  );
+  assert.equal(
+    sqlite.prepare(
+      `SELECT last_seen_utc FROM alert_delivery_failures
+       WHERE delivery_id = 'legacy-bad-token-delivery'`,
+    ).get().last_seen_utc,
+    pinnedLegacyBadDeviceAt,
+    "an unrelated current registration cannot retain an abandoned legacy invalid-token hash indefinitely",
+  );
+  sqlite.exec(
+    `UPDATE devices SET sources = '[]', updated_at = updated_at
+     WHERE token = 'valid-source-token'`,
+  );
+  assert.equal(
+    sqlite.prepare(
+      "SELECT COUNT(*) AS count FROM devices WHERE token = 'valid-source-token'",
+    ).get().count,
+    0,
+    "a post-migration old-Worker empty-source UPSERT is deleted immediately",
+  );
+  sqlite.exec(`
+    INSERT INTO devices (
+      token, environment, sources, min_magnitude, critical_alerts_enabled,
+      include_test_alerts, notify_at_night, created_at, updated_at
+    ) VALUES (
+      'post-migration-empty-token', 'production', '[]', 0, 0, 0, 1,
+      '2026-08-22T00:00:00.000Z', '2026-08-22T00:00:00.000Z'
+    );
+  `);
+  assert.equal(
+    sqlite.prepare(
+      `SELECT COUNT(*) AS count FROM devices
+       WHERE token = 'post-migration-empty-token'`,
+    ).get().count,
+    0,
+    "a post-migration old-Worker empty-source INSERT is remediated too",
+  );
+});
+
 test("uses one validated Queue-name triplet and preserves legacy defaults", async () => {
   const {
     default: worker,
@@ -6671,7 +8909,14 @@ test("terminalizes pre-build-8 non-JMA Queue work without reaching APNs", async 
 
   const batches = [];
   const relay = new QuakeRelay(
-    { storage: {}, waitUntil() {} },
+    {
+      storage: {
+        async list() {
+          return new Map();
+        },
+      },
+      waitUntil() {},
+    },
     {
       DB: {
         prepare(sql) {
@@ -6755,6 +9000,7 @@ test("D1-unavailable DLQ persistence is acknowledged only after token-free Durab
       "quakesignal-alert-delivery-staging-dlq-fallback",
   };
   const fallbackBodies = [];
+  const relayPaths = [];
   let acknowledged = 0;
   let retried = 0;
   const failingD1 = {
@@ -6793,10 +9039,12 @@ test("D1-unavailable DLQ persistence is acknowledged only after token-free Durab
         get() {
           return {
             async fetch(request) {
-              assert.equal(
-                new URL(request.url).pathname,
-                "/dlq/persistence-fallback",
-              );
+              const pathname = new URL(request.url).pathname;
+              relayPaths.push(pathname);
+              if (pathname === "/dlq/finalize") {
+                return Response.json({ error: "D1 unavailable" }, { status: 503 });
+              }
+              assert.equal(pathname, "/dlq/persistence-fallback");
               fallbackBodies.push(await request.json());
               return new Response(null, { status: 204 });
             },
@@ -6807,6 +9055,7 @@ test("D1-unavailable DLQ persistence is acknowledged only after token-free Durab
   );
   assert.equal(acknowledged, 1, "a durable fallback permits DLQ acknowledgement");
   assert.equal(retried, 0);
+  assert.deepEqual(relayPaths, ["/dlq/finalize", "/dlq/persistence-fallback"]);
   assert.deepEqual(fallbackBodies, [{
     queueMessageId: "dlq-message-1",
     queueAttempts: 7,
@@ -6825,6 +9074,7 @@ test("D1-unavailable DLQ persistence is acknowledged only after token-free Durab
     apnsConfigured: true,
     activeDlqIncidents: 0,
     pendingDlqPersistenceFallbacks: false,
+    pendingApnsAcceptanceBatches: 0,
     activePageFailures: 0,
     activeQuarantinedFailures: 0,
     activeRetryFailures: 0,
@@ -6847,6 +9097,22 @@ test("D1-unavailable DLQ persistence is acknowledged only after token-free Durab
     }),
     "degraded",
     "an unreadable fallback marker store must fail readiness closed",
+  );
+  assert.equal(
+    deliveryReadinessStatus({
+      ...baselineReadiness,
+      pendingApnsAcceptanceBatches: 1,
+    }),
+    "degraded",
+    "a durable post-2xx batch waiting for D1 must degrade readiness",
+  );
+  assert.equal(
+    deliveryReadinessStatus({
+      ...baselineReadiness,
+      pendingApnsAcceptanceBatches: null,
+    }),
+    "degraded",
+    "an unreadable acceptance journal must fail readiness closed",
   );
 });
 
@@ -6987,6 +9253,493 @@ test("Durable Object fallback persists and replays only sanitized DLQ evidence",
   assert.equal(d1Batches[0].length, 3, "incident, terminal outbox, and page-failure resolution commit together");
 });
 
+test("malformed APNs acceptance journal state is preserved and fails closed", async () => {
+  const { QuakeRelay } = await workerModule();
+  const key = `apns-acceptance:v1:${"a".repeat(64)}`;
+  const records = new Map([[key, { version: 1, malformed: true }]]);
+  let alarmAt = null;
+  const relay = new QuakeRelay(
+    {
+      storage: {
+        async list({ prefix, limit }) {
+          return new Map(
+            [...records.entries()]
+              .filter(([candidate]) => candidate.startsWith(prefix))
+              .slice(0, limit),
+          );
+        },
+        async getAlarm() {
+          return alarmAt;
+        },
+        async setAlarm(value) {
+          alarmAt = value;
+        },
+        async delete(candidate) {
+          records.delete(candidate);
+        },
+      },
+    },
+    { DB: {} },
+  );
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  try {
+    await assert.rejects(
+      relay.reconcileApnsAcceptanceJournal(),
+      /journal record is invalid/,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+  assert.equal(records.has(key), true,
+    "malformed known-acceptance state must remain for operator repair");
+  assert.ok(alarmAt !== null, "malformed state retains a bounded retry signal");
+  records.clear();
+  records.set(key, {
+    version: 1,
+    writeId: "integrity-mismatch-write",
+    deliveryId: "integrity-mismatch-delivery",
+    eventRef: "jma_eew:integrity-mismatch",
+    sourceId: "jma_eew",
+    reason: "new",
+    createdAtUtc: new Date().toISOString(),
+    deliveries: [{
+      token: "integrity-mismatch-token",
+      tokenHash: "b".repeat(64),
+      snapshotRegistrationRevision: "integrity-mismatch-revision",
+      snapshotAppAttestKeyId: null,
+      firstAcceptedAtUtc: "2026-08-12T00:00:00.000Z",
+      lastAcceptedAtUtc: "2026-08-12T00:00:00.000Z",
+    }],
+  });
+  console.error = () => {};
+  try {
+    await assert.rejects(
+      relay.reconcileApnsAcceptanceJournal(),
+      /integrity check failed/,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+  assert.equal(records.has(key), true,
+    "a mismatched raw-token hash or stable storage key must never replay or disappear");
+});
+
+test("the global APNs lane durably admits work before delivery and terminal decisions", async () => {
+  const { QuakeRelay } = await workerModule();
+  const records = new Map(
+    Array.from({ length: 128 }, (_, index) => [
+      `apns-acceptance:v1:${String(index).padStart(64, "0")}`,
+      { reserved: true },
+    ]),
+  );
+  const relay = new QuakeRelay(
+    {
+      storage: {
+        async list({ prefix, limit }) {
+          return new Map(
+            [...records.entries()]
+              .filter(([key]) => key.startsWith(prefix))
+              .slice(0, limit),
+          );
+        },
+      },
+    },
+    { DB: {} },
+  );
+  await assert.rejects(
+    relay.ensureApnsAcceptanceJournalCapacity(),
+    /capacity is exhausted/,
+  );
+
+  const order = [];
+  let releaseFirst;
+  const firstBlocked = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  const first = relay.serializeApnsDelivery(async () => {
+    order.push("first-start");
+    await firstBlocked;
+    order.push("first-end");
+  });
+  const second = relay.serializeApnsDelivery(async () => {
+    order.push("second-start");
+  });
+  await Promise.resolve();
+  assert.deepEqual(order, ["first-start"]);
+  releaseFirst();
+  await Promise.all([first, second]);
+  assert.deepEqual(order, ["first-start", "first-end", "second-start"]);
+
+  const source = await readFile(
+    join(cloudflareDirectory, "src/index.ts"),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /const preparedIntent = prepareApnsBatch[\s\S]*?await prepareApnsBatch\(deliveries\)[\s\S]*?sendPushRequest/,
+    "dispatch must await its durable pre-send intent before the first APNs request",
+  );
+  assert.match(
+    source,
+    /persistApnsDeliveryIntent\(message, deliveries\)[\s\S]*?reconcileObservedApnsDeliveryIntentBatch/,
+    "the production lane must retain the exact prepared intent through durable outcome handling",
+  );
+  assert.match(
+    source,
+    /APNS_ACCEPTANCE_JOURNAL_MAX_RECORD_BYTES = 64 \* 1_024[\s\S]*?isBoundedApnsJournalRecord\(record\)/,
+    "intent admission must bound each record's encoded size as well as count",
+  );
+  assert.match(
+    source,
+    /recoverApnsDeliveryIntent[\s\S]*?currentDevicesForApnsIntent[\s\S]*?sendPushRequest/,
+    "startup and alarm reconciliation must redispatch admitted work from current consent",
+  );
+  assert.match(
+    source,
+    /\/dlq\/finalize[\s\S]*?serializeApnsDelivery[\s\S]*?reconcileApnsAcceptanceJournal[\s\S]*?persistDlqIncidentAndFinalizeOutbox/,
+    "DLQ terminalization must reconcile acceptances inside the same lane",
+  );
+  assert.match(
+    source,
+    /\/outbox\/source-policy\/reject[\s\S]*?serializeApnsDelivery[\s\S]*?reconcileApnsAcceptanceJournal[\s\S]*?supersedeOutboxForSourcePolicy/,
+    "source-policy supersession must share the acceptance lane",
+  );
+  assert.match(
+    source,
+    /\/outbox\/ack[\s\S]*?serializeApnsDelivery[\s\S]*?reconcileApnsAcceptanceJournal[\s\S]*?finalizeOutbox/,
+    "Queue acknowledgement must share the acceptance lane",
+  );
+  assert.match(
+    source,
+    /async alarm\(\)[\s\S]*?serializeApnsDelivery[\s\S]*?reconcileApnsAcceptanceJournal[\s\S]*?reconcileDlqPersistenceFallbacks/,
+    "alarm fallback finalization must recheck acceptances inside the shared lane",
+  );
+  assert.match(
+    source,
+    /private async ensureStarted[\s\S]*?await this\.ensureUpstreams\(\)[\s\S]*?scheduleRoutineRelayAlarm/,
+    "startup must leave bounded D1 recovery to the alarm-owned maintenance lane",
+  );
+  assert.match(
+    source,
+    /originDeliveryIndex: number[\s\S]*?value\.deliveries\[recipient\.originDeliveryIndex\]/,
+    "each observed subset carries an immutable original-recipient identity instead of re-deriving one by token/key first-match",
+  );
+  assert.match(
+    source,
+    /const intentStillPending = await completeApnsBatch[\s\S]*?if \(intentStillPending\)[\s\S]*?retryRequired = true/,
+    "a strict final-admission subset keeps its Queue page retrying until every durable origin is resolved",
+  );
+  assert.match(
+    source,
+    /fence\.processed_at_utc >= lifecycle\.last_evidence_at_utc/,
+    "a historical removal fence cannot suppress later APNs-accepted evidence after a fresh opt-in",
+  );
+  assert.match(
+    source,
+    /attempt_id LIKE 'training:%'[\s\S]*?admitted_at_utc <= \?/,
+    "alarm/startup maintenance releases a crashed short-lived training admission after its safety window",
+  );
+});
+
+test("a strict final-admission subset keeps the Queue page pending", async () => {
+  const { dispatchPushPage } = await workerModule();
+  const rows = [1, 2].map((cursor) => ({
+    cursor,
+    token: String(cursor).repeat(64),
+    environment: "production",
+    locale: null,
+    sources: '["jma_eew"]',
+    min_magnitude: 0,
+    critical_alerts_enabled: 0,
+    alert_sound: "system",
+    city_name: null,
+    latitude: 35,
+    longitude: 135,
+    radius_km: 100,
+    include_test_alerts: 1,
+    utc_offset_minutes: null,
+    notify_at_night: 1,
+    app_attest_key_id: `subset-key-${cursor}`,
+    app_identity: "5TT564H883.com.quakesignal.app",
+    apns_topic: "com.quakesignal.app",
+    app_platform: "ios",
+    registration_revision: `subset-revision-${cursor}`,
+    created_at: "2026-08-22T00:00:00.000Z",
+    updated_at: "2026-08-22T00:00:00.000Z",
+  }));
+  const database = {
+    prepare(sql) {
+      return {
+        bind() {
+          return {
+            async all() {
+              if (sql.includes("SELECT rowid AS cursor, * FROM devices")) {
+                // Deliberately model a rolling two-recipient prepared record;
+                // production's current page size is one, while recovery still
+                // accepts bounded records written by the immediately prior code.
+                return { results: rows };
+              }
+              if (
+                sql.includes("FROM notification_deliveries") ||
+                sql.includes("FROM alert_delivery_failures")
+              ) return { results: [] };
+              throw new Error(`unexpected strict-subset query: ${sql}`);
+            },
+          };
+        },
+      };
+    },
+  };
+  const event = {
+    id: "jma_eew:strict-subset",
+    sourceId: "jma_eew",
+    eventId: "strict-subset",
+    serial: 1,
+    kind: "eew",
+    originTimeUtc: "2026-08-22T00:00:00.000Z",
+    reportTimeUtc: "2026-08-22T00:00:00.000Z",
+    hypocenter: "Test Region",
+    latitude: 35,
+    longitude: 135,
+    magnitude: 5.5,
+    depth: 10,
+    maxIntensity: "5-",
+    isWarn: true,
+    isFinal: false,
+    isCancel: false,
+    isTraining: false,
+    tsunami: null,
+    raw: null,
+  };
+  const originalFetch = globalThis.fetch;
+  let contacts = 0;
+  let observedOrigins = [];
+  globalThis.fetch = async () => {
+    contacts += 1;
+    return new Response(null, { status: 200 });
+  };
+  try {
+    const page = await dispatchPushPage(
+      {
+        APP_ATTEST_ENFORCEMENT: "required",
+        DB: database,
+        APNS_PRIVATE_KEY: "configured",
+        APNS_KEY_ID: "ABCDEFGHIJ",
+        APNS_TEAM_ID: "ABCDEFGHIJ",
+        APNS_BUNDLE_ID: "com.quakesignal.app",
+      },
+      event,
+      "new",
+      "cached.provider.jwt",
+      "strict-subset-delivery",
+      undefined,
+      undefined,
+      undefined,
+      async () => ({ storageKey: "strict-subset", writeId: "write" }),
+      async (_intent, _observedAtUtc, deliveries) => {
+        observedOrigins = deliveries.map(({ originDeliveryIndex }) =>
+          originDeliveryIndex
+        );
+      },
+      async (_intent, deliveries) => [{
+        delivery: deliveries[0],
+        originDeliveryIndex: 0,
+        snapshotRegistrationRevision:
+          deliveries[0].device.registrationRevision,
+      }],
+      async () => true,
+    );
+    assert.equal(contacts, 1, "only the transaction-time admitted subset contacts APNs");
+    assert.deepEqual(observedOrigins, [0], "the provider result retains its exact original recipient identity");
+    assert.equal(
+      page.retryRequired,
+      true,
+      "an uncontacted durable origin prevents the Queue page from returning an ackable success",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("observed intent integrity binds each contacted alias to its original index", async () => {
+  const { QuakeRelay } = await workerModule();
+  const records = new Map();
+  let alarmAt = null;
+  const storage = {
+    async list({ prefix, limit }) {
+      return new Map([...records].filter(([key]) => key.startsWith(prefix)).slice(0, limit));
+    },
+    async get(key) { return records.get(key); },
+    async put(key, value) { records.set(key, structuredClone(value)); },
+    async delete(key) { records.delete(key); },
+    async getAlarm() { return alarmAt; },
+    async setAlarm(value) { alarmAt = Number(value); },
+    async transaction(operation) { return operation(this); },
+  };
+  const db = {
+    prepare(sql) {
+      return {
+        bind() {
+          return {
+            async run() { return { meta: { changes: 0 } }; },
+            async first() { return null; },
+          };
+        },
+      };
+    },
+  };
+  const relay = new QuakeRelay({ storage }, { DB: db });
+  const event = {
+    id: "jma_eew:origin-index",
+    sourceId: "jma_eew",
+    eventId: "origin-index",
+    serial: 1,
+    kind: "eew",
+    originTimeUtc: "2026-08-22T00:00:00.000Z",
+    reportTimeUtc: "2026-08-22T00:00:00.000Z",
+    hypocenter: "Test Region",
+    latitude: 35,
+    longitude: 135,
+    magnitude: 5.5,
+    depth: 10,
+    maxIntensity: "5-",
+    isWarn: true,
+    isFinal: false,
+    isCancel: false,
+    isTraining: false,
+    tsunami: null,
+  };
+  const device = (suffix) => ({
+    token: suffix.repeat(64),
+    environment: "production",
+    locale: null,
+    sources: ["jma_eew"],
+    minMagnitude: 0,
+    criticalAlertsEnabled: false,
+    alertSound: "system",
+    cityName: null,
+    latitude: null,
+    longitude: null,
+    radiusKm: null,
+    includeTestAlerts: true,
+    utcOffsetMinutes: null,
+    notifyAtNight: true,
+    appAttestKeyId: `origin-key-${suffix}`,
+    registrationRevision: `origin-revision-${suffix}`,
+    appIdentity: "5TT564H883.com.quakesignal.app",
+    apnsTopic: "com.quakesignal.app",
+    platform: "ios",
+    createdAt: "2026-08-22T00:00:00.000Z",
+    updatedAt: "2026-08-22T00:00:00.000Z",
+  });
+  const deliveries = await Promise.all(["a", "b"].map(async (suffix) => ({
+    device: device(suffix),
+    tokenHash: await sha256Hex(suffix.repeat(64)),
+  })));
+  const handle = await relay.persistApnsDeliveryIntent(
+    {
+      version: 1,
+      outboxId: "origin-index-outbox",
+      deliveryId: "origin-index-delivery",
+      rootDeliveryId: "origin-index-delivery",
+      event,
+      reason: "new",
+      expiresAtUtc: "2099-01-01T00:00:00.000Z",
+      expiryPolicy: "eew_10m",
+    },
+    deliveries,
+  );
+  const record = records.get(handle.storageKey);
+  const observedAtUtc = "2026-08-22T00:00:01.000Z";
+  records.set(handle.storageKey, {
+    ...record,
+    providerAttempts: 1,
+    lastProviderAttemptAtUtc: observedAtUtc,
+    nextProviderAttemptAtUtc: observedAtUtc,
+    lifecycleEvidencePreparedAtUtc: observedAtUtc,
+    unobservedAttemptReconciled: false,
+    observedBatch: {
+      observedAtUtc,
+      deliveries: [{
+        delivery: deliveries[0],
+        originDeliveryIndex: 0,
+        // Valid-shaped but deliberately points at the other original. A
+        // token/key first-match implementation could accept this corruption.
+        snapshotRegistrationRevision:
+          deliveries[1].device.registrationRevision,
+      }],
+      results: [{ ok: true, apnsId: null, acceptedAtUtc: observedAtUtc }],
+    },
+  });
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    await assert.rejects(
+      relay.reconcileApnsAcceptanceJournal(),
+      /integrity check failed/,
+    );
+  } finally {
+    console.error = originalError;
+  }
+  assert.equal(records.has(handle.storageKey), true,
+    "a mismatched origin index/revision pair remains preserved for operator repair");
+});
+
+test("an exhausted origin cannot hot-loop ahead of an independently deferred recipient", async () => {
+  const { QuakeRelay } = await workerModule();
+  const relay = new QuakeRelay({ storage: {} }, { DB: {} });
+  const now = Date.parse("2026-08-22T00:00:00.000Z");
+  const deferredAt = now + 60 * 60_000;
+  const mapped = (revision, originDeliveryIndex) => ({
+    delivery: {
+      device: { registrationRevision: revision },
+      tokenHash: revision.padEnd(64, "0").slice(0, 64),
+    },
+    originDeliveryIndex,
+    snapshotRegistrationRevision: revision,
+  });
+  const record = {
+    writeId: "exhausted-origin-write",
+    providerAttempts: 6,
+    recipientProviderAttempts: { exhausted: 6, deferred: 1 },
+    recipientRetryNotBeforeUtc: {
+      deferred: new Date(deferredAt).toISOString(),
+    },
+    nextProviderAttemptAtUtc: new Date(now).toISOString(),
+    observedBatch: null,
+    lifecycleEvidencePreparedAtUtc: null,
+    lastProviderAttemptAtUtc: new Date(now).toISOString(),
+    unobservedAttemptReconciled: true,
+    message: { expiresAtUtc: "2099-01-01T00:00:00.000Z" },
+  };
+  relay.reconcileObservedApnsDeliveryIntentBatch = async () => record;
+  relay.currentDevicesForApnsIntent = async () => ({
+    sourceConsenting: [mapped("exhausted", 0), mapped("deferred", 1)],
+    redispatch: [mapped("exhausted", 0), mapped("deferred", 1)],
+  });
+  relay.expireOutboxIfDue = async () => "pending";
+  let terminalized = false;
+  relay.terminalizeExhaustedApnsDeliveryIntent = async () => {
+    terminalized = true;
+  };
+  let scheduledAt = null;
+  relay.scheduleRelayAlarm = async (value) => {
+    scheduledAt = value;
+  };
+  const originalNow = Date.now;
+  Date.now = () => now;
+  try {
+    await relay.recoverApnsDeliveryIntent("intent-key", record);
+  } finally {
+    Date.now = originalNow;
+  }
+  assert.equal(terminalized, false,
+    "one exhausted recipient cannot terminalize an independently retryable peer");
+  assert.equal(scheduledAt, deferredAt,
+    "the alarm is scheduled from non-exhausted recipient deadlines only");
+});
+
 test("DLQ terminal guard ignores stale terminal outboxes but retains canonical DLQ evidence", async () => {
   const { default: worker } = await workerModule();
   const queueNames = {
@@ -7034,7 +9787,7 @@ test("DLQ terminal guard ignores stale terminal outboxes but retains canonical D
       );
       assert.match(
         statements[1].sql,
-        /SELECT \?, \?, \?, \?, \?, \?, \?, \?, 'active', \?, \?\s+WHERE \? IS NULL OR EXISTS \(/i,
+        /SELECT (?:\?,\s*){8,}'active',\s*\?,\s*\?\s+WHERE \? IS NULL OR EXISTS \(/i,
         "the incident write must be conditional inside the same D1 batch",
       );
       assert.match(
@@ -7156,7 +9909,7 @@ test("DLQ terminal guard ignores stale terminal outboxes but retains canonical D
          FROM alert_delivery_incidents i
          JOIN alert_delivery_outbox o ON o.id = 'outbox-${genuineSerial}'
          JOIN alert_delivery_page_failures p ON p.outbox_id = o.id
-         WHERE i.queue_message_id = '${genuineMessageId}'`,
+         WHERE i.queue_message_id = 'outbox:outbox-${genuineSerial}'`,
         "--json",
       ])),
       [{
@@ -7190,7 +9943,7 @@ test("DLQ terminal guard ignores stale terminal outboxes but retains canonical D
         ...localArguments,
         "--command",
         `SELECT queue_attempts, status FROM alert_delivery_incidents
-         WHERE queue_message_id = '${genuineMessageId}'`,
+         WHERE queue_message_id = 'outbox:outbox-${genuineSerial}'`,
         "--json",
       ])),
       [{ queue_attempts: 9, status: "active" }],

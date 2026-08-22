@@ -19,20 +19,56 @@ represented in this repository.
 
 ## `ios-app-store-release`
 
+Require at least one reviewer and enable **Prevent self-review**. For the hosted
+screenshot finalizer, the approving account must be different from the dispatch
+actor and the three reviewer inputs must be that approved account's exact GitHub
+login. The job uses its read-only Actions token to query the canonical run's
+environment review history and fails closed when this machine binding is absent.
+
 | Name | Kind | Value |
 | --- | --- | --- |
 | `IOS_APP_STORE_CERTIFICATE` | Secret | Base64-encoded Apple Distribution `.p12` for `com.quakesignal.app` |
 | `IOS_APP_STORE_CERTIFICATE_PASSWORD` | Secret | Password used when exporting that `.p12` |
 | `IOS_APP_STORE_PROVISIONING_PROFILE` | Secret | Base64-encoded App Store provisioning profile with production Push Notifications, Time Sensitive Notifications, and App Attest support |
-| `IOS_APP_STORE_PROFILE_NAME` | Environment variable | Exact provisioning-profile name |
+| `IOS_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal App Store Release` |
+| `WATCHOS_APP_STORE_PROVISIONING_PROFILE` | Secret | Base64-encoded App Store profile for `com.quakesignal.app.watchkitapp` |
+| `WATCHOS_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal Watch App Store Release` |
+| `TVOS_APP_STORE_PROVISIONING_PROFILE` | Secret | Base64-encoded tvOS App Store profile for `com.quakesignal.app` |
+| `TVOS_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal tvOS App Store Release` |
+| `VISIONOS_APP_STORE_PROVISIONING_PROFILE` | Secret | Base64-encoded visionOS App Store profile for `com.quakesignal.app` |
+| `VISIONOS_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal visionOS App Store Release` |
+| `MACCATALYST_APP_STORE_PROVISIONING_PROFILE` | Secret | Base64-encoded Mac App Store provisioning profile for the Catalyst `com.quakesignal.app` |
+| `MACCATALYST_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal Mac Catalyst App Store Release` |
+| `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE` | Secret | Base64-encoded Mac Installer Distribution `.p12` used only for the Catalyst `.pkg` |
+| `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD` | Secret | Password used when exporting that installer `.p12` |
+| `MACCATALYST_APP_STORE_INSTALLER_IDENTITY` | Environment variable | `Mac Installer Distribution: UniSphereco LLC (5TT564H883)` |
 | `APP_STORE_CONNECT_API_KEY` | Secret | Team App Store Connect API private `.p8` key contents |
 | `APP_STORE_CONNECT_API_KEY_ID` | Environment variable | App Store Connect API key ID |
 | `APP_STORE_CONNECT_API_ISSUER` | Environment variable | App Store Connect API issuer UUID |
 | `CLOUDFLARE_WORKER_URL` | Environment variable | Exactly `https://quakesignal-api.hopeso.workers.dev`; the Release archive verifies this user-approved public Workers.dev production origin |
 
 The Account Holder must first enable App Store Connect API access. Use a
-least-privilege team key. The workflow only uploads when a trusted maintainer
-starts **iOS → Run workflow** with `upload_to_testflight` enabled.
+least-privilege team key. The workflows only upload when a trusted maintainer
+starts **iOS** or **Native Apple platform release → Run workflow** with
+`upload_to_testflight` enabled and the exact lowercase protected-main
+`source_commit`. The job checks out that commit without persisted credentials
+and requires it to equal the dispatch head before exposing any signing secret.
+The Catalyst lane requires both the Apple
+Distribution application identity and the separate Mac Installer Distribution
+identity. Because this repository is public, the verified iOS, tvOS, and
+visionOS `.ipa` files and Catalyst `.pkg` are never retained as GitHub Actions
+artifacts. Each workflow retains only a small 30-day JSON attestation binding
+the canonical workflow run/head SHA to the artifact kind and SHA-256 digest and, only with
+explicit upload consent, rehashes and sends that same verified binary directly
+to App Store Connect. An archive-only run retains its log and attestation, not
+the signed release binary, and is not eligible for final screenshot approval.
+
+The five named profiles above exist in the Apple Developer portal as of
+2026-08-22 and expire on 2027-08-12. The Watch, tvOS, visionOS, and Catalyst
+profiles were generated and downloaded during the release audit. Their portal
+existence is not evidence that the protected GitHub environment contains the
+matching base64 values; the signed workflows remain the fail-closed proof of
+that configuration.
 
 ## `macos-direct-release`
 
@@ -72,7 +108,10 @@ contents) and `MACOS_APP_STORE_CONNECT_API_KEY_ID` plus
 `MACOS_APP_STORE_CONNECT_API_ISSUER` protected environment variables. The
 workflow only uploads when a trusted maintainer starts **Desktop release → Run
 workflow** with `upload_macos_to_app_store_connect` enabled. Its signed `.pkg`
-is never a public GitHub Release asset.
+is never retained as a GitHub Actions artifact or public GitHub Release asset.
+Build-only runs retain hash and verification-log evidence only and delete the
+package. Signed-build visual approval remains blocked until a release owner
+approves a separate private handoff mechanism for this dormant lane.
 
 ## `microsoft-store-release`
 
@@ -109,9 +148,9 @@ account instead.
 | `CLOUDFLARE_STAGING_WORKER_NAME` | Environment variable | Lowercase Worker name beginning `quakesignal-` and containing a `staging` segment, for example `quakesignal-api-staging`. It is never `quakesignal-api`. |
 | `CLOUDFLARE_STAGING_D1_DATABASE_NAME` | Environment variable | Separate, staging-named D1 database, for example `quakesignal-api-staging`; never `quakesignal-production`. |
 | `CLOUDFLARE_STAGING_D1_DATABASE_ID` | Environment variable | UUID of that separate D1 database. |
-| `CLOUDFLARE_STAGING_DEVICE_API_RATE_LIMIT_NAMESPACE_ID` | Environment variable | New, account-unique namespace ID for the staging `DEVICE_API_RATE_LIMIT` binding. |
+| `CLOUDFLARE_STAGING_DEVICE_API_RATE_LIMIT_NAMESPACE_ID` | Environment variable | New, account-unique namespace ID for the staging 300/minute route-wide `DEVICE_API_RATE_LIMIT` circuit-breaker binding. |
 | `CLOUDFLARE_STAGING_DEVICE_MUTATION_RATE_LIMIT_NAMESPACE_ID` | Environment variable | A different new, account-unique namespace ID for the staging `DEVICE_MUTATION_RATE_LIMIT` binding. |
-| `CLOUDFLARE_STAGING_APP_ATTEST_CHALLENGE_RATE_LIMIT_NAMESPACE_ID` | Environment variable | A third, different account-unique namespace ID for the staging route-wide `APP_ATTEST_CHALLENGE_RATE_LIMIT` binding. |
+| `CLOUDFLARE_STAGING_APP_ATTEST_CHALLENGE_RATE_LIMIT_NAMESPACE_ID` | Environment variable | A third, different account-unique namespace ID for the historically named staging binding that enforces the 60/minute route-scoped client-IP pseudonym budget on every public route; admitted requests then use the higher `DEVICE_API_RATE_LIMIT` route-wide circuit breaker. |
 | `CLOUDFLARE_STAGING_ALLOWED_BUNDLE_VERSIONS` | Environment variable (optional) | Comma-separated Debug `CFBundleVersion` allowlist. Omit or leave blank to use the isolated baseline `1`; set `1,2` for the current build-2 client while build 1 remains installed. |
 | `CLOUDFLARE_STAGING_WORKER_URL` | Environment variable (required only for readiness verification) | Bare `https://<worker>.<account-subdomain>.workers.dev` URL. Set it after the first deployment before running the workflow with `verify_staging_apns=true`. |
 
@@ -366,8 +405,10 @@ with normal public TLS when `workers_dev=true`. It requires no Custom Domain,
 DNS-zone activation, private CA, or client mTLS configuration. Do not
 substitute a different Workers.dev URL in either release environment.
 
-Before public iOS registration is enabled, keep both native Cloudflare
-rate-limit bindings for the device endpoints and complete Apple App Attest
+Before public iOS registration is enabled, keep all three native Cloudflare
+rate-limit bindings: the 60/minute client-pseudonym and 300/minute route-wide
+circuits cover every normalized public method/route family, while the 8/minute
+actor binding covers device mutations. Also complete Apple App Attest
 challenge/assertion verification with replay protection. These controls
 deliberately are not replaced by a client-shipped static secret; see
 [`CLOUDFLARE_PRODUCTION.md`](CLOUDFLARE_PRODUCTION.md#production-deployment-order).

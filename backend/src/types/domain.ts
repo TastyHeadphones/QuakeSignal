@@ -58,7 +58,7 @@ export interface DeviceRecord {
   cityName: string | null;
   latitude: number | null;
   longitude: number | null;
-  /** Only push events within this radius of (latitude, longitude). Null = no distance filter (magnitude threshold still applies). */
+  /** Only push events within this radius of (latitude, longitude). Null is retained for legacy rows but fails closed for automatic delivery. */
   radiusKm: number | null;
   /** Whether to push JMA drill/training broadcasts. Defaults to false so a training message never reads as a real warning. */
   includeTestAlerts: boolean;

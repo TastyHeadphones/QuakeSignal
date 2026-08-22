@@ -370,7 +370,7 @@ private struct WatchReportsHeader: View {
     var body: some View {
         HStack(alignment: .center, spacing: 5) {
             VStack(alignment: .leading, spacing: 4) {
-                Label("platform.foreground.badge", systemImage: "eye")
+                Label("platform.foreground.badge", systemImage: "applewatch")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Color("CautionColor"))
                     .lineLimit(1)
@@ -493,44 +493,44 @@ private struct WatchEventDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 foregroundBadge
 
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text(event.magnitudeText)
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
                         .foregroundStyle(event.severity.color)
+                        .lineLimit(1)
 
-                    Spacer(minLength: 3)
+                    Spacer(minLength: 4)
 
-                    if let depth = event.depth {
-                        Label(localizedDepthLabel(depth), systemImage: "arrow.down")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
+                    VStack(alignment: .trailing, spacing: 1) {
+                        if let maxIntensity = event.maxIntensity {
+                            Text(L("quake.intensity.label", maxIntensity))
+                        }
+
+                        if let depth = event.depth {
+                            Label(localizedDepthLabel(depth), systemImage: "arrow.down")
+                        }
+
+                        HStack(spacing: 3) {
+                            Label(event.reportStatus.labelKey, systemImage: "waveform.path.ecg")
+                            Text(event.sourceLabelKey)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .multilineTextAlignment(.trailing)
+                    .accessibilityElement(children: .combine)
                 }
 
                 Text(event.hypocenter)
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                     .lineLimit(2)
-                    .minimumScaleFactor(0.84)
-
-                HStack(spacing: 6) {
-                    Label(event.reportStatus.labelKey, systemImage: "waveform.path.ecg")
-                    Text(event.sourceLabelKey)
-                        .foregroundStyle(.secondary)
-
-                    if let maxIntensity = event.maxIntensity {
-                        Spacer(minLength: 2)
-                        Text(L("quake.intensity.label", maxIntensity))
-                            .foregroundStyle(.secondary)
-                            .minimumScaleFactor(0.75)
-                    }
-                }
-                .font(.caption2)
-                .lineLimit(1)
+                    .minimumScaleFactor(0.82)
 
                 if let date = event.reportDate ?? event.originDate {
                     Label(
@@ -540,27 +540,31 @@ private struct WatchEventDetailView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.78)
                 }
 
                 Divider()
+                    .padding(.top, 12)
                 Text("platform.watch.foregroundOnly.detail")
-                    .font(.caption2)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 10)
         }
         .navigationTitle("detail.title")
         .navigationBarTitleDisplayMode(.inline)
     }
 
     private var foregroundBadge: some View {
-        Label("platform.foreground.badge", systemImage: "eye")
+        Label("platform.foreground.badge", systemImage: "applewatch")
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.black)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
             .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 Color("CautionColor"),

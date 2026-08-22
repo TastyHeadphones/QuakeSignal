@@ -121,9 +121,9 @@ npm run tauri dev
   其他 `workers.dev` hostname 仅限隔离的 Debug/staging 服务，绝不能作为 Release
   备用地址。
 - 确认已注册的 `com.quakesignal.app`、Watch App ID 与已审核 capability，并从 Xcode
-  桌面端完成单一 build-8 Xcode Cloud workflow 的首次配置。使用 Xcode Cloud 自动签名，
-  保持所有 `QUAKESIGNAL_*_PROFILE_NAME` override 未设置；验证生成的签名 archive 与
-  entitlement，而不是提供手动 profile。
+  2026-08-22 账户审计确认尚未配置 Xcode Cloud workflow。本次发布禁止使用本地 Xcode，
+  因此应使用配置了五个已审核分发 profile 的受保护 GitHub build-8 workflow。所有签名 run
+  必须固定到冻结的完整 source SHA，并在 TestFlight QA 前验证机器可读的签名 artifact 证明。
 - Debug 与 Simulator 必须使用不共享生产数据或凭据的独立 staging Worker。先在真机上
   完成 APNs/App Attest、注册/删除和令牌刷新测试，再针对用户批准的生产 endpoint 完成
   TestFlight APNs 测试，之后才能由 reviewer 批准。

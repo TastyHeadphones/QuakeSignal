@@ -34,7 +34,7 @@ unchanged.
 | Platform | Customer-visible behavior | Notification capability in this release |
 | --- | --- | --- |
 | iPhone / iPad | Full reports, map, preparedness guide, settings, and optional nearby notifications | Protected App Attest + APNs registration. Qualifying fresh warnings may use **Time Sensitive**, subject to system/user settings. There is no Critical Alerts entitlement. |
-| Apple Vision Pro | Full native windowed app with reports, map, guide, settings, and local foreground warning presentation while open | Foreground only. Apple does not list Push Notifications or Time Sensitive Notifications as supported visionOS provisioning capabilities, so this target has no APNs, App Attest, Time Sensitive, Critical Alerts, or background emergency-alert path. |
+| Apple Vision Pro | Full native windowed app with reports, map, guide, settings, and local foreground warning presentation while open | Foreground only. Apple lists App Attest for visionOS, but not Push Notifications or Time Sensitive Notifications. QuakeSignal's protected alert registration requires both App Attest and APNs, so the target does not start that registration path when APNs is unavailable and has no Time Sensitive, Critical Alerts, or background emergency-alert path. |
 | Apple TV | Large-screen headline, recent-report list, event details, active-only live-warning guidance, and a three-choice sound screen | Foreground only. No APNs, App Attest, automatic alert audio, or background emergency alerts. System is visual-only; custom sounds play only after an explicit Siri Remote action. |
 | Apple Watch | Compact headline, recent-report list, event details, active-warning guidance, native warning haptic, and the selected mirrored custom sound while open | Foreground only. The Watch app does not independently register for APNs, App Attest, Time Sensitive/Critical Alerts, or background emergency delivery. Paired-iPhone alerts remain the background path. |
 | Mac Catalyst | Native SwiftUI reports, map, preparedness guide, and settings in a Mac window | Foreground/local only. No independent APNs, App Attest, or background emergency-alert path in this release. |
@@ -92,12 +92,14 @@ frames. Partial, mixed-commit, or historically copied sets are rejected.
 Release readiness additionally requires a separately hashed
 `release-approval.json` with a named reviewer and approved signed-Release
 parity for every platform. Each signed build commit must be product-source
-equivalent to the screenshot commit. Validate that gate with:
+equivalent to the screenshot commit. The protected finalizer validates that
+gate with the following job-internal command; do not run it locally:
 
 ```sh
 ruby .github/scripts/verify-store-assets.rb \
   --require-build8-screenshot-release-ready \
-  --expected-source-commit=<40-character-source-commit>
+  --expected-source-commit=<40-character-source-commit> \
+  --screenshot-release-evidence-root="$EVIDENCE_ROOT"
 ```
 
 Apple Watch has no separate platform description field for this companion.
@@ -112,13 +114,15 @@ owner approves each exact display name, availability, and trademark review.
 ## Required human gates
 
 - [ ] Freeze the exact source commit and build 8 archives.
-- [ ] Let Xcode Cloud automatic signing resolve the registered platform App IDs,
-  then validate every signed archive/profile/entitlement and the embedded Watch
-  signature. Do not treat automatic signing as evidence before inspection.
+- [ ] Use the currently defined protected GitHub signing workflows at the
+  frozen source commit, then validate every signed archive/profile/entitlement,
+  the embedded Watch signature, and each machine-readable signed-run
+  attestation. Xcode Cloud remains unconfigured as of 2026-08-22.
 - [ ] Recapture the complete screenshot set at the exact final build-8 commit,
   then compare those source-matching Debug candidates with the matching signed
-  Release artifacts, record those artifact hashes, and obtain named visual
-  approval before upload. The preserved b461 packages are historical and do
+  Release uploads, preserve the four exact upload-run IDs, and obtain named
+  visual approval before screenshot upload, version attachment, or submission.
+  The preserved b461 packages are historical and do
   not satisfy the current source, signed-parity, or reviewer gates.
 - [ ] Complete platform QA. Generic compilation and source inspection are not
   simulator, Apple TV, Apple Vision Pro, Apple Watch, or signed-device evidence.
@@ -147,8 +151,8 @@ owner approves each exact display name, availability, and trademark review.
 - [ ] For visionOS, assess the final experience and set the required App Motion
   answer. Source inspection suggests a windowed interface with no virtual-camera
   movement, but only final-platform QA can authorize the portal answer.
-- [ ] Follow `../app-store-connect-portal-audit-2026-08-19.md` without deleting
-  or repurposing existing drafts.
+- [ ] Follow `../app-store-connect-portal-audit-2026-08-22.md`; retain the
+  2026-08-19 and 2026-08-20 audits as history without repurposing drafts.
 
 Apple's current field limits are 4,000 characters for descriptions, 170
 characters for promotional text, and 100 bytes for keywords. The source files

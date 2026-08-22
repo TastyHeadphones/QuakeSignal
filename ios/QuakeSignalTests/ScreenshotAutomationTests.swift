@@ -1,5 +1,59 @@
+import SwiftUI
 import XCTest
 @testable import QuakeSignal
+
+private struct VisionReadabilitySnapshot {
+    var windowWidth: CGFloat
+    var windowHeight: CGFloat
+    var surfaceOpacity: Double
+    var rowSurfaceOpacity: Double
+    var supportingTextOpacity: Double
+    var minimumControlTargetSize: CGFloat
+    var reportRowHeight: CGFloat
+    var guideRowHeight: CGFloat
+    var alertSoundRowHeight: CGFloat
+
+    static var current: Self {
+        Self(
+            windowWidth: VisionReadabilityMetrics.defaultWindowWidth,
+            windowHeight: VisionReadabilityMetrics.defaultWindowHeight,
+            surfaceOpacity: VisionReadabilityMetrics.surfaceOpacity,
+            rowSurfaceOpacity: VisionReadabilityMetrics.rowSurfaceOpacity,
+            supportingTextOpacity: VisionReadabilityMetrics.supportingTextOpacity,
+            minimumControlTargetSize: VisionReadabilityMetrics.minimumControlTargetSize,
+            reportRowHeight: VisionReadabilityMetrics.reportMinimumRowHeight,
+            guideRowHeight: VisionReadabilityMetrics.guideMinimumRowHeight,
+            alertSoundRowHeight: VisionReadabilityMetrics.alertSoundMinimumRowHeight
+        )
+    }
+
+    var aspectRatio: CGFloat {
+        windowWidth / windowHeight
+    }
+
+    var retainsReviewedComposition: Bool {
+        windowWidth == 1_600 &&
+            windowHeight == 800 &&
+            (1.9...2.1).contains(aspectRatio) &&
+            (0.95...0.99).contains(surfaceOpacity) &&
+            rowSurfaceOpacity >= surfaceOpacity &&
+            rowSurfaceOpacity <= 1.0 &&
+            (0.80...0.90).contains(supportingTextOpacity) &&
+            minimumControlTargetSize == 60 &&
+            (120...140).contains(reportRowHeight) &&
+            (80...96).contains(guideRowHeight) &&
+            (100...128).contains(alertSoundRowHeight)
+    }
+
+    func replacing<Value>(
+        _ keyPath: WritableKeyPath<Self, Value>,
+        with value: Value
+    ) -> Self {
+        var copy = self
+        copy[keyPath: keyPath] = value
+        return copy
+    }
+}
 
 @MainActor
 final class ScreenshotAutomationTests: XCTestCase {
@@ -237,6 +291,103 @@ final class ScreenshotAutomationTests: XCTestCase {
         XCTAssertFalse(ScreenshotAutomation.isAlertPreferencesFrame(nil))
     }
 
+    func testVisionReadabilityMetricsKeepTheCaptureLargeOpaqueAndLegible() {
+        let metrics = VisionReadabilitySnapshot.current
+
+        XCTAssertEqual(metrics.windowWidth, 1_600)
+        XCTAssertEqual(metrics.windowHeight, 800)
+        XCTAssertGreaterThanOrEqual(metrics.aspectRatio, 1.9)
+        XCTAssertLessThanOrEqual(metrics.aspectRatio, 2.1)
+        XCTAssertGreaterThanOrEqual(metrics.surfaceOpacity, 0.95)
+        XCTAssertLessThanOrEqual(metrics.surfaceOpacity, 0.99)
+        XCTAssertGreaterThanOrEqual(metrics.rowSurfaceOpacity, metrics.surfaceOpacity)
+        XCTAssertLessThanOrEqual(metrics.rowSurfaceOpacity, 1.0)
+        XCTAssertGreaterThanOrEqual(metrics.supportingTextOpacity, 0.80)
+        XCTAssertLessThanOrEqual(metrics.supportingTextOpacity, 0.90)
+        XCTAssertEqual(metrics.minimumControlTargetSize, 60)
+        XCTAssertGreaterThanOrEqual(metrics.reportRowHeight, 120)
+        XCTAssertLessThanOrEqual(metrics.reportRowHeight, 140)
+        XCTAssertGreaterThanOrEqual(metrics.guideRowHeight, 80)
+        XCTAssertLessThanOrEqual(metrics.guideRowHeight, 96)
+        XCTAssertGreaterThanOrEqual(metrics.alertSoundRowHeight, 100)
+        XCTAssertLessThanOrEqual(metrics.alertSoundRowHeight, 128)
+        XCTAssertTrue(metrics.retainsReviewedComposition)
+    }
+
+    func testVisionReadabilityBoundsRejectHighAndLowMutations() {
+        let baseline = VisionReadabilitySnapshot.current
+        XCTAssertTrue(baseline.retainsReviewedComposition)
+
+        let invalidMutations: [(String, VisionReadabilitySnapshot)] = [
+            ("window width below exact review", baseline.replacing(\.windowWidth, with: 1_599)),
+            ("window width above exact review", baseline.replacing(\.windowWidth, with: 1_601)),
+            ("window height below exact review", baseline.replacing(\.windowHeight, with: 799)),
+            ("window height above exact review", baseline.replacing(\.windowHeight, with: 801)),
+            ("surface opacity below range", baseline.replacing(\.surfaceOpacity, with: 0.949)),
+            ("surface opacity above range", baseline.replacing(\.surfaceOpacity, with: 0.991)),
+            ("row opacity below surface", baseline.replacing(\.rowSurfaceOpacity, with: 0.969)),
+            ("row opacity above one", baseline.replacing(\.rowSurfaceOpacity, with: 1.001)),
+            ("supporting opacity below range", baseline.replacing(\.supportingTextOpacity, with: 0.799)),
+            ("supporting opacity above range", baseline.replacing(\.supportingTextOpacity, with: 0.901)),
+            ("control target below exact review", baseline.replacing(\.minimumControlTargetSize, with: 59)),
+            ("control target above exact review", baseline.replacing(\.minimumControlTargetSize, with: 61)),
+            ("report row below range", baseline.replacing(\.reportRowHeight, with: 119)),
+            ("report row above range", baseline.replacing(\.reportRowHeight, with: 141)),
+            ("guide row below range", baseline.replacing(\.guideRowHeight, with: 79)),
+            ("guide row above range", baseline.replacing(\.guideRowHeight, with: 97)),
+            ("alert row below range", baseline.replacing(\.alertSoundRowHeight, with: 99)),
+            ("alert row above range", baseline.replacing(\.alertSoundRowHeight, with: 129)),
+        ]
+
+        for (name, mutation) in invalidMutations {
+            XCTAssertFalse(mutation.retainsReviewedComposition, name)
+        }
+    }
+
+    func testVisionGuideUsesOneWideReviewedRowWithAccessibleDynamicTypeFallback() {
+        XCTAssertEqual(
+            GuideContent.afterQuakeKeys.count,
+            VisionGuideLayoutPolicy.wideAfterQuakeItemCount
+        )
+
+        for dynamicTypeSize in [
+            DynamicTypeSize.xSmall,
+            .small,
+            .medium,
+            .large,
+            .xLarge,
+            .xxLarge,
+            .xxxLarge,
+        ] {
+            XCTAssertTrue(VisionGuideLayoutPolicy.usesWideAfterQuakeRow(
+                itemCount: GuideContent.afterQuakeKeys.count,
+                dynamicTypeSize: dynamicTypeSize
+            ))
+        }
+
+        for dynamicTypeSize in [
+            DynamicTypeSize.accessibility1,
+            .accessibility2,
+            .accessibility3,
+            .accessibility4,
+            .accessibility5,
+        ] {
+            XCTAssertFalse(VisionGuideLayoutPolicy.usesWideAfterQuakeRow(
+                itemCount: GuideContent.afterQuakeKeys.count,
+                dynamicTypeSize: dynamicTypeSize
+            ))
+        }
+
+        XCTAssertFalse(VisionGuideLayoutPolicy.usesWideAfterQuakeRow(
+            itemCount: VisionGuideLayoutPolicy.wideAfterQuakeItemCount - 1,
+            dynamicTypeSize: .large
+        ))
+        XCTAssertFalse(VisionGuideLayoutPolicy.usesWideAfterQuakeRow(
+            itemCount: VisionGuideLayoutPolicy.wideAfterQuakeItemCount + 1,
+            dynamicTypeSize: .large
+        ))
+    }
+
     func testMacCaptureGeometryPolicyAcceptsOnlyReviewedMacSelectors() throws {
         let currentFrame = CGRect(x: 144, y: 72, width: 900, height: 700)
 
@@ -279,33 +430,99 @@ final class ScreenshotAutomationTests: XCTestCase {
         ))
     }
 
-    func testMacCaptureGeometryRequiresStable1280By800RetinaFrame() {
+    func testMacCaptureGeometryRequiresStable1280By800FrameAndHonestSourceScale() {
         let target = CGRect(x: 40, y: 60, width: 1_280, height: 800)
 
         XCTAssertTrue(ScreenshotAutomation.macCaptureGeometryIsStable(
             systemFrame: target,
             previousSystemFrame: target,
-            backingScale: 2
+            sourceDisplayScale: 1
+        ))
+        XCTAssertTrue(ScreenshotAutomation.macCaptureGeometryIsStable(
+            systemFrame: target,
+            previousSystemFrame: target,
+            sourceDisplayScale: 2
         ))
         XCTAssertFalse(ScreenshotAutomation.macCaptureGeometryIsStable(
             systemFrame: target,
             previousSystemFrame: nil,
-            backingScale: 2
+            sourceDisplayScale: 1
         ))
         XCTAssertFalse(ScreenshotAutomation.macCaptureGeometryIsStable(
             systemFrame: target,
             previousSystemFrame: target.offsetBy(dx: 1, dy: 0),
-            backingScale: 2
+            sourceDisplayScale: 1
         ))
         XCTAssertFalse(ScreenshotAutomation.macCaptureGeometryIsStable(
             systemFrame: CGRect(x: 40, y: 60, width: 1_279, height: 800),
             previousSystemFrame: CGRect(x: 40, y: 60, width: 1_279, height: 800),
-            backingScale: 2
+            sourceDisplayScale: 1
         ))
         XCTAssertFalse(ScreenshotAutomation.macCaptureGeometryIsStable(
             systemFrame: target,
             previousSystemFrame: target,
-            backingScale: 1
+            sourceDisplayScale: 0
+        ))
+    }
+
+    func testMacHierarchyRendererRequiresItsIndependentExactDualGate() {
+        let enabledArguments = [
+            "QuakeSignal",
+            ScreenshotAutomation.launchArgument,
+            ScreenshotAutomation.macHierarchyCaptureArgument,
+        ]
+        let enabledEnvironment = [
+            ScreenshotAutomation.environmentKey: "1",
+            ScreenshotAutomation.macHierarchyCaptureEnvironmentKey: "1",
+        ]
+
+        XCTAssertTrue(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: true,
+            selectedFrame: .macMap,
+            arguments: enabledArguments,
+            environment: enabledEnvironment
+        ))
+        XCTAssertFalse(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: true,
+            selectedFrame: .macMap,
+            arguments: enabledArguments.filter {
+                $0 != ScreenshotAutomation.macHierarchyCaptureArgument
+            },
+            environment: enabledEnvironment
+        ))
+        XCTAssertFalse(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: false,
+            selectedFrame: .macMap,
+            arguments: enabledArguments,
+            environment: enabledEnvironment
+        ))
+        XCTAssertFalse(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: true,
+            selectedFrame: .macMap,
+            arguments: enabledArguments,
+            environment: enabledEnvironment.filter {
+                $0.key != ScreenshotAutomation.macHierarchyCaptureEnvironmentKey
+            }
+        ))
+        XCTAssertFalse(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: true,
+            selectedFrame: .macMap,
+            arguments: enabledArguments + [ScreenshotAutomation.macHierarchyCaptureArgument],
+            environment: enabledEnvironment
+        ))
+        XCTAssertFalse(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: true,
+            selectedFrame: .visionMap,
+            arguments: enabledArguments,
+            environment: enabledEnvironment
+        ))
+        XCTAssertFalse(ScreenshotAutomation.macHierarchyCaptureIsEnabled(
+            screenshotAutomationEnabled: true,
+            selectedFrame: .macMap,
+            arguments: enabledArguments,
+            environment: enabledEnvironment.merging([
+                ScreenshotAutomation.macHierarchyCaptureEnvironmentKey: "true"
+            ]) { _, new in new }
         ))
     }
 

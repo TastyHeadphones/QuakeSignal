@@ -7,8 +7,9 @@ usage() {
 Usage: capture-maccatalyst-screenshot-set.sh <absolute-output-directory>
 
 Captures all five reviewed English Mac Catalyst selectors from one exact clean
-Git commit. Each native 2560x1600 frame and its raw/window/build evidence is
-validated before the complete unapproved set is published atomically.
+Git commit. Each direct @2x live-UIWindow hierarchy render and its request,
+raw, window, and build evidence is validated before the complete unapproved
+set is published atomically.
 
 Optional environment:
   QUAKESIGNAL_CATALYST_SCREENSHOT_DERIVED_DATA=/absolute/cache/directory
@@ -66,6 +67,7 @@ mkdir -p "$payload"
 for directory in \
   app-logs \
   build-logs \
+  capture-request-evidence \
   en-US \
   frame-capture-evidence \
   geometry-evidence \
@@ -117,11 +119,12 @@ while IFS=$'\t' read -r selector planned_file width height; do
     root = Pathname.new(ARGV.fetch(0)).realpath
     selector = ARGV.fetch(1)
     planned_file = ARGV.fetch(2)
-    expected_directories = %w[app-logs build-logs en-US frame-capture-evidence geometry-evidence native-capture-evidence raw-window-captures semantic-evidence semantic-rejections transformation-evidence window-observations]
+    expected_directories = %w[app-logs build-logs capture-request-evidence en-US frame-capture-evidence geometry-evidence native-capture-evidence raw-window-captures semantic-evidence semantic-rejections transformation-evidence window-observations]
     expected_files = [
       planned_file,
       "app-logs/#{selector}.log",
       "build-logs/#{selector}.log",
+      "capture-request-evidence/#{selector}.json",
       "frame-capture-evidence/#{selector}.json",
       "geometry-evidence/#{selector}.json",
       "native-capture-evidence/#{selector}.json",
@@ -164,6 +167,7 @@ while IFS=$'\t' read -r selector planned_file width height; do
   mv "$single_package/$planned_file" "$payload/$planned_file"
   mv "$single_package/app-logs/$selector.log" "$payload/app-logs/$selector.log"
   mv "$single_package/build-logs/$selector.log" "$payload/build-logs/$selector.log"
+  mv "$single_package/capture-request-evidence/$selector.json" "$payload/capture-request-evidence/$selector.json"
   mv "$single_package/frame-capture-evidence/$selector.json" "$payload/frame-capture-evidence/$selector.json"
   mv "$single_package/geometry-evidence/$selector.json" "$payload/geometry-evidence/$selector.json"
   mv "$single_package/native-capture-evidence/$selector.json" "$payload/native-capture-evidence/$selector.json"

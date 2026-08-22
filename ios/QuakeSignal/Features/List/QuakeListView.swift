@@ -16,9 +16,13 @@ struct QuakeListView: View {
                         NavigationLink(value: event) {
                             QuakeRowView(event: event, coordinate: store.effectiveCoordinate)
                         }
+                        .visionReadableRow()
                     }
                 }
                 .listStyle(.plain)
+                .visionReadableListSurface(
+                    minimumRowHeight: VisionReadabilityMetrics.reportMinimumRowHeight
+                )
                 .overlay {
                     if filteredEvents.isEmpty {
                         ContentUnavailableView {
@@ -58,8 +62,16 @@ struct QuakeListView: View {
                 .padding(.horizontal)
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, filterBarVerticalPadding)
         .background(Color("GroupedBGColor"))
+    }
+
+    private var filterBarVerticalPadding: CGFloat {
+#if os(visionOS)
+        14
+#else
+        10
+#endif
     }
 }
 
@@ -70,13 +82,47 @@ private struct FilterChip: View {
 
     var body: some View {
         Button(action: action) {
-            Text(labelKey)
-                .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(Capsule().fill(isSelected ? Color("BrandColor") : Color("CardColor")))
-                .foregroundStyle(isSelected ? .white : .primary)
+            HStack(spacing: 6) {
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .accessibilityHidden(true)
+                }
+                Text(labelKey)
+            }
+            .font(.subheadline.weight(.medium))
+            .visionFont(.body.weight(.semibold))
+            .padding(.horizontal, chipHorizontalPadding)
+            .padding(.vertical, chipVerticalPadding)
+            .frame(minWidth: minimumHitTarget, minHeight: minimumHitTarget)
+            .background(Capsule().fill(isSelected ? Color("BrandColor") : Color("CardColor")))
+            .foregroundStyle(isSelected ? .white : .primary)
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var minimumHitTarget: CGFloat? {
+#if os(visionOS)
+        VisionReadabilityMetrics.minimumControlTargetSize
+#else
+        nil
+#endif
+    }
+
+    private var chipHorizontalPadding: CGFloat {
+#if os(visionOS)
+        18
+#else
+        14
+#endif
+    }
+
+    private var chipVerticalPadding: CGFloat {
+#if os(visionOS)
+        9
+#else
+        7
+#endif
     }
 }

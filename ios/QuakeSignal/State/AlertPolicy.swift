@@ -21,10 +21,9 @@ enum AlertPresentationReason: String, Codable, Sendable, Equatable {
     }
 }
 
-/// Captures the notification-presentation decision at receipt time. Keeping
-/// this decision with a buffered payload prevents a launch or scene-state
-/// transition from causing both the system and the app to present the same
-/// warning.
+/// Captures the notification-presentation decision after the app has had one
+/// synchronous opportunity to take ownership of this warning revision or
+/// recognize that a newer revision already owns the emergency presentation.
 enum ForegroundNotificationSystemPresentation: Equatable {
     case alert
     case listOnly
@@ -32,25 +31,183 @@ enum ForegroundNotificationSystemPresentation: Equatable {
 
 struct ForegroundNotificationPresentationDecision: Equatable {
     let systemPresentation: ForegroundNotificationSystemPresentation
-    let shouldPresentEmergencyInApp: Bool
+    let didHandleEmergencyInApp: Bool
 }
 
 enum ForegroundNotificationPresentationPolicy {
-    static func decision(
+    static func allowsEmergencyPresentation(
         for payload: PushPayload,
         isSceneActive: Bool
-    ) -> ForegroundNotificationPresentationDecision {
-        guard payload.hasUsableMatchingEventSnapshot, isSceneActive else {
-            return ForegroundNotificationPresentationDecision(
-                systemPresentation: .alert,
-                shouldPresentEmergencyInApp: false
-            )
-        }
+    ) -> Bool {
+        payload.hasUsableMatchingEventSnapshot && isSceneActive
+    }
 
-        return ForegroundNotificationPresentationDecision(
-            systemPresentation: .listOnly,
-            shouldPresentEmergencyInApp: true
+    static func decision(
+        didHandleEmergencyInApp: Bool
+    ) -> ForegroundNotificationPresentationDecision {
+        ForegroundNotificationPresentationDecision(
+            systemPresentation: didHandleEmergencyInApp ? .listOnly : .alert,
+            didHandleEmergencyInApp: didHandleEmergencyInApp
         )
+    }
+}
+
+/// Identifies one event revision for foreground presentation ownership. A
+/// later APNs copy may yield its banner for the same revision, for an older
+/// active revision that this key monotonically supersedes, or for an active
+/// replay after a system-presented terminal lifecycle boundary.
+struct ForegroundEmergencyRevisionKey: Hashable, Sendable {
+    let eventID: String
+    let serial: Int
+    let kind: String
+    let isWarning: Bool
+    let isFinal: Bool
+    let isCancelled: Bool
+    let isTraining: Bool
+    let effectiveTimestamp: Date?
+
+    init(event: EEWEvent) {
+        self.init(
+            eventID: event.id,
+            serial: event.serial,
+            kind: event.kind,
+            isWarning: event.isWarn,
+            isFinal: event.isFinal,
+            isCancelled: event.isCancel,
+            isTraining: event.isTraining,
+            effectiveTimestamp: event.reportDate ?? event.originDate
+        )
+    }
+
+    init(
+        eventID: String,
+        serial: Int,
+        kind: String,
+        isWarning: Bool,
+        isFinal: Bool,
+        isCancelled: Bool,
+        isTraining: Bool,
+        effectiveTimestamp: Date?
+    ) {
+        self.eventID = eventID
+        self.serial = serial
+        self.kind = kind
+        self.isWarning = isWarning
+        self.isFinal = isFinal
+        self.isCancelled = isCancelled
+        self.isTraining = isTraining
+        self.effectiveTimestamp = effectiveTimestamp
+    }
+
+    private var isActiveWarning: Bool {
+        kind == "eew" && isWarning && !isFinal && !isCancelled && !isTraining
+    }
+
+    private var isTerminalWarningLifecycle: Bool {
+        kind == "eew" && !isTraining && (isFinal || isCancelled)
+    }
+
+    /// A warning already elevated by the app also owns a delayed APNs copy of
+    /// an older active revision. The inverse is deliberately false: a handled
+    /// older revision must not hide a newer APNs update.
+    func monotonicallyDominates(_ incoming: ForegroundEmergencyRevisionKey) -> Bool {
+        guard eventID == incoming.eventID else { return false }
+        // Once APNs has presented a meaningful final/cancellation, no active
+        // replay for that event may reopen imperative UI during the brief
+        // snapshot-resolution gap. This mirrors EventMergePolicy, where a
+        // terminal lifecycle outranks even a later-serial active replay.
+        if isTerminalWarningLifecycle && incoming.isActiveWarning {
+            return true
+        }
+        guard isActiveWarning,
+              incoming.isActiveWarning else {
+            return false
+        }
+        if serial != incoming.serial {
+            return serial > incoming.serial
+        }
+        guard let effectiveTimestamp,
+              let incomingTimestamp = incoming.effectiveTimestamp else {
+            return false
+        }
+        return effectiveTimestamp > incomingTimestamp
+    }
+}
+
+enum ForegroundEmergencyRevisionOwnershipPolicy {
+    static func key(for event: EEWEvent) -> ForegroundEmergencyRevisionKey {
+        ForegroundEmergencyRevisionKey(event: event)
+    }
+
+    static func wasAlreadyHandled(
+        event: EEWEvent,
+        handledRevisionKeys: Set<ForegroundEmergencyRevisionKey>,
+        allowsEmergencyPresentation: Bool
+    ) -> Bool {
+        guard allowsEmergencyPresentation else { return false }
+        let incoming = key(for: event)
+        if handledRevisionKeys.contains(incoming) { return true }
+        guard event.isActiveWarning else { return false }
+        return handledRevisionKeys.contains { handled in
+            handled.monotonicallyDominates(incoming)
+        }
+    }
+}
+
+/// A snapshotless foreground push has already kept its APNs banner and sound
+/// before the matching event can be resolved. Reserve its validated revision
+/// briefly so an older direct copy cannot consume ownership intended for a
+/// newer live revision. Exact matches consume their one-shot reservation;
+/// monotonically older active copies remain system-owned until that exact
+/// revision arrives or the bounded reservation expires.
+enum ForegroundSystemPresentationReservationPolicy {
+    static let lifetime: TimeInterval = 15
+
+    static func reserve(
+        revisionKey: ForegroundEmergencyRevisionKey,
+        receivedAt: Date,
+        now: Date,
+        reservations: inout [ForegroundEmergencyRevisionKey: Date]
+    ) {
+        guard !revisionKey.eventID.isEmpty else { return }
+        removeExpired(now: now, reservations: &reservations)
+        // A launch-buffered delivery keeps its original receipt time. Starting
+        // this TTL when RootView later drains the buffer could suppress an
+        // unrelated newer revision long after APNs presented the first one.
+        let expiresAt = receivedAt.addingTimeInterval(lifetime)
+        guard expiresAt >= now else { return }
+        reservations[revisionKey] = expiresAt
+    }
+
+    static func consume(
+        revisionKey: ForegroundEmergencyRevisionKey,
+        now: Date,
+        reservations: inout [ForegroundEmergencyRevisionKey: Date]
+    ) -> Bool {
+        removeExpired(now: now, reservations: &reservations)
+        if let expiresAt = reservations.removeValue(forKey: revisionKey) {
+            return expiresAt >= now
+        }
+        return reservations.keys.contains { reserved in
+            reserved.monotonicallyDominates(revisionKey)
+        }
+    }
+
+    private static func removeExpired(
+        now: Date,
+        reservations: inout [ForegroundEmergencyRevisionKey: Date]
+    ) {
+        reservations = reservations.filter { $0.value >= now }
+    }
+}
+
+/// Playback is reached only after the foreground preference/location policy
+/// accepts a warning. Training therefore plays only for an opted-in event that
+/// was explicitly elevated with the training reason.
+enum ForegroundEmergencyAudioPolicy {
+    static func shouldPlay(event: EEWEvent, reason: AlertPresentationReason) -> Bool {
+        event.isActiveWarning ||
+            (event.kind == "eew" && event.isTraining && reason == .training)
     }
 }
 
@@ -215,11 +372,13 @@ enum ForegroundAlertPolicy {
             return nil
         }
 
-        if let coordinate = preferences.coordinate {
-            guard let distance = event.distanceKm(from: coordinate),
-                  distance <= preferences.radiusKm else {
-                return nil
-            }
+        // QuakeSignal has no user-visible nationwide alert mode. Until a city
+        // or current-location fix exists, foreground delivery must match the
+        // server's fail-closed nearby-subscription behavior.
+        guard let coordinate = preferences.coordinate,
+              let distance = event.distanceKm(from: coordinate),
+              distance <= preferences.radiusKm else {
+            return nil
         }
 
         if event.isTraining {

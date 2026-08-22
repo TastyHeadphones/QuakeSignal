@@ -30,6 +30,13 @@ final class AlertPolicyTests: XCTestCase {
             for: event,
             previous: nil,
             isBackfill: false,
+            preferences: preferences(coordinate: nil),
+            now: now
+        ))
+        XCTAssertNil(ForegroundAlertPolicy.presentationReason(
+            for: event,
+            previous: nil,
+            isBackfill: false,
             preferences: preferences(subscriptionEnabled: false),
             now: now
         ))
@@ -68,6 +75,28 @@ final class AlertPolicyTests: XCTestCase {
             for: makeEvent(reportDate: now.addingTimeInterval(-601), isWarn: true),
             preferences: matching
         ))
+    }
+
+    func testEmergencyAudioLifetimeFollowsDismissalRevisionAndReplacement() {
+        let warning = PresentedAlert(
+            event: makeEvent(reportDate: now, isWarn: true),
+            reason: .new
+        )
+        let updated = PresentedAlert(
+            event: makeEvent(serial: 2, reportDate: now, isWarn: true),
+            reason: .updated
+        )
+        let detail = PresentedAlert(
+            event: warning.event,
+            reason: .report,
+            mode: .detail
+        )
+
+        XCTAssertFalse(PresentedAlertAudioPolicy.shouldStop(previous: nil, next: warning))
+        XCTAssertFalse(PresentedAlertAudioPolicy.shouldStop(previous: warning, next: warning))
+        XCTAssertTrue(PresentedAlertAudioPolicy.shouldStop(previous: warning, next: nil))
+        XCTAssertTrue(PresentedAlertAudioPolicy.shouldStop(previous: warning, next: updated))
+        XCTAssertTrue(PresentedAlertAudioPolicy.shouldStop(previous: warning, next: detail))
     }
 
     func testCompanionHeadlineRejectsStaleAndFutureWarningsForLatestReport() {
@@ -424,31 +453,572 @@ final class AlertPolicyTests: XCTestCase {
         XCTAssertNil(replayDecision.presentationReason)
     }
 
-    func testForegroundNotificationWithoutUsableSnapshotNeverClaimsInAppPresentation() {
+    func testForegroundNotificationRequiresUsableActiveSnapshotBeforeAttemptingInAppPresentation() {
         let payload = PushPayload(userInfo: [
             "sourceId": "jma_eew",
             "eventId": "test",
         ])
+        XCTAssertFalse(ForegroundNotificationPresentationPolicy.allowsEmergencyPresentation(
+            for: payload,
+            isSceneActive: false
+        ))
+        XCTAssertFalse(ForegroundNotificationPresentationPolicy.allowsEmergencyPresentation(
+            for: payload,
+            isSceneActive: true
+        ))
+    }
+
+    func testForegroundNotificationSuppressesSystemAlertOnlyAfterConfirmedInAppOwnership() {
         XCTAssertEqual(
             ForegroundNotificationPresentationPolicy.decision(
-                for: payload,
-                isSceneActive: false
+                didHandleEmergencyInApp: false
             ),
             ForegroundNotificationPresentationDecision(
                 systemPresentation: .alert,
-                shouldPresentEmergencyInApp: false
+                didHandleEmergencyInApp: false
             )
         )
         XCTAssertEqual(
             ForegroundNotificationPresentationPolicy.decision(
-                for: payload,
-                isSceneActive: true
+                didHandleEmergencyInApp: true
             ),
             ForegroundNotificationPresentationDecision(
-                systemPresentation: .alert,
-                shouldPresentEmergencyInApp: false
+                systemPresentation: .listOnly,
+                didHandleEmergencyInApp: true
             )
         )
+    }
+
+    func testForegroundEmergencyOwnershipRequiresPermissionAndTheExactHandledRevision() {
+        let warning = makeEvent(serial: 1, reportDate: now, isWarn: true)
+        let handledKeys = [ForegroundEmergencyRevisionOwnershipPolicy.key(for: warning)]
+
+        XCTAssertTrue(ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+            event: warning,
+            handledRevisionKeys: Set(handledKeys),
+            allowsEmergencyPresentation: true
+        ))
+        XCTAssertFalse(ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+            event: warning,
+            handledRevisionKeys: Set(handledKeys),
+            allowsEmergencyPresentation: false
+        ))
+        XCTAssertFalse(ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+            event: makeEvent(serial: 2, reportDate: now, isWarn: true),
+            handledRevisionKeys: Set(handledKeys),
+            allowsEmergencyPresentation: true
+        ))
+        XCTAssertFalse(ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+            event: makeEvent(serial: 1, reportDate: now, isWarn: true, isFinal: true),
+            handledRevisionKeys: Set(handledKeys),
+            allowsEmergencyPresentation: true
+        ))
+    }
+
+    func testNewerHandledWarningClaimsDelayedOlderActivePush() {
+        let delayedOlderSerial = makeEvent(serial: 1, reportDate: now, isWarn: true)
+        let handledHigherSerial = makeEvent(
+            serial: 2,
+            reportDate: now.addingTimeInterval(1),
+            isWarn: true
+        )
+        XCTAssertTrue(ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+            event: delayedOlderSerial,
+            handledRevisionKeys: [
+                ForegroundEmergencyRevisionOwnershipPolicy.key(for: handledHigherSerial),
+            ],
+            allowsEmergencyPresentation: true
+        ))
+
+        let delayedOlderTimestamp = makeEvent(serial: 3, reportDate: now, isWarn: true)
+        let handledNewerTimestamp = makeEvent(
+            serial: 3,
+            reportDate: now.addingTimeInterval(1),
+            isWarn: true
+        )
+        XCTAssertTrue(ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+            event: delayedOlderTimestamp,
+            handledRevisionKeys: [
+                ForegroundEmergencyRevisionOwnershipPolicy.key(for: handledNewerTimestamp),
+            ],
+            allowsEmergencyPresentation: true
+        ))
+    }
+
+    func testOlderHandledWarningDoesNotClaimNewerOrTerminalPush() {
+        let earlier = makeEvent(serial: 1, reportDate: now, isWarn: true)
+        let higherSerial = makeEvent(
+            serial: 2,
+            reportDate: now,
+            isWarn: true
+        )
+        let newerTimestamp = makeEvent(
+            serial: 1,
+            reportDate: now.addingTimeInterval(1),
+            isWarn: true
+        )
+        let handledKeys = [ForegroundEmergencyRevisionOwnershipPolicy.key(for: earlier)]
+
+        for incoming in [
+            higherSerial,
+            newerTimestamp,
+            makeEvent(
+                serial: 2,
+                reportDate: now.addingTimeInterval(1),
+                isWarn: true,
+                isFinal: true
+            ),
+            makeEvent(
+                serial: 2,
+                reportDate: now.addingTimeInterval(1),
+                isWarn: true,
+                isCancel: true
+            ),
+        ] {
+            XCTAssertTrue(EventMergePolicy.shouldAccept(incoming, replacing: earlier))
+            XCTAssertFalse(ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+                event: incoming,
+                handledRevisionKeys: Set(handledKeys),
+                allowsEmergencyPresentation: true
+            ))
+        }
+    }
+
+    func testNonActiveHandledRevisionNeverDominatesAnActivePush() {
+        let incoming = makeEvent(serial: 1, reportDate: now, isWarn: true)
+        let handledFinal = makeEvent(
+            serial: 2,
+            reportDate: now.addingTimeInterval(1),
+            isWarn: true,
+            isFinal: true
+        )
+        let handledTraining = makeEvent(
+            serial: 2,
+            reportDate: now.addingTimeInterval(1),
+            isWarn: false,
+            isTraining: true
+        )
+
+        XCTAssertTrue(ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+            event: incoming,
+            handledRevisionKeys: [
+                ForegroundEmergencyRevisionOwnershipPolicy.key(for: handledFinal),
+            ],
+            allowsEmergencyPresentation: true
+        ))
+        XCTAssertFalse(ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+            event: incoming,
+            handledRevisionKeys: [
+                ForegroundEmergencyRevisionOwnershipPolicy.key(for: handledTraining),
+            ],
+            allowsEmergencyPresentation: true
+        ))
+    }
+
+    func testConsumedSystemReservationRemainsOwnedForResolvedDuplicate() {
+        let event = makeEvent(reportDate: now, isWarn: true)
+        let revisionKey = ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)
+        var reservations: [ForegroundEmergencyRevisionKey: Date] = [:]
+        ForegroundSystemPresentationReservationPolicy.reserve(
+            revisionKey: revisionKey,
+            receivedAt: now,
+            now: now,
+            reservations: &reservations
+        )
+
+        XCTAssertTrue(ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: revisionKey,
+            now: now,
+            reservations: &reservations
+        ))
+        // QuakeStore records this consumed key so the async snapshot
+        // resolution and a duplicate APNs copy cannot reopen the emergency UI.
+        XCTAssertTrue(ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+            event: event,
+            handledRevisionKeys: [revisionKey],
+            allowsEmergencyPresentation: true
+        ))
+    }
+
+    func testSnapshotlessSystemPresentationReservationIsRevisionBoundShortLivedAndOneShot() {
+        let event = makeEvent(reportDate: now, isWarn: true)
+        let other = makeEvent(id: "jma_eew:other", reportDate: now, isWarn: true)
+        let revisionKey = ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)
+        var reservations: [ForegroundEmergencyRevisionKey: Date] = [:]
+        ForegroundSystemPresentationReservationPolicy.reserve(
+            revisionKey: revisionKey,
+            receivedAt: now,
+            now: now,
+            reservations: &reservations
+        )
+
+        XCTAssertFalse(ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: ForegroundEmergencyRevisionOwnershipPolicy.key(for: other),
+            now: now.addingTimeInterval(1),
+            reservations: &reservations
+        ))
+        XCTAssertTrue(ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: revisionKey,
+            now: now.addingTimeInterval(1),
+            reservations: &reservations
+        ))
+        XCTAssertFalse(ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: revisionKey,
+            now: now.addingTimeInterval(2),
+            reservations: &reservations
+        ))
+
+        ForegroundSystemPresentationReservationPolicy.reserve(
+            revisionKey: revisionKey,
+            receivedAt: now,
+            now: now,
+            reservations: &reservations
+        )
+        XCTAssertFalse(ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: revisionKey,
+            now: now.addingTimeInterval(
+                ForegroundSystemPresentationReservationPolicy.lifetime + 1
+            ),
+            reservations: &reservations
+        ))
+    }
+
+    func testSystemOwnedReservationSuppressesTheRacingDirectEmergency() {
+        let event = makeEvent(reportDate: now, isWarn: true)
+        let directReason = ForegroundAlertPolicy.presentationReason(
+            for: event,
+            previous: nil,
+            isBackfill: false,
+            preferences: preferences(),
+            now: now
+        )
+        XCTAssertEqual(directReason, .new)
+
+        let revisionKey = ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)
+        var reservations: [ForegroundEmergencyRevisionKey: Date] = [:]
+        ForegroundSystemPresentationReservationPolicy.reserve(
+            revisionKey: revisionKey,
+            receivedAt: now,
+            now: now,
+            reservations: &reservations
+        )
+        let systemOwnsPresentation = ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: revisionKey,
+            now: now,
+            reservations: &reservations
+        )
+        let firstPresentationReason: AlertPresentationReason? = systemOwnsPresentation
+            ? nil
+            : directReason
+        XCTAssertTrue(systemOwnsPresentation)
+        XCTAssertNil(firstPresentationReason)
+    }
+
+    func testCachedFirstMatchConsumesReservationWithoutSuppressingNewerUpdate() {
+        let cached = makeEvent(serial: 1, reportDate: now, isWarn: true)
+        let newer = makeEvent(
+            serial: 2,
+            reportDate: now.addingTimeInterval(1),
+            isWarn: true
+        )
+        let cachedKey = ForegroundEmergencyRevisionOwnershipPolicy.key(for: cached)
+        var reservations: [ForegroundEmergencyRevisionKey: Date] = [:]
+        ForegroundSystemPresentationReservationPolicy.reserve(
+            revisionKey: cachedKey,
+            receivedAt: now,
+            now: now,
+            reservations: &reservations
+        )
+
+        // The cached copy is the first valid event resolved for the system-owned
+        // APNs alert, even though monotonic merge correctly rejects its replay.
+        let cachedMatchWasSystemOwned =
+            ForegroundSystemPresentationReservationPolicy.consume(
+                revisionKey: cachedKey,
+                now: now,
+                reservations: &reservations
+            )
+        XCTAssertTrue(cachedMatchWasSystemOwned)
+        XCTAssertFalse(EventMergePolicy.shouldAccept(cached, replacing: cached))
+
+        // The one-shot reservation is gone before the genuinely newer revision,
+        // so that update remains eligible for app-owned cover and audio.
+        XCTAssertTrue(EventMergePolicy.shouldAccept(newer, replacing: cached))
+        XCTAssertFalse(ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: ForegroundEmergencyRevisionOwnershipPolicy.key(for: newer),
+            now: now.addingTimeInterval(1),
+            reservations: &reservations
+        ))
+        XCTAssertEqual(
+            ForegroundAlertPolicy.presentationReason(
+                for: newer,
+                previous: cached,
+                isBackfill: false,
+                preferences: preferences(),
+                now: now.addingTimeInterval(1)
+            ),
+            .updated
+        )
+    }
+
+    func testNewerDirectRevisionCannotConsumeAnOlderSystemPresentationReservation() {
+        let reserved = makeEvent(serial: 1, reportDate: now, isWarn: true)
+        let newer = makeEvent(
+            serial: 2,
+            reportDate: now.addingTimeInterval(1),
+            isWarn: true
+        )
+        let laterSameSerial = makeEvent(
+            serial: 1,
+            reportDate: now.addingTimeInterval(2),
+            isWarn: true
+        )
+        let reservedKey = ForegroundEmergencyRevisionOwnershipPolicy.key(for: reserved)
+        var reservations: [ForegroundEmergencyRevisionKey: Date] = [:]
+        ForegroundSystemPresentationReservationPolicy.reserve(
+            revisionKey: reservedKey,
+            receivedAt: now,
+            now: now,
+            reservations: &reservations
+        )
+
+        XCTAssertFalse(ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: ForegroundEmergencyRevisionOwnershipPolicy.key(for: newer),
+            now: now.addingTimeInterval(1),
+            reservations: &reservations
+        ))
+        XCTAssertFalse(ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: ForegroundEmergencyRevisionOwnershipPolicy.key(for: laterSameSerial),
+            now: now.addingTimeInterval(2),
+            reservations: &reservations
+        ))
+        XCTAssertEqual(reservations[reservedKey], now.addingTimeInterval(
+            ForegroundSystemPresentationReservationPolicy.lifetime
+        ))
+        XCTAssertTrue(ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: reservedKey,
+            now: now.addingTimeInterval(3),
+            reservations: &reservations
+        ))
+        XCTAssertTrue(reservations.isEmpty)
+    }
+
+    func testReservedNewerRevisionOwnsOlderActiveCopiesUntilExactMatchArrives() {
+        let older = makeEvent(serial: 1, reportDate: now, isWarn: true)
+        let reserved = makeEvent(
+            serial: 2,
+            reportDate: now.addingTimeInterval(1),
+            isWarn: true
+        )
+        let reservedKey = ForegroundEmergencyRevisionOwnershipPolicy.key(for: reserved)
+        var reservations: [ForegroundEmergencyRevisionKey: Date] = [:]
+        ForegroundSystemPresentationReservationPolicy.reserve(
+            revisionKey: reservedKey,
+            receivedAt: now,
+            now: now,
+            reservations: &reservations
+        )
+
+        XCTAssertTrue(ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: ForegroundEmergencyRevisionOwnershipPolicy.key(for: older),
+            now: now.addingTimeInterval(1),
+            reservations: &reservations
+        ))
+        XCTAssertNotNil(reservations[reservedKey])
+        XCTAssertTrue(ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: reservedKey,
+            now: now.addingTimeInterval(2),
+            reservations: &reservations
+        ))
+        XCTAssertTrue(reservations.isEmpty)
+    }
+
+    func testTerminalReservationOwnsActiveReplaysButTrainingAndReportsDoNot() {
+        let active = makeEvent(serial: 1, reportDate: now, isWarn: true)
+        let final = makeEvent(
+            serial: 2,
+            reportDate: now.addingTimeInterval(1),
+            isWarn: true,
+            isFinal: true
+        )
+        let cancellation = makeEvent(
+            serial: 1,
+            reportDate: now,
+            isWarn: false,
+            isCancel: true
+        )
+        let laterActiveReplay = makeEvent(
+            serial: 3,
+            reportDate: now.addingTimeInterval(2),
+            isWarn: true
+        )
+
+        for terminal in [final, cancellation] {
+            let terminalKey = ForegroundEmergencyRevisionOwnershipPolicy.key(for: terminal)
+            var reservations: [ForegroundEmergencyRevisionKey: Date] = [:]
+            ForegroundSystemPresentationReservationPolicy.reserve(
+                revisionKey: terminalKey,
+                receivedAt: now,
+                now: now,
+                reservations: &reservations
+            )
+            for replay in [active, laterActiveReplay] {
+                XCTAssertTrue(ForegroundSystemPresentationReservationPolicy.consume(
+                    revisionKey: ForegroundEmergencyRevisionOwnershipPolicy.key(for: replay),
+                    now: now.addingTimeInterval(1),
+                    reservations: &reservations
+                ))
+            }
+            XCTAssertNotNil(reservations[terminalKey])
+        }
+
+        let nonTerminalOwners = [
+            makeEvent(
+                serial: 3,
+                reportDate: now,
+                isWarn: false,
+                isTraining: true
+            ),
+            makeEvent(
+                serial: 3,
+                kind: "report",
+                reportDate: now,
+                isWarn: false,
+                isFinal: true
+            ),
+        ]
+        for nonTerminalOwner in nonTerminalOwners {
+            var reservations: [ForegroundEmergencyRevisionKey: Date] = [:]
+            ForegroundSystemPresentationReservationPolicy.reserve(
+                revisionKey: ForegroundEmergencyRevisionOwnershipPolicy.key(for: nonTerminalOwner),
+                receivedAt: now,
+                now: now,
+                reservations: &reservations
+            )
+            XCTAssertFalse(ForegroundSystemPresentationReservationPolicy.consume(
+                revisionKey: ForegroundEmergencyRevisionOwnershipPolicy.key(for: active),
+                now: now.addingTimeInterval(1),
+                reservations: &reservations
+            ))
+        }
+    }
+
+    func testAlreadyExpiredBufferedSystemPresentationIsNotReservedAtDrainTime() {
+        let revisionKey = ForegroundEmergencyRevisionOwnershipPolicy.key(
+            for: makeEvent(reportDate: now, isWarn: true)
+        )
+        var reservations: [ForegroundEmergencyRevisionKey: Date] = [:]
+        let drainedAt = now.addingTimeInterval(
+            ForegroundSystemPresentationReservationPolicy.lifetime + 1
+        )
+
+        ForegroundSystemPresentationReservationPolicy.reserve(
+            revisionKey: revisionKey,
+            receivedAt: now,
+            now: drainedAt,
+            reservations: &reservations
+        )
+
+        XCTAssertTrue(reservations.isEmpty)
+        XCTAssertFalse(ForegroundSystemPresentationReservationPolicy.consume(
+            revisionKey: revisionKey,
+            now: drainedAt,
+            reservations: &reservations
+        ))
+    }
+
+    func testOptedInForegroundTrainingUsesOwnedDeduplicatedAudio() {
+        let training = makeEvent(
+            reportDate: now,
+            isWarn: false,
+            isTraining: true
+        )
+        XCTAssertNil(reason(
+            for: training,
+            preferences: preferences(includeTraining: false)
+        ))
+        let acceptedReason = reason(
+            for: training,
+            preferences: preferences(includeTraining: true)
+        )
+        XCTAssertEqual(acceptedReason, .training)
+        XCTAssertTrue(ForegroundEmergencyAudioPolicy.shouldPlay(
+            event: training,
+            reason: .training
+        ))
+        XCTAssertFalse(ForegroundEmergencyAudioPolicy.shouldPlay(
+            event: training,
+            reason: .new
+        ))
+
+        let key = ForegroundEmergencyRevisionOwnershipPolicy.key(for: training)
+        XCTAssertTrue(ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+            event: training,
+            handledRevisionKeys: [key],
+            allowsEmergencyPresentation: true
+        ))
+    }
+
+    func testWebSocketFirstDuplicateSuppressesSecondBannerWithoutOpeningAnotherCover() {
+        let warning = makeEvent(serial: 1, reportDate: now, isWarn: true)
+        let mergeDecision = ForegroundPushPolicy.ingestionDecision(
+            for: warning,
+            previous: warning,
+            requestedReason: .new,
+            allowsEmergencyPresentation: true,
+            preferences: preferences(),
+            now: now
+        )
+        XCTAssertFalse(mergeDecision.shouldMerge)
+        XCTAssertNil(mergeDecision.presentationReason)
+
+        let alreadyOwned = ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+            event: warning,
+            handledRevisionKeys: [ForegroundEmergencyRevisionOwnershipPolicy.key(for: warning)],
+            allowsEmergencyPresentation: true
+        )
+        XCTAssertTrue(alreadyOwned)
+        XCTAssertEqual(
+            ForegroundNotificationPresentationPolicy.decision(
+                didHandleEmergencyInApp: alreadyOwned
+            ),
+            ForegroundNotificationPresentationDecision(
+                systemPresentation: .listOnly,
+                didHandleEmergencyInApp: true
+            )
+        )
+    }
+
+    func testPreferenceOrLocationRejectedForegroundWarningCannotTakeInAppOwnership() {
+        let event = makeEvent(reportDate: now, isWarn: true)
+        let rejectedPreferences = [
+            preferences(subscriptionEnabled: false),
+            preferences(enabledSources: []),
+            preferences(minimumMagnitude: 6),
+            preferences(coordinate: nil),
+            preferences(
+                coordinate: CLLocationCoordinate2D(latitude: 35.681, longitude: 139.767),
+                radiusKm: 10
+            ),
+        ]
+
+        for rejected in rejectedPreferences {
+            let decision = ForegroundPushPolicy.ingestionDecision(
+                for: event,
+                previous: nil,
+                requestedReason: .new,
+                allowsEmergencyPresentation: true,
+                preferences: rejected,
+                now: now
+            )
+            XCTAssertTrue(decision.shouldMerge)
+            XCTAssertNil(decision.presentationReason)
+            XCTAssertFalse(ForegroundEmergencyRevisionOwnershipPolicy.wasAlreadyHandled(
+                event: event,
+                handledRevisionKeys: [],
+                allowsEmergencyPresentation: true
+            ))
+        }
     }
 
     func testSystemPresentedForegroundPushStillMergesWithoutEmergencyTakeover() {
@@ -777,7 +1347,10 @@ final class AlertPolicyTests: XCTestCase {
         subscriptionEnabled: Bool = true,
         enabledSources: Set<String> = ["jma_eew"],
         minimumMagnitude: Double = 3,
-        coordinate: CLLocationCoordinate2D? = nil,
+        coordinate: CLLocationCoordinate2D? = CLLocationCoordinate2D(
+            latitude: 34.6937,
+            longitude: 135.5023
+        ),
         radiusKm: Double = 100,
         includeTraining: Bool = false
     ) -> AlertPreferenceSnapshot {

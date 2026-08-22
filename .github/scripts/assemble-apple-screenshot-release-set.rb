@@ -57,7 +57,9 @@ class AppleScreenshotReleaseSetAssembler
     "watchos" => [["source-address.json"], ["frame-capture-evidence/"]],
     "visionos" => [["source-address.json"], ["frame-capture-evidence/"]],
     "maccatalyst" => [
+      ["capture-request-evidence/"],
       ["frame-capture-evidence/"],
+      ["native-capture-evidence/"],
       ["raw-window-captures/"],
       ["semantic-evidence/"],
       ["window-observations/"],
@@ -83,7 +85,8 @@ class AppleScreenshotReleaseSetAssembler
     ],
     "maccatalyst" => %w[
       schemaVersion status uploadApproved reviewer approval releaseBinaryEvidence platform
-      locale fixture source planManifest product host app captureWindowUtc frames approvalRequired
+      locale fixture source planManifest product host app captureEnvironment captureWindowUtc
+      frames approvalRequired
     ],
   }.transform_values(&:freeze).freeze
   FRAME_KEYS = {
@@ -107,8 +110,9 @@ class AppleScreenshotReleaseSetAssembler
     ],
     "maccatalyst" => %w[
       captureSelector file screen purpose setup pixels sha256 rawSha256 capturedAtUtc source
-      product host app processId windowId logicalFrame backingScale nativeCapture
-      semanticValidation frameCaptureEvidenceFile frameCaptureEvidenceSha256 reviewer approval
+      product host app processId windowId logicalFrame sourceDisplayScale rasterizationScale
+      captureRequest nativeCapture semanticValidation frameCaptureEvidenceFile
+      frameCaptureEvidenceSha256 reviewer approval
     ],
   }.transform_values(&:freeze).freeze
   PROVENANCE_ENVELOPE_FILES = %w[
@@ -133,6 +137,7 @@ class AppleScreenshotReleaseSetAssembler
 
   def initialize(
     root:,
+    release_evidence_root: nil,
     image_inspector: AppleScreenshotImageInspector.new,
     source_guard: nil,
     index_validator: nil,
@@ -148,6 +153,20 @@ class AppleScreenshotReleaseSetAssembler
       raise AppleScreenshotReleaseSetAssemblyError, "repository root must not be a symlink"
     end
     @root = requested_root.realpath
+    requested_release_evidence_root = Pathname.new(release_evidence_root || @root).expand_path
+    if requested_release_evidence_root.symlink?
+      raise AppleScreenshotReleaseSetAssemblyError,
+            "release evidence root must not be a symlink"
+    end
+    unless requested_release_evidence_root.directory?
+      raise AppleScreenshotReleaseSetAssemblyError,
+            "release evidence root must be an existing directory"
+    end
+    @release_evidence_root = requested_release_evidence_root.realpath
+    if release_evidence_root && path_within?(@release_evidence_root, @root)
+      raise AppleScreenshotReleaseSetAssemblyError,
+            "external release evidence root must remain outside the repository"
+    end
     @image_inspector = image_inspector
     @source_guard = source_guard || AppleScreenshotReleaseSourceGuard.new(@root)
     @index_validator = index_validator || lambda do
@@ -172,17 +191,20 @@ class AppleScreenshotReleaseSetAssembler
   end
 
   # packages is an exact platform-keyed hash whose values contain :capture_root
-  # and :artifact. `output` must be the canonical repository release-set path;
-  # `index_candidate` is a separate new file and can never replace the index.
+  # and :artifact. `output` must be the canonical release-evidence path;
+  # `index_candidate` is a separate new file and can never replace the checked-in
+  # index. The default evidence root is the repository for backwards-compatible
+  # offline fixture assembly; hosted release handoff supplies a fresh external
+  # root so generated assets never mutate the checkout.
   def assemble(source_commit:, output:, index_candidate:, packages:)
     require_full_commit!(source_commit, "source commit")
     require_equal!(packages.keys, PLATFORMS, "capture package order")
     output_path = Pathname.new(output).expand_path
-    expected_output = @root.join(RELEASE_ROOT, source_commit)
+    expected_output = @release_evidence_root.join(RELEASE_ROOT, source_commit)
     require_equal!(output_path.cleanpath, expected_output, "release-set output path")
     output_parent_binding = ensure_canonical_directory_chain_under!(
       output_path.dirname,
-      anchor: @root,
+      anchor: @release_evidence_root,
       label: "release-set output parent",
     )
     ensure_new_path!(output_path, "release-set output")
@@ -707,7 +729,7 @@ class AppleScreenshotReleaseSetAssembler
       raise AppleScreenshotReleaseSetAssemblyError, "#{platform} aggregate frames must be an array"
     end
     require_equal!(frames.length, expected.length, "#{platform} aggregate frame count")
-    frames.zip(expected).map.with_index do |(frame, specification), index|
+    normalized_frames = frames.zip(expected).map.with_index do |(frame, specification), index|
       require_exact_keys!(frame, FRAME_KEYS.fetch(platform), "#{platform} aggregate frame #{index}")
       %w[captureSelector file pixels].each do |field|
         require_equal!(frame.fetch(field), specification.fetch(field), "#{platform} frame #{index} #{field}")
@@ -723,8 +745,134 @@ class AppleScreenshotReleaseSetAssembler
       require_equal!([properties.fetch(:width), properties.fetch(:height)], specification.fetch("pixels"), "#{platform} frame #{index} pixels")
       require_equal!(properties.fetch(:format), specification.fetch("format"), "#{platform} frame #{index} format")
       require_equal!(properties.fetch(:has_alpha), false, "#{platform} frame #{index} alpha")
-      specification.merge("sha256" => sha256, "hasAlpha" => false, "sourcePath" => path)
+      normalized = specification.merge("sha256" => sha256, "hasAlpha" => false, "sourcePath" => path)
+      if platform == "maccatalyst"
+        normalized["captureEvidence"] = normalize_maccatalyst_capture_evidence!(
+          frame,
+          capture_path,
+          index,
+        )
+      end
+      normalized
     end
+    if platform == "maccatalyst"
+      nonces = normalized_frames.map { |frame| frame.fetch("captureEvidence").fetch("nonce") }
+      require_equal!(nonces.uniq.length, nonces.length, "Mac Catalyst capture nonce uniqueness")
+    end
+    normalized_frames
+  end
+
+  def normalize_maccatalyst_capture_evidence!(frame, capture_path, index)
+    label = "maccatalyst frame #{index}"
+    request = frame.fetch("captureRequest")
+    response = frame.fetch("nativeCapture")
+    unless request.is_a?(Hash) && response.is_a?(Hash)
+      raise AppleScreenshotReleaseSetAssemblyError,
+            "#{label} direct hierarchy request and response must be objects"
+    end
+
+    request_file = capture_evidence_file!(
+      request,
+      capture_path,
+      "#{label} app capture request",
+    )
+    response_file = capture_evidence_file!(
+      response,
+      capture_path,
+      "#{label} app capture response",
+    )
+    if request_file == response_file
+      raise AppleScreenshotReleaseSetAssemblyError,
+            "#{label} app capture request and response evidence must be distinct"
+    end
+
+    selector = frame.fetch("captureSelector")
+    require_equal!(request_file, "capture-request-evidence/#{selector}.json",
+                   "#{label} app capture request file")
+    require_equal!(response_file, "native-capture-evidence/#{selector}.json",
+                   "#{label} app capture response file")
+    nonce = request.fetch("nonce")
+    unless nonce.is_a?(String) && nonce.match?(/\A[0-9a-f]{64}\z/)
+      raise AppleScreenshotReleaseSetAssemblyError, "#{label} capture nonce is invalid"
+    end
+    require_equal!(response.fetch("nonce"), nonce, "#{label} capture nonce binding")
+    [request, response].each_with_index do |record, record_index|
+      record_label = record_index.zero? ? "request" : "response"
+      require_equal!(record.fetch("schemaVersion"), 1, "#{label} #{record_label} schemaVersion")
+      require_equal!(record.fetch("captureSelector"), selector, "#{label} #{record_label} selector")
+      require_equal!(record.fetch("processId"), frame.fetch("processId"), "#{label} #{record_label} PID")
+      require_equal!(record.fetch("windowId"), frame.fetch("windowId"), "#{label} #{record_label} window ID")
+      require_equal!(record.fetch("logicalViewPoints"), [1_280, 800],
+                     "#{label} #{record_label} logical view points")
+      require_equal!(record.fetch("rasterizationScale"), 2,
+                     "#{label} #{record_label} rasterization scale")
+    end
+
+    source_display_scale = response.fetch("sourceDisplayScale")
+    unless source_display_scale.is_a?(Numeric) && source_display_scale.finite? &&
+           source_display_scale.between?(0.5, 4)
+      raise AppleScreenshotReleaseSetAssemblyError,
+            "#{label} source display scale must be finite and between 0.5 and 4"
+    end
+    require_equal!(frame.fetch("sourceDisplayScale"), source_display_scale,
+                   "#{label} source display scale binding")
+    require_equal!(frame.fetch("rasterizationScale"), 2,
+                   "#{label} frame rasterization scale")
+    require_equal!(response.fetch("status"), "captured", "#{label} capture response status")
+    require_equal!(response.fetch("reason"), nil, "#{label} capture response reason")
+    require_equal!(response.fetch("captureApi"), "UIKit.UIView.drawHierarchy", "#{label} capture API")
+    require_equal!(response.fetch("captureSurface"), "live-catalyst-uiwindow-hierarchy",
+                   "#{label} capture surface")
+    require_equal!(response.fetch("pixels"), [2_560, 1_600], "#{label} response pixels")
+    require_equal!(response.fetch("afterScreenUpdates"), true,
+                   "#{label} after-screen-updates policy")
+    require_equal!(response.fetch("drawHierarchyComplete"), true,
+                   "#{label} hierarchy completion")
+    require_equal!(response.fetch("postCaptureResizePerformed"), false,
+                   "#{label} post-capture resize")
+    require_equal!(response.fetch("rendererOpaque"), false, "#{label} renderer opacity")
+    require_equal!(response.fetch("rendererPreferredRange"), "standard",
+                   "#{label} renderer preferred range")
+    raw_relative = "raw-window-captures/#{selector}.png"
+    raw_path = capture_path.join(raw_relative)
+    ensure_plain_file!(raw_path, "#{label} direct raw PNG", inside_repository: false)
+    raw_sha256 = response.fetch("rawSha256")
+    require_sha256!(raw_sha256, "#{label} direct raw PNG SHA-256")
+    require_equal!(frame.fetch("rawSha256"), raw_sha256, "#{label} aggregate/raw response SHA-256")
+    require_equal!(Digest::SHA256.file(raw_path).hexdigest, raw_sha256,
+                   "#{label} direct raw PNG actual SHA-256")
+
+    {
+      "requestFile" => "evidence/raw-capture/#{request.fetch('file')}",
+      "requestSha256" => request.fetch("sha256"),
+      "responseFile" => "evidence/raw-capture/#{response.fetch('file')}",
+      "responseSha256" => response.fetch("sha256"),
+      "rawFile" => "evidence/raw-capture/#{raw_relative}",
+      "rawSha256" => raw_sha256,
+      "nonce" => nonce,
+      "captureApi" => response.fetch("captureApi"),
+      "captureSurface" => response.fetch("captureSurface"),
+      "logicalViewPoints" => response.fetch("logicalViewPoints"),
+      "sourceDisplayScale" => source_display_scale,
+      "rasterizationScale" => response.fetch("rasterizationScale"),
+      "pixels" => response.fetch("pixels"),
+      "afterScreenUpdates" => response.fetch("afterScreenUpdates"),
+      "drawHierarchyComplete" => response.fetch("drawHierarchyComplete"),
+      "postCaptureResizePerformed" => response.fetch("postCaptureResizePerformed"),
+      "rendererOpaque" => response.fetch("rendererOpaque"),
+      "rendererPreferredRange" => response.fetch("rendererPreferredRange"),
+    }
+  end
+
+  def capture_evidence_file!(record, capture_path, label)
+    relative = record.fetch("file")
+    validate_safe_relative_path!(relative, "#{label} file")
+    sha256 = record.fetch("sha256")
+    require_sha256!(sha256, "#{label} SHA-256")
+    path = capture_path.join(relative)
+    ensure_plain_file!(path, label, inside_repository: false)
+    require_equal!(Digest::SHA256.file(path).hexdigest, sha256, "#{label} actual SHA-256")
+    relative
   end
 
   def normalize_capture_environment!(aggregate, capture_path, platform)
@@ -733,15 +881,65 @@ class AppleScreenshotReleaseSetAssembler
       %w[xcodeVersion macOSVersion macOSBuild hardwareModel].each do |field|
         require_nonempty_string!(host.fetch(field), "Mac Catalyst host #{field}")
       end
+      frames = aggregate.fetch("frames")
+      capture_environment = aggregate.fetch("captureEnvironment")
+      require_exact_keys!(
+        capture_environment,
+        %w[
+          kind captureApi captureSurface sourceDisplayScale rasterizationScale
+          logicalViewPoints pixels afterScreenUpdates postCaptureResizePerformed
+        ],
+        "Mac Catalyst aggregate capture environment",
+      )
+      require_equal!(capture_environment.fetch("kind"), "maccatalyst-uikit-hierarchy",
+                     "Mac Catalyst aggregate capture kind")
+      require_equal!(capture_environment.fetch("captureApi"), "UIKit.UIView.drawHierarchy",
+                     "Mac Catalyst aggregate capture API")
+      require_equal!(capture_environment.fetch("captureSurface"),
+                     "live-catalyst-uiwindow-hierarchy",
+                     "Mac Catalyst aggregate capture surface")
+      require_equal!(capture_environment.fetch("logicalViewPoints"), [1_280, 800],
+                     "Mac Catalyst aggregate logical view points")
+      require_equal!(capture_environment.fetch("pixels"), [2_560, 1_600],
+                     "Mac Catalyst aggregate capture pixels")
+      require_equal!(capture_environment.fetch("rasterizationScale"), 2,
+                     "Mac Catalyst aggregate rasterization scale")
+      require_equal!(capture_environment.fetch("afterScreenUpdates"), true,
+                     "Mac Catalyst aggregate after-screen-updates policy")
+      require_equal!(capture_environment.fetch("postCaptureResizePerformed"), false,
+                     "Mac Catalyst aggregate post-capture resize")
+      source_display_scales = frames.map { |frame| frame.fetch("sourceDisplayScale") }.uniq
+      require_equal!(source_display_scales.length, 1, "Mac Catalyst source display-scale inventory")
+      source_display_scale = source_display_scales.first
+      unless source_display_scale.is_a?(Numeric) && source_display_scale.finite? &&
+             source_display_scale.between?(0.5, 4)
+        raise AppleScreenshotReleaseSetAssemblyError,
+              "Mac Catalyst source display scale must be finite and between 0.5 and 4"
+      end
+      require_equal!(capture_environment.fetch("sourceDisplayScale"), source_display_scale,
+                     "Mac Catalyst aggregate/frame source display scale")
+      require_equal!(frames.map { |frame| frame.fetch("rasterizationScale") }.uniq, [2],
+                     "Mac Catalyst rasterization-scale inventory")
+      require_equal!(frames.map { |frame| frame.fetch("nativeCapture").fetch("captureApi") }.uniq,
+                     ["UIKit.UIView.drawHierarchy"], "Mac Catalyst capture API inventory")
+      require_equal!(frames.map { |frame| frame.fetch("nativeCapture").fetch("captureSurface") }.uniq,
+                     ["live-catalyst-uiwindow-hierarchy"],
+                     "Mac Catalyst capture-surface inventory")
       return {
-        "kind" => "maccatalyst-host",
+        "kind" => capture_environment.fetch("kind"),
         "xcodeVersion" => [host.fetch("xcodeVersion"), host["xcodeBuild"]].compact.join(" "),
         "operatingSystem" => "#{host.fetch('macOSVersion')} (#{host.fetch('macOSBuild')})",
         "runtimeIdentifier" => nil,
         "deviceIdentifier" => host.fetch("hardwareModel"),
         "deviceModel" => host.fetch("hardwareModel"),
-        "logicalWindowPoints" => [1280, 800],
-        "backingScale" => 2,
+        "captureApi" => capture_environment.fetch("captureApi"),
+        "captureSurface" => capture_environment.fetch("captureSurface"),
+        "logicalViewPoints" => capture_environment.fetch("logicalViewPoints"),
+        "sourceDisplayScale" => source_display_scale,
+        "rasterizationScale" => capture_environment.fetch("rasterizationScale"),
+        "pixels" => capture_environment.fetch("pixels"),
+        "afterScreenUpdates" => capture_environment.fetch("afterScreenUpdates"),
+        "postCaptureResizePerformed" => capture_environment.fetch("postCaptureResizePerformed"),
       }
     end
 
@@ -1006,6 +1204,7 @@ class AppleScreenshotReleaseSetAssembler
   def validate_staged_release!(stage:, release_manifest:, candidate:, source_commit:)
     validator = AppleScreenshotReleaseSetValidator.new(
       root: @root,
+      release_evidence_root: @release_evidence_root == @root ? nil : @release_evidence_root,
       image_inspector: @image_inspector,
       source_guard: @source_guard,
       provenance_repository_root: @ios_provenance_repository_root,
@@ -1850,9 +2049,11 @@ class AppleScreenshotReleaseSetAssembler
   end
 
   def within_repository?(path)
-    root = @root.to_s
     real = path.realpath.to_s
-    real == root || real.start_with?("#{root}#{File::SEPARATOR}")
+    [@root, @release_evidence_root].any? do |allowed_root|
+      root = allowed_root.to_s
+      real == root || real.start_with?("#{root}#{File::SEPARATOR}")
+    end
   end
 
   def within_directory?(path, directory)
@@ -1928,9 +2129,22 @@ end
 
 if $PROGRAM_NAME == __FILE__
   begin
-    unless ARGV.length == 13
+    release_evidence_root = nil
+    arguments = ARGV.reject do |argument|
+      if argument.start_with?("--release-evidence-root=")
+        if release_evidence_root
+          abort "--release-evidence-root may be supplied only once"
+        end
+        release_evidence_root = argument.delete_prefix("--release-evidence-root=")
+        true
+      else
+        false
+      end
+    end
+    unless arguments.length == 13
       abort <<~USAGE
         Usage: assemble-apple-screenshot-release-set.rb \
+          [--release-evidence-root=<absolute-existing-directory>] \
           <source-commit> <canonical-output-directory> <new-index-candidate.json> \
           <ios-ipados-capture-root> <ios-ipados-artifact> \
           <tvos-capture-root> <tvos-artifact> \
@@ -1939,7 +2153,7 @@ if $PROGRAM_NAME == __FILE__
           <maccatalyst-capture-root> <maccatalyst-artifact>
       USAGE
     end
-    source_commit, output, index_candidate, *package_arguments = ARGV
+    source_commit, output, index_candidate, *package_arguments = arguments
     packages = AppleScreenshotReleaseSetAssembler::PLATFORMS.each_with_index.to_h do |platform, index|
       [
         platform,
@@ -1950,7 +2164,10 @@ if $PROGRAM_NAME == __FILE__
       ]
     end
     root = Pathname.new(__dir__).join("../..").realpath
-    AppleScreenshotReleaseSetAssembler.new(root: root).assemble(
+    AppleScreenshotReleaseSetAssembler.new(
+      root: root,
+      release_evidence_root: release_evidence_root,
+    ).assemble(
       source_commit: source_commit,
       output: output,
       index_candidate: index_candidate,

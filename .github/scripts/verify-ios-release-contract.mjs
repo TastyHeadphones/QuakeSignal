@@ -24,7 +24,9 @@ const contractFiles = {
   platformCapabilityPolicy: [
     "ios/QuakeSignal/App/AppDelegate.swift",
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
+    "ios/QuakeSignal/App/QuakeSignalApp.swift",
     "ios/QuakeSignal/Features/Detail/QuakeDetailView.swift",
+    "ios/QuakeSignal/Features/Guide/DisasterGuideView.swift",
     "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
     "ios/QuakeSignal/Features/Onboarding/OnboardingView.swift",
     "ios/QuakeSignal/Features/Root/RootView.swift",
@@ -80,6 +82,7 @@ const contractFiles = {
   iosWorkflow: ".github/workflows/ios.yml",
   platformWorkflow: ".github/workflows/apple-platforms.yml",
   screenshotWorkflow: ".github/workflows/apple-platform-screenshots.yml",
+  screenshotReleaseWorkflow: ".github/workflows/apple-screenshot-release-ready.yml",
   macCatalystScreenshotPlan: "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build8.json",
   cloudflareWorkflow: ".github/workflows/cloudflare.yml",
   signedArtifactVerifier: "ios/ci_scripts/verify-signed-apple-artifacts.sh",
@@ -94,6 +97,8 @@ const contractFiles = {
     ".github/scripts/assemble-apple-screenshot-release-set.test.rb",
     ".github/scripts/verify-apple-screenshot-release-set.rb",
     ".github/scripts/verify-apple-screenshot-release-set.test.rb",
+    ".github/scripts/verify-store-assets.rb",
+    ".github/scripts/verify-store-assets.test.rb",
     "backend/cloudflare/scripts/legal-page-contract.mjs",
     "backend/cloudflare/scripts/render-staging-config.mjs",
     "backend/cloudflare/scripts/smoke-test-policy.mjs",
@@ -219,6 +224,7 @@ const REVIEWED_WORKFLOW_FILES = [
   ".github/workflows/apns-incident-disposition.yml",
   ".github/workflows/apple-platform-screenshots.yml",
   ".github/workflows/apple-platforms.yml",
+  ".github/workflows/apple-screenshot-release-ready.yml",
   ".github/workflows/cloudflare-staging.yml",
   ".github/workflows/cloudflare.yml",
   ".github/workflows/desktop-build.yml",
@@ -296,6 +302,8 @@ const APPLE_APP_PLATFORMS = new Set([
 const MAX_APP_IDENTITY_ROUTES = 16;
 const MAX_APP_IDENTITY_ROUTE_CONFIGURATION_LENGTH = 8 * 1024;
 const CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1";
+const UPLOAD_ARTIFACT_ACTION = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
+const DOWNLOAD_ARTIFACT_ACTION = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
 const ROOT_ENV = {
   XCODE_PROJECT: "ios/QuakeSignal.xcodeproj",
   XCODE_SCHEME: "QuakeSignal",
@@ -319,6 +327,11 @@ const PLATFORM_ROOT_CONCURRENCY = {
 const SCREENSHOT_ROOT_CONCURRENCY = {
   group: "apple-platform-screenshot-candidates-${{ github.ref }}",
   "cancel-in-progress": true,
+};
+const SCREENSHOT_RELEASE_ROOT_PERMISSIONS = { actions: "read", contents: "read" };
+const SCREENSHOT_RELEASE_ROOT_CONCURRENCY = {
+  group: "apple-screenshot-release-ready-${{ inputs.source_commit }}",
+  "cancel-in-progress": false,
 };
 // The production Worker deploy and the TestFlight signing job share this
 // lock. That serializes a policy-changing deploy with the live policy smoke
@@ -357,19 +370,21 @@ const PLATFORM_RELEASE_MATRIX = {
   include: [
     {
       key: "${{ inputs.platform }}",
-      name: "${{ inputs.platform == 'tvos' && 'tvOS' || 'visionOS' }}",
-      scheme: "${{ inputs.platform == 'tvos' && 'QuakeSignalTV' || 'QuakeSignalVision' }}",
-      destination: "${{ inputs.platform == 'tvos' && 'generic/platform=tvOS' || 'generic/platform=visionOS' }}",
+      name: "${{ inputs.platform == 'tvos' && 'tvOS' || inputs.platform == 'visionos' && 'visionOS' || 'Mac Catalyst' }}",
+      scheme: "${{ inputs.platform == 'tvos' && 'QuakeSignalTV' || inputs.platform == 'visionos' && 'QuakeSignalVision' || 'QuakeSignal' }}",
+      destination: "${{ inputs.platform == 'tvos' && 'generic/platform=tvOS' || inputs.platform == 'visionos' && 'generic/platform=visionOS' || 'generic/platform=macOS,variant=Mac Catalyst' }}",
       bundle_identifier: "com.quakesignal.app",
-      profile_secret: "${{ inputs.platform == 'tvos' && 'TVOS_APP_STORE_PROVISIONING_PROFILE' || 'VISIONOS_APP_STORE_PROVISIONING_PROFILE' }}",
-      profile_variable: "${{ inputs.platform == 'tvos' && 'TVOS_APP_STORE_PROFILE_NAME' || 'VISIONOS_APP_STORE_PROFILE_NAME' }}",
-      profile_platform: "${{ inputs.platform == 'tvos' && 'tvOS' || 'visionOS' }}",
+      profile_secret: "${{ inputs.platform == 'tvos' && 'TVOS_APP_STORE_PROVISIONING_PROFILE' || inputs.platform == 'visionos' && 'VISIONOS_APP_STORE_PROVISIONING_PROFILE' || 'MACCATALYST_APP_STORE_PROVISIONING_PROFILE' }}",
+      profile_variable: "${{ inputs.platform == 'tvos' && 'TVOS_APP_STORE_PROFILE_NAME' || inputs.platform == 'visionos' && 'VISIONOS_APP_STORE_PROFILE_NAME' || 'MACCATALYST_APP_STORE_PROFILE_NAME' }}",
+      profile_platform: "${{ inputs.platform == 'tvos' && 'tvOS' || inputs.platform == 'visionos' && 'visionOS' || 'OSX' }}",
+      profile_extension: "${{ inputs.platform == 'maccatalyst' && 'provisionprofile' || 'mobileprovision' }}",
+      altool_platform: "${{ inputs.platform == 'tvos' && 'appletvos' || inputs.platform == 'visionos' && 'visionos' || 'macos' }}",
       requires_alert_entitlements: "false",
     },
   ],
 };
 const PLATFORM_RELEASE_JOB_HEADER = {
-  name: "Archive ${{ matrix.name }} and optionally upload to TestFlight",
+  name: "Archive ${{ matrix.name }} and optionally upload to App Store Connect",
   if: "github.event_name == 'workflow_dispatch' && (inputs.archive_only || inputs.upload_to_testflight) && github.ref == 'refs/heads/main' && github.ref_protected",
   "runs-on": "macos-latest",
   environment: { name: "ios-app-store-release" },
@@ -389,27 +404,28 @@ const CLOUDFLARE_DEPLOY_PRODUCTION_HEADER = {
 };
 // This covers the full effective workflow job graph: the ordinary test lane
 // and every TestFlight post-smoke step (XcodeGen, signing material handling,
-// archive, export, artifact verification, upload, artifact retention, and
-// cleanup). A deliberate workflow change must update this reviewed value
+// archive, export, artifact verification, digest-bound upload, and cleanup).
+// A deliberate workflow change must update this reviewed value
 // alongside its tests; an unreviewed sibling job, extra post-smoke step, or
 // edited signing/upload action fails before release automation can use
 // credentials.
-const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:lZgHa3Y9qXK8lfLTbhAalD25fVRHZ8EXHg-vsOvNSTs";
-const WORKFLOW_JOBS_FINGERPRINT = "sha256:5498q5lbi5Yom3Sn4_Z-CWhkfathWmEmju9dNMTTJHY";
-const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:gIdap293hpqUJ9U_gKOGiTsYupuumhNhDR3BileJEVI";
-const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:pyFXJBB9gZ7oyUQR5FTk2qRZe4TlhnJmc0HjteIYnLI";
-const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:1OSObm6_ZnZHbLL7WQR38dWTgK4iR6pr-J5gbFY6y0E";
+const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:7azTL9yLaCoXfTYgdmzDYpR2OMemDeSRbbzZNF58TCk";
+const WORKFLOW_JOBS_FINGERPRINT = "sha256:6AhmhXkDTWp-hwGgD68swWatAb8O41fxuzcUqNflYFg";
+const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:CeXc25NPAuv5OR6lIuUtXE4vQiR1aiaMrbZobtaEf5g";
+const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:Qqnne2ErWXoSS3OQDsL0PuonhgfngS5ktqlpH8XqoGU";
+const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:mKE3lLqxtJUhMRw6pIX4gSy4IuKbxI67MCX7UYRVwzg";
+const SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT = "sha256:aFb1fRSt-2lR7tc1nUhShXaxtALlljondf8I7W0-iNw";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
-const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:JNEQMrC6ERPFz0noPzgFH0GL-wfKSEWMChfGib5wm54";
+const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:HAZ6_PFOLP7aVPA_N-icRc-SjBNqD8R-UaXmQeAFq-E";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
-const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:KWWQdqZwo-iFcqhKlcIhuezMY8ntSKDnCRHOP1S3n1s";
-const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:8EQKMBOl9E4S3crmbhjbcP9FeiMyA2FkB_sJG0hyyhs";
-const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:32MbJwrA2zHhZBPxfCYvYMRnGw4BUjwF2W_C4YOFh70";
+const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:AEmkbo4XxK1zz5daEvuhJ-SQ56sme74v3-M_0kohobk";
+const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:Z1ORYylsf3gY5Wt7doeCF6UK95ceFDhaHDgwhG-jJeQ";
+const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:YuHjBNk9q2O71xPlIAkcPGU3_n23m4xsr9LdYCnW86M";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
-const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:vtAIx8JZ4s9UUN07yItVzVx-po5bFVrgWPH5FV_zhXA";
-const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:FziznhIyMsrK3XG4hiulKdGrLslyBQ0GnhkgxKYdK5c";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:eHMqqYHndysneD_S65eDEn0HhM_xPgxERm5L2IrNOek";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:CbqdprNsBxzcY2H24R0_vDGY0lxdX0Ti1uRvtja8g1Q";
+const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:9gIZr4z1GYeDv68V0t1HQp2BYebmJp47LMPmw2La6dU";
+const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:rmRQNbDzFDCBLFDneiZaX8XKIZOfWiP00UE9WVSd1PQ";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:mEfigWWSkmx1AidcePsOoqOWfIXdjlRWxo3lMLA2XAs";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:IJ76lcMY5QNZhpIaq_C7lEw3y8dhR9cO635KHVBoqUs";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:gNHr13EktFUXs0KiPpLYbdaL3I7IApzP4PQjaDmX2Gk";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -451,6 +467,7 @@ const PLATFORM_ARCHIVE_COMMAND = [
   "CODE_SIGN_IDENTITY='Apple Distribution'",
   "QUAKESIGNAL_TV_PROFILE_NAME=\"$PLATFORM_PROFILE_NAME\"",
   "QUAKESIGNAL_VISION_PROFILE_NAME=\"$PLATFORM_PROFILE_NAME\"",
+  "QUAKESIGNAL_CATALYST_PROFILE_NAME=\"$PLATFORM_PROFILE_NAME\"",
   "CURRENT_PROJECT_VERSION=\"$BUILD_NUMBER\"",
 ].join(" ");
 const IOS_SIGNED_ARTIFACT_COMMAND = [
@@ -465,19 +482,79 @@ const IOS_SIGNED_ARTIFACT_COMMAND = [
   "  --archive-signing strict-distribution \\",
   "  --host-profile-name \"$IOS_PROFILE_NAME\" \\",
   "  --watch-profile-name \"$WATCH_PROFILE_NAME\"",
+  "ipa_sha256=\"$(/usr/bin/shasum -a 256 \"$IPA_PATH\")\"",
+  "ipa_sha256=\"${ipa_sha256%% *}\"",
+  "if [[ ! \"$ipa_sha256\" =~ ^[0-9a-f]{64}$ ]]; then",
+  "  echo \"::error::Verified iOS IPA did not produce a valid SHA-256 digest\"",
+  "  exit 1",
+  "fi",
+  "echo \"IPA_SHA256=$ipa_sha256\" >> \"$GITHUB_ENV\"",
+  "printf 'Verified `%s` SHA-256: `%s`\\n' \"${IPA_PATH##*/}\" \"$ipa_sha256\" >> \"$GITHUB_STEP_SUMMARY\"",
+  "echo 'IPA_VERIFIED=true' >> \"$GITHUB_ENV\"",
+  "",
+].join("\n");
+const IOS_UPLOAD_COMMAND = [
+  "set -euo pipefail",
+  "if [ \"${IPA_VERIFIED:-false}\" != true ]; then",
+  "  echo \"::error::Refusing to upload an iOS IPA that did not pass signed verification\"",
+  "  exit 1",
+  "fi",
+  "upload_sha256=\"$(/usr/bin/shasum -a 256 \"${IPA_PATH:?IPA_PATH is not set after export}\")\"",
+  "upload_sha256=\"${upload_sha256%% *}\"",
+  "if [ \"$upload_sha256\" != \"${IPA_SHA256:?Verified iOS IPA SHA-256 is missing}\" ]; then",
+  "  echo \"::error::iOS IPA changed after signed verification\"",
+  "  exit 1",
+  "fi",
+  "key_dir=\"$RUNNER_TEMP/appstore-private-keys\"",
+  "key_path=\"$key_dir/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8\"",
+  "mkdir -p \"$key_dir\"",
+  "cleanup() {",
+  "  rm -f \"$key_path\"",
+  "  rmdir \"$key_dir\" 2>/dev/null || true",
+  "}",
+  "trap cleanup EXIT",
+  "printf '%s' \"$APP_STORE_CONNECT_KEY\" > \"$key_path\"",
+  "chmod 600 \"$key_path\"",
+  "export API_PRIVATE_KEYS_DIR=\"$key_dir\"",
+  "upload_arguments=(",
+  "  --platform \"$IOS_ALTOOL_PLATFORM\"",
+  "  --apple-id \"$APP_STORE_CONNECT_APPLE_ID\"",
+  "  --bundle-id \"$IOS_BUNDLE_IDENTIFIER\"",
+  "  --bundle-version \"$BUILD_NUMBER\"",
+  "  --bundle-short-version-string 1.1",
+  "  --api-key \"$APP_STORE_CONNECT_KEY_ID\"",
+  "  --api-issuer \"$APP_STORE_CONNECT_ISSUER\"",
+  "  --output-format json",
+  ")",
+  "xcrun altool --validate-app \"$IPA_PATH\" \"${upload_arguments[@]}\"",
+  "xcrun altool --upload-package \"$IPA_PATH\" \"${upload_arguments[@]}\"",
   "",
 ].join("\n");
 const PLATFORM_SIGNED_ARTIFACT_COMMAND = [
   "set -euo pipefail",
-  "ios/ci_scripts/verify-signed-apple-artifacts.sh \\",
-  "  --platform \"$PLATFORM_KEY\" \\",
-  "  --archive \"$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY.xcarchive\" \\",
-  "  --exported \"${IPA_PATH:?IPA_PATH is not set after export}\" \\",
-  "  --build-number \"$BUILD_NUMBER\" \\",
-  "  --marketing-version 1.1 \\",
-  "  --team-id 5TT564H883 \\",
-  "  --archive-signing strict-distribution \\",
+  "verifier_arguments=(",
+  "  --platform \"$PLATFORM_KEY\"",
+  "  --archive \"$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY.xcarchive\"",
+  "  --exported \"${APPLE_ARTIFACT_PATH:?APPLE_ARTIFACT_PATH is not set after export}\"",
+  "  --build-number \"$BUILD_NUMBER\"",
+  "  --marketing-version 1.1",
+  "  --team-id 5TT564H883",
+  "  --archive-signing strict-distribution",
   "  --host-profile-name \"$PLATFORM_PROFILE_NAME\"",
+  ")",
+  "if [ \"$PLATFORM_KEY\" = maccatalyst ]; then",
+  "  verifier_arguments+=(--installer-identity \"${PLATFORM_INSTALLER_IDENTITY:?Mac Catalyst installer identity is missing}\")",
+  "fi",
+  "ios/ci_scripts/verify-signed-apple-artifacts.sh \"${verifier_arguments[@]}\"",
+  "artifact_sha256=\"$(/usr/bin/shasum -a 256 \"$APPLE_ARTIFACT_PATH\")\"",
+  "artifact_sha256=\"${artifact_sha256%% *}\"",
+  "if [[ ! \"$artifact_sha256\" =~ ^[0-9a-f]{64}$ ]]; then",
+  "  echo \"::error::Verified Apple artifact did not produce a valid SHA-256 digest\"",
+  "  exit 1",
+  "fi",
+  "echo \"APPLE_ARTIFACT_SHA256=$artifact_sha256\" >> \"$GITHUB_ENV\"",
+  "printf 'Verified `%s` SHA-256: `%s`\\n' \"${APPLE_ARTIFACT_PATH##*/}\" \"$artifact_sha256\" >> \"$GITHUB_STEP_SUMMARY\"",
+  "echo 'APPLE_ARTIFACT_VERIFIED=true' >> \"$GITHUB_ENV\"",
   "",
 ].join("\n");
 
@@ -1189,6 +1266,15 @@ function exactRecordWithAllowedKeys(value, expected, allowedKeys, label) {
   }
 }
 
+function requireText(value, requiredFragments, label) {
+  if (typeof value !== "string") fail(`${label} must be a string.`);
+  for (const fragment of requiredFragments) {
+    if (!value.includes(fragment)) {
+      fail(`${label} must include ${JSON.stringify(fragment)}.`);
+    }
+  }
+}
+
 function canonicalJSON(value) {
   if (Array.isArray(value)) return value.map(canonicalJSON);
   if (isRecord(value)) {
@@ -1502,6 +1588,7 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
   const mobileReleaseFiles = new Set([
     contractFiles.iosWorkflow,
     contractFiles.platformWorkflow,
+    contractFiles.screenshotReleaseWorkflow,
   ]);
   const appleUploadFiles = new Set([
     ...mobileReleaseFiles,
@@ -1555,7 +1642,7 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
         name: "Set up Go",
         uses: "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
         with: {
-          "go-version": "1.24.13",
+          "go-version": "1.25.0",
           cache: false,
         },
       }, "workflow-lint pinned Go setup step");
@@ -1589,9 +1676,9 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
     for (const value of workflowStrings) {
       const mobileSurface =
         value === "ios-app-store-release" ||
-        /(?:^|[^A-Z0-9_])(?:IOS|WATCHOS|TVOS|VISIONOS)_APP_STORE_[A-Z0-9_]+/.test(value) ||
+        /(?:^|[^A-Z0-9_])(?:IOS|WATCHOS|TVOS|VISIONOS|MACCATALYST)_APP_STORE_[A-Z0-9_]+/.test(value) ||
         /(?:^|[^A-Z0-9_])APP_STORE_CONNECT_API_(?:KEY|KEY_ID|ISSUER)\b/.test(value) ||
-        /generic\/platform=(?:iOS|tvOS|visionOS|watchOS)/.test(value) ||
+        /generic\/platform=(?:iOS|tvOS|visionOS|watchOS|macOS,variant=Mac Catalyst)/.test(value) ||
         /\bxcodebuild\s+(?:archive|-exportArchive)\b/.test(value);
       if (mobileSurface && !mobileReleaseFiles.has(workflowPath)) {
         fail(`${workflowPath} contains a protected mobile Apple signing/archive surface outside the reviewed release lanes.`);
@@ -1670,6 +1757,21 @@ function forbidSimulatorDownloads(jobs, label) {
   }
 }
 
+function verifySignedReleaseArtifactRetentionPolicy(steps, label) {
+  const retained = steps.filter((step) =>
+    isRecord(step) &&
+    typeof step.uses === "string" &&
+    /^actions\/upload-artifact@/.test(step.uses)
+  );
+  if (retained.length !== 1 || retained[0]?.name !== "Upload signed release attestation only") {
+    fail(`${label} must not retain signed release binaries as GitHub Actions artifacts; it may retain exactly one machine-readable attestation.`);
+  }
+  const retainedSource = JSON.stringify(retained[0]);
+  if (/\.(?:ipa|pkg|dmg|xcarchive)\b|IPA_PATH|APPLE_ARTIFACT_PATH/.test(retainedSource)) {
+    fail(`${label} must not retain signed release binaries as GitHub Actions artifacts in this public repository.`);
+  }
+}
+
 function verifyArchiveWorkflow(workflowSource, buildNumber) {
   const workflow = parseEffectiveWorkflow(workflowSource);
   if (Object.hasOwn(workflow, "defaults")) {
@@ -1681,7 +1783,7 @@ function verifyArchiveWorkflow(workflowSource, buildNumber) {
 
   const dispatch = workflowDispatch(workflow);
   exactRecord(record(dispatch.archive_only, "iOS workflow archive_only input"), {
-    description: "Archive, export, and validate a signed IPA without uploading it to App Store Connect",
+    description: "Archive, verify, and hash a signed IPA without retaining or uploading it",
     required: false,
     default: false,
     type: "boolean",
@@ -1703,6 +1805,11 @@ function verifyArchiveWorkflow(workflowSource, buildNumber) {
     default: buildNumber,
     type: "string",
   }, "iOS workflow build_number input");
+  exactRecord(record(dispatch.source_commit, "iOS workflow source_commit input"), {
+    description: "Exact 40-character lowercase protected-main commit to sign",
+    required: true,
+    type: "string",
+  }, "iOS workflow source_commit input");
 
   const jobs = record(workflow.jobs, "iOS workflow jobs");
   forbidSimulatorDownloads(jobs, "iOS workflow");
@@ -1749,26 +1856,48 @@ function verifyArchiveWorkflow(workflowSource, buildNumber) {
   );
   if (!Array.isArray(testflight.steps)) fail("iOS workflow testflight steps must be a sequence.");
   const steps = testflight.steps;
+  verifySignedReleaseArtifactRetentionPolicy(steps, "iOS TestFlight job");
   const expectedPrelude = [
     "Check out repository",
+    "Validate immutable signed source",
     "Verify iOS and Worker release contract",
     "Verify production notification origin readiness and contract",
   ];
   if (steps.length < expectedPrelude.length ||
       steps.slice(0, expectedPrelude.length).some((step, index) => step?.name !== expectedPrelude[index])) {
-    fail("testflight must run checkout, static release contract, and remote policy smoke consecutively before all other steps.");
+    fail("testflight must run exact checkout, immutable-source validation, static release contract, and remote policy smoke consecutively before all other steps.");
   }
   exactRecord(steps[0], {
     name: "Check out repository",
     uses: CHECKOUT_ACTION,
+    with: {
+      ref: "${{ inputs.source_commit }}",
+      "fetch-depth": 0,
+      "persist-credentials": false,
+    },
   }, "testflight checkout step");
   exactRecord(steps[1], {
+    name: "Validate immutable signed source",
+    env: {
+      REF_PROTECTED: "${{ github.ref_protected }}",
+      SOURCE_COMMIT: "${{ inputs.source_commit }}",
+    },
+    run: steps[1].run,
+  }, "iOS immutable signed source step");
+  requireText(steps[1].run, [
+    "test \"$GITHUB_REPOSITORY\" = TastyHeadphones/QuakeSignal",
+    "test \"$GITHUB_REF\" = refs/heads/main",
+    "[[ \"$SOURCE_COMMIT\" =~ ^[0-9a-f]{40}$ ]]",
+    "test \"$SOURCE_COMMIT\" = \"$GITHUB_SHA\"",
+    "test \"$(git rev-parse --verify HEAD)\" = \"$SOURCE_COMMIT\"",
+  ], "iOS immutable signed source command");
+  exactRecord(steps[2], {
     name: "Verify iOS and Worker release contract",
     id: "release-contract",
     env: { BUILD_NUMBER: "${{ inputs.build_number }}" },
     run: PRE_SIGNING_COMMAND,
   }, "pre-signing release-contract step");
-  exactRecord(steps[2], {
+  exactRecord(steps[3], {
     name: "Verify production notification origin readiness and contract",
     "working-directory": "backend/cloudflare",
     env: {
@@ -1790,6 +1919,30 @@ function verifyArchiveWorkflow(workflowSource, buildNumber) {
     },
     run: ARCHIVE_COMMAND,
   }, "signed archive step");
+  const exportedIpa = stepByName(
+    steps,
+    "Export App Store Connect IPA",
+    "iOS workflow exported IPA step",
+  );
+  exactRecordWithAllowedKeys(exportedIpa, {
+    name: "Export App Store Connect IPA",
+    env: {
+      IOS_PROFILE_NAME: "${{ vars.IOS_APP_STORE_PROFILE_NAME }}",
+      WATCH_PROFILE_NAME: "${{ vars.WATCHOS_APP_STORE_PROFILE_NAME }}",
+    },
+  }, ["run"], "iOS workflow exported IPA step");
+  requireText(exportedIpa.run, [
+    "Add :manageAppVersionAndBuildNumber bool false",
+    'shopt -s nullglob',
+    'ipas=("$export_path"/*.ipa)',
+    'unexpected=("$export_path"/*.pkg)',
+    '[ "${#ipas[@]}" -ne 1 ]',
+    '[ "${#unexpected[@]}" -ne 0 ]',
+    '[ ! -f "${ipas[0]:-}" ]',
+    '[ -L "${ipas[0]:-}" ]',
+    'echo "IPA_PATH=${ipas[0]}" >> "$GITHUB_ENV"',
+    "echo 'IPA_VERIFIED=false' >> \"$GITHUB_ENV\"",
+  ], "iOS workflow exported IPA step.run");
   const signedArtifacts = stepByName(
     steps,
     "Verify signed iOS archive and exported IPA",
@@ -1805,6 +1958,52 @@ function verifyArchiveWorkflow(workflowSource, buildNumber) {
     },
     run: IOS_SIGNED_ARTIFACT_COMMAND,
   }, "iOS signed artifact verifier step");
+  const upload = stepByName(
+    steps,
+    "Upload build to TestFlight",
+    "iOS App Store Connect upload step",
+  );
+  exactRecord(upload, {
+    name: "Upload build to TestFlight",
+    if: "${{ inputs.upload_to_testflight && !inputs.archive_only }}",
+    env: {
+      BUILD_NUMBER: "${{ inputs.build_number }}",
+      IOS_ALTOOL_PLATFORM: "ios",
+      APP_STORE_CONNECT_APPLE_ID: "6800642443",
+      IOS_BUNDLE_IDENTIFIER: "com.quakesignal.app",
+      APP_STORE_CONNECT_KEY: "${{ secrets.APP_STORE_CONNECT_API_KEY }}",
+      APP_STORE_CONNECT_KEY_ID: "${{ vars.APP_STORE_CONNECT_API_KEY_ID }}",
+      APP_STORE_CONNECT_ISSUER: "${{ vars.APP_STORE_CONNECT_API_ISSUER }}",
+    },
+    run: IOS_UPLOAD_COMMAND,
+  }, "iOS App Store Connect upload step");
+  const cleanup = stepByName(steps, "Remove signing material", "iOS signing cleanup step");
+  const attestation = stepByName(steps, "Write signed release attestation", "iOS signed release attestation step");
+  requireText(attestation.run, [
+    '"workflowFile" => ".github/workflows/ios.yml"',
+    '"platforms" => %w[ios-ipados watchos]',
+    '"kind" => "ipa"',
+    '"distributionMode" => ENV.fetch("ARCHIVE_ONLY") == "true" ? "archive-only" : "testflight-upload"',
+    '"sourceCommit" => ENV.fetch("SOURCE_COMMIT")',
+  ], "iOS signed release attestation command");
+  const attestationUpload = stepByName(steps, "Upload signed release attestation only", "iOS signed release attestation upload");
+  exactRecord(attestationUpload, {
+    name: "Upload signed release attestation only",
+    uses: UPLOAD_ARTIFACT_ACTION,
+    with: {
+      name: "signed-release-attestation-ios-ipados-watchos-${{ inputs.source_commit }}-${{ github.run_id }}-${{ github.run_attempt }}",
+      path: "${{ runner.temp }}/signed-release-attestation-ios-ipados-watchos/signed-release-attestation.json",
+      "if-no-files-found": "error",
+      "include-hidden-files": false,
+      "compression-level": 0,
+      overwrite: false,
+      "retention-days": 30,
+    },
+  }, "iOS signed release attestation upload");
+  const orderedSteps = [archive, exportedIpa, signedArtifacts, upload, cleanup, attestation, attestationUpload];
+  if (orderedSteps.some((step, index) => index > 0 && steps.indexOf(step) <= steps.indexOf(orderedSteps[index - 1]))) {
+    fail("iOS archive, export, verification, digest-bound upload, and cleanup steps must remain in reviewed order.");
+  }
   const postSmokeFingerprint = workflowSequenceFingerprint(steps.slice(expectedPrelude.length));
   if (postSmokeFingerprint !== TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT) {
     fail(`testflight post-remote signing sequence must match the reviewed fingerprint (received ${postSmokeFingerprint}).`);
@@ -1839,10 +2038,10 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
     required: true,
     default: "tvos",
     type: "choice",
-    options: ["tvos", "visionos"],
+    options: ["tvos", "visionos", "maccatalyst"],
   }, "native platform workflow platform input");
   exactRecord(record(dispatch.archive_only, "native platform workflow archive_only input"), {
-    description: "Archive, export, and validate a signed IPA without uploading it to App Store Connect",
+    description: "Archive, verify, and hash a signed IPA or PKG without retaining or uploading it",
     required: false,
     default: false,
     type: "boolean",
@@ -1864,6 +2063,11 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
     default: buildNumber,
     type: "string",
   }, "native platform workflow build_number input");
+  exactRecord(record(dispatch.source_commit, "native platform workflow source_commit input"), {
+    description: "Exact 40-character lowercase protected-main commit to sign",
+    required: true,
+    type: "string",
+  }, "native platform workflow source_commit input");
 
   const jobs = record(workflow.jobs, "native platform workflow jobs");
   forbidSimulatorDownloads(jobs, "native platform workflow");
@@ -1879,24 +2083,108 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
   );
   if (!Array.isArray(release.steps)) fail("native platform release steps must be a sequence.");
   const steps = release.steps;
+  verifySignedReleaseArtifactRetentionPolicy(steps, "native platform release job");
   const expectedPrelude = [
     "Check out repository",
+    "Validate immutable signed source",
     "Verify frozen Apple platform release contract",
   ];
   if (steps.length < expectedPrelude.length ||
       steps.slice(0, expectedPrelude.length).some((step, index) => step?.name !== expectedPrelude[index])) {
-    fail("native platform release must run checkout and its frozen static release contract consecutively before all credential-bearing steps.");
+    fail("native platform release must run exact checkout, immutable-source validation, and its frozen static release contract consecutively before all credential-bearing steps.");
   }
   exactRecord(steps[0], {
     name: "Check out repository",
     uses: CHECKOUT_ACTION,
+    with: {
+      ref: "${{ inputs.source_commit }}",
+      "fetch-depth": 0,
+      "persist-credentials": false,
+    },
   }, "native platform checkout step");
   exactRecord(steps[1], {
+    name: "Validate immutable signed source",
+    env: {
+      REF_PROTECTED: "${{ github.ref_protected }}",
+      SOURCE_COMMIT: "${{ inputs.source_commit }}",
+    },
+    run: steps[1].run,
+  }, "native platform immutable signed source step");
+  requireText(steps[1].run, [
+    "test \"$GITHUB_REPOSITORY\" = TastyHeadphones/QuakeSignal",
+    "test \"$GITHUB_REF\" = refs/heads/main",
+    "[[ \"$SOURCE_COMMIT\" =~ ^[0-9a-f]{40}$ ]]",
+    "test \"$SOURCE_COMMIT\" = \"$GITHUB_SHA\"",
+    "test \"$(git rev-parse --verify HEAD)\" = \"$SOURCE_COMMIT\"",
+  ], "native platform immutable signed source command");
+  exactRecord(steps[2], {
     name: "Verify frozen Apple platform release contract",
     id: "release-contract",
     env: { BUILD_NUMBER: "${{ inputs.build_number }}" },
     run: PRE_SIGNING_COMMAND,
   }, "native platform pre-signing release-contract step");
+
+  const signingConfiguration = stepByName(
+    steps,
+    "Validate selected protected signing configuration",
+    "native platform selected signing configuration step",
+  );
+  exactRecordWithAllowedKeys(signingConfiguration, {
+    name: "Validate selected protected signing configuration",
+    env: {
+      PLATFORM_KEY: "${{ matrix.key }}",
+      PLATFORM_SCHEME: "${{ matrix.scheme }}",
+      PLATFORM_DESTINATION: "${{ matrix.destination }}",
+      PLATFORM_BUNDLE_IDENTIFIER: "${{ matrix.bundle_identifier }}",
+      PLATFORM_PROFILE_PLATFORM: "${{ matrix.profile_platform }}",
+      PLATFORM_PROFILE_EXTENSION: "${{ matrix.profile_extension }}",
+      PLATFORM_ALTOOL_PLATFORM: "${{ matrix.altool_platform }}",
+      PLATFORM_REQUIRES_ALERT_ENTITLEMENTS: "${{ matrix.requires_alert_entitlements }}",
+      PLATFORM_PROFILE: "${{ secrets[matrix.profile_secret] }}",
+      PLATFORM_PROFILE_NAME: "${{ vars[matrix.profile_variable] }}",
+      PLATFORM_INSTALLER_CERTIFICATE: "${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || '' }}",
+      PLATFORM_INSTALLER_CERTIFICATE_PASSWORD: "${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD || '' }}",
+      PLATFORM_INSTALLER_IDENTITY: "${{ inputs.platform == 'maccatalyst' && vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || '' }}",
+      IOS_CERTIFICATE: "${{ secrets.IOS_APP_STORE_CERTIFICATE }}",
+      IOS_CERTIFICATE_PASSWORD: "${{ secrets.IOS_APP_STORE_CERTIFICATE_PASSWORD }}",
+      ARCHIVE_ONLY: "${{ inputs.archive_only }}",
+      UPLOAD_TO_TESTFLIGHT: "${{ inputs.upload_to_testflight }}",
+    },
+  }, ["run"], "native platform selected signing configuration step");
+  requireText(signingConfiguration.run, [
+    "required+=(\n    PLATFORM_INSTALLER_CERTIFICATE\n    PLATFORM_INSTALLER_CERTIFICATE_PASSWORD\n    PLATFORM_INSTALLER_IDENTITY\n  )",
+    "test \"$PLATFORM_DESTINATION\" = 'generic/platform=macOS,variant=Mac Catalyst'",
+    "test \"$PLATFORM_PROFILE_PLATFORM\" = OSX",
+    "test \"$PLATFORM_PROFILE_EXTENSION\" = provisionprofile",
+    "test \"$PLATFORM_ALTOOL_PLATFORM\" = appletvos",
+    "test \"$PLATFORM_ALTOOL_PLATFORM\" = visionos",
+    "test \"$PLATFORM_ALTOOL_PLATFORM\" = macos",
+    "Mac Installer Distribution: '*' (5TT564H883)",
+    "3rd Party Mac Developer Installer: '*' (5TT564H883)",
+  ], "native platform selected signing configuration step.run");
+
+  const signingImport = stepByName(
+    steps,
+    "Import Apple Distribution certificate and selected App Store profile",
+    "native platform signing import step",
+  );
+  exactRecordWithAllowedKeys(signingImport, {
+    name: "Import Apple Distribution certificate and selected App Store profile",
+    env: {
+      PLATFORM_KEY: "${{ matrix.key }}",
+      PLATFORM_PROFILE_EXTENSION: "${{ matrix.profile_extension }}",
+      PLATFORM_PROFILE: "${{ secrets[matrix.profile_secret] }}",
+      PLATFORM_INSTALLER_CERTIFICATE: "${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || '' }}",
+      PLATFORM_INSTALLER_CERTIFICATE_PASSWORD: "${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD || '' }}",
+      IOS_CERTIFICATE: "${{ secrets.IOS_APP_STORE_CERTIFICATE }}",
+      IOS_CERTIFICATE_PASSWORD: "${{ secrets.IOS_APP_STORE_CERTIFICATE_PASSWORD }}",
+    },
+  }, ["run"], "native platform signing import step");
+  requireText(signingImport.run, [
+    'profile="$profile_dir/quakesignal-$PLATFORM_KEY.$PLATFORM_PROFILE_EXTENSION"',
+    'printf \'%s\' "$PLATFORM_INSTALLER_CERTIFICATE" | base64 -D > "$installer_certificate"',
+    'security import "$installer_certificate" -k "$keychain" -P "$PLATFORM_INSTALLER_CERTIFICATE_PASSWORD" -T /usr/bin/productbuild',
+  ], "native platform signing import step.run");
 
   const archive = stepByName(steps, "Archive selected signed App Store build", "native platform signed archive step");
   exactRecord(archive, {
@@ -1910,21 +2198,129 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
     },
     run: PLATFORM_ARCHIVE_COMMAND,
   }, "native platform signed archive step");
+
+  const exportedArtifact = stepByName(
+    steps,
+    "Export selected App Store Connect artifact",
+    "native platform exported artifact step",
+  );
+  exactRecordWithAllowedKeys(exportedArtifact, {
+    name: "Export selected App Store Connect artifact",
+    env: {
+      PLATFORM_KEY: "${{ matrix.key }}",
+      PLATFORM_BUNDLE_IDENTIFIER: "${{ matrix.bundle_identifier }}",
+      PLATFORM_PROFILE_NAME: "${{ vars[matrix.profile_variable] }}",
+      PLATFORM_INSTALLER_IDENTITY: "${{ inputs.platform == 'maccatalyst' && vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || '' }}",
+    },
+  }, ["run"], "native platform exported artifact step");
+  requireText(exportedArtifact.run, [
+    "Add :manageAppVersionAndBuildNumber bool false",
+    "Add :signingCertificate string Apple Distribution",
+    "Add :installerSigningCertificate string $PLATFORM_INSTALLER_IDENTITY",
+    'artifacts=("$export_path"/*.pkg)',
+    'unexpected=("$export_path"/*.ipa)',
+    'artifacts=("$export_path"/*.ipa)',
+    'unexpected=("$export_path"/*.pkg)',
+    '[ "${#artifacts[@]}" -ne 1 ]',
+    '[ "${#unexpected[@]}" -ne 0 ]',
+    '[ ! -f "${artifacts[0]:-}" ]',
+    '[ -L "${artifacts[0]:-}" ]',
+    'echo "APPLE_ARTIFACT_PATH=${artifacts[0]}" >> "$GITHUB_ENV"',
+    "echo 'APPLE_ARTIFACT_VERIFIED=false' >> \"$GITHUB_ENV\"",
+  ], "native platform exported artifact step.run");
+
   const signedArtifacts = stepByName(
     steps,
-    "Verify selected signed archive and exported IPA",
+    "Verify selected signed archive and exported artifact",
     "native platform signed artifact verifier step",
   );
   exactRecord(signedArtifacts, {
-    name: "Verify selected signed archive and exported IPA",
+    name: "Verify selected signed archive and exported artifact",
     shell: "bash",
     env: {
       BUILD_NUMBER: "${{ inputs.build_number }}",
       PLATFORM_KEY: "${{ matrix.key }}",
       PLATFORM_PROFILE_NAME: "${{ vars[matrix.profile_variable] }}",
+      PLATFORM_INSTALLER_IDENTITY: "${{ inputs.platform == 'maccatalyst' && vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || '' }}",
     },
     run: PLATFORM_SIGNED_ARTIFACT_COMMAND,
   }, "native platform signed artifact verifier step");
+
+  const upload = stepByName(
+    steps,
+    "Upload selected build to TestFlight",
+    "native platform App Store Connect upload step",
+  );
+  exactRecordWithAllowedKeys(upload, {
+    name: "Upload selected build to TestFlight",
+    if: "${{ inputs.upload_to_testflight && !inputs.archive_only }}",
+    env: {
+      BUILD_NUMBER: "${{ inputs.build_number }}",
+      PLATFORM_KEY: "${{ matrix.key }}",
+      PLATFORM_ALTOOL_PLATFORM: "${{ matrix.altool_platform }}",
+      PLATFORM_BUNDLE_IDENTIFIER: "${{ matrix.bundle_identifier }}",
+      APP_STORE_CONNECT_APPLE_ID: "6800642443",
+      APP_STORE_CONNECT_KEY: "${{ secrets.APP_STORE_CONNECT_API_KEY }}",
+      APP_STORE_CONNECT_KEY_ID: "${{ vars.APP_STORE_CONNECT_API_KEY_ID }}",
+      APP_STORE_CONNECT_ISSUER: "${{ vars.APP_STORE_CONNECT_API_ISSUER }}",
+    },
+  }, ["run"], "native platform App Store Connect upload step");
+  requireText(upload.run, [
+    'if [ "${APPLE_ARTIFACT_VERIFIED:-false}" != true ]; then',
+    'upload_sha256="$(/usr/bin/shasum -a 256 "$APPLE_ARTIFACT_PATH")"',
+    'if [ "$upload_sha256" != "${APPLE_ARTIFACT_SHA256:?Verified Apple artifact SHA-256 is missing}" ]; then',
+    '--platform "$PLATFORM_ALTOOL_PLATFORM"',
+    '--apple-id "$APP_STORE_CONNECT_APPLE_ID"',
+    '--bundle-id "$PLATFORM_BUNDLE_IDENTIFIER"',
+    '--bundle-version "$BUILD_NUMBER"',
+    '--bundle-short-version-string 1.1',
+    'xcrun altool --validate-app "$APPLE_ARTIFACT_PATH" "${upload_arguments[@]}"',
+    'xcrun altool --upload-package "$APPLE_ARTIFACT_PATH" "${upload_arguments[@]}"',
+  ], "native platform App Store Connect upload step.run");
+
+  const cleanup = stepByName(steps, "Remove signing material", "native platform signing cleanup step");
+  requireText(cleanup.run, [
+    'rm -f "$RUNNER_TEMP/quakesignal-$PLATFORM_KEY-installer.p12"',
+    'rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/quakesignal-$PLATFORM_KEY.$PLATFORM_PROFILE_EXTENSION"',
+  ], "native platform signing cleanup step.run");
+
+  const attestation = stepByName(steps, "Write signed release attestation", "native platform signed release attestation step");
+  requireText(attestation.run, [
+    '"workflowFile" => ".github/workflows/apple-platforms.yml"',
+    '"platforms" => [platform]',
+    '"kind" => platform == "maccatalyst" ? "pkg" : "ipa"',
+    '"distributionMode" => ENV.fetch("ARCHIVE_ONLY") == "true" ? "archive-only" : "testflight-upload"',
+    '"sourceCommit" => ENV.fetch("SOURCE_COMMIT")',
+  ], "native platform signed release attestation command");
+  const attestationUpload = stepByName(steps, "Upload signed release attestation only", "native platform signed release attestation upload");
+  exactRecord(attestationUpload, {
+    name: "Upload signed release attestation only",
+    uses: UPLOAD_ARTIFACT_ACTION,
+    with: {
+      name: "signed-release-attestation-${{ matrix.key }}-${{ inputs.source_commit }}-${{ github.run_id }}-${{ github.run_attempt }}",
+      path: "${{ runner.temp }}/signed-release-attestation-${{ matrix.key }}/signed-release-attestation.json",
+      "if-no-files-found": "error",
+      "include-hidden-files": false,
+      "compression-level": 0,
+      overwrite: false,
+      "retention-days": 30,
+    },
+  }, "native platform signed release attestation upload");
+
+  const orderedSteps = [
+    signingConfiguration,
+    signingImport,
+    archive,
+    exportedArtifact,
+    signedArtifacts,
+    upload,
+    cleanup,
+    attestation,
+    attestationUpload,
+  ];
+  if (orderedSteps.some((step, index) => index > 0 && steps.indexOf(step) <= steps.indexOf(orderedSteps[index - 1]))) {
+    fail("native platform signing, export, verification, digest-bound upload, and cleanup steps must remain in reviewed order.");
+  }
 
   const postContractFingerprint = workflowSequenceFingerprint(steps.slice(expectedPrelude.length));
   if (postContractFingerprint !== PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT) {
@@ -1977,12 +2373,391 @@ function verifyScreenshotCandidateWorkflow(workflowSource) {
     fail("native screenshot candidate workflow must remain credential-free.");
   }
   const jobs = record(workflow.jobs, "native screenshot candidate workflow jobs");
-  if (!sameValue(Object.keys(jobs), ["capture"])) {
-    fail("native screenshot candidate workflow must expose only its reviewed capture job.");
+  if (!sameValue(Object.keys(jobs), ["capture", "capture_maccatalyst"])) {
+    fail("native screenshot candidate workflow must expose exactly its reviewed simulator matrix and distinct Mac Catalyst hierarchy jobs.");
+  }
+  const simulatorCaptureJob = record(jobs.capture, "native simulator screenshot capture job");
+  if (simulatorCaptureJob["runs-on"] !== "macos-latest") {
+    fail("native simulator screenshot capture must run on macos-latest.");
+  }
+  const catalystCaptureJob = record(jobs.capture_maccatalyst, "native Mac Catalyst screenshot capture job");
+  if (catalystCaptureJob["runs-on"] !== "macos-26-intel") {
+    fail("native Mac Catalyst screenshot capture must run on macos-26-intel for exact live-window geometry.");
+  }
+  if (catalystCaptureJob["timeout-minutes"] !== 90) {
+    fail("native Mac Catalyst screenshot capture timeout must remain 90 minutes.");
+  }
+  exactRecord(
+    catalystCaptureJob.env,
+    { DEVELOPER_DIR: "/Applications/Xcode_26.6.app/Contents/Developer" },
+    "native Mac Catalyst screenshot capture toolchain",
+  );
+  if (!Array.isArray(catalystCaptureJob.steps)) {
+    fail("native Mac Catalyst screenshot capture steps must be a sequence.");
+  }
+  const capacityPreflight = stepByName(
+    catalystCaptureJob.steps,
+    "Prove hosted Catalyst capture capacity",
+    "native Mac Catalyst screenshot capacity preflight",
+  );
+  const harnessValidation = stepByName(
+    catalystCaptureJob.steps,
+    "Validate credential-free Mac Catalyst harness",
+    "native Mac Catalyst screenshot harness validation",
+  );
+  const cleanSourceProof = stepByName(
+    catalystCaptureJob.steps,
+    "Prove exact clean source immediately before Catalyst capture",
+    "native Mac Catalyst screenshot clean-source proof",
+  );
+  if (catalystCaptureJob.steps.indexOf(capacityPreflight) !== catalystCaptureJob.steps.indexOf(harnessValidation) + 1 ||
+      catalystCaptureJob.steps.indexOf(capacityPreflight) >= catalystCaptureJob.steps.indexOf(cleanSourceProof)) {
+    fail("native Mac Catalyst screenshot capacity preflight must run immediately after harness validation and before the clean-source proof.");
   }
   const jobsFingerprint = workflowSequenceFingerprint(jobs);
   if (jobsFingerprint !== SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT) {
     fail(`native screenshot candidate workflow jobs must match the reviewed capture graph fingerprint (received ${jobsFingerprint}).`);
+  }
+}
+
+function verifyScreenshotReleaseWorkflow(workflowSource) {
+  const label = "Apple screenshot release-ready workflow";
+  const workflow = parseEffectiveWorkflow(
+    workflowSource,
+    label,
+    ".github/workflows/apple-screenshot-release-ready.yml",
+  );
+  if (Object.hasOwn(workflow, "defaults")) {
+    fail(`${label} workflow-level defaults are forbidden.`);
+  }
+  exactRecord(workflow.permissions, SCREENSHOT_RELEASE_ROOT_PERMISSIONS, `${label} permissions`);
+  exactRecord(workflow.concurrency, SCREENSHOT_RELEASE_ROOT_CONCURRENCY, `${label} concurrency`);
+  const inputs = workflowDispatch(workflow, label);
+  const stringInputs = [
+    "capture_run_id",
+    "source_commit",
+    "visual_reviewer",
+    "privacy_reviewer",
+    "signed_parity_reviewer",
+    "signed_release_evidence",
+  ];
+  const booleanInputs = [
+    "visual_review_approved",
+    "privacy_review_approved",
+    "signed_release_parity_approved",
+  ];
+  const expectedInputOrder = [
+      "capture_run_id",
+      "source_commit",
+      "visual_reviewer",
+      "visual_review_approved",
+      "privacy_reviewer",
+      "privacy_review_approved",
+      "signed_parity_reviewer",
+      "signed_release_parity_approved",
+      "signed_release_evidence",
+  ];
+  if (!sameValue(Object.keys(inputs), expectedInputOrder)) {
+    fail(`${label} input order must be exactly ${expectedInputOrder.join(", ")}.`);
+  }
+  for (const name of stringInputs) {
+    exactRecordWithAllowedKeys(
+      inputs[name],
+      { required: true, type: "string" },
+      ["description"],
+      `${label} ${name} input`,
+    );
+  }
+  for (const name of booleanInputs) {
+    exactRecordWithAllowedKeys(
+      inputs[name],
+      { required: true, default: false, type: "boolean" },
+      ["description"],
+      `${label} ${name} input`,
+    );
+  }
+  if (/\$\{\{\s*secrets(?:\.|\[)/i.test(JSON.stringify(workflow))) {
+    fail(`${label} must use only the built-in read-only token and never repository secrets.`);
+  }
+  const jobs = record(workflow.jobs, `${label} jobs`);
+  if (!sameValue(Object.keys(jobs), ["assemble_and_validate"])) {
+    fail(`${label} must expose exactly one reviewed assembly job.`);
+  }
+  const job = record(jobs.assemble_and_validate, `${label} assembly job`);
+  exactRecordWithAllowedKeys(
+    job,
+    {
+      name: "Assemble approved 26-frame upload evidence",
+      "runs-on": "macos-latest",
+      "timeout-minutes": 45,
+      environment: { name: "ios-app-store-release" },
+    },
+    ["env", "steps"],
+    `${label} assembly job header`,
+  );
+  const steps = job.steps;
+  if (!Array.isArray(steps)) fail(`${label} steps must be a sequence.`);
+  const dispatchPreflight = stepByName(
+    steps,
+    "Validate exact protected dispatch inputs",
+    `${label} canonical repository dispatch preflight`,
+  );
+  requireText(dispatchPreflight.run, [
+    'ENV.fetch("GITHUB_REPOSITORY") == "TastyHeadphones/QuakeSignal"',
+    'ENV.fetch("GITHUB_REF") == "refs/heads/main"',
+    'ENV.fetch("REF_PROTECTED") == "true"',
+    "reviewer == reviewer.strip",
+    "reviewer.match?(/[<>]/)",
+    "reviewer.match?(/\\b(?:tbd|todo|unknown|placeholder)\\b/i)",
+    'abort "#{kind} approval reviewer is a placeholder" if placeholder',
+    'signed_evidence.keys.sort == %w[reviewedAtUtc signedRunIds]',
+    'run_ids.fetch("ios-ipados") == run_ids.fetch("watchos")',
+    'run_ids.values.uniq.length == 4',
+    'parsed.utc.iso8601 == raw',
+  ], `${label} canonical repository dispatch preflight command`);
+  const reviewerBinding = stepByName(
+    steps,
+    "Bind named reviewers to protected environment approval",
+    `${label} protected environment reviewer binding`,
+  );
+  requireText(reviewerBinding.run, [
+    "repos/TastyHeadphones/QuakeSignal/actions/runs/$GITHUB_RUN_ID/approvals",
+    '[expected, "#{expected}@main"].include?(actual)',
+    'expected_workflow_path?(run.fetch("path"), ".github/workflows/apple-screenshot-release-ready.yml")',
+    'environment.fetch("name") == "ios-app-store-release"',
+    'review.fetch("state") == "approved"',
+    'approved_logins.include?(login)',
+    'login.casecmp?(ENV.fetch("GITHUB_ACTOR"))',
+    "finalizer-environment-approval.json",
+  ], `${label} protected environment reviewer binding command`);
+  const checkout = stepByName(steps, "Check out exact source commit", `${label} checkout`);
+  exactRecord(checkout, {
+    name: "Check out exact source commit",
+    uses: CHECKOUT_ACTION,
+    with: {
+      ref: "${{ inputs.source_commit }}",
+      "fetch-depth": 0,
+      "persist-credentials": false,
+    },
+  }, `${label} checkout`);
+  const initialSignedRuns = stepByName(
+    steps,
+    "Verify exact successful signed release runs and attestation artifacts",
+    `${label} signed release run verification`,
+  );
+  requireText(initialSignedRuns.run, [
+    "repos/TastyHeadphones/QuakeSignal/actions/runs/$run_id",
+    '[expected, "#{expected}@main"].include?(actual)',
+    'expected_workflow_path?(run.fetch("path"), workflow_file)',
+    'run.fetch("status") == "completed"',
+    'run.fetch("conclusion") == "success"',
+    'run.fetch("head_sha") == source',
+    'specs.values.map(&:first).uniq.length == 4',
+    "signed-runs-api-attestation.json",
+  ], `${label} signed release run verification command`);
+  const signedDownloads = [
+    [
+      "Download exact iOS and watchOS signed attestation",
+      "signed-release-attestation-ios-ipados-watchos-${{ inputs.source_commit }}-${{ steps.dispatch-evidence.outputs.ios_run_id }}-${{ steps.signed-runs.outputs.ios_run_attempt }}",
+      "${{ env.SIGNED_DOWNLOAD_ROOT }}/ios-ipados-watchos",
+      "${{ steps.dispatch-evidence.outputs.ios_run_id }}",
+    ],
+    [
+      "Download exact tvOS signed attestation",
+      "signed-release-attestation-tvos-${{ inputs.source_commit }}-${{ steps.dispatch-evidence.outputs.tvos_run_id }}-${{ steps.signed-runs.outputs.tvos_run_attempt }}",
+      "${{ env.SIGNED_DOWNLOAD_ROOT }}/tvos",
+      "${{ steps.dispatch-evidence.outputs.tvos_run_id }}",
+    ],
+    [
+      "Download exact visionOS signed attestation",
+      "signed-release-attestation-visionos-${{ inputs.source_commit }}-${{ steps.dispatch-evidence.outputs.visionos_run_id }}-${{ steps.signed-runs.outputs.visionos_run_attempt }}",
+      "${{ env.SIGNED_DOWNLOAD_ROOT }}/visionos",
+      "${{ steps.dispatch-evidence.outputs.visionos_run_id }}",
+    ],
+    [
+      "Download exact Mac Catalyst signed attestation",
+      "signed-release-attestation-maccatalyst-${{ inputs.source_commit }}-${{ steps.dispatch-evidence.outputs.maccatalyst_run_id }}-${{ steps.signed-runs.outputs.maccatalyst_run_attempt }}",
+      "${{ env.SIGNED_DOWNLOAD_ROOT }}/maccatalyst",
+      "${{ steps.dispatch-evidence.outputs.maccatalyst_run_id }}",
+    ],
+  ].map(([name, artifactName, path, runId]) => {
+    const step = stepByName(steps, name, `${label} ${name}`);
+    exactRecord(step, {
+      name,
+      uses: DOWNLOAD_ARTIFACT_ACTION,
+      with: {
+        name: artifactName,
+        path,
+        repository: "${{ github.repository }}",
+        "run-id": runId,
+        "github-token": "${{ github.token }}",
+      },
+    }, `${label} ${name}`);
+    return step;
+  });
+  const signedTopology = stepByName(
+    steps,
+    "Validate four signed attestations and exact release topology",
+    `${label} signed release topology validation`,
+  );
+  requireText(signedTopology.run, [
+    'attestation.fetch("distributionMode") == "testflight-upload"',
+    'attestation.fetch("headSha") == source',
+    'records.values.map { |run, _artifact| run.fetch("runId") }.uniq.length == 4',
+    'records.values.map { |run, _artifact| run.fetch("artifact").fetch("id") }.uniq.length == 4',
+    'records.values.map { |run, _artifact| run.fetch("artifact").fetch("digest") }.uniq.length == 4',
+    'records.values.map { |_run, artifact| artifact.fetch("sha256") }.uniq.length == 4',
+    'platform_rows.fetch(0).fetch("signedReleaseRunId") == platform_rows.fetch(2).fetch("signedReleaseRunId")',
+    'platform_rows.fetch(0).fetch("signedReleaseArtifactSha256") == platform_rows.fetch(2).fetch("signedReleaseArtifactSha256")',
+    "validated-signed-release-evidence.json",
+  ], `${label} signed release topology validation command`);
+  const initialRunAttestation = stepByName(
+    steps,
+    "Verify exact successful capture run and five artifacts",
+    `${label} canonical capture-run attestation`,
+  );
+  requireText(initialRunAttestation.run, [
+    "repos/TastyHeadphones/QuakeSignal/actions/runs/$CAPTURE_RUN_ID",
+    '[expected, "#{expected}@main"].include?(actual)',
+    'expected_workflow_path?(run.fetch("path"), ".github/workflows/apple-platform-screenshots.yml")',
+    'repository = "TastyHeadphones/QuakeSignal"',
+    'ENV.fetch("GITHUB_REPOSITORY") == repository',
+    'run.dig("repository", "full_name") == repository',
+    'run.dig("head_repository", "full_name") == repository',
+  ], `${label} canonical capture-run attestation command`);
+  const download = stepByName(steps, "Download exact candidate artifacts", `${label} artifact download`);
+  exactRecord(download, {
+    name: "Download exact candidate artifacts",
+    uses: DOWNLOAD_ARTIFACT_ACTION,
+    with: {
+      pattern: "UNAPPROVED-debug-*-${{ inputs.source_commit }}",
+      path: "${{ env.DOWNLOAD_ROOT }}",
+      "merge-multiple": false,
+      repository: "${{ github.repository }}",
+      "run-id": "${{ inputs.capture_run_id }}",
+      "github-token": "${{ github.token }}",
+    },
+  }, `${label} artifact download`);
+  const postDownloadReverify = stepByName(
+    steps,
+    "Reverify run and artifact identities after download",
+    `${label} post-download run revalidation`,
+  );
+  exactRecordWithAllowedKeys(
+    postDownloadReverify,
+    {
+      name: "Reverify run and artifact identities after download",
+      env: { GH_TOKEN: "${{ github.token }}" },
+    },
+    ["run"],
+    `${label} post-download run revalidation`,
+  );
+  requireText(postDownloadReverify.run, [
+    "repos/TastyHeadphones/QuakeSignal/actions/runs/$CAPTURE_RUN_ID",
+    '[expected, "#{expected}@main"].include?(actual)',
+    'expected_workflow_path?(run.fetch("path"), attestation.fetch("workflowFile"))',
+    "actions/runs/$CAPTURE_RUN_ID",
+    "actions/runs/$CAPTURE_RUN_ID/artifacts?per_page=100",
+    "capture-run-attestation.json",
+    'run.fetch("status") == "completed"',
+    'run.fetch("conclusion") == "success"',
+    "second_artifacts == expected_records",
+    "JSON.generate(second_artifacts) == JSON.generate(expected_records)",
+  ], `${label} post-download run revalidation command`);
+  const safeInventory = stepByName(
+    steps,
+    "Safely inventory five packages and all 26 frames",
+    `${label} safe downloaded inventory`,
+  );
+  const recordApproval = stepByName(
+    steps,
+    "Record named reviews and signed Release parity",
+    `${label} release approval recorder`,
+  );
+  requireText(recordApproval.run, [
+    '"schemaVersion" => 3',
+    "finalizer-environment-approval.json",
+    "validated-signed-release-evidence.json",
+    'parsed_review_times.fetch("signedReleaseParity") < latest_signed_run',
+    'reviewed_at = parsed_review_times.values.max.utc.iso8601',
+    '"signedReleaseParityApproved" => true',
+  ], `${label} release approval recorder command`);
+  const upload = stepByName(
+    steps,
+    "Upload one short-lived approved screenshot artifact",
+    `${label} final upload`,
+  );
+  exactRecord(upload, {
+    name: "Upload one short-lived approved screenshot artifact",
+    uses: UPLOAD_ARTIFACT_ACTION,
+    with: {
+      name: "APPROVED-build8-apple-screenshots-${{ inputs.source_commit }}",
+      path: "${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-set-index-v1.1-build8.json\n${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-release-sets-v1.1-build8/${{ inputs.source_commit }}\n",
+      "if-no-files-found": "error",
+      "include-hidden-files": false,
+      "compression-level": 0,
+      overwrite: false,
+      "retention-days": 3,
+    },
+  }, `${label} final upload`);
+  const allRunSource = steps
+    .filter((step) => isRecord(step) && typeof step.run === "string")
+    .map((step) => step.run)
+    .join("\n");
+  for (const required of [
+    ".github/workflows/apple-platform-screenshots.yml",
+    "UNAPPROVED-debug-simulator-ios-ipados-#{source}",
+    "UNAPPROVED-debug-simulator-tvos-#{source}",
+    "UNAPPROVED-debug-simulator-watchos-#{source}",
+    "UNAPPROVED-debug-simulator-visionos-#{source}",
+    "UNAPPROVED-debug-maccatalyst-direct-uikit-#{source}",
+    "--release-evidence-root=$EVIDENCE_ROOT",
+    "--require-build8-screenshot-release-ready",
+    "--expected-source-commit=\"$SOURCE_COMMIT\"",
+    "--screenshot-release-evidence-root=\"$EVIDENCE_ROOT\"",
+    "release-approval.json",
+    "visual",
+    "privacy",
+    "signedReleaseParity",
+    "signedRunIds",
+    "reviewedAtUtc",
+    "validated-signed-release-evidence.json",
+    "finalizer-environment-approval.json",
+    "signedReleaseRunId",
+    "signedReleaseRunAttempt",
+    "signedMarketingVersion",
+    "signedBuildNumber",
+    "signedDistributionMode",
+    "signedReleaseAttestedAtUtc",
+    "signedRunCompletedAtUtc",
+    "post-download capture verification failed",
+    "TastyHeadphones/QuakeSignal",
+  ]) {
+    if (!allRunSource.includes(required)) {
+      fail(`${label} must retain ${JSON.stringify(required)}.`);
+    }
+  }
+  if (/\bxcodebuild\s+(?:archive|-exportArchive)\b|\bxcrun\s+altool\b/.test(allRunSource)) {
+    fail(`${label} must never build, sign, retain, or upload an Apple binary.`);
+  }
+  if (steps.indexOf(dispatchPreflight) >= steps.indexOf(reviewerBinding) ||
+      steps.indexOf(reviewerBinding) >= steps.indexOf(checkout) ||
+      steps.indexOf(checkout) >= steps.indexOf(initialSignedRuns) ||
+      signedDownloads.some((step, index) =>
+        steps.indexOf(step) <= steps.indexOf(index === 0 ? initialSignedRuns : signedDownloads[index - 1])) ||
+      steps.indexOf(signedDownloads.at(-1)) >= steps.indexOf(signedTopology) ||
+      steps.indexOf(signedTopology) >= steps.indexOf(initialRunAttestation) ||
+      steps.indexOf(checkout) >= steps.indexOf(download) ||
+      steps.indexOf(download) >= steps.indexOf(postDownloadReverify) ||
+      steps.indexOf(postDownloadReverify) >= steps.indexOf(safeInventory) ||
+      steps.indexOf(safeInventory) >= steps.indexOf(recordApproval) ||
+      steps.indexOf(recordApproval) >= steps.indexOf(upload) ||
+      steps.indexOf(safeInventory) >= steps.indexOf(upload)) {
+    fail(`${label} reviewer binding, four signed-run downloads, capture download, validation, approval, and final upload order drifted.`);
+  }
+  const jobsFingerprint = workflowSequenceFingerprint(jobs);
+  if (jobsFingerprint !== SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT) {
+    fail(`${label} jobs must match the reviewed hosted approval graph fingerprint (received ${jobsFingerprint}).`);
   }
 }
 
@@ -2011,6 +2786,7 @@ export async function verifyIOSReleaseContract({
     iosWorkflow,
     platformWorkflow,
     screenshotWorkflow,
+    screenshotReleaseWorkflow,
     macCatalystScreenshotPlan,
     cloudflareWorkflow,
     releaseHooks,
@@ -2037,6 +2813,7 @@ export async function verifyIOSReleaseContract({
     readFile(path(contractFiles.iosWorkflow), "utf8"),
     readFile(path(contractFiles.platformWorkflow), "utf8"),
     readFile(path(contractFiles.screenshotWorkflow), "utf8"),
+    readFile(path(contractFiles.screenshotReleaseWorkflow), "utf8"),
     readFile(path(contractFiles.macCatalystScreenshotPlan), "utf8"),
     readFile(path(contractFiles.cloudflareWorkflow), "utf8"),
     readReviewedCiScriptInventory(root),
@@ -2157,6 +2934,7 @@ export async function verifyIOSReleaseContract({
   verifyArchiveWorkflow(iosWorkflow, buildNumber);
   verifyPlatformArchiveWorkflow(platformWorkflow, buildNumber);
   verifyScreenshotCandidateWorkflow(screenshotWorkflow);
+  verifyScreenshotReleaseWorkflow(screenshotReleaseWorkflow);
   verifyProductionDeploymentSerialization(cloudflareWorkflow);
   verifyWorkflowDirectoryPolicy(workflowFiles);
   return {

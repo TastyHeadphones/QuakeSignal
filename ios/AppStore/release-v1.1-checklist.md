@@ -17,7 +17,10 @@ recorded in the existing submission documents.
   visual approval and signed public-Release parity are still pending. Keep `ja`
   and `zh-Hans` unpublished until the product-page name, availability, and
   trademark approvals are recorded.
-- Copy the matching `whats_new_v1.1.txt` only into each approved localization.
+- Copy the matching nonempty `whats_new_v1.1.txt` only into each approved
+  localization. Hosted listing validation enforces the 4,000-character limit;
+  the final authenticated portal pass must verify the saved What's New and
+  promotional-text values rather than treating checked-in copy as save evidence.
 - Preserve `screenshot-provenance-v1.1.json` as truthful build-7 simulator
   evidence. Its 30 matching hashes do not authorize a build-8 upload. The
   separate build-8 candidate hashes are historical and permanently
@@ -28,25 +31,34 @@ recorded in the existing submission documents.
   ordinary listing CI until one exact final commit has all 26 required Apple
   frames under `screenshot-release-sets-v1.1-build8/<source-commit>/`. Never
   reuse or mutate an occupied historical path.
-- Before upload, require the source-addressed screenshot release gate as well
-  as the ordinary listing checks:
+- Before screenshot upload, build attachment to version `1.1`, or App Review
+  submission, require the source-addressed screenshot release gate as well as
+  the ordinary listing checks. The protected finalizer, not a workstation,
+  executes this job-internal command:
 
   ```sh
   ruby .github/scripts/verify-store-assets.rb \
     --require-build8-screenshot-release-ready \
-    --expected-source-commit=<40-character-source-commit>
+    --expected-source-commit=<40-character-source-commit> \
+    --screenshot-release-evidence-root="$EVIDENCE_ROOT"
   ```
 
   This must remain blocked until the active set is complete and source-current
   and a separate named approval records signed-Release parity for iOS/iPadOS,
   tvOS, watchOS, visionOS, and Mac Catalyst.
-- Deploy all D1 migrations through 0012 and the build-8 Worker contract first.
+- Deploy all D1 migrations through 0013 and the build-8 Worker contract first.
   Confirm the production health endpoint accepts App Attest bundle versions
   1–8 and reports exactly `jma_eew` and `jma_eqlist` as its upstream source
   inventory.
 - Upload only the public `Release` archive. Never submit the `InternalQA`
   configuration, whose controlled delayed training control is intentionally
   excluded from the public build.
+- After the exact source/Worker policy, distribution credentials/profiles, and
+  store-complete icon gates pass, use the four protected GitHub upload lanes to
+  stage build 8 in TestFlight for internal/physical QA. This prerequisite upload
+  is not permission to select or attach a build to version `1.1`, add it to App
+  Review, submit it, or release it. Archive-only rehearsals are not final signed
+  evidence; the finalizer requires the four successful upload-run attestations.
 - Complete physical-device App Attest, APNs foreground/background/terminated,
   notification-sound, Silent Mode/Focus, location, and iPad QA before public
   submission.
@@ -68,9 +80,13 @@ recorded in the existing submission documents.
   evidence, pause the affected scope rather than claiming a private written
   license. Separately confirm the App Review contact fields.
 - Follow `apple-platform-release.md` for the iOS+embedded-Watch, tvOS,
-  visionOS, and Mac Catalyst protected Xcode Cloud archive actions. Do not
-  upload a native platform until its store-complete icon set, screenshots,
-  signing, metadata, and platform QA are approved.
+  visionOS, and Mac Catalyst protected GitHub archive/upload actions. Xcode
+  Cloud remains a future lane until an authorized owner creates its first
+  workflow. Do not attach a native build to version `1.1` or submit it until its
+  screenshots, signing, metadata, privacy/legal checks, and platform QA are
+  approved. This 2026-08-22 operational direction supersedes the historical
+  Xcode Cloud execution choice in `release-owner-decisions-2026-08-20.md`; it
+  does not supersede that record's Mac storefront or content-rights decisions.
 - The Watch catalog is mechanically valid and intentionally carries the
   canonical signal artwork. Obtain named visual approval against SHA-256
   `b792fccc4c08645fb6485ab96c1882c069229246162b02ebdbb605157a5bc65f`;
@@ -83,7 +99,8 @@ recorded in the existing submission documents.
   parity, metadata, and named approval.
 - Use `platforms/` for the platform-specific copy, review notes, planned
   screenshot manifests, and capture checklist. Use
-  `app-store-connect-portal-audit-2026-08-19.md` as history and the latest
-  `app-store-connect-portal-audit-2026-08-20.md` addendum for current planning.
+  `app-store-connect-portal-audit-2026-08-22.md` for current planning. Retain
+  `app-store-connect-portal-audit-2026-08-19.md` and
+  `app-store-connect-portal-audit-2026-08-20.md` as historical audits only.
   The shared iOS, tvOS, and visionOS `1.1` drafts still have no selected build
   or screenshots; do not delete or duplicate them.

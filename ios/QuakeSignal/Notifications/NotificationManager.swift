@@ -3,7 +3,8 @@ import UserNotifications
 
 struct ForegroundNotificationDelivery {
     let payload: PushPayload
-    let shouldPresentEmergencyInApp: Bool
+    let allowsEmergencyPresentation: Bool
+    let receivedAt: Date
 }
 
 @Observable
@@ -20,7 +21,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     var onNotificationTapped: ((PushPayload) -> Void)? {
         didSet { drainPendingTappedPayloads() }
     }
-    var onForegroundNotification: ((ForegroundNotificationDelivery) -> Void)? {
+    var onForegroundNotification: ((ForegroundNotificationDelivery) -> Bool)? {
         didSet { drainPendingForegroundPayloads() }
     }
 
@@ -65,8 +66,9 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// RootView updates this synchronously with QuakeStore's lifecycle. The
-    /// value is sampled when each notification arrives and that exact decision
-    /// travels with buffered callbacks.
+    /// value is sampled when each notification arrives. A handler must confirm
+    /// synchronously that it owns this revision, or a newer active revision,
+    /// before APNs is suppressed.
     func setForegroundSceneActive(_ isActive: Bool) {
         isForegroundSceneActive = isActive
     }
@@ -146,13 +148,22 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    private func deliverForeground(_ delivery: ForegroundNotificationDelivery) {
+    @discardableResult
+    private func deliverForeground(_ delivery: ForegroundNotificationDelivery) -> Bool {
         if let onForegroundNotification {
-            onForegroundNotification(delivery)
-        } else {
-            pendingForegroundPayloads.append(delivery)
-            pendingForegroundPayloads = Array(pendingForegroundPayloads.suffix(5))
+            return onForegroundNotification(delivery)
         }
+
+        // No app surface can take ownership before RootView installs its
+        // handler. APNs remains visible now; the buffered copy may merge later
+        // but must not open a second emergency cover or replay alert audio.
+        pendingForegroundPayloads.append(ForegroundNotificationDelivery(
+            payload: delivery.payload,
+            allowsEmergencyPresentation: false,
+            receivedAt: delivery.receivedAt
+        ))
+        pendingForegroundPayloads = Array(pendingForegroundPayloads.suffix(5))
+        return false
     }
 
     private func drainPendingTappedPayloads() {
@@ -166,7 +177,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         guard let onForegroundNotification, !pendingForegroundPayloads.isEmpty else { return }
         let pending = pendingForegroundPayloads
         pendingForegroundPayloads.removeAll()
-        pending.forEach(onForegroundNotification)
+        pending.forEach { _ = onForegroundNotification($0) }
     }
 
     // MARK: UNUserNotificationCenterDelegate
@@ -178,29 +189,35 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
+        let receivedAt = Date()
         let payload = PushPayload(userInfo: notification.request.content.userInfo)
         let decision = await MainActor.run {
-            let decision = ForegroundNotificationPresentationPolicy.decision(
-                for: payload,
-                // Require both the scene callback and UIKit's receipt-time
-                // application state. During a Control/Notification Center or
-                // interruption transition, UIKit can become inactive before
-                // SwiftUI delivers scenePhase's onChange callback.
-                isSceneActive: self.isForegroundSceneActive &&
-                    UIApplication.shared.applicationState == .active
-            )
-            self.deliverForeground(ForegroundNotificationDelivery(
+            let isSceneActive = self.isForegroundSceneActive &&
+                UIApplication.shared.applicationState == .active
+            let allowsEmergencyPresentation =
+                ForegroundNotificationPresentationPolicy.allowsEmergencyPresentation(
+                    for: payload,
+                    // Require both the scene callback and UIKit's receipt-time
+                    // application state. During a Control/Notification Center or
+                    // interruption transition, UIKit can become inactive before
+                    // SwiftUI delivers scenePhase's onChange callback.
+                    isSceneActive: isSceneActive
+                )
+            let didHandleEmergencyInApp = self.deliverForeground(ForegroundNotificationDelivery(
                 payload: payload,
-                shouldPresentEmergencyInApp: decision.shouldPresentEmergencyInApp
+                allowsEmergencyPresentation: allowsEmergencyPresentation,
+                receivedAt: receivedAt
             ))
-            return decision
+            return ForegroundNotificationPresentationPolicy.decision(
+                didHandleEmergencyInApp: allowsEmergencyPresentation && didHandleEmergencyInApp
+            )
         }
 
         switch decision.systemPresentation {
         case .alert:
             // Token tests, unusable/mismatched snapshots, launch-buffered
-            // pushes, and real events received while the scene is inactive
-            // retain the APNs banner and sound.
+            // pushes, inactive-scene events, and valid snapshots that the app
+            // did not present retain the APNs banner and sound.
             return [.banner, .sound, .list]
         case .listOnly:
             // The active app owns the visible emergency UI and selected sound.

@@ -335,6 +335,16 @@ class IOSScreenshotProvenanceTest < Minitest::Test
     end
   end
 
+  def test_rejects_noncanonical_status_bar_time
+    with_capture_fixture do |capture_root, output|
+      selector = "ios-iphone-6.5-home"
+      mutate_json_artifact(capture_root, selector, "launchEvidence") do |record|
+        record["statusBarTime"] = "2026-01-01T09:41:00Z"
+      end
+      assert_rejected(capture_root, output, /status-bar time/)
+    end
+  end
+
   def test_requires_verified_disposable_simulator_cleanup
     with_capture_fixture do |capture_root, output|
       cleanup_path = capture_root.join("simulator-cleanup-evidence.json")
@@ -519,6 +529,63 @@ class IOSScreenshotProvenanceTest < Minitest::Test
         record["imageSha256"] = final_sha
       end
       assert_rejected(capture_root, output, /semantic image binding/)
+    end
+  end
+
+  def test_applies_the_sparse_non_black_floor_only_to_ipad_reports
+    assert_equal 0.12, QuakeSignalIOSScreenshotProvenance::DEFAULT_MINIMUM_NON_BLACK_FRACTION
+    assert_equal(
+      { "ios-ipad-13-reports" => 0.004 },
+      QuakeSignalIOSScreenshotProvenance::MINIMUM_NON_BLACK_FRACTION_BY_SELECTOR,
+    )
+
+    with_capture_fixture do |capture_root, output|
+      selector = "ios-ipad-13-reports"
+      mutate_json_artifact(
+        capture_root, selector, "semanticValidation", reference_key: "finalEvidence"
+      ) do |record|
+        metrics = record.fetch("checks").fetch("committedView")
+        metrics["nonBlackFraction"] = 0.004
+        metrics["brightFraction"] = 0.004
+      end
+      aggregate = assemble(capture_root, output)
+      assert_equal 10, aggregate.fetch("frames").length
+    end
+
+    with_capture_fixture do |capture_root, output|
+      selector = "ios-ipad-13-reports"
+      mutate_json_artifact(
+        capture_root, selector, "semanticValidation", reference_key: "finalEvidence"
+      ) do |record|
+        metrics = record.fetch("checks").fetch("committedView")
+        metrics["nonBlackFraction"] = 0.003_999
+        metrics["brightFraction"] = 0.003_999
+      end
+      assert_rejected(capture_root, output, /derived semantic reasons/)
+    end
+
+    with_capture_fixture do |capture_root, output|
+      selector = "ios-iphone-6.5-reports"
+      mutate_json_artifact(
+        capture_root, selector, "semanticValidation", reference_key: "finalEvidence"
+      ) do |record|
+        metrics = record.fetch("checks").fetch("committedView")
+        metrics["nonBlackFraction"] = 0.004
+        metrics["brightFraction"] = 0.004
+      end
+      assert_rejected(capture_root, output, /derived semantic reasons/)
+    end
+
+    with_capture_fixture do |capture_root, output|
+      selector = "ios-ipad-13-reports"
+      mutate_json_artifact(
+        capture_root, selector, "semanticValidation", reference_key: "finalEvidence"
+      ) do |record|
+        metrics = record.fetch("checks").fetch("committedView")
+        metrics["nonBlackFraction"] = 0.004
+        metrics["brightFraction"] = 0.004_001
+      end
+      assert_rejected(capture_root, output, /brightFraction cannot exceed nonBlackFraction/)
     end
   end
 
@@ -769,7 +836,7 @@ class IOSScreenshotProvenanceTest < Minitest::Test
       "appleLocale" => "en_US",
       "timeZone" => "UTC",
       "appearance" => "dark",
-      "statusBarTime" => "2026-01-01T09:41:00+00:00",
+      "statusBarTime" => "9:41",
       "captureAttemptCount" => 1,
       "retryPerformed" => false,
       "stdoutSha256" => Digest::SHA256.file(stdout_path).hexdigest,
@@ -1128,7 +1195,7 @@ class IOSScreenshotProvenanceTest < Minitest::Test
           "PRODUCT_BUNDLE_IDENTIFIER" => "com.quakesignal.app",
           "SDKROOT" => "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk",
           "ARCHS" => host_architecture,
-          "ONLY_ACTIVE_ARCH" => "YES",
+          "ONLY_ACTIVE_ARCH" => "NO",
           "CODE_SIGNING_ALLOWED" => "NO",
           "CODE_SIGNING_REQUIRED" => "NO",
           "CODE_SIGN_IDENTITY" => "",

@@ -153,7 +153,7 @@ end
 class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
   SOURCE_ROOT = Pathname.new(__dir__).join("../..").realpath
   SOURCE_COMMIT = "a" * 40
-  SIGNED_COMMIT = "b" * 40
+  SIGNED_COMMIT = SOURCE_COMMIT
 
   class << self
     def realistic_active_release_fixture
@@ -215,6 +215,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
   def setup
     @temporary_directory = Dir.mktmpdir("apple-screenshot-release-set")
     @root = Pathname.new(@temporary_directory).realpath
+    @release_evidence_root = @root
     @inspector = FakeAppleReleaseScreenshotInspector.new
     @source_guard = FakeAppleReleaseSourceGuard.new
     @historical_guard = FakeAppleHistoricalCommitGuard.new
@@ -231,6 +232,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
   def validator
     AppleScreenshotReleaseSetValidator.new(
       root: @root,
+      release_evidence_root: @release_evidence_root == @root ? nil : @release_evidence_root,
       image_inspector: @inspector,
       source_guard: @source_guard,
       historical_commit_guard: @historical_guard,
@@ -246,6 +248,20 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     end
     assert_match(/complete active build-8 screenshot release set/, error.message)
     assert_empty @source_guard.validations
+  end
+
+  def test_external_ephemeral_release_evidence_validates_without_repository_mutation
+    @release_evidence_root = @root.dirname.join("#{@root.basename}-release-evidence")
+    @release_evidence_root.mkpath
+    build_active_release_set
+
+    assert_equal :active_unapproved,
+                 validator.validate!(expected_source_commit: SOURCE_COMMIT)
+    assert @release_evidence_root.join(AppleScreenshotReleaseSetValidator::INDEX_PATH).file?
+    refute @root.join(AppleScreenshotReleaseSetValidator::RELEASE_ROOT, SOURCE_COMMIT).exist?
+  ensure
+    FileUtils.remove_entry(@release_evidence_root) if
+      @release_evidence_root && @release_evidence_root != @root && @release_evidence_root.exist?
   end
 
   def test_complete_active_set_is_source_guarded_but_not_release_ready_without_approval
@@ -338,6 +354,47 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     rehash_plan_reference!("ios-ipados")
     error = assert_raises(AppleScreenshotReleaseSetValidationError) { validator.validate! }
     assert_match(/iOS\/iPadOS plan exact ten-frame contract/, error.message)
+  end
+
+  def test_catalyst_release_metadata_requires_direct_uikit_hierarchy_at_2x
+    build_active_release_set
+    metadata_path = release_root.join("maccatalyst/package-provenance.json")
+    metadata = JSON.parse(metadata_path.read)
+    metadata.fetch("captureEnvironment")["kind"] = "maccatalyst-host"
+    write_json(metadata_path, metadata)
+    rehash_package!("maccatalyst")
+    rehash_release_manifest!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) { validator.validate! }
+    assert_match(/Mac Catalyst capture kind mismatch/, error.message)
+
+    build_active_release_set(reset: true)
+    metadata = JSON.parse(metadata_path.read)
+    metadata.fetch("frames").first.fetch("captureEvidence")["captureApi"] =
+      "ScreenCaptureKit.SCScreenshotManager"
+    write_json(metadata_path, metadata)
+    rehash_package!("maccatalyst")
+    rehash_release_manifest!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) { validator.validate! }
+    assert_match(/capture API mismatch/, error.message)
+
+    build_active_release_set(reset: true)
+    metadata = JSON.parse(metadata_path.read)
+    metadata.fetch("frames").first.fetch("captureEvidence")["rasterizationScale"] = 1
+    write_json(metadata_path, metadata)
+    rehash_package!("maccatalyst")
+    rehash_release_manifest!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) { validator.validate! }
+    assert_match(/rasterization scale mismatch/, error.message)
+
+    build_active_release_set(reset: true)
+    metadata = JSON.parse(metadata_path.read)
+    first_nonce = metadata.fetch("frames").first.fetch("captureEvidence").fetch("nonce")
+    metadata.fetch("frames").fetch(1).fetch("captureEvidence")["nonce"] = first_nonce
+    write_json(metadata_path, metadata)
+    rehash_package!("maccatalyst")
+    rehash_release_manifest!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) { validator.validate! }
+    assert_match(/capture nonce uniqueness mismatch/, error.message)
   end
 
   def test_collapsed_or_historical_frame_bytes_are_rejected_after_all_rehashing
@@ -444,7 +501,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     add_release_approval
     approval_path = release_root.join("release-approval.json")
     approval = JSON.parse(approval_path.read)
-    approval["reviewer"] = "  "
+    approval.fetch("approvals").fetch("visual")["reviewer"] = "  "
     write_json(approval_path, approval)
     rehash_approval!
     assert_raises(AppleScreenshotReleaseSetValidationError) do
@@ -459,18 +516,78 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     assert_match(/signed source drift/, error.message)
   end
 
+  def test_approval_requires_explicit_privacy_review_and_exact_capture_run_binding
+    build_active_release_set
+    add_release_approval
+    approval_path = release_root.join("release-approval.json")
+    approval = JSON.parse(approval_path.read)
+    approval.fetch("approvals").fetch("privacy")["approved"] = false
+    write_json(approval_path, approval)
+    rehash_approval!
+    assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+
+    add_release_approval(reset: true)
+    approval = JSON.parse(approval_path.read)
+    approval.fetch("captureRun")["workflowFile"] = ".github/workflows/unreviewed.yml"
+    write_json(approval_path, approval)
+    rehash_approval!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+    assert_match(/capture run workflow file/, error.message)
+
+    add_release_approval(reset: true)
+    approval = JSON.parse(approval_path.read)
+    approval.fetch("captureRun")["repository"] = "UntrustedFork/QuakeSignal"
+    write_json(approval_path, approval)
+    rehash_approval!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+    assert_match(/capture run canonical repository/, error.message)
+  end
+
+  def test_named_reviewers_are_bound_to_protected_environment_approval
+    build_active_release_set
+    add_release_approval
+    approval_path = release_root.join("release-approval.json")
+    approval = JSON.parse(approval_path.read)
+    approval.fetch("approvals").fetch("visual")["reviewer"] = "unapproved-reviewer"
+    write_json(approval_path, approval)
+    rehash_approval!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+    assert_match(/approved protected-environment login/, error.message)
+
+    add_release_approval(reset: true)
+    approval = JSON.parse(approval_path.read)
+    approval.fetch("environmentApproval")["approvedReviewerGitHubLogins"] = ["release-owner"]
+    approval.fetch("approvals").each_value { |record| record["reviewer"] = "release-owner" }
+    write_json(approval_path, approval)
+    rehash_approval!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+    assert_match(/reviewer distinct from the actor/, error.message)
+  end
+
   def test_approval_times_must_follow_capture_and_platform_parity
     build_active_release_set
     add_release_approval
     approval_path = release_root.join("release-approval.json")
     approval = JSON.parse(approval_path.read)
     approval.fetch("platforms").first["parityReviewedAtUtc"] = "2020-01-01T00:00:00Z"
+    approval.fetch("approvals").fetch("signedReleaseParity")["reviewedAtUtc"] =
+      "2020-01-01T00:00:00Z"
     write_json(approval_path, approval)
     rehash_approval!
     error = assert_raises(AppleScreenshotReleaseSetValidationError) do
       validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
     end
-    assert_match(/parity review must not predate screenshot capture completion/, error.message)
+    assert_match(/signedReleaseParity review must not predate screenshot capture completion/, error.message)
 
     add_release_approval(reset: true)
     approval = JSON.parse(approval_path.read)
@@ -480,7 +597,36 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     error = assert_raises(AppleScreenshotReleaseSetValidationError) do
       validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
     end
-    assert_match(/overall release review must not predate/, error.message)
+    assert_match(/overall release review completion time/, error.message)
+  end
+
+  def test_signed_release_evidence_requires_embedded_watch_and_four_distinct_artifacts
+    build_active_release_set
+    add_release_approval
+    approval_path = release_root.join("release-approval.json")
+    approval = JSON.parse(approval_path.read)
+    watch = approval.fetch("platforms").find { |record| record.fetch("platform") == "watchos" }
+    watch["signedReleaseRunId"] += 100
+    watch["signedReleaseAttestationArtifactName"] =
+      "signed-release-attestation-ios-ipados-watchos-#{SOURCE_COMMIT}-#{watch.fetch("signedReleaseRunId")}-#{watch.fetch("signedReleaseRunAttempt")}"
+    write_json(approval_path, approval)
+    rehash_approval!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+    assert_match(/iOS\/iPadOS and watchOS signed release run ID/, error.message)
+
+    add_release_approval(reset: true)
+    approval = JSON.parse(approval_path.read)
+    tvos = approval.fetch("platforms").find { |record| record.fetch("platform") == "tvos" }
+    visionos = approval.fetch("platforms").find { |record| record.fetch("platform") == "visionos" }
+    visionos["signedReleaseArtifactSha256"] = tvos.fetch("signedReleaseArtifactSha256")
+    write_json(approval_path, approval)
+    rehash_approval!
+    error = assert_raises(AppleScreenshotReleaseSetValidationError) do
+      validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
+    end
+    assert_match(/distinct signed release artifact count/, error.message)
   end
 
   def test_duplicate_json_keys_and_partial_approval_pointer_are_rejected
@@ -792,7 +938,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
   end
 
   def index_path
-    @root.join(AppleScreenshotReleaseSetValidator::INDEX_PATH)
+    @release_evidence_root.join(AppleScreenshotReleaseSetValidator::INDEX_PATH)
   end
 
   def release_root_relative
@@ -800,7 +946,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
   end
 
   def release_root
-    @root.join(release_root_relative)
+    @release_evidence_root.join(release_root_relative)
   end
 
   def base_index
@@ -858,6 +1004,8 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
   def build_package(platform, expected_count)
     package_root = release_root.join(platform)
     package_root.mkpath
+    raw_capture_root = package_root.join("evidence/raw-capture")
+    raw_capture_root.mkpath
     frames = AppleScreenshotReleaseSetValidator::FRAME_SPECS.fetch(platform).map do |spec|
       file = package_root.join(spec.fetch("file"))
       file.dirname.mkpath
@@ -868,14 +1016,53 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
         format: spec.fetch("format"),
         has_alpha: false,
       }
-      spec.merge("sha256" => Digest::SHA256.file(file).hexdigest, "hasAlpha" => false)
+      normalized = spec.merge("sha256" => Digest::SHA256.file(file).hexdigest, "hasAlpha" => false)
+      if platform == "maccatalyst"
+        selector = spec.fetch("captureSelector")
+        nonce = Digest::SHA256.hexdigest("fixture capture nonce:#{selector}")
+        request = raw_capture_root.join("capture-request-evidence/#{selector}.json")
+        response = raw_capture_root.join("native-capture-evidence/#{selector}.json")
+        raw = raw_capture_root.join("raw-window-captures/#{selector}.png")
+        write_json(request, { "fixture" => "app request", "nonce" => nonce })
+        write_json(response, { "fixture" => "app response", "nonce" => nonce })
+        raw.dirname.mkpath
+        raw.binwrite("direct hierarchy fixture:#{selector}\n")
+        normalized["captureEvidence"] = {
+          "requestFile" => "evidence/raw-capture/#{request.relative_path_from(raw_capture_root)}",
+          "requestSha256" => Digest::SHA256.file(request).hexdigest,
+          "responseFile" => "evidence/raw-capture/#{response.relative_path_from(raw_capture_root)}",
+          "responseSha256" => Digest::SHA256.file(response).hexdigest,
+          "rawFile" => "evidence/raw-capture/#{raw.relative_path_from(raw_capture_root)}",
+          "rawSha256" => Digest::SHA256.file(raw).hexdigest,
+          "nonce" => nonce,
+          "captureApi" => "UIKit.UIView.drawHierarchy",
+          "captureSurface" => "live-catalyst-uiwindow-hierarchy",
+          "logicalViewPoints" => [1_280, 800],
+          "sourceDisplayScale" => 1.0,
+          "rasterizationScale" => 2,
+          "pixels" => [2_560, 1_600],
+          "afterScreenUpdates" => true,
+          "drawHierarchyComplete" => true,
+          "postCaptureResizePerformed" => false,
+          "rendererOpaque" => false,
+          "rendererPreferredRange" => "standard",
+        }
+      end
+      normalized
     end
     assert_equal expected_count, frames.length
-    evidence_path = package_root.join("evidence/raw-capture/capture.txt")
-    evidence_path.dirname.mkpath
+    evidence_path = raw_capture_root.join("capture.txt")
     evidence_path.binwrite("capture evidence for #{platform}\n")
     artifact_path = package_root.join("evidence/capture-artifact")
     artifact_path.binwrite("debug capture artifact bytes for #{platform}\n")
+    raw_evidence_records = raw_capture_root.glob("**/*", File::FNM_DOTMATCH).select do |path|
+      path.file? && !path.symlink?
+    end.sort_by { |path| path.relative_path_from(raw_capture_root).to_s }.map do |path|
+      {
+        "file" => "evidence/raw-capture/#{path.relative_path_from(raw_capture_root)}",
+        "sha256" => Digest::SHA256.file(path).hexdigest,
+      }
+    end
     metadata = {
       "schemaVersion" => 1,
       "status" => "unapproved-source-frozen-candidate",
@@ -898,10 +1085,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
           "file" => "evidence/capture-artifact",
           "sha256" => Digest::SHA256.file(artifact_path).hexdigest,
         },
-        {
-          "file" => "evidence/raw-capture/capture.txt",
-          "sha256" => Digest::SHA256.file(evidence_path).hexdigest,
-        },
+        *raw_evidence_records,
       ],
     }
     metadata_path = package_root.join("package-provenance.json")
@@ -922,15 +1106,34 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
 
   def capture_environment(platform)
     catalyst = platform == "maccatalyst"
+    if catalyst
+      return {
+        "kind" => "maccatalyst-uikit-hierarchy",
+        "xcodeVersion" => "26.6 (17F113)",
+        "operatingSystem" => "macOS 26.6.2 (25G83)",
+        "runtimeIdentifier" => nil,
+        "deviceIdentifier" => "host-mac",
+        "deviceModel" => "Mac",
+        "captureApi" => "UIKit.UIView.drawHierarchy",
+        "captureSurface" => "live-catalyst-uiwindow-hierarchy",
+        "logicalViewPoints" => [1_280, 800],
+        "sourceDisplayScale" => 1.0,
+        "rasterizationScale" => 2,
+        "pixels" => [2_560, 1_600],
+        "afterScreenUpdates" => true,
+        "postCaptureResizePerformed" => false,
+      }
+    end
+
     {
-      "kind" => catalyst ? "maccatalyst-host" : "simulator",
+      "kind" => "simulator",
       "xcodeVersion" => "26.6 (17F113)",
       "operatingSystem" => "macOS 26.6.2 (25G83)",
-      "runtimeIdentifier" => catalyst ? nil : "com.apple.CoreSimulator.SimRuntime.test",
-      "deviceIdentifier" => catalyst ? "host-mac" : "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
-      "deviceModel" => catalyst ? "Mac" : "Simulator",
-      "logicalWindowPoints" => catalyst ? [1280, 800] : nil,
-      "backingScale" => catalyst ? 2 : nil,
+      "runtimeIdentifier" => "com.apple.CoreSimulator.SimRuntime.test",
+      "deviceIdentifier" => "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+      "deviceModel" => "Simulator",
+      "logicalWindowPoints" => nil,
+      "backingScale" => nil,
     }
   end
 
@@ -939,18 +1142,97 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     approval_path.delete if reset && approval_path.exist?
     manifest_path = release_root.join("release-set.json")
     approval = {
-      "schemaVersion" => 1,
+      "schemaVersion" => 3,
       "status" => "approved-for-build8-upload",
       "uploadApproved" => true,
       "sourceCommit" => SOURCE_COMMIT,
       "releaseSetManifestSha256" => Digest::SHA256.file(manifest_path).hexdigest,
-      "reviewer" => "Release Owner",
-      "reviewedAtUtc" => "2026-08-20T01:00:00Z",
+      "dispatchActorGitHubLogin" => "release-owner",
+      "environmentApproval" => {
+        "schemaVersion" => 1,
+        "repository" => AppleScreenshotReleaseSetValidator::CANONICAL_REPOSITORY,
+        "runId" => 30_001,
+        "runAttempt" => 1,
+        "workflowFile" => ".github/workflows/apple-screenshot-release-ready.yml",
+        "headSha" => SOURCE_COMMIT,
+        "environment" => "ios-app-store-release",
+        "approvedReviewerGitHubLogins" => ["release-reviewer"],
+      },
+      "captureRun" => {
+        "schemaVersion" => 1,
+        "repository" => AppleScreenshotReleaseSetValidator::CANONICAL_REPOSITORY,
+        "runId" => 12_345,
+        "runAttempt" => 1,
+        "workflowFile" => AppleScreenshotReleaseSetValidator::CAPTURE_WORKFLOW_FILE,
+        "event" => "workflow_dispatch",
+        "headBranch" => "main",
+        "headSha" => SOURCE_COMMIT,
+        "status" => "completed",
+        "conclusion" => "success",
+        "completedAtUtc" => "2026-08-20T00:50:00Z",
+        "artifacts" => [
+          "UNAPPROVED-debug-simulator-ios-ipados-#{SOURCE_COMMIT}",
+          "UNAPPROVED-debug-simulator-tvos-#{SOURCE_COMMIT}",
+          "UNAPPROVED-debug-simulator-watchos-#{SOURCE_COMMIT}",
+          "UNAPPROVED-debug-simulator-visionos-#{SOURCE_COMMIT}",
+          "UNAPPROVED-debug-maccatalyst-direct-uikit-#{SOURCE_COMMIT}",
+        ].map.with_index do |name, index|
+          {
+            "name" => name,
+            "id" => index + 1,
+            "sizeInBytes" => 1024 + index,
+            "digest" => "sha256:#{Digest::SHA256.hexdigest(name)}",
+            "expired" => false,
+          }
+        end,
+      },
+      "approvals" => {
+        "visual" => {
+          "approved" => true,
+          "reviewer" => "release-reviewer",
+          "reviewedAtUtc" => "2026-08-20T00:57:00Z",
+        },
+        "privacy" => {
+          "approved" => true,
+          "reviewer" => "release-reviewer",
+          "reviewedAtUtc" => "2026-08-20T00:58:00Z",
+        },
+        "signedReleaseParity" => {
+          "approved" => true,
+          "reviewer" => "release-reviewer",
+          "reviewedAtUtc" => "2026-08-20T00:55:00Z",
+        },
+      },
+      "reviewedAtUtc" => "2026-08-20T00:58:00Z",
       "platforms" => AppleScreenshotReleaseSetValidator::REQUIRED_PLATFORMS.keys.map do |platform|
+        run_id = {
+          "ios-ipados" => 20_001,
+          "watchos" => 20_001,
+          "tvos" => 20_002,
+          "visionos" => 20_003,
+          "maccatalyst" => 20_004,
+        }.fetch(platform)
+        role = %w[ios-ipados watchos].include?(platform) ? "ios-ipados-watchos" : platform
+        signed_hash_platform = platform == "watchos" ? "ios-ipados" : platform
         {
           "platform" => platform,
-          "signedReleaseArtifactSha256" => Digest::SHA256.hexdigest("signed:#{platform}"),
+          "signedReleaseRunId" => run_id,
+          "signedReleaseRunAttempt" => 1,
+          "signedReleaseWorkflowFile" =>
+            AppleScreenshotReleaseSetValidator::SIGNED_RELEASE_WORKFLOW_FILES.fetch(platform),
+          "signedReleaseAttestationArtifactName" =>
+            "signed-release-attestation-#{role}-#{SOURCE_COMMIT}-#{run_id}-1",
+          "signedReleaseAttestationArtifactDigest" =>
+            "sha256:#{Digest::SHA256.hexdigest("attestation:#{role}")}",
+          "signedReleaseArtifactKind" =>
+            AppleScreenshotReleaseSetValidator::SIGNED_RELEASE_ARTIFACT_KINDS.fetch(platform),
+          "signedReleaseArtifactSha256" => Digest::SHA256.hexdigest("signed:#{signed_hash_platform}"),
+          "signedMarketingVersion" => "1.1",
+          "signedBuildNumber" => 8,
+          "signedDistributionMode" => "testflight-upload",
+          "signedReleaseAttestedAtUtc" => "2026-08-20T00:53:00Z",
           "signedBuildSourceCommit" => SIGNED_COMMIT,
+          "signedRunCompletedAtUtc" => "2026-08-20T00:54:00Z",
           "signedReleaseParityApproved" => true,
           "parityReviewedAtUtc" => "2026-08-20T00:55:00Z",
         }

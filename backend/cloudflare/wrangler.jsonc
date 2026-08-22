@@ -95,9 +95,8 @@
       // Cloudflare account and stable after the first production deployment.
       "namespace_id": "62228001",
       "simple": {
-        // Applies once per route per Cloudflare location, before parsing a
-        // request body. This native binding remains required for the public
-        // Workers.dev device API.
+        // Reserved for the route-wide circuit breaker. Only requests admitted
+        // by the lower per-client binding below consume this higher allowance.
         "limit": 300,
         "period": 60
       }
@@ -114,9 +113,9 @@
     },
     {
       "name": "APP_ATTEST_CHALLENGE_RATE_LIMIT",
-      // New App Attest keys are caller supplied until Apple verifies a proof.
-      // Keep this separate route-wide budget stable and account-unique so key
-      // rotation cannot turn challenge issuance into unbounded D1 writes.
+      // Historical binding name: this is the route-scoped client-IP pseudonym
+      // budget for every public endpoint, including App Attest challenge
+      // issuance. Keep it stable and account-unique.
       "namespace_id": "62228003",
       "simple": {
         "limit": 60,

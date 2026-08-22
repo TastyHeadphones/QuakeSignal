@@ -7,7 +7,7 @@ UNDERSTAND WHAT IS NEARBY
 Choose a city or use your current location to review distance, direction, magnitude, available intensity, depth, timing, and epicenter context on the map.
 
 FOREGROUND SAFETY CONTEXT
-Apple does not list Push Notifications or Time Sensitive Notifications as supported visionOS provisioning capabilities. QuakeSignal for Apple Vision Pro therefore does not register for APNs or App Attest and does not claim background emergency-alert delivery. While the app is open, it refreshes earthquake information and can present a qualifying live warning in the app with your selected local alert sound. Close or background the app and that foreground monitoring stops.
+Apple lists App Attest for visionOS, but does not list Push Notifications or Time Sensitive Notifications as supported visionOS provisioning capabilities. QuakeSignal's protected alert registration requires both App Attest and APNs. Because APNs is unavailable on this target, QuakeSignal for Apple Vision Pro does not start that registration path or claim background emergency-alert delivery. While the app is open, it refreshes earthquake information and can present a qualifying live warning in the app with your selected local alert sound. Close or background the app and that foreground monitoring stops.
 
 PREPARE OFFLINE
 Keep drop-cover-hold-on guidance, situation-specific safety actions, an emergency-kit checklist, and family check-in notes available without a network connection.

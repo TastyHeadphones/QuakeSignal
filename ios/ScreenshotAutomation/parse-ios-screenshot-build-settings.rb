@@ -25,6 +25,17 @@ module QuakeSignalIOSBuildSettings
       raise Error, "target build-settings record has an unexpected schema"
     end
     values = record.fetch("buildSettings")
+    code_signing_allowed = values.fetch("CODE_SIGNING_ALLOWED")
+    code_signing_required = values.fetch("CODE_SIGNING_REQUIRED")
+    code_sign_identity = if values.key?("CODE_SIGN_IDENTITY")
+                           values.fetch("CODE_SIGN_IDENTITY")
+                         elsif code_signing_allowed == "NO" && code_signing_required == "NO"
+                           ""
+                         else
+                           raise Error,
+                                 "omitted CODE_SIGN_IDENTITY requires CODE_SIGNING_ALLOWED=NO " \
+                                 "and CODE_SIGNING_REQUIRED=NO"
+                         end
     result = {
       "target" => target,
       "targetBuildDirectory" => values.fetch("TARGET_BUILD_DIR"),
@@ -38,9 +49,9 @@ module QuakeSignalIOSBuildSettings
       "sdkRoot" => values.fetch("SDKROOT"),
       "architectures" => values.fetch("ARCHS"),
       "onlyActiveArchitecture" => values.fetch("ONLY_ACTIVE_ARCH"),
-      "codeSigningAllowed" => values.fetch("CODE_SIGNING_ALLOWED"),
-      "codeSigningRequired" => values.fetch("CODE_SIGNING_REQUIRED"),
-      "codeSignIdentity" => values.fetch("CODE_SIGN_IDENTITY"),
+      "codeSigningAllowed" => code_signing_allowed,
+      "codeSigningRequired" => code_signing_required,
+      "codeSignIdentity" => code_sign_identity,
       "indexStoreEnabled" => values.fetch("COMPILER_INDEX_STORE_ENABLE"),
       "buildDirectory" => values.fetch("BUILD_DIR"),
       "buildRoot" => values.fetch("BUILD_ROOT"),
@@ -75,8 +86,10 @@ module QuakeSignalIOSBuildSettings
     unless %w[arm64 x86_64].include?(result.fetch("architectures"))
       raise Error, "build-settings architectures is not one exact supported host architecture"
     end
+    unless result.fetch("onlyActiveArchitecture") == "NO"
+      raise Error, "build-settings onlyActiveArchitecture is not the exact deterministic screenshot value"
+    end
     expected_flags = {
-      "onlyActiveArchitecture" => "YES",
       "codeSigningAllowed" => "NO",
       "codeSigningRequired" => "NO",
       "codeSignIdentity" => "",

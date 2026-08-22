@@ -212,7 +212,7 @@ struct EpicenterMapView: View {
 
     private func requestAndFocusCurrentLocation() {
         isWaitingToFocusLocation = true
-        locationManager.requestCurrentLocation()
+        locationManager.requestCurrentLocation(purpose: .mapFocus)
     }
 
     private func focusMap(on coordinate: CLLocationCoordinate2D) {
@@ -223,7 +223,10 @@ struct EpicenterMapView: View {
     }
 
     private var canShowUserLocation: Bool {
-        locationManager.authorizationStatus.allowsQuakeSignalLocation
+        // Authorization alone is not current intent. Render MapKit's user
+        // annotation only after the subscription flow or this explicit Map
+        // control has produced a usable one-shot fix.
+        locationManager.currentLocation != nil
     }
 
     private var locatedEvents: [EEWEvent] {

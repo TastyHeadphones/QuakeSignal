@@ -93,8 +93,12 @@ their canonical event rows, and an operational cleanup failure can delay
 deletion. It exposes no public
 earthquake-feed or normalized-event API and neither sells nor licenses the
 feed. Apple Watch, tvOS, visionOS, and Mac Catalyst are foreground/local-only
-and do not independently register for APNs or App Attest. The separate Tauri
-client and Designed-for-iPad-on-Mac route are outside this release.
+and do not independently register for APNs; their notification paths do not
+invoke App Attest. This is a product-path statement, not a platform-capability
+claim: Apple lists App Attest for visionOS, but QuakeSignal's protected alert
+registration requires both App Attest and APNs, so the visionOS path remains
+disabled when APNs is unavailable. The separate Tauri client and Designed-for-
+iPad-on-Mac route are outside this release.
 
 The clients and relay use bounded connections and retries and do not bypass
 access controls or documented limits. The release is free, contains no

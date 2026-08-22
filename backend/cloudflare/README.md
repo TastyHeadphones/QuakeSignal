@@ -20,9 +20,11 @@ quakesignal-alert-delivery Queue ──► bounded Queue consumer ──► rela
 The Queue messages contain a normalized earthquake snapshot, notification
 reason, and an internal SQLite cursor. They never contain an APNs device token.
 The consumer has one configured concurrent invocation, and the relay sends at
-most two APNs requests concurrently. Confirmed deliveries are recorded for 14 days so a
-retry does not intentionally duplicate a particular event revision for a
-device; APNs collapse IDs cover the small response/write race.
+most two APNs requests concurrently. After each such provider batch, every
+APNs 2xx crosses a bounded Durable Object journal before recipient-failure D1
+cleanup or any later APNs batch begins. D1 then records the acceptance for 14
+days so a retry does not intentionally duplicate a particular event revision
+for a device; APNs acceptance does not prove display or user receipt.
 
 Live WebSocket events first enter a small Durable Object journal; it coalesces
 each event's revisions safely and reports source freshness only after the D1
@@ -71,9 +73,10 @@ other route groups on the page to finish. APNs `429
 TooManyRequests` and `BadDeviceToken` remain recipient-scoped; provider-token
 update throttling remains page-scoped. An `ExpiredProviderToken` clears the
 relay's cached JWT before a later retry. Only an APNs `410` with a valid
-invalidation timestamp removes a subscription, and the Worker preserves a
-registration refreshed after that timestamp. A malformed 410 is quarantined
-instead of risking deletion.
+invalidation timestamp makes the sent snapshot eligible for cleanup. D1 then
+removes only its exact opaque registration revision, so a same-millisecond or
+clock-skewed authenticated renewal with a different revision is preserved. A
+malformed 410 is quarantined instead of risking deletion.
 
 The DLQ consumer has a separate persistence safety boundary. If D1 cannot
 store its sanitized incident record, the consumer sends only the queue ID,
@@ -96,10 +99,49 @@ alert, and the recovery runbook before Cloudflare's consumerless-DLQ retention
 ends; see
 [`docs/CLOUDFLARE_PRODUCTION.md`](../../docs/CLOUDFLARE_PRODUCTION.md#terminal-dlq-fallback-recovery).
 
-Each page has a persisted deadline. New, updated, cancelled, and training EEW
-work expires after 30 minutes; final EEW and earthquake reports after 60
-minutes. The 30-minute EEW envelope leaves one real retry window after APNs'
-15-minute 5XX retry floor. APNs itself still receives `apns-expiration: 0`, so
+The APNs delivery journal is also a readiness boundary. Before a small provider
+batch starts, one record durably captures its exact queued event/delivery data
+and one complete sent registration snapshot: the raw APNs token and SHA-256
+hash, opaque registration revision and optional App Attest key ID,
+server-selected environment/topic/platform route, coarse matching area,
+preferences, sources, registration timestamps, and the original lineage
+revision plus a stable original-recipient index for each actual contact. An
+observed batch can additionally contain
+the nullable APNs response ID, HTTP status/reason, accepted or invalidation
+timestamp, `Retry-After`, and bounded cleanup/disposition flags. The global
+relay serializes APNs batches, retains at most 128 combined intent/acceptance
+records of at most 64 KiB each, and writes conservative
+`unknown_provider_outcome` lifecycle evidence for every still-consenting active
+warning recipient before each bounded provider contact. A known APNs 2xx
+promotes that evidence and writes exact delivery deduplication; possible
+acceptance never fabricates a dedupe row. If an isolate stops immediately after
+APNs accepts a request, startup/alarm recovery can re-dispatch the current
+eligible route with the stable collapse ID; this is at-least-once. Recovery
+uses at most the initial contact plus five later contacts per original recipient, persists the latest
+contact-observation time and the next eligible retry time before network I/O,
+honors a longer provider `Retry-After`, and lets unrelated alerts proceed while
+one intent waits. Valid, integrity-matched records become eligible for safe
+retirement after 14 days; a D1 outage or consent race can delay deletion until
+the conservative evidence transaction succeeds. Malformed or
+hash/key-mismatched records are preserved for operator repair, can exceed that
+age until repaired, and make `/healthz` return `503` with a
+nonzero or unavailable `delivery.pendingApnsAcceptanceBatches`; they are not
+silently treated as delivered. The relay reconciles this journal before every
+outbox acknowledgement, supersession, expiry, or DLQ terminalization, and on
+startup/alarm. A not-yet-due intent is isolated rather than globally blocking
+independent provider work; its already-durable possible-contact evidence keeps
+later lifecycle handling conservative. Replay respects current source consent
+and deletion fences:
+ordinary token rotation or a fresh exact-token key rebind preserves continuity,
+while explicit removal, empty-source remediation, or stale-registration
+retention blocks the retired authenticated lineage from being resurrected;
+current magnitude/location/training/quiet-hour eligibility is reapplied before
+redispatch. Work that has reached its persisted safety deadline is not sent,
+but any still-consenting possible-contact lineage is retained for closure.
+
+Each page has a persisted deadline. New and updated EEW work expires after 10
+minutes; final/cancel EEW and earthquake reports after 60 minutes; controlled
+training work after 30 minutes. APNs itself still receives `apns-expiration: 0`, so
 Apple never retains an old emergency alert for an offline device. The deadline
 uses the event report/origin timestamp but is never later than the same cap
 after durable creation, so future source-clock skew cannot extend retries. An
@@ -165,8 +207,31 @@ preference values and the shorter delivery deadline for urgent EEW warnings.
 `0011_authenticated_app_routes.sql` backfills the current iOS App Attest
 identity, APNs topic, and platform on every registration and adds the route
 audit index. `0012_event_retention_index.sql` adds the revision timestamp index
-used by the 89-day-cutoff event/revision cleanup. Migrations `0008` through
-`0012` are required by this Worker revision.
+used by the 89-day-cutoff event/revision cleanup.
+`0013_alert_lifecycle_and_incident_retention.sql` adds pseudonymous
+active-warning recipient continuity, unique opaque registration revisions and
+rolling-Worker revision triggers, fail-closed unfenced-delete protection,
+bounded token-hash/processed-revision lookup,
+authenticated continuity-fence lineage, resolved incident/page-failure
+retention indexes, and a fresh migration-time retention start for older
+resolved rows whose actual resolution time is unknowable. It also deletes legacy registrations whose
+stored source array is explicitly empty, together with raw-token delivery
+deduplication and orphaned App Attest key state; it never silently enables a
+source. SQLite cannot reverse the one-way hashes in an already-existing
+per-device failure row, so those residual hashes remain on their disclosed
+ordinary/resolved 14-day or active `BadDeviceToken` retention. During the
+rolling compatibility window, legacy invalid-token rows without an attachable
+revision are conservatively pinned to the newest registration clock until a
+new-Worker authenticated renewal resolves the matching hash; this prevents a
+known-invalid token from silently re-entering fanout. Old isolates that attempt
+an unfenced delete fail and must retry after deployment convergence.
+Migrations `0008` through `0013` are required by this
+Worker revision.
+
+Final/cancel continuity deliberately ignores revised magnitude and location
+estimates after an APNs-accepted—or durably possible—active-warning contact and
+survives ordinary APNs token rotation. It does not override current source consent: a registration
+that no longer selects the event's JMA feed is excluded before lifecycle lookup.
 
 The protected **Cloudflare Worker → Run workflow → deploy_production** job is
 the sole normal route for remote D1 migrations and `wrangler deploy`. It runs
@@ -350,8 +415,11 @@ npx wrangler secret put APNS_BUNDLE_ID
   `alert_delivery_incidents` and then acknowledges the DLQ message. It never
   automatically replays an alert. A nonzero active incident count makes
   `/healthz` return `503` with `delivery.status: "degraded"`; resolve the
-  incident deliberately in D1 and only then manually redrive an alert if it is
-  still safe and useful to do so.
+  incident deliberately in D1 by setting `status = 'resolved'` and
+  `resolved_at_utc` to the same reviewed current UTC timestamp in one guarded
+  update of the exact `queue_message_id` (or exact page-failure `outbox_id`). A
+  status-only manual update never starts retention. Only then manually redrive
+  an alert if it is still safe and useful to do so.
 - If that initial DLQ D1 write fails, the Worker retains token-free incident
   evidence in the global Durable Object and acknowledges the DLQ message only
   after that independent durable write. The relay retries it into D1 before
@@ -364,12 +432,19 @@ npx wrangler secret put APNS_BUNDLE_ID
   before Cloudflare's consumerless-DLQ retention expires. A production
   deployment does not attest that the monitor is deployed or healthy; it does
   not claim to query Queue depth or dashboard alert wiring automatically.
+- A nonzero or unavailable `delivery.pendingApnsAcceptanceBatches` also makes
+  `/healthz` return `503`. It means a bounded pre-send provider intent needs
+  recovery, a rolling post-2xx record still needs D1 replay, or its integrity
+  shape/hash/storage key needs operator
+  repair. Do not delete it merely to clear health; outbox acknowledgement,
+  supersession, expiry, and DLQ finalization all wait behind this gate.
 - Active per-device quarantines or transient retry failures also make
   `/healthz` return `503`. They store only a token hash, delivery/event
   metadata, APNs status, and reason; resolve the underlying
   topic/payload/configuration issue and mark the D1 row resolved only after
-  review. A later confirmed delivery resolves its matching failure
-  automatically.
+  review. An immediate later APNs acceptance resolves only matching evidence
+  whose recorded provider-response time is no later; delayed journal replay
+  restores acceptance state without clearing active evidence by D1 order alone.
 - Active `alert_delivery_page_failures` also make `/healthz` return `503`.
   They identify provider/topic/payload failure for one alert page without a
   token hash. A successful later page resolves the record; a final DLQ record
@@ -424,11 +499,23 @@ npx wrangler secret put APNS_BUNDLE_ID
   opaque App Attest key ID and UTC timestamps—never an APNs token, proof, or
   request body—and becomes eligible for deletion after 14 days. The next
   successful routine cleanup removes it; an operational cleanup failure can
-  delay deletion. The always-available immediate and
+  delay deletion. Immediately before either production training contact, the
+  relay also writes a separate pseudonymous D1 provider-attempt fence containing
+  a random attempt ID, the exact opaque registration revision, a SHA-256 token
+  hash, synthetic training event/outbox references, and admission/reconciliation
+  timestamps. It contains no raw token, proof, request body, preferences, or
+  location. Device mutation fails closed while that exact marker is unresolved;
+  provider settlement resolves it, while a crash releases it after 60 seconds
+  without claiming APNs acceptance. A resolved marker becomes eligible for
+  deletion 14 days after admission. The always-available immediate and
   flag-gated delayed modes share this same claim. The delayed mode stores only the opaque key ID, due
   time, and at-most-once state in a private per-key Durable Object; it rechecks
-  the current D1 ownership and the production flag before APNs, drops jobs more
-  than 30 seconds late, and never retries an APNs result.
+  the current D1 ownership and the production flag inside the global APNs/D1
+  decision lane, then rechecks its absolute deadline after authorization and
+  collapse-ID work immediately before APNs. It drops jobs more than 30 seconds
+  late and never retries an APNs result. Production training shares causal
+  ordering with alert delivery but does not enter the emergency-alert intent
+  journal.
 - Device registrations are refreshed by the client and become eligible for
   deletion after they have not been refreshed for 90 days. The next successful
   daily maintenance pass removes stale registrations and matching
@@ -437,28 +524,73 @@ npx wrangler secret put APNS_BUNDLE_ID
   deletion. App Attest challenges become invalid within five minutes, and their
   expired rows are removed by the next successful routine cleanup. When the
   last registration for a key is removed, that integrity record is deleted too.
-  The separate token-free production-training claim, delivery-deduplication
-  records, resolved page-failure evidence, terminal outbox snapshots, and
-  delivery-failure token hashes become eligible for deletion after 14 days and
+  The separate token-free production-training claim, resolved production-training
+  provider-attempt fences, delivery-deduplication records, alert-lifecycle
+  recipient rows, terminal outbox snapshots, and
+  ordinary/resolved delivery-failure token hashes and processed-registration
+  revision fences become eligible for deletion after 14 days and
   are removed by the next successful routine cleanup; an operational cleanup
-  failure can delay deletion.
+  failure can delay deletion. Resolved page-failure and terminal-DLQ incident
+  evidence uses a 14-day period measured from `resolved_at_utc`. A later
+  confirmed page attempt automatically resolves its matching provider-page
+  failure; terminal-Queue incidents require an operator to set both
+  `status='resolved'` and `resolved_at_utc` after verified recovery. Alert
+  expiry alone never starts either retention clock.
+  Active `BadDeviceToken` quarantine/retry hashes instead follow a 90-day
+  last-seen window aligned with stale registration cleanup unless later
+  registration or APNs acceptance resolves them first.
 - Device APIs use JSON request bodies and `Cache-Control: no-store`; there is
   intentionally no permissive browser CORS policy. Native iOS networking is
-  unaffected. Before parsing device bodies, `DEVICE_API_RATE_LIMIT` allows at
-  most 300 requests/minute for each method/path at a Cloudflare location,
-  including `GET /healthz` before the relay is activated.
+  unaffected. Before routing every public request—including root/legal pages,
+  `OPTIONS`, health, disabled endpoints, and normalized unmatched paths—the historically named
+  `APP_ATTEST_CHALLENGE_RATE_LIMIT` first allows at most 60 requests/minute for
+  each normalized method/route family plus a route-scoped
+  SHA-256 pseudonym derived only from Cloudflare's authenticated client-IP
+  header at a Cloudflare location, including `GET /healthz` before the relay is
+  activated. Missing or malformed headers share one bounded fallback bucket.
+  Only requests admitted by that client/fallback bucket consume the separate
+  `DEVICE_API_RATE_LIMIT` 300/minute route-wide key for the same normalized family,
+  so one client cannot consume more than 60 of that route capacity.
   `DEVICE_MUTATION_RATE_LIMIT` then allows at most 8 requests/minute for each
-  method/path plus SHA-256-derived App Attest key ID and/or bounded APNs token
-  during the App Attest rollout. Before challenge-body parsing, the dedicated
-  `APP_ATTEST_CHALLENGE_RATE_LIMIT` also allows at most 60 requests/minute for
-  the fixed `POST /v1/app-attest/challenge` route key, so a caller cannot evade
-  its D1-write budget by rotating a proposed key ID. Rate-limit logs contain only the route and
-  actor category, never a raw key, token, or IP address. A quota or binding
+  mutation family plus SHA-256-derived App Attest key ID and/or bounded APNs token
+  during the App Attest rollout. Before challenge-body parsing, the same
+  60/minute per-client binding uses the challenge route-scoped pseudonym and
+  still runs before the shared 300/minute
+  circuit breaker, so one blocked IP cannot drain challenge capacity by
+  rotating a proposed key ID. Rate-limit keys are native 60-second edge
+  counters and are never written to D1 or application logs. Rate-limit logs
+  contain only the route and actor category, never a raw key, token, IP address,
+  or client-IP pseudonym. A quota or binding
   failure returns a `429` with `Cache-Control: no-store` and fails the public
   mutation closed. These native counters are per-location and eventually
   consistent, so they are defense in depth alongside the required one-time App
   Attest verification. Do not replace them with a client-shipped static
   secret.
+- APNs `BadDeviceToken` is a documented terminal token outcome. The Worker
+  conditionally deletes only the exact opaque registration revision sent to
+  APNs. Successful deletion removes the invalid device, its orphaned App
+  Attest verifier, and active per-token evidence, so later fanout stops without
+  degrading readiness. A separate processed-revision fence retains the opaque
+  revision, optional SHA-256 token hash, optional opaque App Attest key ID,
+  random decision ID, decision kind, replay-blocking flag, and timestamp for
+  14 days so a duplicate stale response cannot act on a reincarnated row; it
+  never contains the raw APNs token, location, proof, or request body.
+  The next client registration can use the existing one-retry key-replacement/
+  re-attestation path if the verifier is absent. A same-token refresh serialized
+  before the APNs cleanup transaction is preserved but its token hash is
+  quarantined across delivery IDs and degrades readiness unless that sent
+  revision was already processed. An authenticated same-token renewal
+  serialized after that transaction resolves the active quarantine while
+  retaining the marker. An APNs acceptance whose D1 success-recording batch
+  carries a provider-response timestamp no earlier than existing
+  `BadDeviceToken` evidence may resolve it; a later observed rejection remains
+  active even if its D1 write serializes first or clocks differ between colos.
+  The active hash follows a 90-day last-seen window aligned with stale
+  registration cleanup, and its last-seen value is never earlier than the
+  preserved registration's update time. Processed fences use the ordinary
+  14-day evidence window. If D1 cleanup/evidence persistence is unavailable,
+  the bounded Queue attempt may issue APNs again because there is no separate
+  cleanup-only work item.
 - App Attest proofs, certificates, receipts, APNs tokens, raw locations, and
   assertion bodies are never returned or logged. While a registration is
   active, the database retains only the opaque App Attest key identifier,

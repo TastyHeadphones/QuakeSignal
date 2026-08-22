@@ -119,11 +119,13 @@ interface Env extends AlertDeliveryQueueNameEnvironment, AppAttestPolicyEnvironm
    */
   TRAINING_PUSH_SCHEDULER: DurableObjectNamespace;
   ALERT_DELIVERY_QUEUE: Queue<AlertDeliveryMessage>;
+  /** Higher route-wide circuit breaker, used only after the client budget. */
   DEVICE_API_RATE_LIMIT: RateLimit;
   DEVICE_MUTATION_RATE_LIMIT: RateLimit;
   /**
-   * A route-wide pre-attestation budget. Its key never contains caller input,
-   * so rotating a proposed App Attest key cannot create a fresh quota.
+   * Historical name for every public route's lower pre-proof client budget.
+   * Its pseudonymous key is derived only from Cloudflare's authenticated
+   * client-IP header, never caller key input.
    */
   APP_ATTEST_CHALLENGE_RATE_LIMIT: RateLimit;
   APNS_PRIVATE_KEY?: string;
@@ -175,6 +177,8 @@ interface DeviceRow {
   app_identity?: string | null;
   apns_topic?: string | null;
   app_platform?: string | null;
+  /** Added by migration 0013; optional for focused legacy-row fixtures. */
+  registration_revision?: string;
   created_at: string;
   updated_at: string;
 }
@@ -221,9 +225,12 @@ interface UpstreamDataReadinessCandidate {
   durableIntentRecorded: boolean;
 }
 const APNS_MAX_CONCURRENT_DELIVERIES = 2;
-// Keep one queue message comfortably below Workers' subrequest limits: a page
-// has at most 20 APNs requests plus a small, fixed number of D1 operations.
-const DEVICE_DELIVERY_PAGE_SIZE = 20;
+// Keep one queue message comfortably below Workers' subrequest limits. A
+// single-recipient page leaves conservative headroom under the Workers Free
+// 50-query invocation budget even when admission, terminal cleanup, outcome
+// reconciliation, gates, and one child-page append all run. Routine outbox and
+// durability maintenance are alarm-owned and never composed with this page.
+const DEVICE_DELIVERY_PAGE_SIZE = 1;
 const DEVICE_REGISTRATION_MAX_AGE_MS = 90 * 24 * 60 * 60_000;
 const DELIVERY_DEDUP_RETENTION_MS = 14 * 24 * 60 * 60_000;
 // Normalized upstream facts are private relay state, not a public historical
@@ -318,8 +325,29 @@ const LIVE_SNAPSHOT_RESUME_INTERVAL_MS = 5_000;
 // separate from live-ingest journaling so recovery can finalize the outbox
 // before any ordinary Queue replay.
 const DLQ_PERSISTENCE_FALLBACK_PREFIX = "dlq-persistence-fallback:";
-const DLQ_PERSISTENCE_FALLBACK_REPLAY_BATCH_SIZE = 50;
-const OUTBOX_REPLAY_BATCH_SIZE = 50;
+const DLQ_PERSISTENCE_FALLBACK_REPLAY_BATCH_SIZE = 8;
+// APNs and D1 cannot share a transaction. Before contacting APNs, the global
+// relay durably records one exact single-recipient page intent. It removes it
+// only after every observed provider outcome and accepted lifecycle evidence
+// crosses D1. A crash in the provider/D1 gap therefore becomes an idempotent,
+// collapse-ID-bounded retry instead of lost provenance. Rolling version-1
+// post-2xx records share this prefix/capacity and remain replayable.
+const APNS_ACCEPTANCE_JOURNAL_PREFIX = "apns-acceptance:v1:";
+const APNS_ACCEPTANCE_JOURNAL_MAX_RECORDS = 128;
+const APNS_ACCEPTANCE_JOURNAL_MAX_RECORD_BYTES = 64 * 1_024;
+const APNS_ACCEPTANCE_JOURNAL_REPLAY_BATCH_SIZE = 1;
+const APNS_ACCEPTANCE_JOURNAL_MAX_AGE_MS = DELIVERY_DEDUP_RETENTION_MS;
+// Match the primary Queue's initial attempt plus five configured retries.
+// Once this budget is reserved, recovery performs only D1 terminalization and
+// can never turn a persistent provider failure into an unbounded alarm loop.
+const APNS_DELIVERY_INTENT_MAX_PROVIDER_ATTEMPTS = 6;
+// A production training request uses the same transaction-time registration
+// fence as alert delivery, but it has no Queue-owned journal to recover. The
+// provider request itself is bounded to twenty seconds; release only a crashed
+// training fence after a full minute so no still-running request can overlap a
+// later registration mutation.
+const TRAINING_APNS_ATTEMPT_RECOVERY_MS = 60_000;
+const OUTBOX_REPLAY_BATCH_SIZE = 8;
 // A normal relay alarm also reconciles journals and runs fallback ingestion.
 // Limiting routine Queue hand-off to eight rows leaves headroom below the
 // Workers Free 50-internal-subrequest budget: each row needs a claim, Queue
@@ -437,6 +465,8 @@ const APNS_TRANSIENT_RETRY_DELAY_SECONDS = 15 * 60;
 const DEFAULT_QUEUE_RETRY_DELAY_SECONDS = 60;
 const MAX_QUEUE_RETRY_DELAY_SECONDS = 24 * 60 * 60;
 const DELIVERY_RETRY_DELAY_HEADER = "x-quakesignal-retry-delay-seconds";
+const DELIVERY_MAINTENANCE_DEFERRED_HEADER =
+  "x-quakesignal-outbox-maintenance-deferred";
 const DEFAULT_ALERT_DELIVERY_QUEUE_NAME = "quakesignal-alert-delivery";
 const DEFAULT_ALERT_DELIVERY_DLQ_NAME = "quakesignal-alert-delivery-dlq";
 // The terminal evidence queue deliberately has no consumer. Cloudflare keeps
@@ -459,17 +489,54 @@ const REPORT_DELIVERY_TTL_MS = 60 * 60_000;
 interface ApnsDeliveryResult {
   ok: boolean;
   apnsId: string | null;
+  /** Worker receipt time for APNs' response; present on accepted deliveries. */
+  acceptedAtUtc?: string;
   status?: number;
   apnsReason?: string | null;
   invalidationTimestampMs?: number | null;
   retryAfterSeconds?: number | null;
-  /** An APNs 410/Unregistered response is the only deletion signal. */
+  /** APNs has authoritatively invalidated this exact registration snapshot. */
   terminalUnregistration?: boolean;
+  /** APNs rejected the device token and documents that it must not be retried. */
+  terminalInvalidToken?: boolean;
   /** Never delete on a malformed 410 response without its safety timestamp. */
   unregistrationTimestampMissing?: boolean;
-  /** A newer local registration superseded APNs' invalidation timestamp. */
+  /** Deletion completed, no row remains, or a newer registration won the race. */
   terminalResolved?: boolean;
+  /** The exact registration snapshot sent to APNs was actually deleted. */
   deactivated?: boolean;
+  /** A newer same-token row was preserved and atomically quarantined in D1. */
+  badDeviceTokenQuarantined?: boolean;
+}
+
+interface ProductionTrainingRelayRequest {
+  token: string;
+  registrationRevision: string;
+  appAttestKeyId: string;
+  kind: "immediate" | "delayed";
+  deadlineUtc: string;
+  collapseId: string;
+}
+
+function isProductionTrainingRelayRequest(
+  value: unknown,
+): value is ProductionTrainingRelayRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Partial<ProductionTrainingRelayRequest>;
+  return (
+    Object.keys(value).length === 6 &&
+    isValidDeviceToken(candidate.token) &&
+    typeof candidate.registrationRevision === "string" &&
+    candidate.registrationRevision.length > 0 &&
+    candidate.registrationRevision.length <= 256 &&
+    canonicalizeAppAttestKeyId(candidate.appAttestKeyId)?.keyId ===
+      candidate.appAttestKeyId &&
+    (candidate.kind === "immediate" || candidate.kind === "delayed") &&
+    typeof candidate.deadlineUtc === "string" &&
+    Number.isFinite(Date.parse(candidate.deadlineUtc)) &&
+    typeof candidate.collapseId === "string" &&
+    /^quake-[0-9a-f]{56}$/.test(candidate.collapseId)
+  );
 }
 
 export type AppleAppPlatform =
@@ -487,11 +554,98 @@ export interface AuthenticatedAppRoute {
   platform: AppleAppPlatform;
 }
 
-type RoutedDeviceRecord = DeviceRecord & AuthenticatedAppRoute;
+type RoutedDeviceRecord = DeviceRecord &
+  AuthenticatedAppRoute & {
+    appAttestKeyId: string | null;
+    registrationRevision: string;
+  };
 
 interface PreparedDelivery {
   device: RoutedDeviceRecord;
   tokenHash: string;
+}
+
+interface AcceptedDelivery extends PreparedDelivery {
+  acceptedAtUtc: string;
+}
+
+interface AcceptedDeliveryEvidence {
+  token: string;
+  tokenHash: string;
+  snapshotRegistrationRevision: string;
+  snapshotAppAttestKeyId: string | null;
+  firstAcceptedAtUtc: string;
+  lastAcceptedAtUtc: string;
+}
+
+interface ApnsIntentObservedBatch {
+  /** Relay observation after every provider promise in this batch settled. */
+  observedAtUtc: string;
+  /** Exact routes and original lineage identities contacted in this attempt. */
+  deliveries: MappedApnsIntentRecipient[];
+  /** Results are positionally aligned with this attempt's deliveries. */
+  results: ApnsDeliveryResult[];
+}
+
+interface PendingApnsAcceptanceRecord {
+  version: 1;
+  writeId: string;
+  deliveryId: string;
+  eventRef: string;
+  sourceId: ApnsRelaySourceId;
+  reason: NotifyReason;
+  createdAtUtc: string;
+  deliveries: AcceptedDeliveryEvidence[];
+}
+
+interface PendingApnsDeliveryIntentRecord {
+  version: 2;
+  writeId: string;
+  createdAtUtc: string;
+  /** Monotonic attempt sequence; recipient-specific counters enforce budget. */
+  providerAttempts: number;
+  /** Initial admitted send plus at most five contacts per original recipient. */
+  recipientProviderAttempts: Record<string, number>;
+  /** Latest reserved provider-contact observation for lifecycle retention. */
+  lastProviderAttemptAtUtc: string;
+  /** Earliest instant where recovery may reserve another provider contact. */
+  nextProviderAttemptAtUtc: string;
+  /** Per-contacted revision provider backoff; uncontacted peers remain due. */
+  recipientRetryNotBeforeUtc: Record<string, string>;
+  /** D1 classified the current no-observed-response attempt as unknown. */
+  unobservedAttemptReconciled: boolean;
+  /**
+   * Equals lastProviderAttemptAtUtc only after D1 durably records conservative
+   * lifecycle evidence for that reserved contact. Null forbids provider I/O.
+   */
+  lifecycleEvidencePreparedAtUtc: string | null;
+  /**
+   * Compact provider outcomes durably captured before any fallible D1
+   * acceptance, cleanup, or incident write. Recovery reconciles these
+   * outcomes without contacting APNs again.
+   */
+  observedBatch: ApnsIntentObservedBatch | null;
+  message: AlertDeliveryMessage;
+  deliveries: PreparedDelivery[];
+}
+
+interface MappedApnsIntentRecipient {
+  delivery: PreparedDelivery;
+  /** Stable position in the immutable original intent recipient array. */
+  originDeliveryIndex: number;
+  snapshotRegistrationRevision: string;
+}
+
+interface ApnsIntentRecipientResolution {
+  /** Current registrations that retain source consent and lineage continuity. */
+  sourceConsenting: MappedApnsIntentRecipient[];
+  /** Subset still eligible and safe for a provider redispatch now. */
+  redispatch: MappedApnsIntentRecipient[];
+}
+
+interface ApnsDeliveryIntentHandle {
+  storageKey: string;
+  writeId: string;
 }
 
 /** A JSON-safe event snapshot. Raw upstream payloads never enter Queues. */
@@ -801,6 +955,8 @@ export interface DeliveryReadinessInput {
    * set until the relay atomically replays the record into D1.
    */
   pendingDlqPersistenceFallbacks: boolean | null;
+  /** APNs batches or consent-removal token handoffs awaiting safe replay. */
+  pendingApnsAcceptanceBatches: number | null;
   activePageFailures: number | null;
   activeQuarantinedFailures: number | null;
   activeRetryFailures: number | null;
@@ -826,6 +982,8 @@ export function deliveryReadinessStatus(
     input.activeDlqIncidents > 0 ||
     input.pendingDlqPersistenceFallbacks === null ||
     input.pendingDlqPersistenceFallbacks ||
+    input.pendingApnsAcceptanceBatches === null ||
+    input.pendingApnsAcceptanceBatches > 0 ||
     input.activePageFailures === null ||
     input.activePageFailures > 0 ||
     input.activeQuarantinedFailures === null ||
@@ -1501,6 +1659,361 @@ function isAlertDeliveryMessage(value: unknown): value is AlertDeliveryMessage {
   );
 }
 
+function isAcceptedDeliveryEvidence(
+  value: unknown,
+): value is AcceptedDeliveryEvidence {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const evidence = value as Partial<AcceptedDeliveryEvidence>;
+  return (
+    typeof evidence.token === "string" &&
+    evidence.token.length > 0 &&
+    evidence.token.length <= 512 &&
+    typeof evidence.tokenHash === "string" &&
+    /^[0-9a-f]{64}$/.test(evidence.tokenHash) &&
+    typeof evidence.snapshotRegistrationRevision === "string" &&
+    evidence.snapshotRegistrationRevision.length > 0 &&
+    evidence.snapshotRegistrationRevision.length <= 256 &&
+    (evidence.snapshotAppAttestKeyId === null ||
+      (typeof evidence.snapshotAppAttestKeyId === "string" &&
+        evidence.snapshotAppAttestKeyId.length > 0 &&
+        evidence.snapshotAppAttestKeyId.length <= 1_024)) &&
+    typeof evidence.firstAcceptedAtUtc === "string" &&
+    Number.isFinite(Date.parse(evidence.firstAcceptedAtUtc)) &&
+    typeof evidence.lastAcceptedAtUtc === "string" &&
+    Number.isFinite(Date.parse(evidence.lastAcceptedAtUtc)) &&
+    Date.parse(evidence.firstAcceptedAtUtc) <=
+      Date.parse(evidence.lastAcceptedAtUtc)
+  );
+}
+
+function isBoundedApnsJournalRecord(value: unknown): boolean {
+  try {
+    return new TextEncoder().encode(JSON.stringify(value)).byteLength <=
+      APNS_ACCEPTANCE_JOURNAL_MAX_RECORD_BYTES;
+  } catch {
+    return false;
+  }
+}
+
+function isPendingApnsAcceptanceRecord(
+  value: unknown,
+): value is PendingApnsAcceptanceRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Partial<PendingApnsAcceptanceRecord>;
+  return (
+    record.version === 1 &&
+    typeof record.writeId === "string" &&
+    record.writeId.length > 0 &&
+    record.writeId.length <= 128 &&
+    typeof record.deliveryId === "string" &&
+    record.deliveryId.length > 0 &&
+    record.deliveryId.length <= 512 &&
+    typeof record.eventRef === "string" &&
+    record.eventRef.length > 0 &&
+    record.eventRef.length <= 512 &&
+    isApnsRelaySource(record.sourceId) &&
+    isNotifyReason(record.reason) &&
+    typeof record.createdAtUtc === "string" &&
+    Number.isFinite(Date.parse(record.createdAtUtc)) &&
+    Array.isArray(record.deliveries) &&
+    record.deliveries.length > 0 &&
+    record.deliveries.length <= APNS_MAX_CONCURRENT_DELIVERIES &&
+    record.deliveries.every(isAcceptedDeliveryEvidence) &&
+    new Set(record.deliveries.map((delivery) =>
+      `${delivery.tokenHash}\u0000${delivery.snapshotRegistrationRevision}`
+    )).size ===
+      record.deliveries.length &&
+    isBoundedApnsJournalRecord(record)
+  );
+}
+
+function isRoutedDeviceRecord(value: unknown): value is RoutedDeviceRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const device = value as Partial<RoutedDeviceRecord>;
+  return (
+    typeof device.token === "string" &&
+    isValidDeviceToken(device.token) &&
+    (device.environment === "sandbox" || device.environment === "production") &&
+    (device.locale === null ||
+      (typeof device.locale === "string" && device.locale.length <= 128)) &&
+    isValidSources(device.sources) &&
+    typeof device.minMagnitude === "number" &&
+    Number.isFinite(device.minMagnitude) &&
+    typeof device.criticalAlertsEnabled === "boolean" &&
+    isAlertSound(device.alertSound) &&
+    (device.cityName === null ||
+      (typeof device.cityName === "string" && device.cityName.length <= 512)) &&
+    (device.latitude === null ||
+      (typeof device.latitude === "number" &&
+        isNormalizableLatitude(device.latitude))) &&
+    (device.longitude === null ||
+      (typeof device.longitude === "number" &&
+        isNormalizableLongitude(device.longitude))) &&
+    (device.radiusKm === null ||
+      (typeof device.radiusKm === "number" &&
+        Number.isFinite(device.radiusKm) &&
+        device.radiusKm > 0)) &&
+    typeof device.includeTestAlerts === "boolean" &&
+    (device.utcOffsetMinutes === null ||
+      (typeof device.utcOffsetMinutes === "number" &&
+        Number.isSafeInteger(device.utcOffsetMinutes) &&
+        device.utcOffsetMinutes >= -840 &&
+        device.utcOffsetMinutes <= 840)) &&
+    typeof device.notifyAtNight === "boolean" &&
+    (device.appAttestKeyId === null ||
+      (typeof device.appAttestKeyId === "string" &&
+        device.appAttestKeyId.length > 0 &&
+        device.appAttestKeyId.length <= 1_024)) &&
+    typeof device.registrationRevision === "string" &&
+    device.registrationRevision.length > 0 &&
+    device.registrationRevision.length <= 256 &&
+    typeof device.createdAt === "string" &&
+    Number.isFinite(Date.parse(device.createdAt)) &&
+    typeof device.updatedAt === "string" &&
+    Number.isFinite(Date.parse(device.updatedAt)) &&
+    isAuthenticatedAppRoute({
+      appIdentity: device.appIdentity,
+      apnsTopic: device.apnsTopic,
+      platform: device.platform,
+    })
+  );
+}
+
+function isPreparedDelivery(value: unknown): value is PreparedDelivery {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const delivery = value as Partial<PreparedDelivery>;
+  return (
+    isRoutedDeviceRecord(delivery.device) &&
+    typeof delivery.tokenHash === "string" &&
+    /^[0-9a-f]{64}$/.test(delivery.tokenHash)
+  );
+}
+
+function isMappedApnsIntentRecipient(
+  value: unknown,
+): value is MappedApnsIntentRecipient {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const recipient = value as Partial<MappedApnsIntentRecipient>;
+  return (
+    Object.keys(value).length === 3 &&
+    isPreparedDelivery(recipient.delivery) &&
+    Number.isSafeInteger(recipient.originDeliveryIndex) &&
+    (recipient.originDeliveryIndex as number) >= 0 &&
+    (recipient.originDeliveryIndex as number) < APNS_MAX_CONCURRENT_DELIVERIES &&
+    typeof recipient.snapshotRegistrationRevision === "string" &&
+    recipient.snapshotRegistrationRevision.length > 0 &&
+    recipient.snapshotRegistrationRevision.length <= 256
+  );
+}
+
+function isStoredApnsDeliveryResult(value: unknown): value is ApnsDeliveryResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const result = value as Partial<ApnsDeliveryResult>;
+  const allowedKeys = new Set([
+    "ok",
+    "apnsId",
+    "acceptedAtUtc",
+    "status",
+    "apnsReason",
+    "invalidationTimestampMs",
+    "retryAfterSeconds",
+    "terminalUnregistration",
+    "terminalInvalidToken",
+    "unregistrationTimestampMissing",
+    "terminalResolved",
+    "deactivated",
+    "badDeviceTokenQuarantined",
+  ]);
+  if (Object.keys(value).some((key) => !allowedKeys.has(key))) return false;
+  if (
+    typeof result.ok !== "boolean" ||
+    !(
+      result.apnsId === null ||
+      (typeof result.apnsId === "string" && result.apnsId.length <= 256 &&
+        !/[\u0000-\u001f\u007f]/.test(result.apnsId))
+    )
+  ) return false;
+  if (
+    result.acceptedAtUtc !== undefined &&
+    (typeof result.acceptedAtUtc !== "string" ||
+      !Number.isFinite(Date.parse(result.acceptedAtUtc)))
+  ) return false;
+  if (result.ok && result.acceptedAtUtc === undefined) return false;
+  if (
+    result.status !== undefined &&
+    (!Number.isSafeInteger(result.status) || result.status < 100 ||
+      result.status > 599)
+  ) return false;
+  if (
+    result.apnsReason !== undefined && result.apnsReason !== null &&
+    (typeof result.apnsReason !== "string" ||
+      !/^[A-Za-z]+$/.test(result.apnsReason) || result.apnsReason.length > 64)
+  ) return false;
+  if (
+    result.invalidationTimestampMs !== undefined &&
+    result.invalidationTimestampMs !== null &&
+    (!Number.isSafeInteger(result.invalidationTimestampMs) ||
+      result.invalidationTimestampMs <= 0)
+  ) return false;
+  if (
+    result.retryAfterSeconds !== undefined &&
+    result.retryAfterSeconds !== null &&
+    (!Number.isSafeInteger(result.retryAfterSeconds) ||
+      result.retryAfterSeconds < 0 ||
+      result.retryAfterSeconds > MAX_QUEUE_RETRY_DELAY_SECONDS)
+  ) return false;
+  for (const property of [
+    "terminalUnregistration",
+    "terminalInvalidToken",
+    "unregistrationTimestampMissing",
+    "terminalResolved",
+    "deactivated",
+    "badDeviceTokenQuarantined",
+  ] as const) {
+    if (result[property] !== undefined && typeof result[property] !== "boolean") {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isApnsIntentObservedBatch(
+  value: unknown,
+  maximumDeliveryCount: number,
+): value is ApnsIntentObservedBatch {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const batch = value as Partial<ApnsIntentObservedBatch>;
+  return (
+    Object.keys(value).length === 3 &&
+    typeof batch.observedAtUtc === "string" &&
+    Number.isFinite(Date.parse(batch.observedAtUtc)) &&
+    Array.isArray(batch.deliveries) &&
+    batch.deliveries.length > 0 &&
+    batch.deliveries.length <= maximumDeliveryCount &&
+    batch.deliveries.every(isMappedApnsIntentRecipient) &&
+    batch.deliveries.every((delivery) =>
+      delivery.originDeliveryIndex < maximumDeliveryCount
+    ) &&
+    new Set(batch.deliveries.map((delivery) =>
+      delivery.originDeliveryIndex
+    )).size === batch.deliveries.length &&
+    new Set(batch.deliveries.map((delivery) =>
+      `${delivery.delivery.tokenHash}\u0000${delivery.delivery.device.registrationRevision}`
+    )).size === batch.deliveries.length &&
+    Array.isArray(batch.results) &&
+    batch.results.length === batch.deliveries.length &&
+    batch.results.every(isStoredApnsDeliveryResult)
+  );
+}
+
+function isPendingApnsDeliveryIntentRecord(
+  value: unknown,
+): value is PendingApnsDeliveryIntentRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Partial<PendingApnsDeliveryIntentRecord>;
+  return (
+    record.version === 2 &&
+    typeof record.writeId === "string" &&
+    record.writeId.length > 0 &&
+    record.writeId.length <= 128 &&
+    typeof record.createdAtUtc === "string" &&
+    Number.isFinite(Date.parse(record.createdAtUtc)) &&
+    typeof record.providerAttempts === "number" &&
+    Number.isSafeInteger(record.providerAttempts) &&
+    record.providerAttempts >= 0 &&
+    record.providerAttempts <= Number.MAX_SAFE_INTEGER &&
+    record.recipientProviderAttempts !== null &&
+    typeof record.recipientProviderAttempts === "object" &&
+    !Array.isArray(record.recipientProviderAttempts) &&
+    Object.keys(record.recipientProviderAttempts).length <=
+      APNS_MAX_CONCURRENT_DELIVERIES &&
+    Object.entries(record.recipientProviderAttempts).every(
+      ([revision, attempts]) =>
+        revision.length > 0 && revision.length <= 256 &&
+        Number.isSafeInteger(attempts) && attempts >= 0 &&
+        attempts <= APNS_DELIVERY_INTENT_MAX_PROVIDER_ATTEMPTS,
+    ) &&
+    typeof record.lastProviderAttemptAtUtc === "string" &&
+    Number.isFinite(Date.parse(record.lastProviderAttemptAtUtc)) &&
+    typeof record.nextProviderAttemptAtUtc === "string" &&
+    Number.isFinite(Date.parse(record.nextProviderAttemptAtUtc)) &&
+    record.recipientRetryNotBeforeUtc !== null &&
+    typeof record.recipientRetryNotBeforeUtc === "object" &&
+    !Array.isArray(record.recipientRetryNotBeforeUtc) &&
+    Object.keys(record.recipientRetryNotBeforeUtc).length <=
+      APNS_DELIVERY_INTENT_MAX_PROVIDER_ATTEMPTS *
+        APNS_MAX_CONCURRENT_DELIVERIES &&
+    Object.entries(record.recipientRetryNotBeforeUtc).every(
+      ([revision, retryAt]) =>
+        revision.length > 0 && revision.length <= 256 &&
+        typeof retryAt === "string" && Number.isFinite(Date.parse(retryAt)),
+    ) &&
+    typeof record.unobservedAttemptReconciled === "boolean" &&
+    (record.lifecycleEvidencePreparedAtUtc === null ||
+      (typeof record.lifecycleEvidencePreparedAtUtc === "string" &&
+        Number.isFinite(Date.parse(record.lifecycleEvidencePreparedAtUtc)) &&
+        record.lifecycleEvidencePreparedAtUtc ===
+          record.lastProviderAttemptAtUtc)) &&
+    isAlertDeliveryMessage(record.message) &&
+    JSON.stringify(record.message) ===
+      JSON.stringify(apnsJournalMessage(record.message)) &&
+    Array.isArray(record.deliveries) &&
+    record.deliveries.length > 0 &&
+    record.deliveries.length <= APNS_MAX_CONCURRENT_DELIVERIES &&
+    record.deliveries.every(isPreparedDelivery) &&
+    (record.observedBatch === null ||
+      isApnsIntentObservedBatch(record.observedBatch, record.deliveries.length)) &&
+    new Set(record.deliveries.map((delivery) =>
+      `${delivery.tokenHash}\u0000${delivery.device.registrationRevision}`
+    )).size === record.deliveries.length &&
+    // The original registration revision is the durable recipient identity
+    // carried into every observed subset. Reject duplicate aliases instead of
+    // letting an integrity check or retry budget depend on array first-match.
+    new Set(record.deliveries.map((delivery) =>
+      delivery.device.registrationRevision
+    )).size === record.deliveries.length &&
+    isBoundedApnsJournalRecord(record)
+  );
+}
+
+async function apnsAcceptanceJournalStorageKey(
+  deliveryId: string,
+  eventRef: string,
+  sourceId: ApnsRelaySourceId,
+  reason: NotifyReason,
+  deliveries: AcceptedDeliveryEvidence[],
+): Promise<string> {
+  const stableIdentity = JSON.stringify([
+    deliveryId,
+    eventRef,
+    sourceId,
+    reason,
+    [...deliveries.map((delivery) => [
+      delivery.tokenHash,
+      delivery.snapshotRegistrationRevision,
+    ])].sort(([leftHash, leftRevision], [rightHash, rightRevision]) =>
+      leftHash.localeCompare(rightHash) || leftRevision.localeCompare(rightRevision)
+    ),
+  ]);
+  return `${APNS_ACCEPTANCE_JOURNAL_PREFIX}${await sha256Hex(stableIdentity)}`;
+}
+
+async function apnsDeliveryIntentStorageKey(
+  message: AlertDeliveryMessage,
+  deliveries: PreparedDelivery[],
+): Promise<string> {
+  const stableIdentity = JSON.stringify([
+    message,
+    [...deliveries].sort((left, right) =>
+      left.tokenHash.localeCompare(right.tokenHash) ||
+      left.device.registrationRevision.localeCompare(
+        right.device.registrationRevision,
+      )
+    ),
+  ]);
+  return `${APNS_ACCEPTANCE_JOURNAL_PREFIX}${await sha256Hex(stableIdentity)}`;
+}
+
 /**
  * Recognize only the two bounded fields needed to retire a Queue copy created
  * before the JMA-only policy. The body is otherwise untrusted and is never
@@ -1602,6 +2115,51 @@ function eventFromDeliveryMessage(
   return { ...message.event, raw: null };
 }
 
+function apnsJournalMessage(
+  message: AlertDeliveryMessage,
+): AlertDeliveryMessage {
+  const event = message.event;
+  // Queue validation is structural and intentionally tolerates rolling fields.
+  // Persist a strict allow-list so a legacy `raw` member or unknown property can
+  // never enter the temporary raw-token journal alongside the device snapshot.
+  return {
+    version: 1,
+    outboxId: message.outboxId,
+    deliveryId: message.deliveryId,
+    rootDeliveryId: message.rootDeliveryId,
+    event: {
+      id: event.id,
+      sourceId: event.sourceId,
+      eventId: event.eventId,
+      serial: event.serial,
+      kind: event.kind,
+      originTimeUtc: event.originTimeUtc,
+      reportTimeUtc: event.reportTimeUtc,
+      hypocenter: event.hypocenter,
+      latitude: event.latitude,
+      longitude: event.longitude,
+      magnitude: event.magnitude,
+      depth: event.depth,
+      maxIntensity: event.maxIntensity,
+      isWarn: event.isWarn,
+      isFinal: event.isFinal,
+      isCancel: event.isCancel,
+      isTraining: event.isTraining,
+      tsunami: event.tsunami,
+    },
+    reason: message.reason,
+    ...(message.expiresAtUtc === undefined
+      ? {}
+      : { expiresAtUtc: message.expiresAtUtc }),
+    ...(message.expiryPolicy === undefined
+      ? {}
+      : { expiryPolicy: message.expiryPolicy }),
+    ...(message.afterDeviceCursor === undefined
+      ? {}
+      : { afterDeviceCursor: message.afterDeviceCursor }),
+  };
+}
+
 function retryDelaySeconds(attempts: number): number {
   return Math.min(30 * 2 ** Math.min(attempts, 6), 30 * 60);
 }
@@ -1695,13 +2253,16 @@ function dlqIncidentStatement(
   evidence: DlqIncidentEvidence,
   now: string,
 ): D1PreparedStatement {
+  const canonicalQueueMessageId = evidence.outboxId === null
+    ? evidence.queueMessageId
+    : `outbox:${evidence.outboxId}`;
   return db
     .prepare(
       `INSERT INTO alert_delivery_incidents (
-        queue_message_id, delivery_id, root_delivery_id, event_id, source_id,
+        queue_message_id, outbox_id, delivery_id, root_delivery_id, event_id, source_id,
         event_serial, notification_reason, queue_attempts, status,
         first_seen_utc, last_seen_utc
-      ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?
+      ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?
       WHERE ? IS NULL OR EXISTS (
         SELECT 1 FROM alert_delivery_outbox
         WHERE id = ?
@@ -1716,7 +2277,8 @@ function dlqIncidentStatement(
         last_seen_utc = excluded.last_seen_utc`,
     )
     .bind(
-      evidence.queueMessageId,
+      canonicalQueueMessageId,
+      evidence.outboxId,
       evidence.deliveryId,
       evidence.rootDeliveryId,
       evidence.eventId,
@@ -1902,6 +2464,15 @@ function rowToDevice(row: DeviceRow): RoutedDeviceRecord {
     includeTestAlerts: !!row.include_test_alerts,
     utcOffsetMinutes: row.utc_offset_minutes,
     notifyAtNight: !!row.notify_at_night,
+    appAttestKeyId: row.app_attest_key_id ?? null,
+    // Migration 0013 guarantees a non-empty unique value in D1. The fallback
+    // exists only for focused pre-migration fixtures; production deployment
+    // applies migrations before this Worker revision begins fanout.
+    registrationRevision:
+      typeof row.registration_revision === "string" &&
+      row.registration_revision.length > 0
+        ? row.registration_revision
+        : `legacy-fixture:${row.updated_at}`,
     // Migration 0011 makes all three fields non-null. These fallbacks keep a
     // rolling Worker and focused pre-migration test fixtures on the historical
     // iOS route; send-time allow-list validation still runs before APNs.
@@ -2773,6 +3344,7 @@ function outboxRowToMessage(row: AlertOutboxRow): AlertDeliveryMessage | null {
 function isValidSources(value: unknown): value is WolfxSourceId[] {
   return (
     Array.isArray(value) &&
+    value.length > 0 &&
     value.length <= APNS_RELAY_SOURCES.length &&
     new Set(value).size === value.length &&
     value.every(isApnsRelaySource)
@@ -2820,21 +3392,22 @@ function shouldNotify(
     return false;
   }
   if (
-    device.radiusKm != null &&
-    device.latitude != null &&
-    device.longitude != null
+    device.radiusKm == null ||
+    device.latitude == null ||
+    device.longitude == null ||
+    event.latitude == null ||
+    event.longitude == null
   ) {
-    if (event.latitude == null || event.longitude == null) return false;
-    return (
-      haversineDistanceKm(
-        device.latitude,
-        device.longitude,
-        event.latitude,
-        event.longitude,
-      ) <= device.radiusKm
-    );
+    return false;
   }
-  return true;
+  return (
+    haversineDistanceKm(
+      device.latitude,
+      device.longitude,
+      event.latitude,
+      event.longitude,
+    ) <= device.radiusKm
+  );
 }
 
 function base64URL(bytes: Uint8Array): string {
@@ -3160,27 +3733,142 @@ type DeviceDeletionOutcome =
   | "newer_registration"
   | "not_deleted";
 
+interface DeviceDeletionResult {
+  outcome: DeviceDeletionOutcome;
+  currentUpdatedAt: string | null;
+}
+
 /**
  * Delete the device and its delivery-deduplication records in one D1
- * transaction. Callers that react to APNs must pass a validated 410 timestamp
- * so a refreshed registration cannot be deleted by an old response.
+ * transaction. APNs 410 cleanup first validates Apple's invalidation timestamp
+ * against the snapshot sent to APNs, then deletes only that snapshot's opaque
+ * revision. Authenticated user removal owns the current row unconditionally.
+ * The BadDeviceToken path has its separate revision-decision transaction below.
  */
 async function deleteDeviceRegistration(
   db: D1Database,
   token: string,
-  invalidationTimestampMs?: number | null,
-): Promise<DeviceDeletionOutcome> {
-  const invalidationCutoff =
-    invalidationTimestampMs === null || invalidationTimestampMs === undefined
-      ? null
-      : new Date(invalidationTimestampMs).toISOString();
-  const deviceCondition = invalidationCutoff
-    ? "token = ? AND updated_at <= ?"
+  expectedRegistrationRevision?: string | null,
+  preserveAlertLifecycle = false,
+): Promise<DeviceDeletionResult> {
+  const deviceCondition = expectedRegistrationRevision
+    ? "token = ? AND registration_revision = ?"
     : "token = ?";
-  const deviceBindings = invalidationCutoff
-    ? [token, invalidationCutoff]
+  const deviceBindings = expectedRegistrationRevision
+    ? [token, expectedRegistrationRevision]
     : [token];
   const hashedToken = await tokenHash(token);
+  const now = new Date().toISOString();
+  const deletionDecisionId = crypto.randomUUID();
+  const deletionKind = expectedRegistrationRevision
+    ? "apns_unregistration"
+    : "explicit_removal";
+  const lifecycleCleanup = preserveAlertLifecycle
+    ? []
+    : [
+        db
+          .prepare(
+            `DELETE FROM alert_lifecycle_recipients
+             WHERE (
+               token_hash = ? AND EXISTS (
+                 SELECT 1 FROM devices WHERE ${deviceCondition}
+               )
+             ) OR app_attest_key_id IN (
+               SELECT app_attest_key_id FROM devices
+               WHERE ${deviceCondition} AND app_attest_key_id IS NOT NULL
+             )`,
+          )
+          .bind(
+            hashedToken,
+            ...deviceBindings,
+            ...deviceBindings,
+          ),
+      ];
+  const fenceStatements = [
+    db
+      .prepare(
+        `INSERT INTO apns_registration_revision_fences (
+           token_hash, registration_revision, app_attest_key_id,
+           decision_id, decision_kind,
+           blocks_lifecycle_replay, processed_at_utc
+         )
+         SELECT ?, registration_revision, app_attest_key_id, ?, ?, 1, ?
+         FROM devices
+         WHERE ${deviceCondition}
+         ON CONFLICT(registration_revision) DO UPDATE SET
+           token_hash = COALESCE(
+             excluded.token_hash,
+             apns_registration_revision_fences.token_hash
+           ),
+           decision_kind = excluded.decision_kind,
+           blocks_lifecycle_replay = 1,
+           processed_at_utc = MAX(
+             excluded.processed_at_utc,
+             apns_registration_revision_fences.processed_at_utc
+           )`,
+      )
+      .bind(
+        hashedToken,
+        deletionDecisionId,
+        deletionKind,
+        now,
+        ...deviceBindings,
+      ),
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO apns_registration_revision_fences (
+           token_hash, registration_revision, app_attest_key_id,
+           decision_id, decision_kind,
+           blocks_lifecycle_replay, processed_at_utc
+         )
+         SELECT token_hash, registration_revision, NULL,
+                lower(hex(randomblob(16))), 'bad_device_token', 1, ?
+         FROM alert_delivery_failures
+         WHERE token_hash = ? AND status = 'active'
+           AND apns_reason = 'BadDeviceToken'
+           AND registration_revision IS NOT NULL
+           AND EXISTS (SELECT 1 FROM devices WHERE ${deviceCondition})
+         ON CONFLICT(registration_revision) DO UPDATE SET
+           token_hash = COALESCE(
+             excluded.token_hash,
+             apns_registration_revision_fences.token_hash
+           ),
+           decision_kind = 'bad_device_token',
+           blocks_lifecycle_replay = 1,
+           processed_at_utc = MAX(
+             excluded.processed_at_utc,
+             apns_registration_revision_fences.processed_at_utc
+           )`,
+      )
+      .bind(now, hashedToken, ...deviceBindings),
+    ...(expectedRegistrationRevision
+      ? []
+      : [
+          db
+            .prepare(
+              `UPDATE apns_registration_revision_fences
+               SET decision_kind = 'explicit_removal',
+                   blocks_lifecycle_replay = 1,
+                   processed_at_utc = MAX(processed_at_utc, ?)
+               WHERE (
+                 token_hash = ?
+                 OR app_attest_key_id IN (
+                   SELECT app_attest_key_id FROM devices
+                   WHERE ${deviceCondition} AND app_attest_key_id IS NOT NULL
+                 )
+               ) AND EXISTS (
+                 SELECT 1 FROM devices WHERE ${deviceCondition}
+               )`,
+            )
+            .bind(
+              now,
+              hashedToken,
+              ...deviceBindings,
+              ...deviceBindings,
+            ),
+        ]),
+  ];
+  const deviceDeletionIndex = 2 + fenceStatements.length + lifecycleCleanup.length;
   const results = await db.batch([
     db
       .prepare(
@@ -3190,45 +3878,256 @@ async function deleteDeviceRegistration(
          )`,
       )
       .bind(...deviceBindings),
+    ...fenceStatements,
     db
-      .prepare("DELETE FROM alert_delivery_failures WHERE token_hash = ?")
-      .bind(hashedToken),
+      .prepare(
+        `DELETE FROM alert_delivery_failures
+         WHERE token_hash = ? AND EXISTS (
+           SELECT 1 FROM devices WHERE ${deviceCondition}
+         )`,
+      )
+      .bind(hashedToken, ...deviceBindings),
+    ...lifecycleCleanup,
     db.prepare(`DELETE FROM devices WHERE ${deviceCondition}`).bind(...deviceBindings),
-    ...appAttestRetentionCleanupStatements(db, new Date().toISOString()),
+    ...appAttestRetentionCleanupStatements(db, now),
   ]);
-  if ((results[2]?.meta.changes ?? 0) > 0) return "deleted";
+  if ((results[deviceDeletionIndex]?.meta.changes ?? 0) > 0) {
+    return { outcome: "deleted", currentUpdatedAt: null };
+  }
 
   const current = await db
     .prepare("SELECT updated_at FROM devices WHERE token = ?")
     .bind(token)
     .first<{ updated_at: string }>();
-  if (!current) return "not_found";
-  if (
-    invalidationTimestampMs !== null &&
-    invalidationTimestampMs !== undefined &&
-    Date.parse(current.updated_at) > invalidationTimestampMs
-  ) {
-    return "newer_registration";
+  if (!current) return { outcome: "not_found", currentUpdatedAt: null };
+  if (expectedRegistrationRevision) {
+    return {
+      outcome: "newer_registration",
+      currentUpdatedAt: current.updated_at,
+    };
   }
-  // A conditional APNs deletion that leaves an older matching record must be
-  // retried. Treating it as complete could retain an invalid subscription.
-  return invalidationCutoff ? "not_deleted" : "not_found";
+  // Any deletion that leaves the same current row must be retried. Treating an
+  // unconditional zero-change result as not-found would also falsely report a
+  // successful user-requested removal while the registration still exists.
+  return { outcome: "not_deleted", currentUpdatedAt: current.updated_at };
 }
 
 async function deactivateDevice(
   db: D1Database,
-  token: string,
-  invalidationTimestampMs: number,
-): Promise<boolean> {
+  device: RoutedDeviceRecord,
+): Promise<DeviceDeletionResult | null> {
   try {
-    const outcome = await deleteDeviceRegistration(
+    return await deleteDeviceRegistration(
       db,
-      token,
-      invalidationTimestampMs,
+      device.token,
+      device.registrationRevision,
+      true,
     );
-    return outcome !== "not_deleted";
   } catch {
-    return false;
+    return null;
+  }
+}
+
+/**
+ * Give each BadDeviceToken revision its own failure-row identity. The original
+ * logical delivery ID remains in `origin_delivery_id`, while the dedicated
+ * decision-fence table is authoritative for duplicate-response suppression.
+ */
+export function badDeviceTokenFailureId(registrationRevision: string): string {
+  return `bad-device-token-revision:${registrationRevision}`;
+}
+
+export async function deactivateBadDeviceToken(
+  db: D1Database,
+  device: RoutedDeviceRecord,
+  event: NormalizedEvent,
+  reason: NotifyReason,
+  deliveryId: string,
+): Promise<"deleted" | "not_found" | "quarantined" | null> {
+  try {
+    const hashedToken = await tokenHash(device.token);
+    const now = new Date().toISOString();
+    const decisionId = crypto.randomUUID();
+    const failureId = badDeviceTokenFailureId(device.registrationRevision);
+    const results = await db.batch([
+      // Claim this exact sent revision first. A same-token renewal fence is
+      // deliberately claimable: if renewal serialized before Apple's
+      // rejection, the renewed token must be quarantined. Consent-ending and
+      // already-processed fences remain unclaimable, so a duplicate response
+      // cannot cross an explicit removal or act on a later reincarnation.
+      db
+        .prepare(
+          `INSERT INTO apns_registration_revision_fences (
+             token_hash, registration_revision, app_attest_key_id,
+             decision_id, decision_kind,
+             blocks_lifecycle_replay, processed_at_utc
+           ) VALUES (?, ?, ?, ?, 'bad_device_token', 1, ?)
+           ON CONFLICT(registration_revision) DO UPDATE SET
+             token_hash = excluded.token_hash,
+             app_attest_key_id = COALESCE(
+               excluded.app_attest_key_id,
+               apns_registration_revision_fences.app_attest_key_id
+             ),
+             decision_id = excluded.decision_id,
+             decision_kind = 'bad_device_token',
+             blocks_lifecycle_replay = 1,
+             processed_at_utc = MAX(
+               excluded.processed_at_utc,
+               apns_registration_revision_fences.processed_at_utc
+             )
+           WHERE apns_registration_revision_fences.decision_kind =
+                   'registration_renewal'
+             AND apns_registration_revision_fences.blocks_lifecycle_replay = 0`,
+        )
+        .bind(
+          hashedToken,
+          device.registrationRevision,
+          device.appAttestKeyId ?? null,
+          decisionId,
+          now,
+        ),
+      db
+        .prepare(
+          `DELETE FROM notification_deliveries
+           WHERE device_token IN (
+             SELECT token FROM devices
+             WHERE token = ? AND registration_revision = ?
+               AND EXISTS (
+                 SELECT 1 FROM apns_registration_revision_fences
+                 WHERE registration_revision = ? AND decision_id = ?
+               )
+           )`,
+        )
+        .bind(
+          device.token,
+          device.registrationRevision,
+          device.registrationRevision,
+          decisionId,
+        ),
+      // If an earlier cleanup attempt failed after APNs rejected another
+      // revision, deleting the current row also owns resolution of that active
+      // evidence. Preserve each such revision as its own 14-day fence first.
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO apns_registration_revision_fences (
+             token_hash, registration_revision, app_attest_key_id,
+             decision_id, decision_kind,
+             blocks_lifecycle_replay, processed_at_utc
+           )
+           SELECT token_hash, registration_revision, NULL,
+                  lower(hex(randomblob(16))), 'bad_device_token', 1,
+                  MAX(?, last_seen_utc)
+           FROM alert_delivery_failures
+           WHERE token_hash = ? AND status = 'active'
+             AND apns_reason = 'BadDeviceToken'
+             AND registration_revision IS NOT NULL
+             AND EXISTS (
+               SELECT 1 FROM devices
+               WHERE token = ? AND registration_revision = ?
+             )
+             AND EXISTS (
+               SELECT 1 FROM apns_registration_revision_fences
+               WHERE registration_revision = ? AND decision_id = ?
+             )`,
+        )
+        .bind(
+          now,
+          hashedToken,
+          device.token,
+          device.registrationRevision,
+          device.registrationRevision,
+          decisionId,
+        ),
+      db
+        .prepare(
+          `DELETE FROM alert_delivery_failures
+           WHERE token_hash = ? AND status = 'active' AND EXISTS (
+             SELECT 1 FROM devices
+             WHERE token = ? AND registration_revision = ?
+           ) AND EXISTS (
+             SELECT 1 FROM apns_registration_revision_fences
+             WHERE registration_revision = ? AND decision_id = ?
+           )`,
+        )
+        .bind(
+          hashedToken,
+          device.token,
+          device.registrationRevision,
+          device.registrationRevision,
+          decisionId,
+        ),
+      db
+        .prepare(
+          `DELETE FROM devices
+           WHERE token = ? AND registration_revision = ?
+             AND EXISTS (
+               SELECT 1 FROM apns_registration_revision_fences
+               WHERE registration_revision = ? AND decision_id = ?
+             )`,
+        )
+        .bind(
+          device.token,
+          device.registrationRevision,
+          device.registrationRevision,
+          decisionId,
+        ),
+      // This statement follows the conditional delete in the same D1 batch.
+      // The first response for this exact sent revision owns the decision. If
+      // a registration serialized first, its distinct revision remains and is
+      // quarantined even when both writes share a wall-clock timestamp. The
+      // dedicated fence makes every duplicate response a no-op independently
+      // of the per-delivery failure-row primary key.
+      db
+        .prepare(
+          `INSERT INTO alert_delivery_failures (
+            delivery_id, origin_delivery_id, token_hash, event_ref, source_id,
+            notification_reason, apns_status, apns_reason, disposition,
+            first_seen_utc, last_seen_utc, registration_revision
+          )
+          SELECT ?, ?, ?, ?, ?, ?, 400, 'BadDeviceToken', 'quarantine',
+                 MAX(?, updated_at), MAX(?, updated_at), ?
+          FROM devices
+          WHERE token = ? AND registration_revision <> ?
+            AND EXISTS (
+              SELECT 1 FROM apns_registration_revision_fences
+              WHERE registration_revision = ? AND decision_id = ?
+            )
+          ON CONFLICT(delivery_id, token_hash) DO UPDATE SET
+            origin_delivery_id = excluded.origin_delivery_id,
+            apns_status = 400,
+            apns_reason = 'BadDeviceToken',
+            disposition = 'quarantine',
+            registration_revision = excluded.registration_revision,
+            status = 'active',
+            resolved_at_utc = NULL,
+            last_seen_utc = excluded.last_seen_utc,
+            occurrences = alert_delivery_failures.occurrences + 1`,
+        )
+        .bind(
+          failureId,
+          deliveryId,
+          hashedToken,
+          event.id,
+          event.sourceId,
+          reason,
+          now,
+          now,
+          device.registrationRevision,
+          device.token,
+          device.registrationRevision,
+          device.registrationRevision,
+          decisionId,
+        ),
+      ...appAttestRetentionCleanupStatements(db, now),
+    ]);
+    if ((results[4]?.meta.changes ?? 0) > 0) return "deleted";
+    if ((results[5]?.meta.changes ?? 0) > 0) return "quarantined";
+    // The atomic transaction observed neither a deletable sent snapshot nor a
+    // claimable newer row. Another response already processed this revision,
+    // or another deletion already reached the desired state.
+    return "not_found";
+  } catch {
+    return null;
   }
 }
 
@@ -3267,7 +4166,7 @@ export async function withApnsRequestTimeout<T>(
   }
 }
 
-async function sendPush(
+async function sendPushRequest(
   env: Env,
   device: RoutedDeviceRecord,
   event: NormalizedEvent,
@@ -3306,9 +4205,14 @@ async function sendPush(
       signal,
     }),
   );
+  const responseReceivedAtMs = Date.now();
   const apnsId = response.headers.get("apns-id");
   if (response.ok) {
-    return { ok: true, apnsId };
+    return {
+      ok: true,
+      apnsId,
+      acceptedAtUtc: new Date(responseReceivedAtMs).toISOString(),
+    };
   }
 
   const { reason: apnsReason, invalidationTimestampMs } =
@@ -3320,18 +4224,12 @@ async function sendPush(
     response.status === 410 && invalidationTimestampMs === null;
   const terminalUnregistration =
     response.status === 410 && !unregistrationTimestampMissing;
+  const terminalInvalidToken =
+    response.status === 400 && apnsReason === "BadDeviceToken";
   const registeredAfterInvalidation =
     terminalUnregistration &&
     !Number.isNaN(Date.parse(device.updatedAt)) &&
     Date.parse(device.updatedAt) > (invalidationTimestampMs as number);
-  const deactivated =
-    terminalUnregistration && !registeredAfterInvalidation
-      ? await deactivateDevice(
-          env.DB,
-          device.token,
-          invalidationTimestampMs as number,
-        )
-      : false;
   return {
     ok: false,
     apnsId,
@@ -3340,10 +4238,109 @@ async function sendPush(
     invalidationTimestampMs,
     retryAfterSeconds: retryAfterSeconds(response),
     terminalUnregistration,
+    terminalInvalidToken,
     unregistrationTimestampMissing,
-    terminalResolved: terminalUnregistration &&
-      (registeredAfterInvalidation || deactivated),
+    // Apple's timestamp describes the sent token snapshot. If that snapshot
+    // was registered strictly later, no D1 cleanup is necessary. Otherwise a
+    // separate post-network phase conditionally deletes its exact revision.
+    terminalResolved: terminalUnregistration && registeredAfterInvalidation,
+  };
+}
+
+/**
+ * Apply recipient-scoped terminal cleanup only after every provider 2xx from
+ * the same small batch has crossed D1 while its pre-send intent remains
+ * durable. A peer's fallible cleanup can therefore never strand acceptance
+ * provenance in process memory.
+ */
+async function applyTerminalApnsCleanup(
+  env: Env,
+  device: RoutedDeviceRecord,
+  event: NormalizedEvent,
+  reason: NotifyReason,
+  deliveryId: string,
+  result: ApnsDeliveryResult,
+): Promise<ApnsDeliveryResult> {
+  if (result.ok) return result;
+  const unregistrationDeletion =
+    result.terminalUnregistration && !result.terminalResolved
+      ? await deactivateDevice(env.DB, device)
+      : null;
+  const badDeviceTokenOutcome = result.terminalInvalidToken
+    ? await deactivateBadDeviceToken(env.DB, device, event, reason, deliveryId)
+    : null;
+  const deactivated =
+    unregistrationDeletion?.outcome === "deleted" ||
+    badDeviceTokenOutcome === "deleted";
+  const unregistrationResolved =
+    unregistrationDeletion !== null &&
+    unregistrationDeletion.outcome !== "not_deleted";
+  const badDeviceTokenQuarantined = badDeviceTokenOutcome === "quarantined";
+  return {
+    ...result,
+    terminalResolved:
+      result.terminalResolved ||
+      (result.terminalUnregistration && unregistrationResolved) ||
+      (result.terminalInvalidToken &&
+        (badDeviceTokenOutcome === "deleted" ||
+          badDeviceTokenOutcome === "not_found")),
     deactivated,
+    badDeviceTokenQuarantined,
+  };
+}
+
+async function sendPush(
+  env: Env,
+  device: RoutedDeviceRecord,
+  event: NormalizedEvent,
+  reason: NotifyReason,
+  authorization: string,
+  collapseId: string,
+  deliveryId = `direct-apns:${crypto.randomUUID()}`,
+): Promise<ApnsDeliveryResult> {
+  return applyTerminalApnsCleanup(
+    env,
+    device,
+    event,
+    reason,
+    deliveryId,
+    await sendPushRequest(
+      env,
+      device,
+      event,
+      reason,
+      authorization,
+      collapseId,
+    ),
+  );
+}
+
+/**
+ * Production training is an authenticated diagnostic, not an alert fan-out.
+ * Its short-lived D1 admission trigger prevents a pre-response renewal from
+ * committing. Once the response marker commits, clean up only the exact sent
+ * revision: a causally later renewal is authoritative and is never globally
+ * quarantined by this diagnostic result.
+ */
+export async function applyTrainingTerminalApnsCleanup(
+  db: D1Database,
+  device: RoutedDeviceRecord,
+  result: ApnsDeliveryResult,
+): Promise<ApnsDeliveryResult> {
+  if (
+    result.ok ||
+    !((result.terminalUnregistration && !result.terminalResolved) ||
+      result.terminalInvalidToken)
+  ) return result;
+  const deletion = await deactivateDevice(db, device);
+  if (deletion === null) {
+    throw new Error("production training rejection cleanup failed");
+  }
+  return {
+    ...result,
+    terminalResolved: true,
+    deactivated: deletion.outcome === "deleted",
+    badDeviceTokenQuarantined: false,
   };
 }
 
@@ -3380,6 +4377,48 @@ export async function cachedApnsAuthorizationFromRelay(env: Env): Promise<string
     throw new Error("Relay APNs authorization response was invalid");
   }
   return authorization;
+}
+
+async function productionTrainingPushThroughRelay(
+  env: Env,
+  device: RoutedDeviceRecord,
+  kind: "immediate" | "delayed",
+  deadlineUtc: string,
+  collapseId: string,
+): Promise<ApnsDeliveryResult> {
+  if (device.appAttestKeyId === null || device.environment !== "production") {
+    throw new Error("production training relay requires an attested production device");
+  }
+  const relay = env.RELAY.get(env.RELAY.idFromName("global"));
+  const response = await relay.fetch(new Request(
+    "https://relay.internal/apns/training",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        token: device.token,
+        registrationRevision: device.registrationRevision,
+        appAttestKeyId: device.appAttestKeyId,
+        kind,
+        deadlineUtc,
+        collapseId,
+      } satisfies ProductionTrainingRelayRequest),
+    },
+  ));
+  const body: unknown = await response.json().catch(() => null);
+  const result = body && typeof body === "object" && !Array.isArray(body) &&
+      Object.hasOwn(body, "result")
+    ? (body as { result?: unknown }).result
+    : null;
+  if (
+    !response.ok || !result || typeof result !== "object" ||
+    Array.isArray(result) || typeof (result as { ok?: unknown }).ok !== "boolean" ||
+    !(typeof (result as { apnsId?: unknown }).apnsId === "string" ||
+      (result as { apnsId?: unknown }).apnsId === null)
+  ) {
+    throw new Error("production training relay returned an invalid result");
+  }
+  return result as ApnsDeliveryResult;
 }
 
 function logApnsFailure(
@@ -3456,7 +4495,11 @@ function logApnsPageFailure(
  * the bounded Queue-to-DLQ path still preserves the failed route's evidence.
  */
 export function isPageLevelApnsFailure(result: ApnsDeliveryResult): boolean {
-  if (result.terminalUnregistration || result.unregistrationTimestampMissing) {
+  if (
+    result.terminalUnregistration ||
+    result.terminalInvalidToken ||
+    result.unregistrationTimestampMissing
+  ) {
     return false;
   }
   if (result.status === 410) return false;
@@ -3489,7 +4532,21 @@ function apnsFailureDisposition(
   // review, rather than risking deletion of a freshly rotated token.
   if (result.unregistrationTimestampMissing) return "quarantine";
 
-  // APNs 410/Unregistered is the only safe deletion signal. If D1 cleanup
+  // Apple documents BadDeviceToken as an invalid recipient token. Delete only
+  // the exact opaque registration revision sent to APNs. A concurrent
+  // authenticated refresh is preserved but quarantined across events unless
+  // this old revision was already processed; a later authenticated renewal
+  // resolves active evidence while retaining that duplicate-response fence.
+  // If D1 cleanup/evidence persistence fails, the current bounded page retry
+  // may contact APNs again because there is no cleanup-only durable work item.
+  if (result.terminalInvalidToken) {
+    if (result.badDeviceTokenQuarantined) {
+      return "quarantine";
+    }
+    return result.terminalResolved ? "terminal" : "retry";
+  }
+
+  // A timestamped APNs 410 is also a safe deletion signal. If D1 cleanup
   // failed, retry it rather than treating the recipient as complete.
   if (result.terminalUnregistration) {
     return result.terminalResolved ? "terminal" : "retry";
@@ -3507,8 +4564,8 @@ function apnsFailureDisposition(
     return "retry";
   }
 
-  // Topic, payload, and non-terminal token failures (for example 400
-  // BadDeviceToken or a 403) are durable incident evidence, but retrying a
+  // Topic, payload, and other non-terminal token failures (for example a 403)
+  // are durable incident evidence, but retrying a
   // whole page would suppress all later recipients. Keep the subscription for
   // a later client refresh and quarantine only this delivery attempt.
   return "quarantine";
@@ -3547,33 +4604,110 @@ function apnsRetryDelaySeconds(result: ApnsDeliveryResult): number {
   return DEFAULT_QUEUE_RETRY_DELAY_SECONDS;
 }
 
-async function recordDeliveryFailure(
+function durableApnsResult(
+  settled: PromiseSettledResult<ApnsDeliveryResult>,
+): ApnsDeliveryResult {
+  if (settled.status === "fulfilled") return { ...settled.value };
+  return {
+    ok: false,
+    apnsId: null,
+    apnsReason:
+      settled.reason instanceof AppIdentityRouteNotAllowedError
+        ? "AppRouteNotAllowed"
+        : "TransportError",
+  };
+}
+
+function apnsObservedBatchRetryPolicy(results: ApnsDeliveryResult[]): {
+  retryRequired: boolean;
+  retryDelaySeconds: number;
+} {
+  let retryRequired = false;
+  let retryDelaySeconds = DEFAULT_QUEUE_RETRY_DELAY_SECONDS;
+  for (const result of results) {
+    if (result.ok) continue;
+    const disposition = apnsFailureDisposition(result);
+    if (disposition !== "retry" && disposition !== "page_retry") continue;
+    retryRequired = true;
+    retryDelaySeconds = Math.max(
+      retryDelaySeconds,
+      apnsRetryDelaySeconds(result),
+    );
+  }
+  return { retryRequired, retryDelaySeconds };
+}
+
+function deterministicPageFailure(
+  results: ApnsDeliveryResult[],
+): ApnsDeliveryResult | null {
+  const pageFailures = results.filter((result) =>
+    !result.ok && isPageLevelApnsFailure(result)
+  );
+  pageFailures.sort((left, right) => {
+    const delay = apnsRetryDelaySeconds(right) - apnsRetryDelaySeconds(left);
+    if (delay !== 0) return delay;
+    const reason = (left.apnsReason ?? "").localeCompare(right.apnsReason ?? "");
+    if (reason !== 0) return reason;
+    return (left.status ?? 0) - (right.status ?? 0);
+  });
+  return pageFailures[0] ?? null;
+}
+
+export async function recordDeliveryFailure(
   db: D1Database,
   deliveryId: string,
   event: NormalizedEvent,
   reason: NotifyReason,
+  deviceToken: string,
   tokenHashValue: string,
+  registrationRevision: string,
+  registrationUpdatedAt: string,
   result: ApnsDeliveryResult,
   disposition: Exclude<ApnsFailureDisposition, "terminal" | "page_retry">,
+  observedAtUtc = new Date().toISOString(),
 ): Promise<void> {
-  const now = new Date().toISOString();
+  const now = observedAtUtc;
+  // An active invalid-token row must not age out before the registration whose
+  // fanout it suppresses. Pin its last-seen clock to at least that snapshot's
+  // refresh time. If atomic BadDeviceToken cleanup failed and an authenticated
+  // renewal serialized before this fallback write, the same D1 statement also
+  // observes the current raw-token row and pins retention to its clock. If the
+  // evidence writes first, registration resolves it instead. Raw tokens are
+  // used only for this D1 lookup and never copied into failure evidence.
+  const lastSeenUtc = deliveryFailureLastSeenUtc(now, registrationUpdatedAt);
+  const badDeviceToken = result.apnsReason === "BadDeviceToken";
+  const failureId = badDeviceToken
+    ? badDeviceTokenFailureId(registrationRevision)
+    : deliveryId;
   await db
     .prepare(
       `INSERT INTO alert_delivery_failures (
-        delivery_id, token_hash, event_ref, source_id, notification_reason,
-        apns_status, apns_reason, disposition, first_seen_utc, last_seen_utc
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        delivery_id, origin_delivery_id, token_hash, event_ref, source_id,
+        notification_reason, apns_status, apns_reason, disposition,
+        first_seen_utc, last_seen_utc, registration_revision
+      ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          MAX(?, COALESCE(
+            (SELECT updated_at FROM devices WHERE token = ?), ?
+          )), ?
       ON CONFLICT(delivery_id, token_hash) DO UPDATE SET
+        origin_delivery_id = excluded.origin_delivery_id,
         apns_status = excluded.apns_status,
         apns_reason = excluded.apns_reason,
         disposition = excluded.disposition,
+        registration_revision = excluded.registration_revision,
         status = 'active',
         resolved_at_utc = NULL,
-        last_seen_utc = excluded.last_seen_utc,
-        occurrences = alert_delivery_failures.occurrences + 1`,
+        last_seen_utc = MAX(
+          alert_delivery_failures.last_seen_utc,
+          excluded.last_seen_utc
+        ),
+        occurrences = alert_delivery_failures.occurrences + CASE
+          WHEN alert_delivery_failures.last_seen_utc < excluded.last_seen_utc
+            THEN 1 ELSE 0 END`,
     )
     .bind(
-      deliveryId,
+      failureId,
+      badDeviceToken ? deliveryId : null,
       tokenHashValue,
       event.id,
       event.sourceId,
@@ -3582,9 +4716,23 @@ async function recordDeliveryFailure(
       result.apnsReason ?? null,
       disposition,
       now,
-      now,
+      lastSeenUtc,
+      badDeviceToken ? deviceToken : null,
+      lastSeenUtc,
+      registrationRevision,
     )
     .run();
+}
+
+export function deliveryFailureLastSeenUtc(
+  observedAtUtc: string,
+  registrationUpdatedAt: string,
+): string {
+  const registrationUpdatedAtMs = Date.parse(registrationUpdatedAt);
+  return !Number.isNaN(registrationUpdatedAtMs) &&
+      registrationUpdatedAtMs > Date.parse(observedAtUtc)
+    ? registrationUpdatedAt
+    : observedAtUtc;
 }
 
 async function recordPageDeliveryFailure(
@@ -3592,8 +4740,9 @@ async function recordPageDeliveryFailure(
   outboxId: string,
   message: AlertDeliveryMessage,
   result: ApnsDeliveryResult,
+  observedAtUtc = new Date().toISOString(),
 ): Promise<void> {
-  const now = new Date().toISOString();
+  const now = observedAtUtc;
   await db
     .prepare(
       `INSERT INTO alert_delivery_page_failures (
@@ -3606,8 +4755,13 @@ async function recordPageDeliveryFailure(
         apns_reason = excluded.apns_reason,
         status = 'active',
         resolved_at_utc = NULL,
-        last_seen_utc = excluded.last_seen_utc,
-        occurrences = alert_delivery_page_failures.occurrences + 1`,
+        last_seen_utc = MAX(
+          alert_delivery_page_failures.last_seen_utc,
+          excluded.last_seen_utc
+        ),
+        occurrences = alert_delivery_page_failures.occurrences + CASE
+          WHEN alert_delivery_page_failures.last_seen_utc < excluded.last_seen_utc
+            THEN 1 ELSE 0 END`,
     )
     .bind(
       outboxId,
@@ -3667,10 +4821,17 @@ async function quarantinedDeviceTokens(
   const result = await db
     .prepare(
       `SELECT token_hash FROM alert_delivery_failures
-       WHERE delivery_id = ? AND status = 'active' AND disposition = 'quarantine'
+       WHERE status = 'active'
+         AND (
+           (disposition = 'quarantine'
+             AND (COALESCE(origin_delivery_id, delivery_id) = ?
+               OR apns_reason = 'BadDeviceToken'))
+           OR (disposition = 'retry' AND apns_reason = 'BadDeviceToken'
+             AND COALESCE(origin_delivery_id, delivery_id) <> ?)
+         )
          AND token_hash IN (${placeholders})`,
     )
-    .bind(deliveryId, ...tokenHashes)
+    .bind(deliveryId, deliveryId, ...tokenHashes)
     .all<{ token_hash: string }>();
   const quarantinedHashes = new Set(result.results.map((row) => row.token_hash));
   return new Set(
@@ -3678,36 +4839,267 @@ async function quarantinedDeviceTokens(
   );
 }
 
-async function recordDeliveredDevices(
+function isTerminalAlertLifecycleReason(reason: NotifyReason): boolean {
+  return reason === "final" || reason === "cancelled";
+}
+
+/**
+ * Terminal revisions close only alerts this service previously delivered and
+ * whose source the current registration still selects. Match both the token
+ * hash and the opaque App Attest key: the hash preserves continuity across an
+ * integrity-key reset with the same APNs token, while the key preserves
+ * continuity across ordinary APNs token rotation. Magnitude/location changes
+ * cannot strand a warning, but removing its feed remains an immediate consent
+ * boundary.
+ */
+export async function terminalAlertLifecycleDevices(
+  db: D1Database,
+  eventRef: string,
+  devices: RoutedDeviceRecord[],
+): Promise<RoutedDeviceRecord[]> {
+  if (devices.length === 0) return [];
+  const tokenHashes = await Promise.all(
+    devices.map((device) => tokenHash(device.token)),
+  );
+  const appAttestKeyIds = [
+    ...new Set(
+      devices.flatMap((device) =>
+        device.appAttestKeyId === null ? [] : [device.appAttestKeyId]
+      ),
+    ),
+  ];
+  const tokenPlaceholders = tokenHashes.map(() => "?").join(", ");
+  const keyPredicate = appAttestKeyIds.length === 0
+    ? ""
+    : ` OR lifecycle.app_attest_key_id IN (${
+      appAttestKeyIds.map(() => "?").join(", ")
+    })`;
+  const possibleKeyPredicate = appAttestKeyIds.length === 0
+    ? ""
+    : ` OR possible.app_attest_key_id IN (${
+      appAttestKeyIds.map(() => "?").join(", ")
+    })`;
+  const result = await db
+    .prepare(
+      `SELECT lifecycle.token_hash, lifecycle.app_attest_key_id
+       FROM alert_lifecycle_recipients AS lifecycle
+       WHERE lifecycle.event_ref = ?
+         AND (lifecycle.token_hash IN (${tokenPlaceholders})${keyPredicate})
+         AND NOT EXISTS (
+           SELECT 1 FROM apns_registration_revision_fences AS fence
+           WHERE fence.registration_revision = lifecycle.registration_revision
+             AND fence.blocks_lifecycle_replay = 1
+             AND fence.decision_kind IN (
+               'explicit_removal', 'empty_source_removal',
+               'stale_registration_retention'
+             )
+             AND fence.processed_at_utc >= lifecycle.last_evidence_at_utc
+         )
+       UNION
+       SELECT possible.token_hash, possible.app_attest_key_id
+       FROM alert_lifecycle_possible_attempts AS possible
+       WHERE possible.event_ref = ?
+         AND (possible.token_hash IN (${tokenPlaceholders})${possibleKeyPredicate})
+         AND NOT EXISTS (
+           SELECT 1 FROM apns_registration_revision_fences AS fence
+           WHERE fence.registration_revision = possible.registration_revision
+             AND fence.blocks_lifecycle_replay = 1
+             AND fence.decision_kind IN (
+               'explicit_removal', 'empty_source_removal',
+               'stale_registration_retention'
+             )
+         )`,
+    )
+    .bind(
+      eventRef,
+      ...tokenHashes,
+      ...appAttestKeyIds,
+      eventRef,
+      ...tokenHashes,
+      ...appAttestKeyIds,
+    )
+    .all<{ token_hash: string; app_attest_key_id: string | null }>();
+  const deliveredTokenHashes = new Set(
+    result.results.map(({ token_hash: value }) => value),
+  );
+  const deliveredAppAttestKeyIds = new Set(
+    result.results.flatMap(({ app_attest_key_id: value }) =>
+      value === null ? [] : [value]
+    ),
+  );
+  return devices.filter((device, index) =>
+    deliveredTokenHashes.has(tokenHashes[index]) ||
+    (device.appAttestKeyId !== null &&
+      deliveredAppAttestKeyIds.has(device.appAttestKeyId))
+  );
+}
+
+export async function recordDeliveredDevices(
   db: D1Database,
   deliveryId: string,
-  tokens: string[],
+  eventRef: string,
+  sourceId: WolfxSourceId,
+  reason: NotifyReason,
+  deliveries: AcceptedDeliveryEvidence[],
+  resolveFailureEvidence = true,
 ): Promise<void> {
-  if (tokens.length === 0) return;
-  const deliveredAt = new Date().toISOString();
-  const tokenHashes = await Promise.all(tokens.map(tokenHash));
+  if (deliveries.length === 0) return;
+  const currentRegistrationCondition = `(
+    token = ? OR (? IS NOT NULL AND app_attest_key_id = ?)
+  ) AND EXISTS (
+    SELECT 1 FROM json_each(
+      CASE WHEN json_valid(devices.sources) THEN devices.sources ELSE '[]' END
+    ) WHERE value = ?
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM apns_registration_revision_fences AS fence
+    WHERE fence.registration_revision = ?
+      AND fence.blocks_lifecycle_replay = 1
+      AND fence.decision_kind IN (
+        'explicit_removal', 'empty_source_removal',
+        'stale_registration_retention'
+      )
+  )
+  ORDER BY CASE WHEN token = ? THEN 0 ELSE 1 END
+  LIMIT 1`;
+  const currentRegistrationBindings = (
+    delivery: AcceptedDeliveryEvidence,
+  ): unknown[] => [
+    delivery.token,
+    delivery.snapshotAppAttestKeyId,
+    delivery.snapshotAppAttestKeyId,
+    sourceId,
+    delivery.snapshotRegistrationRevision,
+    delivery.token,
+  ];
+  const lifecycleStatements = reason === "new" || reason === "updated"
+    ? deliveries.map((delivery) =>
+        db
+          .prepare(
+            `INSERT INTO alert_lifecycle_recipients (
+               event_ref, token_hash, app_attest_key_id, registration_revision,
+               evidence_kind, first_evidence_at_utc, last_evidence_at_utc
+             )
+             SELECT ?, ?, app_attest_key_id, registration_revision,
+                    'apns_accepted', ?, ?
+             FROM devices
+             WHERE ${currentRegistrationCondition}
+             ON CONFLICT(event_ref, token_hash) DO UPDATE SET
+               app_attest_key_id = excluded.app_attest_key_id,
+               registration_revision = excluded.registration_revision,
+               evidence_kind = 'apns_accepted',
+               first_evidence_at_utc = MIN(
+                 alert_lifecycle_recipients.first_evidence_at_utc,
+                 excluded.first_evidence_at_utc
+               ),
+               last_evidence_at_utc = MAX(
+                 alert_lifecycle_recipients.last_evidence_at_utc,
+                 excluded.last_evidence_at_utc
+               )`,
+          )
+          .bind(
+            eventRef,
+            delivery.tokenHash,
+            delivery.firstAcceptedAtUtc,
+            delivery.lastAcceptedAtUtc,
+            ...currentRegistrationBindings(delivery),
+          )
+      )
+    : [];
+  const failureResolutionStatements = resolveFailureEvidence
+    ? deliveries.map((delivery) =>
+        db
+          .prepare(
+            // Resolve only evidence whose provider-response observation is no
+            // later than this APNs 2xx. D1 serialization alone is insufficient
+            // when two requests overlap; delayed journal replay disables this
+            // update while retaining the original accepted-at timestamp.
+            `UPDATE alert_delivery_failures
+             SET status = 'resolved',
+                 resolved_at_utc = MAX(?, last_seen_utc),
+                 last_seen_utc = MAX(?, last_seen_utc)
+             WHERE token_hash = ? AND status = 'active'
+               AND last_seen_utc <= ?
+               AND (
+                 delivery_id = ?
+                 OR origin_delivery_id = ?
+                 OR apns_reason = 'BadDeviceToken'
+               )
+               AND EXISTS (
+                 SELECT 1 FROM devices
+                 WHERE ${currentRegistrationCondition}
+               )`,
+          )
+          .bind(
+            delivery.lastAcceptedAtUtc,
+            delivery.lastAcceptedAtUtc,
+            delivery.tokenHash,
+            delivery.lastAcceptedAtUtc,
+            deliveryId,
+            deliveryId,
+            ...currentRegistrationBindings(delivery),
+          )
+      )
+    : [];
   await db.batch(
     [
-      ...tokens.map((token) =>
+      ...deliveries.map((delivery) =>
         db
           .prepare(
-            `INSERT OR IGNORE INTO notification_deliveries
-             (delivery_id, device_token, delivered_at_utc)
-             VALUES (?, ?, ?)`,
+            `INSERT INTO notification_deliveries
+             (delivery_id, device_token, delivered_at_utc, lifecycle_reconciled)
+             SELECT ?, token, ?, 1 FROM devices
+             WHERE ${currentRegistrationCondition}
+             ON CONFLICT(delivery_id, device_token) DO UPDATE SET
+               lifecycle_reconciled = 1`,
           )
-          .bind(deliveryId, token, deliveredAt),
+          .bind(
+            deliveryId,
+            delivery.firstAcceptedAtUtc,
+            ...currentRegistrationBindings(delivery),
+          ),
       ),
-      ...tokenHashes.map((tokenHashValue) =>
-        db
-          .prepare(
-            `UPDATE alert_delivery_failures
-             SET status = 'resolved', resolved_at_utc = ?
-             WHERE delivery_id = ? AND token_hash = ? AND status = 'active'`,
-          )
-          .bind(deliveredAt, deliveryId, tokenHashValue),
-      ),
+      ...failureResolutionStatements,
+      ...lifecycleStatements,
     ],
   );
+}
+
+/**
+ * A controlled production training 2xx is current-revision provider evidence,
+ * even though it must not create earthquake delivery or lifecycle rows. Clear
+ * only older/equal BadDeviceToken observations for the still-exact revision;
+ * a later rejection remains active by its provider-response timestamp.
+ */
+async function resolveBadDeviceTokenAfterTrainingAcceptance(
+  db: D1Database,
+  device: RoutedDeviceRecord,
+  acceptedAtUtc: string,
+): Promise<void> {
+  const hashedToken = await tokenHash(device.token);
+  await db
+    .prepare(
+      `UPDATE alert_delivery_failures
+       SET status = 'resolved',
+           resolved_at_utc = MAX(?, last_seen_utc),
+           last_seen_utc = MAX(?, last_seen_utc)
+       WHERE token_hash = ? AND status = 'active'
+         AND apns_reason = 'BadDeviceToken'
+         AND last_seen_utc <= ?
+         AND EXISTS (
+           SELECT 1 FROM devices
+           WHERE token = ? AND registration_revision = ?
+         )`,
+    )
+    .bind(
+      acceptedAtUtc,
+      acceptedAtUtc,
+      hashedToken,
+      acceptedAtUtc,
+      device.token,
+      device.registrationRevision,
+    )
+    .run();
 }
 
 interface DeliveryPageResult {
@@ -3717,6 +5109,10 @@ interface DeliveryPageResult {
   invalidateApnsJwt: boolean;
   /** Provider/payload page failure or one topic-group failure, never one token. */
   pageFailure: ApnsDeliveryResult | null;
+  /** Only provider-wide failures may stop cursor progression to later pages. */
+  globalPageFailure: boolean;
+  /** The pre-send intent completion transaction already recorded pageFailure. */
+  pageFailurePersistedByIntent: boolean;
   /** An expiry or newer serial stopped the page before later APNs batches. */
   terminalState: OutboxDeliveryGateState | null;
 }
@@ -3736,9 +5132,39 @@ export async function dispatchPushPage(
   deliveryId: string,
   afterDeviceCursor?: number,
   beforeApnsBatch?: () => Promise<OutboxDeliveryGateState>,
+  persistAcceptedBatch?: (
+    deliveries: AcceptedDelivery[],
+  ) => Promise<void>,
+  prepareApnsBatch?: (
+    deliveries: PreparedDelivery[],
+  ) => Promise<ApnsDeliveryIntentHandle>,
+  persistObservedApnsBatch?: (
+    intent: ApnsDeliveryIntentHandle,
+    observedAtUtc: string,
+    deliveries: MappedApnsIntentRecipient[],
+    results: ApnsDeliveryResult[],
+  ) => Promise<void>,
+  finalApnsBatchAdmission?: (
+    intent: ApnsDeliveryIntentHandle,
+    deliveries: PreparedDelivery[],
+  ) => Promise<MappedApnsIntentRecipient[]>,
+  completeApnsBatch?: (
+    intent: ApnsDeliveryIntentHandle,
+    pageFailure: ApnsDeliveryResult | null,
+  ) => Promise<boolean>,
 ): Promise<DeliveryPageResult> {
   if (!isApnsRelaySource(event.sourceId)) {
     throw new RangeError("APNs relay source is not permitted");
+  }
+  if (
+    [
+      prepareApnsBatch,
+      persistObservedApnsBatch,
+      finalApnsBatchAdmission,
+      completeApnsBatch,
+    ].filter((callback) => callback !== undefined).length % 4 !== 0
+  ) {
+    throw new TypeError("APNs intent callbacks must be supplied together");
   }
   // APNs JWT credentials are environment-specific. A production Worker must
   // never page a legacy sandbox subscription (and an isolated development
@@ -3759,9 +5185,14 @@ export async function dispatchPushPage(
     page.length === DEVICE_DELIVERY_PAGE_SIZE
       ? (page.at(-1)?.cursor ?? null)
       : null;
-  const devices = page
-    .map(rowToDevice)
-    .filter((device) => shouldNotify(device, event, reason));
+  const pageDevices = page.map(rowToDevice);
+  const devices = isTerminalAlertLifecycleReason(reason)
+    ? await terminalAlertLifecycleDevices(
+        env.DB,
+        event.id,
+        pageDevices.filter((device) => device.sources.includes(event.sourceId)),
+      )
+    : pageDevices.filter((device) => shouldNotify(device, event, reason));
   const alreadyDelivered = await deliveredDeviceTokens(
     env.DB,
     deliveryId,
@@ -3776,11 +5207,12 @@ export async function dispatchPushPage(
     (device) => !alreadyDelivered.has(device.token) && !quarantined.has(device.token),
   );
   const collapseId = await apnsCollapseID(event);
-  const successfulTokens: string[] = [];
   let retryRequired = false;
   let retryDelaySeconds = DEFAULT_QUEUE_RETRY_DELAY_SECONDS;
   let invalidateApnsJwt = false;
   let pageFailure: ApnsDeliveryResult | null = null;
+  let globalPageFailure = false;
+  let pageFailurePersistedByIntent = false;
   let terminalState: OutboxDeliveryGateState | null = null;
 
   // Do not mix APNs topics in one concurrent batch. A topic entitlement or
@@ -3820,53 +5252,196 @@ export async function dispatchPushPage(
           tokenHash: await tokenHash(device.token),
         })),
       );
-      const results = await Promise.allSettled(
-        deliveries.map(({ device }) =>
-          sendPush(env, device, event, reason, authorization, collapseId),
-        ),
-      );
-
-      // A provider transport/auth/topic/payload failure is not evidence that
-      // one recipient is bad. Preserve successful peers, retry this outbox
-      // page, and continue only when the failure is provably topic-scoped.
-      const providerResult = results.find(
-        (result) =>
-          result.status === "rejected" ||
-          (!result.value.ok && isPageLevelApnsFailure(result.value)),
-      );
-      if (providerResult) {
-        for (const [index, result] of results.entries()) {
-          if (result.status === "fulfilled" && result.value.ok) {
-            successfulTokens.push(deliveries[index].device.token);
+      // This is the first durable boundary for a provider attempt. A crash at
+      // any point after it (including immediately after APNs returns 2xx) leaves
+      // enough event/recipient state for the global relay to retry safely.
+      const preparedIntent = prepareApnsBatch
+        ? await prepareApnsBatch(deliveries)
+        : null;
+      // Supersession/expiry can commit while intent admission and conservative
+      // lifecycle evidence cross D1. Make the authoritative outbox read the
+      // final awaited operation before any provider byte is sent.
+      let contactedRecipients = deliveries.map((delivery, originDeliveryIndex) => ({
+        delivery,
+        originDeliveryIndex,
+        snapshotRegistrationRevision: delivery.device.registrationRevision,
+      }));
+      const admittedRecipients =
+        finalApnsBatchAdmission && preparedIntent
+          ? await finalApnsBatchAdmission(preparedIntent, deliveries)
+          : null;
+      if (admittedRecipients !== null) contactedRecipients = admittedRecipients;
+      const contactedDeliveries = contactedRecipients.map(({ delivery }) => delivery);
+      const finalGateState = finalApnsBatchAdmission
+        ? (contactedDeliveries.length > 0 ? "pending" : "changed")
+        : (beforeApnsBatch ? await beforeApnsBatch() : "pending");
+      if (finalGateState !== "pending") {
+        if (finalGateState !== "changed") terminalState = finalGateState;
+        if (preparedIntent && completeApnsBatch) {
+          if (finalGateState !== "changed") {
+            await completeApnsBatch(preparedIntent, null);
           }
         }
-        const failure: ApnsDeliveryResult = providerResult.status === "rejected"
-          ? {
-              ok: false,
-              apnsId: null,
-              apnsReason: providerResult.reason instanceof AppIdentityRouteNotAllowedError
-                ? "AppRouteNotAllowed"
-                : "TransportError",
-            }
-          : providerResult.value;
-        pageFailure ??= failure;
-        retryRequired = true;
-        retryDelaySeconds = Math.max(
-          retryDelaySeconds,
-          apnsRetryDelaySeconds(failure),
-        );
-        invalidateApnsJwt ||= failure.apnsReason === "ExpiredProviderToken";
-        if (isTopicScopedApnsFailure(failure)) break;
+        if (finalGateState === "changed") {
+          retryRequired = true;
+          retryDelaySeconds = Math.max(
+            retryDelaySeconds,
+            DEFAULT_QUEUE_RETRY_DELAY_SECONDS,
+          );
+        }
         break routeGroups;
       }
-
+      const results = await Promise.allSettled(
+        contactedDeliveries.map(({ device }) =>
+          sendPushRequest(
+            env,
+            device,
+            event,
+            reason,
+            authorization,
+            collapseId,
+          ),
+        ),
+      );
+      const observedAtUtc = new Date().toISOString();
+      const durableResults = results.map(durableApnsResult);
+      if (preparedIntent && persistObservedApnsBatch) {
+        // This DO write precedes every fallible D1 write below. Recovery can
+        // replay exact accept/terminal/page outcomes without another APNs
+        // contact, and the maximum observed Retry-After is never lost behind
+        // a peer's failing cleanup.
+        await persistObservedApnsBatch(
+          preparedIntent,
+          observedAtUtc,
+          contactedRecipients,
+          durableResults,
+        );
+      }
+      const intentOwnsOutcomePersistence =
+        preparedIntent !== null && completeApnsBatch !== undefined;
+      const providerFailure = deterministicPageFailure(durableResults);
+      if (intentOwnsOutcomePersistence) {
+        // The durable observed-batch reconciler owns every D1 mutation. Do not
+        // repeat accepted/failure/cleanup statements in this request: keeping
+        // one owner is idempotent and keeps the single-recipient page
+        // below the Workers Free D1 query budget.
+        const intentStillPending = await completeApnsBatch(
+          preparedIntent,
+          providerFailure,
+        );
+        if (intentStillPending) {
+          // A transaction-time admission can deliberately omit a recipient
+          // whose revision changed during preparation. The durable intent owns
+          // that recipient's re-resolution, so keep the Queue/outbox page alive
+          // until the continuation is actually complete instead of returning a
+          // success that `/outbox/ack` could terminalize.
+          retryRequired = true;
+          retryDelaySeconds = Math.max(
+            retryDelaySeconds,
+            DEFAULT_QUEUE_RETRY_DELAY_SECONDS,
+          );
+        }
+      }
+      const acceptedBatch: AcceptedDelivery[] = [];
       for (const [index, result] of results.entries()) {
-        const delivery = deliveries[index];
+        if (result.status === "fulfilled" && result.value.ok) {
+          acceptedBatch.push({
+            ...contactedDeliveries[index],
+            acceptedAtUtc: result.value.acceptedAtUtc as string,
+          });
+        }
+      }
+      if (acceptedBatch.length > 0 && !intentOwnsOutcomePersistence) {
+        if (persistAcceptedBatch) {
+          await persistAcceptedBatch(acceptedBatch);
+        } else {
+          await recordDeliveredDevices(
+            env.DB,
+            deliveryId,
+            event.id,
+            event.sourceId,
+            reason,
+            acceptedBatch.map((delivery) => ({
+              token: delivery.device.token,
+              tokenHash: delivery.tokenHash,
+              snapshotRegistrationRevision:
+                delivery.device.registrationRevision,
+              snapshotAppAttestKeyId: delivery.device.appAttestKeyId,
+              firstAcceptedAtUtc: delivery.acceptedAtUtc,
+              lastAcceptedAtUtc: delivery.acceptedAtUtc,
+            })),
+            true,
+          );
+        }
+      }
+
+      // Provider calls are complete and every observed 2xx is durable. Only
+      // now may a peer's BadDeviceToken/410 path enter fallible D1 cleanup.
+      // Preserve PromiseSettledResult shape so the existing page-level
+      // classifier continues to handle transport rejections consistently.
+      for (const [index, result] of results.entries()) {
+        if (
+          !intentOwnsOutcomePersistence &&
+          result.status === "fulfilled" && !result.value.ok
+        ) {
+          result.value = await applyTerminalApnsCleanup(
+            env,
+            contactedDeliveries[index].device,
+            event,
+            reason,
+            deliveryId,
+            result.value,
+          );
+        }
+      }
+
+      // A terminal-token response is only retryable while its exact sent
+      // revision still needs cleanup. Apply that cleanup before deriving the
+      // page retry policy; otherwise the pre-cleanup observation permanently
+      // marks a successfully deleted BadDeviceToken as Queue-retry work.
+      // Intent-owned outcomes are reconciled from their durable journal, where
+      // an unresolved cleanup remains pending and therefore still retries.
+      if (!intentOwnsOutcomePersistence) {
+        const observedRetryPolicy = apnsObservedBatchRetryPolicy(
+          results.map((result, index) =>
+            result.status === "fulfilled"
+              ? result.value
+              : durableResults[index]
+          ),
+        );
+        retryRequired ||= observedRetryPolicy.retryRequired;
+        retryDelaySeconds = Math.max(
+          retryDelaySeconds,
+          observedRetryPolicy.retryDelaySeconds,
+        );
+      } else {
+        const observedRetryPolicy = apnsObservedBatchRetryPolicy(
+          durableResults.filter((result) =>
+            !result.terminalInvalidToken && !result.terminalUnregistration
+          ),
+        );
+        retryRequired ||= observedRetryPolicy.retryRequired;
+        retryDelaySeconds = Math.max(
+          retryDelaySeconds,
+          observedRetryPolicy.retryDelaySeconds,
+        );
+      }
+
+      // Classify every fulfilled peer before acting on a page-scoped failure.
+      // APNs can return a provider-token error for one concurrent request and
+      // a longer Retry-After or terminal-token result for another; neither
+      // observed outcome may disappear behind the first page classification.
+      for (const [index, result] of results.entries()) {
+        const delivery = contactedDeliveries[index];
         if (result.status === "fulfilled") {
           if (result.value.ok) {
-            successfulTokens.push(delivery.device.token);
+            // Persisted immediately above before any later APNs batch or
+            // provider/failure handling can supersede this known acceptance.
           } else {
             const disposition = apnsFailureDisposition(result.value);
+            const quarantinePersisted =
+              disposition === "quarantine" &&
+              result.value.badDeviceTokenQuarantined === true;
             logApnsFailure(
               event,
               reason,
@@ -3881,22 +5456,28 @@ export async function dispatchPushPage(
                 apnsRetryDelaySeconds(result.value),
               );
               invalidateApnsJwt ||= result.value.apnsReason === "ExpiredProviderToken";
-              await recordDeliveryFailure(
+              if (!intentOwnsOutcomePersistence) await recordDeliveryFailure(
                 env.DB,
                 deliveryId,
                 event,
                 reason,
+                delivery.device.token,
                 delivery.tokenHash,
+                delivery.device.registrationRevision,
+                delivery.device.updatedAt,
                 result.value,
                 "retry",
               );
-            } else if (disposition === "quarantine") {
-              await recordDeliveryFailure(
+            } else if (disposition === "quarantine" && !quarantinePersisted) {
+              if (!intentOwnsOutcomePersistence) await recordDeliveryFailure(
                 env.DB,
                 deliveryId,
                 event,
                 reason,
+                delivery.device.token,
                 delivery.tokenHash,
+                delivery.device.registrationRevision,
+                delivery.device.updatedAt,
                 result.value,
                 "quarantine",
               );
@@ -3911,33 +5492,60 @@ export async function dispatchPushPage(
             retryDelaySeconds,
             APNS_TRANSIENT_RETRY_DELAY_SECONDS,
           );
-          await recordDeliveryFailure(
-            env.DB,
-            deliveryId,
-            event,
-            reason,
-            delivery.tokenHash,
-            {
-              ok: false,
-              apnsId: null,
-              apnsReason: "TransportError",
-            },
-            "retry",
-          );
+          // A rejected send can be a deterministic stored-route mismatch,
+          // not an uncertain token-level transport outcome. Preserve the
+          // page/topic failure without manufacturing retry evidence for a
+          // device that was never contacted.
+          const durableResult = durableResults[index];
+          if (
+            !intentOwnsOutcomePersistence &&
+            !isTopicScopedApnsFailure(durableResult)
+          ) {
+            await recordDeliveryFailure(
+              env.DB,
+              deliveryId,
+              event,
+              reason,
+              delivery.device.token,
+              delivery.tokenHash,
+              delivery.device.registrationRevision,
+              delivery.device.updatedAt,
+              durableResult,
+              "retry",
+            );
+          }
         }
+      }
+      if (providerFailure) {
+        const failure = providerFailure;
+        pageFailure ??= failure;
+        retryRequired = true;
+        retryDelaySeconds = Math.max(
+          retryDelaySeconds,
+          apnsRetryDelaySeconds(failure),
+        );
+        invalidateApnsJwt ||= failure.apnsReason === "ExpiredProviderToken";
+        globalPageFailure ||= !isTopicScopedApnsFailure(failure);
+        if (intentOwnsOutcomePersistence) {
+          pageFailurePersistedByIntent = true;
+        }
+        if (isTopicScopedApnsFailure(failure)) break;
+        break routeGroups;
+      }
+      if (preparedIntent && completeApnsBatch && !intentOwnsOutcomePersistence) {
+        await completeApnsBatch(preparedIntent, null);
       }
     }
   }
 
-  // Record only confirmed APNs successes. If recording fails, the queue will
-  // retry and APNs collapse IDs make the small duplicate window safe.
-  await recordDeliveredDevices(env.DB, deliveryId, successfulTokens);
   return {
     nextAfterDeviceCursor,
     retryRequired,
     retryDelaySeconds,
     invalidateApnsJwt,
     pageFailure,
+    globalPageFailure,
+    pageFailurePersistedByIntent,
     terminalState,
   };
 }
@@ -4031,6 +5639,11 @@ export class QuakeRelay {
   // so a concurrent routine write cannot overwrite a faster reconnect wakeup
   // (or vice versa) between storage.getAlarm() and storage.setAlarm().
   private relayAlarmWrite: Promise<void> = Promise.resolve();
+  // Capacity and the exact intent must be durable before APNs sees a batch.
+  // Serialize provider work and every terminal gate in one global lane so
+  // concurrent Queue requests cannot consume the final slot or supersede an
+  // admitted provider attempt while its D1 outcome is unresolved.
+  private apnsDeliverySerial: Promise<void> = Promise.resolve();
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -4048,6 +5661,201 @@ export class QuakeRelay {
       // precisely when D1 may be unavailable, while Durable Object storage is
       // the independent durability boundary for the sanitized incident record.
       return this.recordDlqPersistenceFallback(request);
+    }
+
+    if (url.pathname === "/dlq/finalize" && request.method === "POST") {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return Response.json({ error: "invalid DLQ incident evidence" }, { status: 400 });
+      }
+      if (!isDlqIncidentEvidence(body)) {
+        return Response.json({ error: "invalid DLQ incident evidence" }, { status: 400 });
+      }
+      try {
+        return await this.serializeApnsDelivery(async () => {
+          // Terminal DLQ state cannot outrun a provider acceptance already
+          // journaled—or a batch currently admitted in this same serial lane.
+          if (await this.reconcileApnsAcceptanceJournal()) {
+            throw new Error("APNs durability maintenance owns this invocation");
+          }
+          const incidentRecorded = await persistDlqIncidentAndFinalizeOutbox(
+            this.env,
+            body,
+          );
+          return Response.json({ ok: true, incidentRecorded });
+        });
+      } catch {
+        return Response.json(
+          { error: "DLQ finalization is temporarily unavailable" },
+          { status: 503 },
+        );
+      }
+    }
+
+    if (url.pathname === "/apns/training" && request.method === "POST") {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return Response.json({ error: "invalid production training request" }, { status: 400 });
+      }
+      if (!isProductionTrainingRelayRequest(body)) {
+        return Response.json({ error: "invalid production training request" }, { status: 400 });
+      }
+      try {
+        return await this.serializeApnsDelivery(async () => {
+          // A controlled training response and every alert response share one
+          // causal lane. Reconcile admitted alert work first, then re-read the
+          // exact current production revision inside that lane before APNs.
+          if (await this.reconcileApnsAcceptanceJournal()) {
+            throw new Error("APNs durability maintenance owns this invocation");
+          }
+          const row = await this.env.DB
+            .prepare(
+              `SELECT * FROM devices
+               WHERE token = ? AND registration_revision = ?
+                 AND app_attest_key_id = ? AND environment = 'production'`,
+            )
+            .bind(
+              body.token,
+              body.registrationRevision,
+              body.appAttestKeyId,
+            )
+            .first<DeviceRow>();
+          if (!row) {
+            return Response.json(
+              { error: "production training registration changed" },
+              { status: 409 },
+            );
+          }
+          const device = rowToDevice(row);
+          allowedStoredAppIdentityRoute(this.env, device);
+          if (
+            !productionTestPushAllowed(
+              this.env.ENABLE_PRODUCTION_TEST_PUSH,
+              device.environment,
+              body.kind,
+            ) || !hasApnsConfiguration(this.env)
+          ) {
+            return Response.json(
+              { error: "production training delivery is disabled" },
+              { status: 403 },
+            );
+          }
+          const event = trainingTestEvent();
+          const expectedCollapseId = await apnsCollapseID(event);
+          if (body.collapseId !== expectedCollapseId) {
+            return Response.json(
+              { error: "invalid production training collapse ID" },
+              { status: 400 },
+            );
+          }
+          const authorization = await this.apnsAuthorization();
+          const collapseId = body.collapseId;
+          const finalDevice = rowToDevice(row);
+          const trainingAttemptId = `training:${crypto.randomUUID()}`;
+          const admittedAtUtc = new Date().toISOString();
+          const trainingTokenHash = await tokenHash(finalDevice.token);
+          // Schedule crash recovery before the final D1 admission. The INSERT
+          // below is intentionally the last awaited operation before fetch.
+          await this.scheduleRelayAlarm(
+            Date.now() + TRAINING_APNS_ATTEMPT_RECOVERY_MS,
+          );
+          const admission = await this.env.DB
+            .prepare(
+              `INSERT INTO apns_provider_attempts (
+                 attempt_id, registration_revision, token_hash,
+                 event_ref, outbox_id, admitted_at_utc
+               )
+               SELECT ?, registration_revision, ?, ?, ?, ? FROM devices
+               WHERE token = ? AND registration_revision = ?
+                 AND app_attest_key_id = ? AND environment = 'production'
+                 AND NOT EXISTS (
+                   SELECT 1 FROM apns_registration_revision_fences
+                   WHERE registration_revision = devices.registration_revision
+                     AND blocks_lifecycle_replay = 1
+                 )
+               RETURNING registration_revision`,
+            )
+            .bind(
+              trainingAttemptId,
+              trainingTokenHash,
+              event.id,
+              trainingAttemptId,
+              admittedAtUtc,
+              body.token,
+              body.registrationRevision,
+              body.appAttestKeyId,
+            )
+            .first<{ registration_revision: string }>();
+          // The serial lane can wait behind emergency recovery. Recheck after
+          // every preceding await so a delayed appointment or concurrent
+          // opt-out/revision change never reaches APNs. This exact D1 read is
+          // the final awaited operation before provider contact.
+          if (!admission || Date.now() > Date.parse(body.deadlineUtc)) {
+            if (admission) {
+              await this.env.DB
+                .prepare(
+                  `UPDATE apns_provider_attempts
+                   SET outcome_reconciled_at_utc = ?
+                   WHERE attempt_id = ? AND outcome_reconciled_at_utc IS NULL`,
+                )
+                .bind(new Date().toISOString(), trainingAttemptId)
+                .run();
+            }
+            return Response.json(
+              { error: "production training registration or deadline changed" },
+              { status: 409 },
+            );
+          }
+          allowedStoredAppIdentityRoute(this.env, finalDevice);
+          let result: ApnsDeliveryResult;
+          try {
+            result = await sendPushRequest(
+              this.env,
+              finalDevice,
+              event,
+              "training",
+              authorization,
+              collapseId,
+            );
+          } finally {
+            // This D1 marker is the response-order boundary. Any registration
+            // mutation serialized before it fails closed on the unresolved
+            // attempt; one serialized afterward is a new revision that the
+            // exact cleanup below cannot delete or quarantine.
+            await this.env.DB
+              .prepare(
+                `UPDATE apns_provider_attempts
+                 SET outcome_reconciled_at_utc = COALESCE(
+                   outcome_reconciled_at_utc, ?
+                 ) WHERE attempt_id = ?`,
+              )
+              .bind(new Date().toISOString(), trainingAttemptId)
+              .run();
+          }
+          result = await applyTrainingTerminalApnsCleanup(
+            this.env.DB,
+            finalDevice,
+            result,
+          );
+          if (result.ok && result.acceptedAtUtc) {
+            await resolveBadDeviceTokenAfterTrainingAcceptance(
+              this.env.DB,
+              finalDevice,
+              result.acceptedAtUtc,
+            );
+          }
+          return Response.json({ result });
+        });
+      } catch {
+        return Response.json(
+          { error: "production training delivery is temporarily unavailable" },
+          { status: 503 },
+        );
+      }
     }
 
     if (
@@ -4112,10 +5920,15 @@ export class QuakeRelay {
       ) {
         return Response.json({ error: "invalid source-policy rejection" }, { status: 400 });
       }
-      const superseded = await this.supersedeOutboxForSourcePolicy(outboxId);
-      return Response.json({ ok: true, alreadyMissingOrAllowed: !superseded });
+      return this.serializeApnsDelivery(async () => {
+        if (await this.reconcileApnsAcceptanceJournal()) {
+          throw new Error("APNs durability maintenance owns this invocation");
+        }
+        const superseded = await this.supersedeOutboxForSourcePolicy(outboxId);
+        return Response.json({ ok: true, alreadyMissingOrAllowed: !superseded });
+      });
     }
-    await this.ensureStarted();
+    await this.ensureRequestStarted();
     if (url.pathname === "/deliver" && request.method === "POST") {
       let body: unknown;
       try {
@@ -4126,7 +5939,7 @@ export class QuakeRelay {
       if (!isAlertDeliveryMessage(body)) {
         return Response.json({ error: "invalid queue message" }, { status: 400 });
       }
-      return this.deliverQueuedPage(body);
+      return this.serializeApnsDelivery(() => this.deliverQueuedPage(body));
     }
     if (url.pathname === "/outbox/ack" && request.method === "POST") {
       let body: unknown;
@@ -4142,11 +5955,16 @@ export class QuakeRelay {
       if (typeof outboxId !== "string" || outboxId.length === 0) {
         return Response.json({ error: "invalid outbox acknowledgement" }, { status: 400 });
       }
-      const acknowledged = await this.finalizeOutbox(outboxId, "delivered");
-      // An old Queue message can outlive terminal-outbox retention. Its relay
-      // path already proved that no APNs work remains safe; acknowledge that
-      // Queue copy instead of retrying it into a misleading DLQ incident.
-      return Response.json({ ok: true, alreadyMissing: !acknowledged });
+      return this.serializeApnsDelivery(async () => {
+        if (await this.reconcileApnsAcceptanceJournal()) {
+          throw new Error("APNs durability maintenance owns this invocation");
+        }
+        const acknowledged = await this.finalizeOutbox(outboxId, "delivered");
+        // An old Queue message can outlive terminal-outbox retention. Its relay
+        // path already proved that no APNs work remains safe; acknowledge that
+        // Queue copy instead of retrying it into a misleading DLQ incident.
+        return Response.json({ ok: true, alreadyMissing: !acknowledged });
+      });
     }
     if (url.pathname === "/outbox/legacy" && request.method === "POST") {
       let body: unknown;
@@ -4218,8 +6036,30 @@ export class QuakeRelay {
     return startup;
   }
 
+  /**
+   * Queue/API requests must not inherit the alarm's purge, outbox-flush, or
+   * bounded migration budget before doing their own D1 work. Start only the
+   * in-memory transports and ensure an alarm owns durable maintenance.
+   */
+  private async ensureRequestStarted(): Promise<void> {
+    await this.ensureUpstreams();
+    if (await this.state.storage.getAlarm() === null) {
+      await this.scheduleRoutineRelayAlarm();
+    }
+  }
+
   async alarm(): Promise<void> {
     try {
+      // Prepared APNs work outranks every later outbox supersession/expiry
+      // decision. Recovery can itself contact APNs, so it shares the exact
+      // serial lane used by live delivery and every terminal outbox gate.
+      const apnsMaintenancePerformed = await this.serializeApnsDelivery(() =>
+        this.reconcileApnsAcceptanceJournal()
+      );
+      if (apnsMaintenancePerformed) {
+        await this.ensureUpstreams();
+        return;
+      }
       const fallbackActive = await this.refreshHttpFallbackActive();
       const pendingHttpSnapshot =
         // Only the alarm may repair malformed public snapshot cursors. Status
@@ -4316,15 +6156,59 @@ export class QuakeRelay {
         await this.ensureUpstreams();
         return;
       }
-      // Recover a D1-persistence fallback before ordinary outbox replay. If
-      // D1 has recovered, this atomically terminalizes the original outbox row
-      // first, so its expired lease cannot resurrect a failed alert page.
-      await this.reconcileDlqPersistenceFallbacks();
-      await this.migrateLegacyPendingDeliveries();
+      // Every D1-heavy maintenance class owns one alarm invocation. Combining
+      // journal replay, an eight-row outbox flush, and the retention batch can
+      // exceed Workers Free's 50-query ceiling before a live delivery starts.
+      if (await this.apnsDurabilityMaintenanceOwnsInvocation()) {
+        await this.serializeApnsDelivery(() =>
+          this.reconcileApnsAcceptanceJournal()
+        );
+        await this.ensureUpstreams();
+        return;
+      }
+      const pendingDlqFallback = await this.state.storage.list({
+        prefix: DLQ_PERSISTENCE_FALLBACK_PREFIX,
+        limit: 1,
+      });
+      if (pendingDlqFallback.size > 0) {
+        await this.serializeApnsDelivery(async () => {
+          if (await this.reconcileApnsAcceptanceJournal()) return;
+          await this.reconcileDlqPersistenceFallbacks();
+        });
+        await this.ensureUpstreams();
+        return;
+      }
+      const pendingLegacy = await this.state.storage.list({
+        prefix: LEGACY_PENDING_DELIVERY_PREFIX,
+        limit: 1,
+      });
+      if (pendingLegacy.size > 0) {
+        await this.migrateLegacyPendingDeliveries();
+        await this.ensureUpstreams();
+        return;
+      }
       if (await this.drainPendingLiveSnapshotWorks()) return;
-      await this.drainPendingIngestJournal();
-      await this.flushAlertDeliveryOutbox(ROUTINE_OUTBOX_FLUSH_BATCH_SIZE);
-      await this.purgeExpiredDevicesIfDue();
+      const pendingIngest = await this.state.storage.list({
+        prefix: PENDING_INGEST_PREFIX,
+        limit: 1,
+      });
+      if (pendingIngest.size > 0) {
+        await this.drainPendingIngestJournal(1, 1);
+        await this.ensureUpstreams();
+        return;
+      }
+      if (await this.devicePurgeIsDue()) {
+        await this.purgeExpiredDevicesIfDue();
+        await this.ensureUpstreams();
+        return;
+      }
+      if (
+        await this.flushAlertDeliveryOutbox(ROUTINE_OUTBOX_FLUSH_BATCH_SIZE) >
+          0
+      ) {
+        await this.ensureUpstreams();
+        return;
+      }
       await this.ensureUpstreams();
     } finally {
       // Preserve a short journal-retry alarm requested during this run rather
@@ -4343,24 +6227,1752 @@ export class QuakeRelay {
       ? await this.state.storage.getAlarm()
       : alarmAtStart;
     await this.ensureUpstreams();
-    // Baseline HTTP seeding always belongs to the relay alarm, never to a
-    // caller's `/deliver` or acknowledgement invocation. A Queue delivery can
-    // have its own sizable D1 page, so mixing an eight-event snapshot slice
-    // here would violate the whole-invocation D1 budget. With no existing
-    // alarm, `scheduleRoutineRelayAlarm()` below requests the immediate
-    // baseline wakeup instead.
-    // This must precede every path that can enqueue an outbox row. A recovered
-    // D1 incident write is the terminal decision for the original page.
-    await this.reconcileDlqPersistenceFallbacks();
-    await this.migrateLegacyPendingDeliveries();
-    if (await this.hasAnyActiveLiveSnapshotWork()) {
-      if (alarm === null) await this.scheduleRoutineRelayAlarm();
+    // All D1 recovery/flush/purge work is alarm-owned and staged one bounded
+    // class per invocation. A first health/request bootstrap only ensures that
+    // such an alarm exists; it never spends that maintenance budget itself.
+    if (alarm === null) await this.scheduleRoutineRelayAlarm();
+  }
+
+  private async ensureApnsAcceptanceJournalCapacity(
+    exemptKey?: string,
+  ): Promise<void> {
+    const pending = await this.state.storage.list({
+      prefix: APNS_ACCEPTANCE_JOURNAL_PREFIX,
+      limit: APNS_ACCEPTANCE_JOURNAL_MAX_RECORDS + 1,
+    });
+    const occupied = exemptKey && pending.has(exemptKey)
+      ? pending.size - 1
+      : pending.size;
+    if (occupied >= APNS_ACCEPTANCE_JOURNAL_MAX_RECORDS) {
+      throw new Error("APNs acceptance journal capacity is exhausted");
+    }
+  }
+
+  /**
+   * Reserve one bounded Durable Object record before the first APNs byte is
+   * sent. The exact event plus registration snapshots are the recovery owner;
+   * the writeId prevents an old completion from deleting a replacement.
+   */
+  private async persistApnsDeliveryIntent(
+    message: AlertDeliveryMessage,
+    deliveries: PreparedDelivery[],
+  ): Promise<ApnsDeliveryIntentHandle> {
+    if (
+      deliveries.length < 1 ||
+      deliveries.length > APNS_MAX_CONCURRENT_DELIVERIES
+    ) {
+      throw new RangeError("APNs delivery intent batch is out of bounds");
+    }
+    const storedMessage = apnsJournalMessage(message);
+    const key = await apnsDeliveryIntentStorageKey(storedMessage, deliveries);
+    await this.ensureApnsAcceptanceJournalCapacity(key);
+    let handle: ApnsDeliveryIntentHandle | null = null;
+    let storedRecord: PendingApnsDeliveryIntentRecord | null = null;
+    let alreadyPending = false;
+    await this.state.storage.transaction(async (transaction) => {
+      const current = await transaction.get<unknown>(key);
+      if (current !== undefined) {
+        if (!isPendingApnsDeliveryIntentRecord(current)) {
+          throw new Error("APNs delivery intent identity collision");
+        }
+        alreadyPending = true;
+        storedRecord = current;
+        handle = { storageKey: key, writeId: current.writeId };
+        return;
+      }
+      const createdAtUtc = new Date().toISOString();
+      const record: PendingApnsDeliveryIntentRecord = {
+        version: 2,
+        writeId: crypto.randomUUID(),
+        createdAtUtc,
+        providerAttempts: 0,
+        recipientProviderAttempts: {},
+        lastProviderAttemptAtUtc: createdAtUtc,
+        nextProviderAttemptAtUtc: createdAtUtc,
+        recipientRetryNotBeforeUtc: {},
+        unobservedAttemptReconciled: true,
+        lifecycleEvidencePreparedAtUtc: null,
+        observedBatch: null,
+        message: storedMessage,
+        deliveries,
+      };
+      if (!isPendingApnsDeliveryIntentRecord(record)) {
+        throw new Error("APNs delivery intent record exceeds its bounds");
+      }
+      await transaction.put(key, record);
+      storedRecord = record;
+      handle = { storageKey: key, writeId: record.writeId };
+    });
+    if (!handle || !storedRecord) {
+      throw new Error("APNs delivery intent write failed");
+    }
+    await this.scheduleRelayAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
+    if (alreadyPending) {
+      // The serial recovery owner, not a duplicate Queue request, decides when
+      // the existing durable intent may contact APNs again.
+      throw new Error("APNs delivery intent is already pending recovery");
+    }
+    return handle;
+  }
+
+  private async completeApnsDeliveryIntent(
+    handle: ApnsDeliveryIntentHandle,
+  ): Promise<void> {
+    const reconciledAtUtc = new Date().toISOString();
+    await this.env.DB
+      .prepare(
+        `UPDATE apns_provider_attempts
+         SET outcome_reconciled_at_utc = COALESCE(
+           outcome_reconciled_at_utc, ?
+         )
+         WHERE attempt_id LIKE ?`,
+      )
+      .bind(reconciledAtUtc, `${handle.writeId}:%`)
+      .run();
+    await this.state.storage.transaction(async (transaction) => {
+      const current = await transaction.get<unknown>(handle.storageKey);
+      if (
+        isPendingApnsDeliveryIntentRecord(current) &&
+        current.writeId === handle.writeId
+      ) {
+        await transaction.delete(handle.storageKey);
+      }
+    });
+  }
+
+  /** Reserve one recovery provider contact before network I/O. */
+  private async reserveApnsDeliveryIntentRecovery(
+    key: string,
+    record: PendingApnsDeliveryIntentRecord,
+  ): Promise<PendingApnsDeliveryIntentRecord> {
+    let reserved: PendingApnsDeliveryIntentRecord | null = null;
+    await this.state.storage.transaction(async (transaction) => {
+      const current = await transaction.get<unknown>(key);
+      if (
+        !isPendingApnsDeliveryIntentRecord(current) ||
+        current.writeId !== record.writeId
+      ) {
+        throw new Error("APNs delivery intent changed before recovery");
+      }
+      if (current.observedBatch !== null) {
+        throw new Error("APNs delivery intent outcomes require reconciliation");
+      }
+      const nowMs = Date.now();
+      if (nowMs < Date.parse(current.nextProviderAttemptAtUtc)) {
+        throw new Error("APNs delivery intent recovery is not due");
+      }
+      const attemptedAtUtc = new Date(nowMs).toISOString();
+      reserved = {
+        ...current,
+        providerAttempts: current.providerAttempts + 1,
+        lastProviderAttemptAtUtc: attemptedAtUtc,
+        nextProviderAttemptAtUtc: new Date(
+          nowMs + DEFAULT_QUEUE_RETRY_DELAY_SECONDS * 1_000,
+        ).toISOString(),
+        // Optimistic marker: the immediately following final D1 admission
+        // either writes exact attempt evidence and contacts APNs, or restores
+        // the prior record without spending this reservation.
+        lifecycleEvidencePreparedAtUtc: attemptedAtUtc,
+        unobservedAttemptReconciled: false,
+        observedBatch: null,
+      };
+      await transaction.put(key, reserved);
+    });
+    if (!reserved) throw new Error("APNs delivery intent recovery reservation failed");
+    return reserved;
+  }
+
+  private async restoreUncontactedApnsIntentReservation(
+    key: string,
+    reserved: PendingApnsDeliveryIntentRecord,
+    prior: PendingApnsDeliveryIntentRecord,
+  ): Promise<void> {
+    await this.state.storage.transaction(async (transaction) => {
+      const current = await transaction.get<unknown>(key);
+      if (
+        !isPendingApnsDeliveryIntentRecord(current) ||
+        current.writeId !== reserved.writeId ||
+        current.providerAttempts !== reserved.providerAttempts ||
+        current.lastProviderAttemptAtUtc !== reserved.lastProviderAttemptAtUtc ||
+        current.observedBatch !== null
+      ) {
+        throw new Error("APNs uncontacted reservation changed before restore");
+      }
+      await transaction.put(key, prior);
+    });
+    await this.scheduleRelayAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
+  }
+
+  private async persistApnsDeliveryIntentObservedBatch(
+    handle: ApnsDeliveryIntentHandle,
+    observedAtUtc: string,
+    deliveries: MappedApnsIntentRecipient[],
+    results: ApnsDeliveryResult[],
+  ): Promise<void> {
+    const observedBatch: ApnsIntentObservedBatch = {
+      observedAtUtc,
+      deliveries,
+      results: results.map((result) => ({ ...result })),
+    };
+    let retryAtMs: number | null = null;
+    await this.state.storage.transaction(async (transaction) => {
+      const current = await transaction.get<unknown>(handle.storageKey);
+      if (
+        !isPendingApnsDeliveryIntentRecord(current) ||
+        current.writeId !== handle.writeId ||
+        current.lifecycleEvidencePreparedAtUtc !==
+          current.lastProviderAttemptAtUtc ||
+        current.observedBatch !== null ||
+        !isApnsIntentObservedBatch(observedBatch, current.deliveries.length)
+      ) {
+        throw new Error("APNs delivery outcomes cannot be journaled");
+      }
+      const retryPolicy = apnsObservedBatchRetryPolicy(observedBatch.results);
+      retryAtMs = retryPolicy.retryRequired
+        ? Math.max(
+            Date.parse(current.nextProviderAttemptAtUtc),
+            Date.parse(observedAtUtc) + retryPolicy.retryDelaySeconds * 1_000,
+          )
+        : Date.parse(current.nextProviderAttemptAtUtc);
+      await transaction.put(handle.storageKey, {
+        ...current,
+        observedBatch,
+        nextProviderAttemptAtUtc: new Date(retryAtMs).toISOString(),
+      } satisfies PendingApnsDeliveryIntentRecord);
+    });
+    await this.scheduleRelayAlarm(
+      Math.min(
+        retryAtMs ?? Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+        Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+      ),
+    );
+  }
+
+  /**
+   * Reconcile one already-observed provider batch before any recovery contact.
+   * All results were durably journaled together, so every peer's D1 mutation
+   * is attempted even when another peer fails. The record is cleared only
+   * after every applicable acceptance, cleanup, failure, and page incident is
+   * durable; otherwise recovery repeats these idempotent operations without
+   * contacting APNs again.
+   */
+  private async reconcileObservedApnsDeliveryIntentBatch(
+    key: string,
+    record: PendingApnsDeliveryIntentRecord,
+    resolveRecoveredPageFailure = false,
+  ): Promise<PendingApnsDeliveryIntentRecord | null> {
+    const observed = record.observedBatch;
+    if (observed === null) return record;
+    const attemptId = `${record.writeId}:${record.providerAttempts}`;
+    const attemptRows = await this.env.DB
+      .prepare(
+        `SELECT registration_revision, outcome_reconciled_at_utc
+         FROM apns_provider_attempts
+         WHERE attempt_id = ?`,
+      )
+      .bind(attemptId)
+      .all<{
+        registration_revision: string;
+        outcome_reconciled_at_utc: string | null;
+      }>();
+    const attemptByRevision = new Map(
+      attemptRows.results.map((row) => [row.registration_revision, row]),
+    );
+    const alreadyReconciled = observed.deliveries.every(({ delivery: { device } }) =>
+      attemptByRevision.get(device.registrationRevision)
+        ?.outcome_reconciled_at_utc !== null &&
+      attemptByRevision.get(device.registrationRevision)
+        ?.outcome_reconciled_at_utc !== undefined
+    );
+    if (!alreadyReconciled && observed.deliveries.some(({ delivery: { device } }) =>
+      !attemptByRevision.has(device.registrationRevision)
+    )) {
+      throw new Error("APNs observed outcomes lost their D1 attempt fence");
+    }
+    const event = eventFromDeliveryMessage(record.message);
+    const reconciledResults = observed.results.map((result) => ({ ...result }));
+    const accepted = observed.deliveries.flatMap((recipient, index) => {
+      const result = reconciledResults[index];
+      return result.ok
+        ? [{
+            ...recipient.delivery,
+            acceptedAtUtc: result.acceptedAtUtc as string,
+          }]
+        : [];
+    });
+    const firstPhase: Promise<unknown>[] = [];
+    if (!alreadyReconciled && accepted.length > 0) {
+      firstPhase.push(recordDeliveredDevices(
+        this.env.DB,
+        record.message.deliveryId,
+        event.id,
+        event.sourceId,
+        record.message.reason,
+        accepted.map((delivery) => ({
+          token: delivery.device.token,
+          tokenHash: delivery.tokenHash,
+          snapshotRegistrationRevision: delivery.device.registrationRevision,
+          snapshotAppAttestKeyId: delivery.device.appAttestKeyId,
+          firstAcceptedAtUtc: delivery.acceptedAtUtc,
+          lastAcceptedAtUtc: delivery.acceptedAtUtc,
+        })),
+        true,
+      ));
+    }
+    for (const [index, result] of reconciledResults.entries()) {
+      if (alreadyReconciled) break;
+      if (result.ok) continue;
+      const delivery = observed.deliveries[index].delivery;
+      firstPhase.push(
+        applyTerminalApnsCleanup(
+          this.env,
+          delivery.device,
+          event,
+          record.message.reason,
+          record.message.deliveryId,
+          result,
+        ).then((cleaned) => {
+          reconciledResults[index] = cleaned;
+        }),
+      );
+    }
+    const firstSettled = await Promise.allSettled(firstPhase);
+    const firstFailure = firstSettled.find((result) => result.status === "rejected");
+    if (firstFailure?.status === "rejected") throw firstFailure.reason;
+
+    const evidenceWrites: Promise<unknown>[] = [];
+    for (const [index, result] of reconciledResults.entries()) {
+      if (alreadyReconciled) break;
+      if (result.ok || isPageLevelApnsFailure(result)) continue;
+      const disposition = apnsFailureDisposition(result);
+      const delivery = observed.deliveries[index].delivery;
+      if (disposition === "retry") {
+        evidenceWrites.push(recordDeliveryFailure(
+          this.env.DB,
+          record.message.deliveryId,
+          event,
+          record.message.reason,
+          delivery.device.token,
+          delivery.tokenHash,
+          delivery.device.registrationRevision,
+          delivery.device.updatedAt,
+          result,
+          "retry",
+          observed.observedAtUtc,
+        ));
+      } else if (
+        disposition === "quarantine" &&
+        result.badDeviceTokenQuarantined !== true
+      ) {
+        evidenceWrites.push(recordDeliveryFailure(
+          this.env.DB,
+          record.message.deliveryId,
+          event,
+          record.message.reason,
+          delivery.device.token,
+          delivery.tokenHash,
+          delivery.device.registrationRevision,
+          delivery.device.updatedAt,
+          result,
+          "quarantine",
+          observed.observedAtUtc,
+        ));
+      }
+    }
+    const pageFailure = deterministicPageFailure(reconciledResults);
+    if (!alreadyReconciled && pageFailure) {
+      evidenceWrites.push(recordPageDeliveryFailure(
+        this.env.DB,
+        record.message.outboxId,
+        record.message,
+        pageFailure,
+        observed.observedAtUtc,
+      ));
+    }
+    const evidenceSettled = await Promise.allSettled(evidenceWrites);
+    const evidenceFailure = evidenceSettled.find(
+      (result) => result.status === "rejected",
+    );
+    if (evidenceFailure?.status === "rejected") throw evidenceFailure.reason;
+
+    if (
+      resolveRecoveredPageFailure &&
+      !pageFailure &&
+      !(await this.hasOtherApnsIntentForOutbox(key, record.message.outboxId))
+    ) {
+      // This clean batch is a recovery of the only remaining failed route for
+      // the page, not merely a healthy later route in the same live dispatch.
+      // Resolve before the outcome marker so a crash can only repeat this
+      // idempotent write, never skip it.
+      await resolvePageDeliveryFailure(this.env.DB, record.message.outboxId);
+    }
+
+    if (!alreadyReconciled) {
+      await this.env.DB.batch([
+      ...observed.deliveries.flatMap((recipient, index) => {
+        const delivery = recipient.delivery;
+        const result = reconciledResults[index];
+        // A provider HTTP response (2xx or rejection) proves whether this
+        // attempt was accepted. AppRouteNotAllowed proves no provider contact.
+        // Preserve possible-contact evidence only for an unknown transport
+        // outcome such as a timeout/reset where APNs might have accepted.
+        const definitiveOutcome = result.ok || result.status !== undefined ||
+          result.apnsReason === "AppRouteNotAllowed";
+        return definitiveOutcome
+          ? [
+            this.env.DB
+              .prepare(
+                `DELETE FROM alert_lifecycle_possible_attempts
+                 WHERE attempt_id = ? AND registration_revision = ?`,
+              )
+              .bind(attemptId, delivery.device.registrationRevision),
+          ]
+          : [];
+      }),
+      ...observed.deliveries.map(({ delivery }) =>
+        this.env.DB
+          .prepare(
+            `UPDATE apns_provider_attempts
+             SET outcome_reconciled_at_utc = COALESCE(
+               outcome_reconciled_at_utc, ?
+             )
+             WHERE attempt_id = ? AND registration_revision = ?`,
+          )
+          .bind(
+            observed.observedAtUtc,
+            attemptId,
+            delivery.device.registrationRevision,
+          )
+      ),
+      ]);
+      const markerRows = await this.env.DB
+        .prepare(
+          `SELECT registration_revision FROM apns_provider_attempts
+           WHERE attempt_id = ? AND outcome_reconciled_at_utc IS NOT NULL`,
+        )
+        .bind(attemptId)
+        .all<{ registration_revision: string }>();
+      const marked = new Set(
+        markerRows.results.map((row) => row.registration_revision),
+      );
+      if (observed.deliveries.some(({ delivery: { device } }) =>
+        !marked.has(device.registrationRevision)
+      )) {
+        throw new Error("APNs observed outcome marker did not commit");
+      }
+    }
+
+    const remaining = await this.currentDevicesForApnsIntent(record);
+    const contactedByOrigin = new Map(
+      observed.deliveries.map((recipient) => [
+        recipient.snapshotRegistrationRevision,
+        recipient,
+      ] as const),
+    );
+    const retryableContactedOrigins = new Set(
+      observed.deliveries.flatMap((recipient, index) => {
+        const disposition = apnsFailureDisposition(reconciledResults[index]);
+        return disposition === "retry" || disposition === "page_retry"
+          ? [recipient.snapshotRegistrationRevision]
+          : [];
+      }),
+    );
+    const keepIntent = remaining.redispatch.some((recipient) => {
+      const contacted = contactedByOrigin.get(
+        recipient.snapshotRegistrationRevision,
+      );
+      return contacted === undefined ||
+        contacted.delivery.device.registrationRevision !==
+          recipient.delivery.device.registrationRevision ||
+        retryableContactedOrigins.has(recipient.snapshotRegistrationRevision);
+    });
+    let reconciled: PendingApnsDeliveryIntentRecord | null = null;
+    await this.state.storage.transaction(async (transaction) => {
+      const current = await transaction.get<unknown>(key);
+      if (
+        !isPendingApnsDeliveryIntentRecord(current) ||
+        current.writeId !== record.writeId ||
+        current.observedBatch?.observedAtUtc !== observed.observedAtUtc
+      ) {
+        throw new Error("APNs observed outcome record changed during reconciliation");
+      }
+      if (keepIntent) {
+        const retryNotBefore = {
+          ...current.recipientRetryNotBeforeUtc,
+        };
+        for (const [index, recipient] of observed.deliveries.entries()) {
+          const originRevision = recipient.snapshotRegistrationRevision;
+          if (retryableContactedOrigins.has(originRevision)) {
+            const result = reconciledResults[index];
+            const resultRetryAtUtc = new Date(
+              Date.parse(observed.observedAtUtc) +
+                apnsRetryDelaySeconds(result) * 1_000,
+            ).toISOString();
+            const priorRetryAt = retryNotBefore[originRevision];
+            retryNotBefore[originRevision] = priorRetryAt === undefined
+              ? resultRetryAtUtc
+              : new Date(Math.max(
+                  Date.parse(priorRetryAt),
+                  Date.parse(resultRetryAtUtc),
+                )).toISOString();
+          } else {
+            delete retryNotBefore[originRevision];
+          }
+        }
+        const nowUtc = new Date().toISOString();
+        const nextRetryAtMs = Math.min(
+          ...remaining.redispatch.map(({ snapshotRegistrationRevision }) =>
+            Date.parse(
+              retryNotBefore[snapshotRegistrationRevision] ?? nowUtc,
+            )
+          ),
+        );
+        reconciled = {
+          ...current,
+          observedBatch: null,
+          unobservedAttemptReconciled: true,
+          recipientRetryNotBeforeUtc: retryNotBefore,
+          nextProviderAttemptAtUtc: new Date(nextRetryAtMs).toISOString(),
+        };
+        await transaction.put(key, reconciled);
+      } else {
+        await transaction.delete(key);
+      }
+    });
+    if (!keepIntent) return null;
+    if (!reconciled) {
+      throw new Error("APNs observed outcome reconciliation was not committed");
+    }
+    // TypeScript cannot observe assignments made inside the D1 transaction
+    // callback; the guard above establishes the runtime invariant.
+    const committedReconciled = reconciled as PendingApnsDeliveryIntentRecord;
+    if (pageFailure?.apnsReason === "ExpiredProviderToken") {
+      this.apnsJwtCache = null;
+    }
+    await this.scheduleRelayAlarm(Date.parse(committedReconciled.nextProviderAttemptAtUtc));
+    return committedReconciled;
+  }
+
+  private async hasOtherApnsIntentForOutbox(
+    currentKey: string,
+    outboxId: string,
+  ): Promise<boolean> {
+    const pending = await this.state.storage.list<unknown>({
+      prefix: APNS_ACCEPTANCE_JOURNAL_PREFIX,
+      limit: APNS_ACCEPTANCE_JOURNAL_MAX_RECORDS + 1,
+    });
+    for (const [key, value] of pending) {
+      if (key === currentKey) continue;
+      if (
+        isPendingApnsDeliveryIntentRecord(value) &&
+        value.message.outboxId === outboxId
+      ) return true;
+    }
+    return false;
+  }
+
+  private async terminalizeExhaustedApnsDeliveryIntent(
+    key: string,
+    record: PendingApnsDeliveryIntentRecord,
+  ): Promise<void> {
+    await persistDlqIncidentAndFinalizeOutbox(this.env, {
+      queueMessageId:
+        `apns-intent:${key.slice(APNS_ACCEPTANCE_JOURNAL_PREFIX.length)}`,
+      queueAttempts: record.providerAttempts,
+      deliveryId: record.message.deliveryId,
+      rootDeliveryId: record.message.rootDeliveryId,
+      eventId: record.message.event.eventId,
+      sourceId: record.message.event.sourceId,
+      eventSerial: record.message.event.serial,
+      notificationReason: record.message.reason,
+      outboxId: record.message.outboxId,
+    });
+    await this.completeApnsDeliveryIntent({
+      storageKey: key,
+      writeId: record.writeId,
+    });
+  }
+
+  private async currentDevicesForApnsIntent(
+    record: PendingApnsDeliveryIntentRecord,
+  ): Promise<ApnsIntentRecipientResolution> {
+    const event = eventFromDeliveryMessage(record.message);
+    const originalDelivered = await deliveredDeviceTokens(
+      this.env.DB,
+      record.message.deliveryId,
+      record.deliveries.map(({ device }) => device.token),
+    );
+    const candidates: MappedApnsIntentRecipient[] = [];
+    for (const [originDeliveryIndex, prepared] of record.deliveries.entries()) {
+      if (originalDelivered.has(prepared.device.token)) continue;
+      const fence = await this.env.DB
+        .prepare(
+          `SELECT blocks_lifecycle_replay, decision_kind
+           FROM apns_registration_revision_fences
+           WHERE registration_revision = ? LIMIT 1`,
+        )
+        .bind(prepared.device.registrationRevision)
+        .first<{ blocks_lifecycle_replay: number; decision_kind: string }>();
+      // Only an explicit consent boundary retires the original lineage. A
+      // BadDeviceToken or timestamped-410 decision applies to the contacted
+      // token/revision, but ordinary same-key rotation may remap the still-live
+      // intent to the replacement token. Delivery-failure dedupe/quarantine
+      // below still prevents recontacting an unchanged invalid registration.
+      if (
+        fence?.blocks_lifecycle_replay === 1 &&
+        [
+          "explicit_removal",
+          "empty_source_removal",
+          "stale_registration_retention",
+        ].includes(fence.decision_kind)
+      ) continue;
+      const rows = await this.env.DB
+        .prepare(
+          `SELECT * FROM devices
+           WHERE environment = ?
+             AND (token = ? OR (? IS NOT NULL AND app_attest_key_id = ?))
+           ORDER BY CASE WHEN token = ? THEN 0 ELSE 1 END
+           LIMIT 2`,
+        )
+        .bind(
+          prepared.device.environment,
+          prepared.device.token,
+          prepared.device.appAttestKeyId,
+          prepared.device.appAttestKeyId,
+          prepared.device.token,
+        )
+        .all<DeviceRow>();
+      for (const row of rows.results) {
+        const device = rowToDevice(row);
+        if (device.sources.includes(event.sourceId)) {
+          candidates.push({
+            delivery: {
+              device,
+              tokenHash: await tokenHash(device.token),
+            },
+            originDeliveryIndex,
+            snapshotRegistrationRevision:
+              prepared.device.registrationRevision,
+          });
+          break;
+        }
+      }
+    }
+    const sourceConsenting = candidates;
+    const current = sourceConsenting.map(({ delivery }) => delivery.device);
+    const eligible = isTerminalAlertLifecycleReason(record.message.reason)
+      ? await terminalAlertLifecycleDevices(this.env.DB, event.id, current)
+      : current.filter((device) => shouldNotify(device, event, record.message.reason));
+    const delivered = await deliveredDeviceTokens(
+      this.env.DB,
+      record.message.deliveryId,
+      eligible.map((device) => device.token),
+    );
+    const quarantined = await quarantinedDeviceTokens(
+      this.env.DB,
+      record.message.deliveryId,
+      eligible.map((device) => device.token),
+    );
+    const redispatchRevisions = new Set(
+      eligible
+        .filter((device) =>
+          !delivered.has(device.token) && !quarantined.has(device.token)
+        )
+        .map((device) => device.registrationRevision),
+    );
+    return {
+      sourceConsenting,
+      redispatch: [
+        ...new Map(
+          sourceConsenting
+            .filter(({ delivery }) =>
+              redispatchRevisions.has(delivery.device.registrationRevision)
+            )
+            .map((recipient) => [
+              recipient.delivery.device.registrationRevision,
+              recipient,
+            ] as const),
+        ).values(),
+      ],
+    };
+  }
+
+  /**
+   * Recover an admitted provider batch. Current source consent and routing
+   * always win: exact-token continuity is preferred, ordinary same-key token
+   * rotation is allowed, and a blocking revision fence drops the stale work.
+   */
+  private async recoverApnsDeliveryIntent(
+    key: string,
+    record: PendingApnsDeliveryIntentRecord,
+  ): Promise<void> {
+    const reconciled = await this.reconcileObservedApnsDeliveryIntentBatch(
+      key,
+      record,
+      true,
+    );
+    if (reconciled === null) return;
+    record = reconciled;
+    if (
+      record.observedBatch === null &&
+      record.providerAttempts > 0 &&
+      record.lifecycleEvidencePreparedAtUtc === record.lastProviderAttemptAtUtc &&
+      !record.unobservedAttemptReconciled
+    ) {
+      // This serial lane can reach an admitted/no-outcome record only after the
+      // original provider turn disappeared (crash/eviction). Its attempt-owned
+      // possible-contact evidence is already durable, so classify the missing
+      // response as unknown before honoring backoff or admitting another
+      // contact. That releases event ingestion for an urgent final/cancel while
+      // retaining honest conservative lifecycle continuity.
+      await this.env.DB
+        .prepare(
+          `UPDATE apns_provider_attempts
+           SET outcome_reconciled_at_utc = COALESCE(
+             outcome_reconciled_at_utc, ?
+           )
+           WHERE attempt_id = ?`,
+        )
+        .bind(
+          new Date().toISOString(),
+          `${record.writeId}:${record.providerAttempts}`,
+        )
+        .run();
+      let updatedRecord: PendingApnsDeliveryIntentRecord | null = null;
+      await this.state.storage.transaction(async (transaction) => {
+        const current = await transaction.get<unknown>(key);
+        if (
+          !isPendingApnsDeliveryIntentRecord(current) ||
+          current.writeId !== record.writeId ||
+          current.providerAttempts !== record.providerAttempts ||
+          current.observedBatch !== null
+        ) {
+          throw new Error("APNs unknown-outcome record changed during reconciliation");
+        }
+        updatedRecord = { ...current, unobservedAttemptReconciled: true };
+        await transaction.put(key, updatedRecord);
+      });
+      if (!updatedRecord) {
+        throw new Error("APNs unknown-outcome reconciliation was not committed");
+      }
+      record = updatedRecord;
+    }
+    const resolution = await this.currentDevicesForApnsIntent(record);
+    const outboxGate = await this.expireOutboxIfDue(record.message);
+    if (outboxGate !== "pending") {
+      await this.completeApnsDeliveryIntent({
+        storageKey: key,
+        writeId: record.writeId,
+      });
       return;
     }
-    await this.drainPendingIngestJournal();
-    await this.flushAlertDeliveryOutbox(ROUTINE_OUTBOX_FLUSH_BATCH_SIZE);
-    await this.purgeExpiredDevicesIfDue();
-    if (alarm === null) await this.scheduleRoutineRelayAlarm();
+    const expiry = record.message.expiresAtUtc === undefined
+      ? null
+      : Date.parse(record.message.expiresAtUtc);
+    if (expiry !== null && Number.isFinite(expiry) && Date.now() >= expiry) {
+      console.warn(JSON.stringify({
+        deliveryId: record.message.deliveryId,
+        outcome: "expired_apns_delivery_intent_retired_with_conservative_lifecycle",
+      }));
+      await this.completeApnsDeliveryIntent({
+        storageKey: key,
+        writeId: record.writeId,
+      });
+      return;
+    }
+    const redispatchCandidates = resolution.redispatch;
+    if (redispatchCandidates.length === 0) {
+      await this.completeApnsDeliveryIntent({
+        storageKey: key,
+        writeId: record.writeId,
+      });
+      return;
+    }
+    if (
+      resolution.redispatch.every((recipient) =>
+        (record.recipientProviderAttempts[
+          recipient.snapshotRegistrationRevision
+        ] ?? 0) >= APNS_DELIVERY_INTENT_MAX_PROVIDER_ATTEMPTS
+      )
+    ) {
+      await this.terminalizeExhaustedApnsDeliveryIntent(key, record);
+      return;
+    }
+    const nextProviderAttemptAtMs = Date.parse(record.nextProviderAttemptAtUtc);
+    if (Date.now() < nextProviderAttemptAtMs) {
+      await this.scheduleRelayAlarm(nextProviderAttemptAtMs);
+      // A durable conservative lifecycle row already protects this intent.
+      // Defer only its provider scope; unrelated alerts, training requests,
+      // terminal gates, and maintenance may continue through the serial lane.
+      return;
+    }
+    const nowMs = Date.now();
+    const retryableCandidates = redispatchCandidates.filter(({
+      snapshotRegistrationRevision,
+    }) =>
+      (record.recipientProviderAttempts[snapshotRegistrationRevision] ?? 0) <
+        APNS_DELIVERY_INTENT_MAX_PROVIDER_ATTEMPTS
+    );
+    const deliveries = retryableCandidates.filter(({
+      snapshotRegistrationRevision,
+    }) => {
+      const retryAt = record.recipientRetryNotBeforeUtc[
+        snapshotRegistrationRevision
+      ];
+      return (
+        (retryAt === undefined || Date.parse(retryAt) <= nowMs)
+      );
+    });
+    if (deliveries.length === 0) {
+      const earliestRecipientRetry = Math.min(
+        ...retryableCandidates.map(({ snapshotRegistrationRevision }) =>
+          Date.parse(
+            record.recipientRetryNotBeforeUtc[snapshotRegistrationRevision] ??
+              record.nextProviderAttemptAtUtc,
+          )
+        ),
+      );
+      await this.scheduleRelayAlarm(earliestRecipientRetry);
+      return;
+    }
+    const event = eventFromDeliveryMessage(record.message);
+    const authorization = await this.apnsAuthorization();
+    const collapseId = await apnsCollapseID(event);
+    const contactedRecipients = await this.admitApnsProviderAttempt(
+      { storageKey: key, writeId: record.writeId },
+      record.message,
+      deliveries,
+    );
+    if (contactedRecipients.length === 0) return;
+    const results = await Promise.allSettled(
+      contactedRecipients.map(({ delivery: { device } }) =>
+        sendPushRequest(
+          this.env,
+          device,
+          event,
+          record.message.reason,
+          authorization,
+          collapseId,
+        )
+      ),
+    );
+    const observedAtUtc = new Date().toISOString();
+    await this.persistApnsDeliveryIntentObservedBatch(
+      { storageKey: key, writeId: record.writeId },
+      observedAtUtc,
+      contactedRecipients,
+      results.map(durableApnsResult),
+    );
+    const observedRecord = await this.state.storage.get<unknown>(key);
+    if (
+      !isPendingApnsDeliveryIntentRecord(observedRecord) ||
+      observedRecord.writeId !== record.writeId ||
+      observedRecord.observedBatch?.observedAtUtc !== observedAtUtc
+    ) {
+      throw new Error("APNs recovery outcomes were not durably journaled");
+    }
+    await this.reconcileObservedApnsDeliveryIntentBatch(
+      key,
+      observedRecord,
+      true,
+    );
+  }
+
+  /**
+   * Rolling-deploy compatibility for version-1 post-2xx records. New delivery
+   * uses the version-2 pre-send intent above, but an older isolate can still
+   * write this shape while the deployment converges.
+   */
+  private async persistApnsAcceptedBatch(
+    deliveryId: string,
+    eventRef: string,
+    sourceId: ApnsRelaySourceId,
+    reason: NotifyReason,
+    deliveries: AcceptedDelivery[],
+  ): Promise<void> {
+    if (
+      deliveries.length < 1 ||
+      deliveries.length > APNS_MAX_CONCURRENT_DELIVERIES
+    ) {
+      throw new RangeError("APNs acceptance journal batch is out of bounds");
+    }
+    const evidence: AcceptedDeliveryEvidence[] = deliveries.map((delivery) => ({
+      token: delivery.device.token,
+      tokenHash: delivery.tokenHash,
+      snapshotRegistrationRevision: delivery.device.registrationRevision,
+      snapshotAppAttestKeyId: delivery.device.appAttestKeyId,
+      firstAcceptedAtUtc: delivery.acceptedAtUtc,
+      lastAcceptedAtUtc: delivery.acceptedAtUtc,
+    }));
+    const key = await apnsAcceptanceJournalStorageKey(
+      deliveryId,
+      eventRef,
+      sourceId,
+      reason,
+      evidence,
+    );
+    await this.ensureApnsAcceptanceJournalCapacity(key);
+    const now = new Date().toISOString();
+    let storedRecord: PendingApnsAcceptanceRecord | null = null;
+    await this.state.storage.transaction(async (transaction) => {
+      const current = await transaction.get<unknown>(key);
+      if (current !== undefined && !isPendingApnsAcceptanceRecord(current)) {
+        throw new Error("APNs acceptance journal record is invalid");
+      }
+      const existing = current as PendingApnsAcceptanceRecord | undefined;
+      if (
+        existing &&
+        (existing.deliveryId !== deliveryId ||
+          existing.eventRef !== eventRef ||
+          existing.sourceId !== sourceId ||
+          existing.reason !== reason)
+      ) {
+        throw new Error("APNs acceptance journal identity collision");
+      }
+      const merged = new Map<string, AcceptedDeliveryEvidence>(
+        (existing?.deliveries ?? []).map((delivery) => [
+          `${delivery.tokenHash}\u0000${delivery.snapshotRegistrationRevision}`,
+          delivery,
+        ]),
+      );
+      for (const delivery of evidence) {
+        const evidenceKey =
+          `${delivery.tokenHash}\u0000${delivery.snapshotRegistrationRevision}`;
+        const prior = merged.get(evidenceKey);
+        merged.set(evidenceKey, prior
+          ? {
+              ...delivery,
+              snapshotAppAttestKeyId:
+                delivery.snapshotAppAttestKeyId ??
+                prior.snapshotAppAttestKeyId,
+              firstAcceptedAtUtc:
+                Date.parse(prior.firstAcceptedAtUtc) <
+                    Date.parse(delivery.firstAcceptedAtUtc)
+                  ? prior.firstAcceptedAtUtc
+                  : delivery.firstAcceptedAtUtc,
+              lastAcceptedAtUtc:
+                Date.parse(prior.lastAcceptedAtUtc) >
+                    Date.parse(delivery.lastAcceptedAtUtc)
+                  ? prior.lastAcceptedAtUtc
+                  : delivery.lastAcceptedAtUtc,
+            }
+          : delivery);
+      }
+      storedRecord = {
+        version: 1,
+        writeId: crypto.randomUUID(),
+        deliveryId,
+        eventRef,
+        sourceId,
+        reason,
+        createdAtUtc: existing?.createdAtUtc ?? now,
+        deliveries: [...merged.values()],
+      };
+      if (!isPendingApnsAcceptanceRecord(storedRecord)) {
+        throw new Error("APNs acceptance journal record exceeds its bounds");
+      }
+      await transaction.put(key, storedRecord);
+    });
+    if (!storedRecord) throw new Error("APNs acceptance journal write failed");
+    // The transaction callback assigns this only after validating and storing
+    // the bounded record; the guard above establishes the runtime invariant.
+    const committedRecord = storedRecord as PendingApnsAcceptanceRecord;
+    await this.scheduleRelayAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
+    await recordDeliveredDevices(
+      this.env.DB,
+      deliveryId,
+      eventRef,
+      sourceId,
+      reason,
+      committedRecord.deliveries,
+      true,
+    );
+    const committedWriteId = committedRecord.writeId;
+    await this.state.storage.transaction(async (transaction) => {
+      const current = await transaction.get<unknown>(key);
+      if (
+        isPendingApnsAcceptanceRecord(current) &&
+        current.writeId === committedWriteId
+      ) {
+        await transaction.delete(key);
+      }
+    });
+  }
+
+  /**
+   * Reconcile both pre-send intents and rolling version-1 accepted batches
+   * before any outbox terminal gate. Valid pre-send work is redispatched from
+   * the current consenting registration; malformed records remain visible and
+   * fail closed for operator repair.
+   */
+  private async apnsDurabilityMaintenanceOwnsInvocation(): Promise<boolean> {
+    const database = this.env.DB;
+    if (
+      !database ||
+      typeof database.prepare !== "function" ||
+      typeof database.batch !== "function"
+    ) {
+      return false;
+    }
+    const crashedTrainingCutoff = new Date(
+      Date.now() - TRAINING_APNS_ATTEMPT_RECOVERY_MS,
+    ).toISOString();
+    let pendingStatement: D1PreparedStatement;
+    try {
+      pendingStatement = database
+        .prepare(
+          `SELECT (
+           EXISTS (SELECT 1 FROM legacy_device_removal_tokens)
+           OR EXISTS (
+             SELECT 1 FROM notification_deliveries
+             WHERE lifecycle_reconciled = 0
+           )
+           OR EXISTS (
+             SELECT 1 FROM apns_provider_attempts
+             WHERE attempt_id LIKE 'training:%'
+               AND outcome_reconciled_at_utc IS NULL
+               AND admitted_at_utc <= ?
+           )
+         ) AS pending`,
+          )
+        .bind(crashedTrainingCutoff);
+    } catch {
+      return false;
+    }
+    if (typeof pendingStatement.first !== "function") return false;
+    const d1Pending = await pendingStatement.first<number>("pending");
+    if ((d1Pending ?? 0) !== 0) return true;
+    const pending = await this.state.storage.list<unknown>({
+      prefix: APNS_ACCEPTANCE_JOURNAL_PREFIX,
+      limit: APNS_ACCEPTANCE_JOURNAL_MAX_RECORDS + 1,
+    });
+    const now = Date.now();
+    for (const value of pending.values()) {
+      if (!isPendingApnsDeliveryIntentRecord(value)) return true;
+      if (value.observedBatch !== null) return true;
+      if (
+        value.lifecycleEvidencePreparedAtUtc === value.lastProviderAttemptAtUtc &&
+        !value.unobservedAttemptReconciled
+      ) return true;
+      const createdAt = Date.parse(value.createdAtUtc);
+      if (
+        !Number.isFinite(createdAt) ||
+        now - createdAt > APNS_ACCEPTANCE_JOURNAL_MAX_AGE_MS
+      ) return true;
+      if (now >= Date.parse(value.nextProviderAttemptAtUtc)) return true;
+    }
+    return false;
+  }
+
+  private async reconcileApnsAcceptanceJournal(
+    limit = APNS_ACCEPTANCE_JOURNAL_REPLAY_BATCH_SIZE,
+  ): Promise<boolean> {
+    if (
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > APNS_ACCEPTANCE_JOURNAL_REPLAY_BATCH_SIZE
+    ) {
+      throw new RangeError(
+        "APNs acceptance journal replay limit must be a positive bounded safe integer",
+      );
+    }
+    const database = this.env.DB;
+    const d1MaintenanceAvailable = Boolean(
+      database &&
+      typeof database.prepare === "function" &&
+      typeof database.batch === "function"
+    );
+    const pending = await this.state.storage.list<unknown>({
+      prefix: APNS_ACCEPTANCE_JOURNAL_PREFIX,
+      limit: APNS_ACCEPTANCE_JOURNAL_MAX_RECORDS + 1,
+    });
+    if (!d1MaintenanceAvailable) {
+      // Storage-only harnesses still exercise the journal's fail-closed
+      // integrity boundary. Validate every visible record before declining
+      // D1 work; malformed or tampered evidence must never disappear merely
+      // because a maintenance caller lacks a database binding.
+      for (const [key, value] of pending) {
+        if (isPendingApnsDeliveryIntentRecord(value)) {
+          const computedTokenHashes = await Promise.all(
+            value.deliveries.map((delivery) => tokenHash(delivery.device.token)),
+          );
+          const expectedKey = await apnsDeliveryIntentStorageKey(
+            value.message,
+            value.deliveries,
+          );
+          const observedTokenHashes = value.observedBatch === null
+            ? []
+            : await Promise.all(
+                value.observedBatch.deliveries.map(({ delivery }) =>
+                  tokenHash(delivery.device.token)
+                ),
+              );
+          const intentMismatch = expectedKey !== key ||
+            value.deliveries.some((delivery, index) =>
+              delivery.tokenHash !== computedTokenHashes[index]
+            ) ||
+            (value.observedBatch !== null &&
+              value.observedBatch.deliveries.some((recipient, index) => {
+                const original = value.deliveries[recipient.originDeliveryIndex];
+                const delivery = recipient.delivery;
+                return delivery.tokenHash !== observedTokenHashes[index] ||
+                  original === undefined ||
+                  original.device.registrationRevision !==
+                    recipient.snapshotRegistrationRevision ||
+                  (original.device.token !== delivery.device.token &&
+                    (original.device.appAttestKeyId === null ||
+                      original.device.appAttestKeyId !==
+                        delivery.device.appAttestKeyId));
+              }));
+          if (intentMismatch) {
+            await this.scheduleRelayAlarm(
+              Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+            );
+            throw new Error("APNs delivery intent integrity check failed");
+          }
+          continue;
+        }
+        if (!isPendingApnsAcceptanceRecord(value)) {
+          await this.scheduleRelayAlarm(
+            Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+          );
+          throw new Error("APNs acceptance journal record is invalid");
+        }
+        const computedTokenHashes = await Promise.all(
+          value.deliveries.map((delivery) => tokenHash(delivery.token)),
+        );
+        const expectedKey = await apnsAcceptanceJournalStorageKey(
+          value.deliveryId,
+          value.eventRef,
+          value.sourceId,
+          value.reason,
+          value.deliveries,
+        );
+        if (
+          expectedKey !== key ||
+          value.deliveries.some((delivery, index) =>
+            delivery.tokenHash !== computedTokenHashes[index]
+          )
+        ) {
+          await this.scheduleRelayAlarm(
+            Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+          );
+          throw new Error("APNs acceptance journal integrity check failed");
+        }
+      }
+      return false;
+    }
+    const crashedTrainingCutoff = new Date(
+      Date.now() - TRAINING_APNS_ATTEMPT_RECOVERY_MS,
+    ).toISOString();
+    let releaseTrainingAttempts: D1PreparedStatement;
+    let pendingRemovalStatement: D1PreparedStatement;
+    try {
+      releaseTrainingAttempts = database
+        .prepare(
+          `UPDATE apns_provider_attempts
+           SET outcome_reconciled_at_utc = admitted_at_utc
+           WHERE attempt_id LIKE 'training:%'
+             AND outcome_reconciled_at_utc IS NULL
+             AND admitted_at_utc <= ?`,
+        )
+        .bind(crashedTrainingCutoff);
+      pendingRemovalStatement = database
+        .prepare("SELECT 1 AS pending FROM legacy_device_removal_tokens LIMIT 1")
+        .bind();
+    } catch {
+      return false;
+    }
+    if (
+      typeof releaseTrainingAttempts.run !== "function" ||
+      typeof pendingRemovalStatement.first !== "function" ||
+      typeof pendingRemovalStatement.all !== "function"
+    ) {
+      return false;
+    }
+    const releasedTrainingAttempts = await releaseTrainingAttempts.run();
+    if ((releasedTrainingAttempts.meta.changes ?? 0) > 0) {
+      // A provider request is bounded to twenty seconds. After one minute an
+      // unresolved training marker can only be a crashed/evicted call; release
+      // its mutation fence without fabricating APNs success or token cleanup.
+      await this.scheduleRelayAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
+      return true;
+    }
+    const pendingRemoval = await pendingRemovalStatement.first<{ pending: number }>();
+    if (pendingRemoval) {
+      await this.reconcileLegacyDeviceRemovals();
+      // Even a fully drained slice owns this invocation's D1 budget. A later
+      // alarm/Queue turn may reconcile provider outcomes or legacy acceptance;
+      // never compose all three maintenance classes under the Free-plan cap.
+      await this.scheduleRelayAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
+      return true;
+    }
+    // Inspect the complete bounded journal so a hash-ordered, not-yet-due
+    // intent cannot hide an independent due record or malformed evidence.
+    // Provider/D1 work remains capped by `limit`; Durable Object reads do not
+    // consume the Worker's D1 subrequest budget.
+    let replayed = 0;
+    let maintenancePerformed = false;
+    for (const [key, value] of pending) {
+      if (isPendingApnsDeliveryIntentRecord(value)) {
+        const computedTokenHashes = await Promise.all(
+          value.deliveries.map((delivery) => tokenHash(delivery.device.token)),
+        );
+        const observedTokenHashes = value.observedBatch === null
+          ? []
+          : await Promise.all(
+              value.observedBatch.deliveries.map(({ delivery }) =>
+                tokenHash(delivery.device.token)
+              ),
+            );
+        const expectedKey = await apnsDeliveryIntentStorageKey(
+          value.message,
+          value.deliveries,
+        );
+        if (
+          expectedKey !== key ||
+          value.deliveries.some((delivery, index) =>
+            delivery.tokenHash !== computedTokenHashes[index]
+          ) ||
+          (value.observedBatch !== null &&
+            value.observedBatch.deliveries.some((recipient, index) => {
+              const delivery = recipient.delivery;
+              const hashMatches = delivery.tokenHash === observedTokenHashes[index];
+              const original = value.deliveries[recipient.originDeliveryIndex];
+              const belongsToOriginalLineage = original !== undefined &&
+                original.device.registrationRevision ===
+                  recipient.snapshotRegistrationRevision &&
+                (original.device.token === delivery.device.token ||
+                  (original.device.appAttestKeyId !== null &&
+                    original.device.appAttestKeyId ===
+                      delivery.device.appAttestKeyId));
+              return !hashMatches || !belongsToOriginalLineage;
+            }))
+        ) {
+          console.error(JSON.stringify({
+            journalKey: key,
+            deliveryId: value.message.deliveryId,
+            outcome: "apns_delivery_intent_integrity_mismatch_preserved",
+          }));
+          await this.scheduleRelayAlarm(
+            Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+          );
+          throw new Error("APNs delivery intent integrity check failed");
+        }
+        // A captured provider outcome is stronger than the generic age or
+        // backoff policy. Reconcile 2xx, terminal-token cleanup, quarantine,
+        // and page evidence first; any D1 failure preserves the raw record
+        // and blocks its retirement rather than degrading it to mere unknown
+        // lifecycle evidence.
+        if (value.observedBatch !== null) {
+          if (replayed >= limit) {
+            await this.scheduleRelayAlarm(
+              Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+            );
+            continue;
+          }
+          replayed += 1;
+          await this.recoverApnsDeliveryIntent(key, value);
+          maintenancePerformed = true;
+          continue;
+        }
+        const createdAtMs = Date.parse(value.createdAtUtc);
+        if (
+          !Number.isFinite(createdAtMs) ||
+          Date.now() - createdAtMs > APNS_ACCEPTANCE_JOURNAL_MAX_AGE_MS
+        ) {
+          console.error(JSON.stringify({
+            journalKey: key,
+            deliveryId: value.message.deliveryId,
+            outcome:
+              "aged_apns_delivery_intent_retired_with_conservative_lifecycle",
+          }));
+          await this.completeApnsDeliveryIntent({
+            storageKey: key,
+            writeId: value.writeId,
+          });
+          maintenancePerformed = true;
+          continue;
+        }
+        const retryAtMs = Date.parse(value.nextProviderAttemptAtUtc);
+        if (
+          value.lifecycleEvidencePreparedAtUtc ===
+            value.lastProviderAttemptAtUtc &&
+          value.unobservedAttemptReconciled &&
+          Date.now() < retryAtMs
+        ) {
+          await this.scheduleRelayAlarm(retryAtMs);
+          continue;
+        }
+        if (replayed >= limit) {
+          await this.scheduleRelayAlarm(
+            Math.min(
+              retryAtMs,
+              Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+            ),
+          );
+          continue;
+        }
+        replayed += 1;
+        await this.recoverApnsDeliveryIntent(key, value);
+        maintenancePerformed = true;
+        continue;
+      }
+      if (!isPendingApnsAcceptanceRecord(value)) {
+        console.error(JSON.stringify({
+          journalKey: key,
+          outcome: "invalid_apns_acceptance_journal_preserved",
+        }));
+        await this.scheduleRelayAlarm(
+          Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+        );
+        throw new Error("APNs acceptance journal record is invalid");
+      }
+      const computedTokenHashes = await Promise.all(
+        value.deliveries.map((delivery) => tokenHash(delivery.token)),
+      );
+      const expectedKey = await apnsAcceptanceJournalStorageKey(
+        value.deliveryId,
+        value.eventRef,
+        value.sourceId,
+        value.reason,
+        value.deliveries,
+      );
+      if (
+        expectedKey !== key ||
+        value.deliveries.some((delivery, index) =>
+          delivery.tokenHash !== computedTokenHashes[index]
+        )
+      ) {
+        console.error(JSON.stringify({
+          journalKey: key,
+          deliveryId: value.deliveryId,
+          outcome: "apns_acceptance_journal_integrity_mismatch_preserved",
+        }));
+        await this.scheduleRelayAlarm(
+          Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+        );
+        throw new Error("APNs acceptance journal integrity check failed");
+      }
+      const createdAtMs = Date.parse(value.createdAtUtc);
+      if (
+        !Number.isFinite(createdAtMs) ||
+        Date.now() - createdAtMs > APNS_ACCEPTANCE_JOURNAL_MAX_AGE_MS
+      ) {
+        console.error(JSON.stringify({
+          journalKey: key,
+          deliveryId: value.deliveryId,
+          outcome: "expired_apns_acceptance_journal_removed",
+        }));
+        await this.state.storage.delete(key);
+        maintenancePerformed = true;
+        continue;
+      }
+      if (replayed >= limit) continue;
+      replayed += 1;
+      maintenancePerformed = true;
+      try {
+        await recordDeliveredDevices(
+          this.env.DB,
+          value.deliveryId,
+          value.eventRef,
+          value.sourceId,
+          value.reason,
+          value.deliveries,
+          false,
+        );
+      } catch (error) {
+        console.error(JSON.stringify({
+          deliveryId: value.deliveryId,
+          outcome: "apns_acceptance_journal_d1_retry",
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        }));
+        await this.scheduleRelayAlarm(
+          Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+        );
+        throw error;
+      }
+      await this.state.storage.transaction(async (transaction) => {
+        const current = await transaction.get<unknown>(key);
+        if (
+          isPendingApnsAcceptanceRecord(current) &&
+          current.writeId === value.writeId
+        ) {
+          await transaction.delete(key);
+        }
+      });
+    }
+    const remaining = await this.state.storage.list<unknown>({
+      prefix: APNS_ACCEPTANCE_JOURNAL_PREFIX,
+      limit: APNS_ACCEPTANCE_JOURNAL_MAX_RECORDS + 1,
+    });
+    // Version-2 intents have already crossed the conservative lifecycle
+    // boundary before any provider contact. They may wait independently for
+    // their durable retry gate without blocking unrelated work. Version-1
+    // accepted batches and malformed records still fail closed globally until
+    // their known APNs acceptance is reconciled or repaired.
+    const blockingRemaining = [...remaining.values()].some((value) =>
+      !isPendingApnsDeliveryIntentRecord(value) ||
+      value.observedBatch !== null ||
+      value.lifecycleEvidencePreparedAtUtc !== value.lastProviderAttemptAtUtc
+    );
+    if (blockingRemaining) {
+      await this.scheduleRelayAlarm(
+        Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+      );
+      throw new Error("APNs acceptance journal replay remains pending");
+    }
+    if (maintenancePerformed) {
+      await this.scheduleRelayAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
+      return true;
+    }
+    return this.reconcileLegacyAcceptedLifecycle();
+  }
+
+  /**
+   * Hash and retire raw-token consent-removal handoffs created by SQL-only
+   * rolling-deploy triggers or stale-device cleanup. D1/SQLite has no SHA-256,
+   * so this bounded table is the only way to join an unbound token's lifecycle
+   * pseudonym without retaining the subscription itself. Alert/journal work is
+   * blocked until every row is converted and the raw token is deleted.
+   */
+  private async reconcileLegacyDeviceRemovals(limit = 8): Promise<void> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 8) {
+      throw new RangeError(
+        "legacy device-removal replay limit must be a positive bounded safe integer",
+      );
+    }
+    const pending = await this.env.DB
+      .prepare(
+        `SELECT token, registration_revision, app_attest_key_id,
+                decision_kind, removed_at_utc
+         FROM legacy_device_removal_tokens
+         ORDER BY removed_at_utc ASC, token ASC
+         LIMIT ?`,
+      )
+      .bind(limit)
+      .all<{
+        token: string;
+        registration_revision: string;
+        app_attest_key_id: string | null;
+        decision_kind: "empty_source_removal" | "stale_registration_retention";
+        removed_at_utc: string;
+      }>();
+    if (pending.results.length === 0) return;
+    const removals = await Promise.all(pending.results.map(async (row) => ({
+      token: row.token,
+      tokenHash: await tokenHash(row.token),
+      registrationRevision: row.registration_revision,
+      appAttestKeyId: row.app_attest_key_id,
+      decisionKind: row.decision_kind,
+      removedAtUtc: row.removed_at_utc,
+    })));
+    const removalsJson = JSON.stringify(removals);
+    const now = new Date().toISOString();
+    const removalCte = `WITH removals AS (
+      SELECT
+        json_extract(value, '$.token') AS token,
+        json_extract(value, '$.tokenHash') AS token_hash,
+        json_extract(value, '$.registrationRevision') AS registration_revision,
+        json_extract(value, '$.appAttestKeyId') AS app_attest_key_id,
+        json_extract(value, '$.decisionKind') AS decision_kind,
+        json_extract(value, '$.removedAtUtc') AS removed_at_utc
+      FROM json_each(?)
+    )`;
+    // Deliberately do not mark `apns_provider_attempts` reconciled here. A
+    // provider outcome may already be durable in the DO journal; consent
+    // removal blocks lifecycle replay, but that observed 2xx/410/BDT/page
+    // result must still reach its idempotent D1 reconciliation owner before
+    // terminal/outbox work can proceed.
+    await this.env.DB.batch([
+      this.env.DB
+        .prepare(
+          `${removalCte}
+           UPDATE apns_registration_revision_fences
+           SET decision_kind = COALESCE((
+                 SELECT removal.decision_kind FROM removals AS removal
+                 WHERE removal.registration_revision =
+                         apns_registration_revision_fences.registration_revision
+                    OR removal.token_hash =
+                      apns_registration_revision_fences.token_hash
+                    OR (
+                      removal.app_attest_key_id IS NOT NULL AND
+                      removal.app_attest_key_id =
+                        apns_registration_revision_fences.app_attest_key_id
+                    )
+                 LIMIT 1
+               ), decision_kind),
+               token_hash = COALESCE(token_hash, (
+                 SELECT removal.token_hash FROM removals AS removal
+                 WHERE removal.registration_revision =
+                         apns_registration_revision_fences.registration_revision
+                    OR (
+                      removal.app_attest_key_id IS NOT NULL AND
+                      removal.app_attest_key_id =
+                        apns_registration_revision_fences.app_attest_key_id
+                    )
+                 LIMIT 1
+               )),
+               blocks_lifecycle_replay = 1,
+               processed_at_utc = MAX(processed_at_utc, ?)
+           WHERE EXISTS (
+             SELECT 1 FROM removals AS removal
+             WHERE removal.registration_revision =
+                     apns_registration_revision_fences.registration_revision
+                OR removal.token_hash =
+                  apns_registration_revision_fences.token_hash
+                OR (
+                  removal.app_attest_key_id IS NOT NULL AND
+                  removal.app_attest_key_id =
+                    apns_registration_revision_fences.app_attest_key_id
+                )
+           )`,
+        )
+        .bind(removalsJson, now),
+      this.env.DB
+        .prepare(
+          `${removalCte}
+           INSERT INTO apns_registration_revision_fences (
+             registration_revision, token_hash, app_attest_key_id,
+             decision_id, decision_kind,
+             blocks_lifecycle_replay, processed_at_utc
+           )
+           SELECT registration_revision, token_hash, app_attest_key_id,
+                  lower(hex(randomblob(16))), decision_kind, 1,
+                  MAX(removed_at_utc, ?)
+           FROM removals WHERE 1
+           ON CONFLICT(registration_revision) DO UPDATE SET
+             token_hash = COALESCE(
+               apns_registration_revision_fences.token_hash,
+               excluded.token_hash
+             ),
+             app_attest_key_id = COALESCE(
+               apns_registration_revision_fences.app_attest_key_id,
+               excluded.app_attest_key_id
+             ),
+             decision_kind = excluded.decision_kind,
+             blocks_lifecycle_replay = 1,
+             processed_at_utc = MAX(
+               apns_registration_revision_fences.processed_at_utc,
+               excluded.processed_at_utc
+             )`,
+        )
+        .bind(removalsJson, now),
+      this.env.DB
+        .prepare(
+          `${removalCte}
+           DELETE FROM alert_lifecycle_recipients
+           WHERE EXISTS (
+             SELECT 1 FROM removals AS removal
+             WHERE removal.token_hash = alert_lifecycle_recipients.token_hash
+                OR (
+                  removal.app_attest_key_id IS NOT NULL AND
+                  removal.app_attest_key_id =
+                    alert_lifecycle_recipients.app_attest_key_id
+                )
+           )`,
+        )
+        .bind(removalsJson),
+      this.env.DB
+        .prepare(
+          `${removalCte}
+           DELETE FROM alert_lifecycle_possible_attempts
+           WHERE EXISTS (
+             SELECT 1 FROM removals AS removal
+             WHERE removal.token_hash =
+                   alert_lifecycle_possible_attempts.token_hash
+                OR (
+                  removal.app_attest_key_id IS NOT NULL AND
+                  removal.app_attest_key_id =
+                    alert_lifecycle_possible_attempts.app_attest_key_id
+                )
+           )`,
+        )
+        .bind(removalsJson),
+      this.env.DB
+        .prepare(
+          `${removalCte}
+           DELETE FROM alert_delivery_failures
+           WHERE token_hash IN (SELECT token_hash FROM removals)`,
+        )
+        .bind(removalsJson),
+      this.env.DB
+        .prepare(
+          `${removalCte}
+           DELETE FROM notification_deliveries
+           WHERE device_token IN (SELECT token FROM removals)`,
+        )
+        .bind(removalsJson),
+      this.env.DB
+        .prepare(
+          `${removalCte}
+           DELETE FROM legacy_device_removal_tokens
+           WHERE EXISTS (
+             SELECT 1 FROM removals AS removal
+             WHERE removal.token = legacy_device_removal_tokens.token
+               AND removal.registration_revision =
+                 legacy_device_removal_tokens.registration_revision
+           )`,
+        )
+        .bind(removalsJson),
+    ]);
+    const remaining = await this.env.DB
+      .prepare("SELECT 1 AS pending FROM legacy_device_removal_tokens LIMIT 1")
+      .first<{ pending: number }>();
+    if (remaining) {
+      await this.scheduleRelayAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
+      throw new Error("legacy device-removal reconciliation remains pending");
+    }
+  }
+
+  /**
+   * During a rolling deploy an older Worker can still write only the legacy
+   * notification-delivery row after migration 0013. Convert a bounded slice
+   * into the new lifecycle evidence before any terminal gate proceeds.
+   */
+  private async reconcileLegacyAcceptedLifecycle(limit = 4): Promise<boolean> {
+    const pending = await this.env.DB
+      .prepare(
+        `SELECT nd.delivery_id, nd.device_token, nd.delivered_at_utc,
+                outbox.event_ref, outbox.notification_reason
+         FROM notification_deliveries AS nd
+         LEFT JOIN alert_delivery_outbox AS outbox
+           ON outbox.delivery_id = nd.delivery_id
+         WHERE nd.lifecycle_reconciled = 0
+         ORDER BY nd.delivered_at_utc ASC
+         LIMIT ?`,
+      )
+      .bind(limit)
+      .all<{
+        delivery_id: string;
+        device_token: string;
+        delivered_at_utc: string;
+        event_ref: string | null;
+        notification_reason: NotifyReason | null;
+    }>();
+    for (const row of pending.results) {
+      const separator = row.event_ref?.indexOf(":") ?? -1;
+      const source = separator > 0
+        ? row.event_ref?.slice(0, separator)
+        : null;
+      const legacyTokenHash = await tokenHash(row.device_token);
+      const deviceRow = await this.env.DB
+        .prepare(
+          `SELECT * FROM devices
+           WHERE (
+             token = ?
+             AND NOT EXISTS (
+               SELECT 1 FROM apns_registration_revision_fences
+               WHERE token_hash = ? AND blocks_lifecycle_replay = 1
+                 AND decision_kind IN (
+                   'explicit_removal', 'empty_source_removal',
+                   'stale_registration_retention'
+                 )
+             )
+           ) OR app_attest_key_id IN (
+             SELECT app_attest_key_id
+             FROM apns_registration_revision_fences
+             WHERE token_hash = ?
+               AND app_attest_key_id IS NOT NULL
+               AND NOT (
+                 blocks_lifecycle_replay = 1
+                 AND decision_kind IN (
+                   'explicit_removal', 'empty_source_removal',
+                   'stale_registration_retention'
+                 )
+               )
+           )
+           ORDER BY CASE WHEN token = ? THEN 0 ELSE 1 END, updated_at DESC
+           LIMIT 1`,
+        )
+        .bind(
+          row.device_token,
+          legacyTokenHash,
+          legacyTokenHash,
+          row.device_token,
+        )
+        .first<DeviceRow>();
+      if (
+        row.event_ref !== null &&
+        (row.notification_reason === "new" ||
+          row.notification_reason === "updated") &&
+        isApnsRelaySource(source) &&
+        deviceRow !== null
+      ) {
+        const device = rowToDevice(deviceRow);
+        if (device.sources.includes(source)) {
+          await recordDeliveredDevices(
+            this.env.DB,
+            row.delivery_id,
+            row.event_ref,
+            source,
+            row.notification_reason,
+            [{
+              token: device.token,
+              tokenHash: await tokenHash(device.token),
+              snapshotRegistrationRevision: device.registrationRevision,
+              snapshotAppAttestKeyId: device.appAttestKeyId,
+              firstAcceptedAtUtc: row.delivered_at_utc,
+              lastAcceptedAtUtc: row.delivered_at_utc,
+            }],
+            false,
+          );
+        }
+      }
+      // A non-active reason, missing historical outbox, removed device, or
+      // current source opt-out needs no lifecycle row. Mark only if the exact
+      // legacy delivery still exists; explicit deletion may have removed it.
+      await this.env.DB
+        .prepare(
+          `UPDATE notification_deliveries
+           SET lifecycle_reconciled = 1
+           WHERE delivery_id = ? AND device_token = ?
+             AND lifecycle_reconciled = 0
+             AND (
+               ? NOT IN ('new', 'updated')
+               OR ? IS NULL
+               OR NOT EXISTS (
+                 SELECT 1 FROM devices WHERE token = ?
+               )
+               OR EXISTS (
+                 SELECT 1 FROM apns_registration_revision_fences
+                 WHERE token_hash = ? AND blocks_lifecycle_replay = 1
+               )
+               OR NOT EXISTS (
+                 SELECT 1 FROM json_each(
+                   CASE WHEN json_valid((
+                     SELECT sources FROM devices WHERE token = ?
+                   )) THEN (
+                     SELECT sources FROM devices WHERE token = ?
+                   ) ELSE '[]' END
+                 ) WHERE value = ?
+               )
+             )`,
+        )
+        .bind(
+          row.delivery_id,
+          row.device_token,
+          row.notification_reason,
+          row.event_ref,
+          row.device_token,
+          legacyTokenHash,
+          row.device_token,
+          row.device_token,
+          source,
+        )
+        .run();
+    }
+    const remaining = await this.env.DB
+      .prepare(
+        `SELECT 1 AS pending FROM notification_deliveries
+         WHERE lifecycle_reconciled = 0 LIMIT 1`,
+      )
+      .first<{ pending: number }>();
+    if (remaining) {
+      await this.scheduleRelayAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
+      throw new Error("legacy accepted lifecycle reconciliation remains pending");
+    }
+    return pending.results.length > 0;
   }
 
   /**
@@ -4443,7 +8055,10 @@ export class QuakeRelay {
             outcome: "invalid_alert_delivery_dlq_persistence_fallback",
           }),
         );
-        continue;
+        await this.scheduleRelayAlarm(
+          Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+        );
+        throw new Error("DLQ persistence fallback record is invalid");
       }
       try {
         await persistDlqIncidentAndFinalizeOutbox(this.env, value.evidence);
@@ -4458,7 +8073,7 @@ export class QuakeRelay {
         await this.scheduleRelayAlarm(
           Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
         );
-        return;
+        throw error;
       }
       await this.state.storage.transaction(async (transaction) => {
         const current = await transaction.get<unknown>(key);
@@ -4469,6 +8084,19 @@ export class QuakeRelay {
           await transaction.delete(key);
         }
       });
+    }
+    const remaining = await this.state.storage.list({
+      prefix: DLQ_PERSISTENCE_FALLBACK_PREFIX,
+      limit: 1,
+    });
+    if (remaining.size > 0) {
+      // More than one bounded replay slice remains. Do not let normal outbox
+      // maintenance re-enqueue, expire, or supersede those canonical terminal
+      // rows until every durable DLQ decision has crossed D1.
+      await this.scheduleRelayAlarm(
+        Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+      );
+      throw new Error("DLQ persistence fallback replay remains pending");
     }
   }
 
@@ -4507,6 +8135,13 @@ export class QuakeRelay {
       }
       await appendOutbox(this.env.DB, message, message.deliveryId);
       await this.state.storage.delete(key);
+    }
+    const remaining = await this.state.storage.list({
+      prefix: LEGACY_PENDING_DELIVERY_PREFIX,
+      limit: 1,
+    });
+    if (remaining.size > 0) {
+      await this.scheduleRelayAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
     }
   }
 
@@ -4584,16 +8219,35 @@ export class QuakeRelay {
         ) {
           return "duplicate" as const;
         }
-        // A stale WebSocket frame must never overwrite an already-journaled
-        // higher serial while the D1 write is waiting to retry.
-        if (
-          !isPendingIngestRecord(current) ||
-          record.event.serial >= current.event.serial
-        ) {
+        if (!isPendingIngestRecord(current)) {
           await transaction.put(key, record);
           return "written" as const;
         }
-        return "retained" as const;
+        // Apply the same monotonic lifecycle reconciliation used at the D1
+        // boundary. A pending final/cancel must survive an equal- or
+        // higher-serial active replay while D1 is unavailable; serial-only
+        // replacement would otherwise erase the terminal transition before it
+        // ever reached the outbox.
+        const reconciled = reconcileEventRevision(
+          { ...snapshot, raw: null },
+          { ...current.event, raw: null },
+        );
+        if (reconciled === null) return "retained" as const;
+        const { raw: _reconciledRaw, ...reconciledSnapshot } = reconciled;
+        const reconciledFingerprint = await liveEventFingerprint(
+          reconciledSnapshot,
+        );
+        if (
+          reconciledFingerprint === current.fingerprint ||
+          canonicalQueuedEvent(reconciledSnapshot) ===
+            canonicalQueuedEvent(current.event)
+        ) return "duplicate" as const;
+        await transaction.put(key, {
+          event: reconciledSnapshot,
+          writeId: crypto.randomUUID(),
+          fingerprint: reconciledFingerprint,
+        } satisfies PendingIngestRecord);
+        return "written" as const;
       });
       // The original attempt already owns either an in-flight D1 drain or a
       // durable retry alarm. Retrying an exact pending replay here would turn
@@ -4607,7 +8261,7 @@ export class QuakeRelay {
         await this.markSourceSuccessfulAndPublishReadiness(event.sourceId);
         return;
       }
-      await this.drainPendingIngestJournal();
+      await this.drainPendingIngestJournal(1, 1);
       // A pre-existing drain can process this just-written record before it
       // observes the candidate flag above. Re-check after the shared drain
       // settles; the pending-work fence still prevents premature readiness.
@@ -4626,8 +8280,8 @@ export class QuakeRelay {
   }
 
   private drainPendingIngestJournal(
-    maxEntries: number | null = null,
-    outboxFlushLimit: number | null = ROUTINE_OUTBOX_FLUSH_BATCH_SIZE,
+    maxEntries: number | null = 1,
+    outboxFlushLimit: number | null = 1,
   ): Promise<void> {
     if (
       maxEntries !== null &&
@@ -4662,7 +8316,18 @@ export class QuakeRelay {
   ): Promise<void> {
     let remaining = maxEntries;
     while (true) {
-      if (remaining !== null && remaining <= 0) return;
+      if (remaining !== null && remaining <= 0) {
+        const more = await this.state.storage.list({
+          prefix: PENDING_INGEST_PREFIX,
+          limit: 1,
+        });
+        if (more.size > 0) {
+          await this.scheduleRelayAlarm(
+            Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+          );
+        }
+        return;
+      }
       const limit = remaining === null
         ? OUTBOX_REPLAY_BATCH_SIZE
         : Math.min(remaining, OUTBOX_REPLAY_BATCH_SIZE);
@@ -5298,7 +8963,7 @@ export class QuakeRelay {
    */
   private async flushAlertDeliveryOutbox(
     limit = ROUTINE_OUTBOX_FLUSH_BATCH_SIZE,
-  ): Promise<void> {
+  ): Promise<number> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > OUTBOX_REPLAY_BATCH_SIZE) {
       throw new RangeError("outbox flush limit must be a positive bounded safe integer");
     }
@@ -5365,6 +9030,7 @@ export class QuakeRelay {
         );
       }
     }
+    return rows.results.length;
   }
 
   private async claimOutboxForEnqueue(outboxId: string): Promise<boolean> {
@@ -5417,6 +9083,26 @@ export class QuakeRelay {
       )
       .bind(retryAt, outboxId)
       .run();
+  }
+
+  private async deferOutboxForDurabilityMaintenance(
+    outboxId: string,
+  ): Promise<void> {
+    const retryAt = new Date(
+      Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+    ).toISOString();
+    const result = await this.env.DB
+      .prepare(
+        `UPDATE alert_delivery_outbox
+         SET queue_lease_until_utc = NULL, next_enqueue_at_utc = ?
+         WHERE id = ? AND acknowledged_at_utc IS NULL AND final_status IS NULL`,
+      )
+      .bind(retryAt, outboxId)
+      .run();
+    if ((result.meta.changes ?? 0) !== 1) {
+      throw new Error("delivery outbox changed during maintenance deferral");
+    }
+    await this.scheduleRelayAlarm(Date.parse(retryAt));
   }
 
   /**
@@ -5509,6 +9195,222 @@ export class QuakeRelay {
     return (result.meta.changes ?? 0) > 0 ? "expired" : "acknowledged";
   }
 
+  /**
+   * Final transaction-time admission immediately before provider I/O. The
+   * outbox ordering/deadline decision and every exact recipient revision are
+   * observed in one D1 batch, so an opt-out, rotation, or newer event that
+   * serialized during authorization/evidence preparation prevents a stale
+   * APNs contact. Recovery re-resolves changed recipients from the durable
+   * intent rather than sending this snapshot.
+   */
+  private async admitApnsProviderAttempt(
+    handle: ApnsDeliveryIntentHandle,
+    message: AlertDeliveryMessage,
+    recipients: MappedApnsIntentRecipient[],
+  ): Promise<MappedApnsIntentRecipient[]> {
+    if (recipients.length === 0) return [];
+    const event = eventFromDeliveryMessage(message);
+    const requested = isTerminalAlertLifecycleReason(message.reason)
+      ? recipients
+      : recipients.filter(({ delivery }) =>
+          shouldNotify(delivery.device, event, message.reason)
+        );
+    if (requested.length === 0) return [];
+    const priorValue = await this.state.storage.get<unknown>(handle.storageKey);
+    if (
+      !isPendingApnsDeliveryIntentRecord(priorValue) ||
+      priorValue.writeId !== handle.writeId ||
+      priorValue.observedBatch !== null
+    ) {
+      throw new Error("APNs delivery intent changed before admission");
+    }
+    const budgetedRequested = requested.filter((recipient) =>
+      (priorValue.recipientProviderAttempts[
+        recipient.snapshotRegistrationRevision
+      ] ?? 0) < APNS_DELIVERY_INTENT_MAX_PROVIDER_ATTEMPTS
+    );
+    if (budgetedRequested.length === 0) return [];
+    const reserved = await this.reserveApnsDeliveryIntentRecovery(
+      handle.storageKey,
+      priorValue,
+    );
+    const attemptId = `${reserved.writeId}:${reserved.providerAttempts}`;
+    const admittedAtUtc = reserved.lastProviderAttemptAtUtc;
+    try {
+      const results = await this.env.DB.batch([
+        supersedeOutboxIfNewerRevisionStatement(
+          this.env.DB,
+          message.outboxId,
+          admittedAtUtc,
+        ),
+        ...budgetedRequested.map(({
+          delivery,
+          snapshotRegistrationRevision,
+        }) =>
+          this.env.DB
+            .prepare(
+              `INSERT OR IGNORE INTO apns_provider_attempts (
+                 attempt_id, registration_revision, token_hash,
+                 event_ref, outbox_id, admitted_at_utc
+               )
+               SELECT ?, registration_revision, ?, ?, ?, ? FROM devices
+               WHERE token = ? AND registration_revision = ?
+                 AND app_attest_key_id IS ?
+                 AND EXISTS (
+                   SELECT 1 FROM json_each(
+                     CASE WHEN json_valid(devices.sources)
+                       THEN devices.sources ELSE '[]' END
+                   ) WHERE value = ?
+                 )
+                 AND NOT EXISTS (
+                   SELECT 1 FROM apns_registration_revision_fences
+                   WHERE registration_revision = ?
+                     AND blocks_lifecycle_replay = 1
+                     AND decision_kind IN (
+                       'explicit_removal', 'empty_source_removal',
+                       'stale_registration_retention'
+                     )
+                 )
+                 AND EXISTS (
+                   SELECT 1 FROM alert_delivery_outbox
+                   WHERE id = ? AND acknowledged_at_utc IS NULL
+                     AND expires_at_utc IS NOT NULL AND expires_at_utc > ?
+                 )
+               RETURNING registration_revision`,
+            )
+            .bind(
+              attemptId,
+              delivery.tokenHash,
+              message.event.id,
+              message.outboxId,
+              admittedAtUtc,
+              delivery.device.token,
+              delivery.device.registrationRevision,
+              delivery.device.appAttestKeyId,
+              message.event.sourceId,
+              snapshotRegistrationRevision,
+              message.outboxId,
+              admittedAtUtc,
+            )
+        ),
+        ...(message.reason === "new" || message.reason === "updated"
+          ? budgetedRequested.map(({ delivery }) =>
+            this.env.DB
+              .prepare(
+                `INSERT OR IGNORE INTO alert_lifecycle_possible_attempts (
+                   attempt_id, event_ref, token_hash, app_attest_key_id,
+                   registration_revision, evidence_at_utc
+                 )
+                 SELECT ?, ?, ?, app_attest_key_id,
+                        registration_revision, ?
+                 FROM devices
+                 WHERE token = ? AND registration_revision = ?
+                   AND EXISTS (
+                     SELECT 1 FROM apns_provider_attempts
+                     WHERE attempt_id = ?
+                       AND registration_revision = devices.registration_revision
+                   )`,
+              )
+              .bind(
+                attemptId,
+                message.event.id,
+                delivery.tokenHash,
+                admittedAtUtc,
+                delivery.device.token,
+                delivery.device.registrationRevision,
+                attemptId,
+              )
+          )
+          : []),
+      ]);
+      const admittedWithIndex = budgetedRequested.flatMap((recipient, index) =>
+        (results[index + 1]?.results.length ?? 0) === 1
+          ? [{ recipient, index }]
+          : []
+      );
+      const admitted = admittedWithIndex.map(({ recipient }) => recipient);
+      // The exact D1 snapshot is authoritative for preferences; this final
+      // synchronous recheck additionally closes a local quiet-hour boundary
+      // without introducing another awaited TOCTOU before fetch.
+      const stillEligible = isTerminalAlertLifecycleReason(message.reason)
+        ? admitted
+        : admitted.filter(({ delivery }) =>
+            shouldNotify(delivery.device, event, message.reason)
+          );
+      if (admitted.length === 0 || stillEligible.length !== admitted.length) {
+        await this.env.DB.batch([
+          this.env.DB
+            .prepare(
+              "DELETE FROM alert_lifecycle_possible_attempts WHERE attempt_id = ?",
+            )
+            .bind(attemptId),
+          this.env.DB
+            .prepare("DELETE FROM apns_provider_attempts WHERE attempt_id = ?")
+            .bind(attemptId),
+        ]);
+        await this.restoreUncontactedApnsIntentReservation(
+          handle.storageKey,
+          reserved,
+          priorValue,
+        );
+        return [];
+      }
+      if (message.reason === "new" || message.reason === "updated") {
+        const possibleOffset = 1 + budgetedRequested.length;
+        if (admittedWithIndex.some(({ index }) =>
+          (results[possibleOffset + index]?.meta.changes ?? 0) !== 1
+        )) {
+          throw new Error("APNs possible-contact evidence was not admitted");
+        }
+      }
+      await this.state.storage.transaction(async (transaction) => {
+        const current = await transaction.get<unknown>(handle.storageKey);
+        if (
+          !isPendingApnsDeliveryIntentRecord(current) ||
+          current.writeId !== reserved.writeId ||
+          current.providerAttempts !== reserved.providerAttempts ||
+          current.lastProviderAttemptAtUtc !== reserved.lastProviderAttemptAtUtc ||
+          current.observedBatch !== null
+        ) {
+          throw new Error("APNs admitted reservation changed before provider contact");
+        }
+        const recipientProviderAttempts = {
+          ...current.recipientProviderAttempts,
+        };
+        for (const { snapshotRegistrationRevision } of admitted) {
+          const next =
+            (recipientProviderAttempts[snapshotRegistrationRevision] ?? 0) + 1;
+          if (next > APNS_DELIVERY_INTENT_MAX_PROVIDER_ATTEMPTS) {
+            throw new Error("APNs recipient provider-attempt budget is exhausted");
+          }
+          recipientProviderAttempts[snapshotRegistrationRevision] = next;
+        }
+        await transaction.put(handle.storageKey, {
+          ...current,
+          recipientProviderAttempts,
+        } satisfies PendingApnsDeliveryIntentRecord);
+      });
+      return stillEligible;
+    } catch (error) {
+      await this.env.DB.batch([
+        this.env.DB
+          .prepare(
+            "DELETE FROM alert_lifecycle_possible_attempts WHERE attempt_id = ?",
+          )
+          .bind(attemptId),
+        this.env.DB
+          .prepare("DELETE FROM apns_provider_attempts WHERE attempt_id = ?")
+          .bind(attemptId),
+      ]).catch(() => undefined);
+      await this.restoreUncontactedApnsIntentReservation(
+        handle.storageKey,
+        reserved,
+        priorValue,
+      ).catch(() => undefined);
+      throw error;
+    }
+  }
+
   private async finalizeOutbox(
     outboxId: string,
     finalStatus: "delivered",
@@ -5572,9 +9474,13 @@ export class QuakeRelay {
     return (results[0]?.meta.changes ?? 0) > 0;
   }
 
-  private async purgeExpiredDevicesIfDue(): Promise<void> {
+  private async devicePurgeIsDue(): Promise<boolean> {
     const lastPurge = await this.state.storage.get<number>(LAST_DEVICE_PURGE_KEY);
-    if (lastPurge && Date.now() - lastPurge < DEVICE_PURGE_INTERVAL_MS) return;
+    return !lastPurge || Date.now() - lastPurge >= DEVICE_PURGE_INTERVAL_MS;
+  }
+
+  private async purgeExpiredDevicesIfDue(): Promise<void> {
+    if (!await this.devicePurgeIsDue()) return;
 
     const deviceCutoff = new Date(
       Date.now() - DEVICE_REGISTRATION_MAX_AGE_MS,
@@ -5585,7 +9491,68 @@ export class QuakeRelay {
     const eventCutoff = new Date(
       Date.now() - RELAY_EVENT_RETENTION_CUTOFF_MS,
     ).toISOString();
+    const purgeObservedAt = new Date(Date.now()).toISOString();
     await this.env.DB.batch([
+      // SQLite cannot SHA-256 unbound raw tokens. Move each consent-ending
+      // stale deletion into the bounded handoff first; reconciliation below
+      // hashes it, blocks the full lineage, and removes the raw token before
+      // this purge is considered complete.
+      this.env.DB
+        .prepare(
+          `INSERT INTO legacy_device_removal_tokens (
+             token, registration_revision, app_attest_key_id,
+             decision_kind, removed_at_utc
+           )
+           SELECT token, registration_revision, app_attest_key_id,
+                  'stale_registration_retention', ?
+           FROM devices WHERE updated_at < ?
+           ON CONFLICT(token) DO UPDATE SET
+             registration_revision = excluded.registration_revision,
+             app_attest_key_id = excluded.app_attest_key_id,
+             decision_kind = excluded.decision_kind,
+             removed_at_utc = excluded.removed_at_utc`,
+        )
+        .bind(purgeObservedAt, deviceCutoff),
+      // Retention is a consent-ending removal. Upgrade every older
+      // continuity-preserving fence carried by the same authenticated key so
+      // a pending acceptance for a rotated token cannot attach to a future
+      // reincarnation after the current registration ages out.
+      this.env.DB
+        .prepare(
+          `UPDATE apns_registration_revision_fences
+           SET decision_kind = 'stale_registration_retention',
+               blocks_lifecycle_replay = 1,
+               processed_at_utc = MAX(processed_at_utc, ?)
+           WHERE app_attest_key_id IN (
+             SELECT app_attest_key_id FROM devices
+             WHERE updated_at < ? AND app_attest_key_id IS NOT NULL
+           )`,
+        )
+        .bind(purgeObservedAt, deviceCutoff),
+      // A stale registration can still have an APNs request in flight. Fence
+      // every opaque revision before bulk deletion so a delayed provider
+      // response cannot act on a later reincarnation of the same token. No raw
+      // token or hash is needed because the revision is globally unique.
+      this.env.DB
+        .prepare(
+          `INSERT INTO apns_registration_revision_fences (
+             registration_revision, token_hash, app_attest_key_id,
+             decision_id, decision_kind,
+             blocks_lifecycle_replay, processed_at_utc
+           )
+           SELECT registration_revision, NULL, app_attest_key_id,
+                  lower(hex(randomblob(16))),
+                  'stale_registration_retention', 1, ?
+           FROM devices WHERE updated_at < ?
+           ON CONFLICT(registration_revision) DO UPDATE SET
+             decision_kind = excluded.decision_kind,
+             blocks_lifecycle_replay = 1,
+             processed_at_utc = MAX(
+               excluded.processed_at_utc,
+               apns_registration_revision_fences.processed_at_utc
+             )`,
+        )
+        .bind(purgeObservedAt, deviceCutoff),
       this.env.DB
         .prepare(
           `DELETE FROM notification_deliveries
@@ -5599,18 +9566,79 @@ export class QuakeRelay {
         .bind(deliveryCutoff),
       this.env.DB
         .prepare(
-          `DELETE FROM alert_delivery_failures
-           WHERE last_seen_utc < ?`,
+          "DELETE FROM alert_lifecycle_recipients WHERE last_evidence_at_utc < ?",
         )
         .bind(deliveryCutoff),
-      // Resolved provider-page evidence and terminal outbox payload snapshots
-      // have the same short operational retention as delivery deduplication.
-      // Active page failures are deliberately retained: a deadline may expire
-      // an old EEW page before a human fixes the APNs provider configuration.
+      this.env.DB
+        .prepare(
+          `DELETE FROM alert_lifecycle_possible_attempts
+           WHERE evidence_at_utc < ?
+             AND NOT EXISTS (
+               SELECT 1 FROM apns_provider_attempts AS attempt
+               WHERE attempt.attempt_id =
+                       alert_lifecycle_possible_attempts.attempt_id
+                 AND attempt.registration_revision =
+                       alert_lifecycle_possible_attempts.registration_revision
+                 AND attempt.outcome_reconciled_at_utc IS NULL
+             )`,
+        )
+        .bind(deliveryCutoff),
+      this.env.DB
+        .prepare(
+          `DELETE FROM apns_provider_attempts
+           WHERE admitted_at_utc < ?
+             AND outcome_reconciled_at_utc IS NOT NULL`,
+        )
+        .bind(deliveryCutoff),
+      this.env.DB
+        .prepare(
+          `DELETE FROM apns_registration_revision_fences
+           WHERE processed_at_utc < ?
+             AND NOT EXISTS (
+               SELECT 1 FROM alert_lifecycle_possible_attempts AS possible
+               WHERE possible.registration_revision =
+                 apns_registration_revision_fences.registration_revision
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM apns_provider_attempts AS attempt
+               WHERE attempt.registration_revision =
+                   apns_registration_revision_fences.registration_revision
+                 AND attempt.outcome_reconciled_at_utc IS NULL
+             )`,
+        )
+        .bind(deliveryCutoff),
+      this.env.DB
+        .prepare(
+          `DELETE FROM alert_delivery_failures
+           WHERE (
+             status = 'active' AND apns_reason = 'BadDeviceToken'
+             AND disposition IN ('quarantine', 'retry')
+             AND last_seen_utc < ?
+           ) OR (
+             NOT (
+               status = 'active' AND COALESCE(apns_reason, '') = 'BadDeviceToken'
+               AND disposition IN ('quarantine', 'retry')
+             )
+             AND last_seen_utc < ?
+           )`,
+        )
+        .bind(deviceCutoff, deliveryCutoff),
+      // Resolved DLQ/page evidence and terminal outbox payload snapshots have
+      // the same short post-resolution retention as delivery deduplication.
+      // Active incidents are deliberately retained: a deadline may expire an
+      // old EEW page before a human fixes the provider/Queue configuration.
+      this.env.DB
+        .prepare(
+          `DELETE FROM alert_delivery_incidents
+           WHERE status = 'resolved' AND resolved_at_utc IS NOT NULL
+             AND resolved_at_utc < ?`,
+        )
+        .bind(deliveryCutoff),
       this.env.DB
         .prepare(
           `DELETE FROM alert_delivery_page_failures
-           WHERE status = 'resolved' AND last_seen_utc < ?`,
+           WHERE status = 'resolved' AND resolved_at_utc IS NOT NULL
+             AND resolved_at_utc < ?`,
         )
         .bind(deliveryCutoff),
       this.env.DB
@@ -5635,16 +9663,41 @@ export class QuakeRelay {
         .bind(deviceCutoff),
       ...appAttestRetentionCleanupStatements(
         this.env.DB,
-        new Date().toISOString(),
+        purgeObservedAt,
       ),
     ]);
-    await this.state.storage.put(LAST_DEVICE_PURGE_KEY, Date.now());
+      // The raw-token consent handoff is a separate, fail-closed maintenance
+      // class. Combining its conversion batch with the retention batch can
+      // exceed Workers Free's 50-query invocation ceiling; the pending row
+      // keeps alert work blocked and the short alarm below owns conversion.
+      await this.scheduleRelayAlarm(Date.now() + PENDING_INGEST_RETRY_DELAY_MS);
+      await this.state.storage.put(LAST_DEVICE_PURGE_KEY, Date.now());
   }
 
   private async deliverQueuedPage(
     message: AlertDeliveryMessage,
   ): Promise<Response> {
     try {
+      // Never let expiry/supersession discard a provider acceptance whose D1
+      // write is still pending. The bounded reconciler either drains the next
+      // record and proves the journal empty or throws before this terminal
+      // gate and before any new APNs request.
+      const recoveryOwnsInvocation =
+        await this.reconcileApnsAcceptanceJournal();
+      if (recoveryOwnsInvocation) {
+        // The recovered outcome/consent handoff owned this invocation's D1
+        // budget. Leave the current Queue row pending for one short retry; it
+        // will then observe dedupe/terminal state without combining a fresh
+        // APNs page with the maintenance batch.
+        await this.deferOutboxForDurabilityMaintenance(message.outboxId);
+        return Response.json(
+          { ok: true, deferredForDurabilityMaintenance: true },
+          {
+            status: 202,
+            headers: { [DELIVERY_MAINTENANCE_DEFERRED_HEADER]: "1" },
+          },
+        );
+      }
       const expiryState = await this.expireOutboxIfDue(message);
       if (expiryState === "acknowledged") {
         return Response.json({ ok: true, alreadyAcknowledged: true });
@@ -5694,7 +9747,63 @@ export class QuakeRelay {
         authorization,
         message.deliveryId,
         message.afterDeviceCursor,
-        () => this.expireOutboxIfDue(message),
+        async () => {
+          const gate = await this.expireOutboxIfDue(message);
+          return gate;
+        },
+        (deliveries) =>
+          recordDeliveredDevices(
+            this.env.DB,
+            message.deliveryId,
+            event.id,
+            event.sourceId,
+            message.reason,
+            deliveries.map((delivery) => ({
+              token: delivery.device.token,
+              tokenHash: delivery.tokenHash,
+              snapshotRegistrationRevision:
+                delivery.device.registrationRevision,
+              snapshotAppAttestKeyId: delivery.device.appAttestKeyId,
+              firstAcceptedAtUtc: delivery.acceptedAtUtc,
+              lastAcceptedAtUtc: delivery.acceptedAtUtc,
+            })),
+            true,
+          ),
+        (deliveries) => this.persistApnsDeliveryIntent(message, deliveries),
+        (intent, observedAtUtc, deliveries, results) =>
+          this.persistApnsDeliveryIntentObservedBatch(
+            intent,
+            observedAtUtc,
+            deliveries,
+            results,
+          ),
+        (intent, deliveries) =>
+          this.admitApnsProviderAttempt(
+            intent,
+            message,
+            deliveries.map((delivery, originDeliveryIndex) => ({
+              delivery,
+              originDeliveryIndex,
+              snapshotRegistrationRevision:
+                delivery.device.registrationRevision,
+            })),
+          ),
+        async (intent, _failure) => {
+          const current = await this.state.storage.get<unknown>(
+            intent.storageKey,
+          );
+          if (
+            !isPendingApnsDeliveryIntentRecord(current) ||
+            current.writeId !== intent.writeId ||
+            current.observedBatch === null
+          ) {
+            throw new Error("APNs observed batch is unavailable for completion");
+          }
+          return (await this.reconcileObservedApnsDeliveryIntentBatch(
+            intent.storageKey,
+            current,
+          )) !== null;
+        },
       );
       if (page.terminalState !== null) {
         const outcome = page.terminalState === "superseded"
@@ -5714,18 +9823,20 @@ export class QuakeRelay {
       }
       if (page.pageFailure) {
         logApnsPageFailure(event, message.reason, message.outboxId, page.pageFailure);
-        await recordPageDeliveryFailure(
-          this.env.DB,
-          message.outboxId,
-          message,
-          page.pageFailure,
-        );
+        if (!page.pageFailurePersistedByIntent) {
+          await recordPageDeliveryFailure(
+            this.env.DB,
+            message.outboxId,
+            message,
+            page.pageFailure,
+          );
+        }
       } else {
         // A successful/non-provider retry proves the page-level provider
         // incident cleared even if one recipient still needs its own retry.
         await resolvePageDeliveryFailure(this.env.DB, message.outboxId);
       }
-      if (page.pageFailure === null && page.nextAfterDeviceCursor !== null) {
+      if (!page.globalPageFailure && page.nextAfterDeviceCursor !== null) {
         const nextPage = createAlertDeliveryMessage(
           event,
           message.reason,
@@ -5742,7 +9853,6 @@ export class QuakeRelay {
         // a retry response lets the primary Queue apply its configured five
         // bounded attempts to this same leased outbox row. Confirmed devices
         // and quarantined permanent failures are skipped on the next attempt.
-        await this.flushAlertDeliveryOutbox();
         return Response.json(
           { error: "delivery retry required" },
           {
@@ -5753,7 +9863,6 @@ export class QuakeRelay {
           },
         );
       }
-      await this.flushAlertDeliveryOutbox();
       return Response.json({ ok: true });
     } catch (error) {
       const pageFailure: ApnsDeliveryResult = {
@@ -6238,6 +10347,7 @@ export class QuakeRelay {
     let pendingOutboxRows: number | null;
     let staleOutboxRows: number | null;
     let pendingDlqPersistenceFallbacks: boolean | null;
+    let pendingApnsAcceptanceBatches: number | null;
     try {
       activeDlqIncidents =
         (await this.env.DB
@@ -6310,6 +10420,22 @@ export class QuakeRelay {
       // signal, not an inference from Queue depth.
       pendingDlqPersistenceFallbacks = null;
     }
+    try {
+      const pendingAcceptances = await this.state.storage.list({
+        prefix: APNS_ACCEPTANCE_JOURNAL_PREFIX,
+        limit: APNS_ACCEPTANCE_JOURNAL_MAX_RECORDS + 1,
+      });
+      const pendingConsentRemovals =
+        (await this.env.DB
+          .prepare(
+            "SELECT COUNT(*) AS pending_count FROM legacy_device_removal_tokens",
+          )
+          .first<number>("pending_count")) ?? 0;
+      pendingApnsAcceptanceBatches =
+        pendingAcceptances.size + pendingConsentRemovals;
+    } catch {
+      pendingApnsAcceptanceBatches = null;
+    }
     let apnsConfigured = false;
     if (hasApnsConfiguration(this.env)) {
       try {
@@ -6326,6 +10452,7 @@ export class QuakeRelay {
       apnsConfigured,
       activeDlqIncidents,
       pendingDlqPersistenceFallbacks,
+      pendingApnsAcceptanceBatches,
       activePageFailures,
       activeQuarantinedFailures,
       activeRetryFailures,
@@ -6335,6 +10462,7 @@ export class QuakeRelay {
         apnsConfigured,
         activeDlqIncidents,
         pendingDlqPersistenceFallbacks,
+        pendingApnsAcceptanceBatches,
         activePageFailures,
         activeQuarantinedFailures,
         activeRetryFailures,
@@ -6529,6 +10657,15 @@ export class QuakeRelay {
     // unlike the constructor's generic `error` event, while still retaining a
     // standard WebSocket after a successful Upgrade.
     this.state.waitUntil(this.connectWithUpgrade(route));
+  }
+
+  private serializeApnsDelivery<T>(operation: () => Promise<T>): Promise<T> {
+    const queued = this.apnsDeliverySerial.then(operation, operation);
+    this.apnsDeliverySerial = queued.then(
+      () => undefined,
+      () => undefined,
+    );
+    return queued;
   }
 
   private serializeRelayAlarm<T>(
@@ -7726,18 +11863,13 @@ export class TrainingPushScheduler {
     // before any D1, relay, or APNs I/O so retries cannot deliver twice.
     await this.state.storage.put(DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY, { ...job, state: "attempted" } satisfies DelayedTrainingTestPushJob);
     try {
-      // Obtain the cached provider authorization before the final ownership
-      // lookup. That lookup therefore occurs immediately before the APNs
-      // request and sees a deletion or key rebind that happened while the
-      // scheduler was waiting on the relay.
-      const [apnsAuthorization, collapseId] = await Promise.all([
-        cachedApnsAuthorizationFromRelay(this.env),
-        // Do every asynchronous preparation before the final ownership
-        // lookup. Once that D1 query returns a current registration, this DO
-        // immediately begins the APNs request without another await point at
-        // which a deletion/rebind event could interleave.
-        apnsCollapseID({ id: TRAINING_TEST_EVENT_ID }),
-      ]);
+      // Prepare the deterministic training collapse ID before the ownership
+      // lookup. A delayed appointment that is deleted while this preparation
+      // waits must never carry a stale row into the relay.
+      const collapseId = await apnsCollapseID(trainingTestEvent());
+      // The global relay performs a second exact-revision lookup inside its
+      // APNs serial lane. This local read avoids scheduling an obviously
+      // deleted key, while the relay closes the final read/send race.
       const row = await this.env.DB.prepare(
         `SELECT * FROM devices WHERE app_attest_key_id = ? AND environment = 'production' LIMIT 1`,
       ).bind(job.appAttestKeyId).first<DeviceRow>();
@@ -7758,13 +11890,13 @@ export class TrainingPushScheduler {
         ) ||
         !hasApnsConfiguration(this.env)
       ) return;
-      const event = trainingTestEvent();
-      const result = await sendPush(
+      const result = await productionTrainingPushThroughRelay(
         this.env,
         device,
-        event,
-        "training",
-        apnsAuthorization,
+        "delayed",
+        new Date(
+          job.dueAtMs + DELAYED_TRAINING_TEST_PUSH_MAX_LATE_MS,
+        ).toISOString(),
         collapseId,
       );
       if (!result.ok) return;
@@ -7891,12 +12023,67 @@ async function deviceRateLimitKey(
   );
 }
 
+function canonicalIpv4(value: string): string | null {
+  const parts = value.split(".");
+  if (parts.length !== 4) return null;
+  const octets: number[] = [];
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const octet = Number(part);
+    if (!Number.isSafeInteger(octet) || octet < 0 || octet > 255) return null;
+    octets.push(octet);
+  }
+  return octets.join(".");
+}
+
+export function cloudflareAuthenticatedClientIp(request: Request): string | null {
+  // Cloudflare overwrites this header at the Worker boundary. Accept only the
+  // exact IPv4/IPv6 forms it supplies; alphabet-only checks would let values
+  // such as `A` or `::::` escape the documented malformed-header fallback.
+  // Canonicalization also makes IPv6 compression/case and zero-padded IPv4
+  // aliases consume one budget. The raw value never leaves this function.
+  const value = request.headers.get("cf-connecting-ip")?.trim();
+  if (!value || value.length > 45) return null;
+  if (!value.includes(":")) return canonicalIpv4(value);
+  if (!/^[0-9A-Fa-f:.]+$/.test(value)) return null;
+  let candidate = value;
+  const lastColon = candidate.lastIndexOf(":");
+  const dottedTail = candidate.slice(lastColon + 1);
+  if (dottedTail.includes(".")) {
+    const canonicalTail = canonicalIpv4(dottedTail);
+    if (canonicalTail === null) return null;
+    candidate = `${candidate.slice(0, lastColon + 1)}${canonicalTail}`;
+  }
+  try {
+    const hostname = new URL(`http://[${candidate}]/`).hostname;
+    if (!hostname.startsWith("[") || !hostname.endsWith("]")) return null;
+    const canonical = hostname.slice(1, -1).toLowerCase();
+    return canonical.includes(":") ? canonical : null;
+  } catch {
+    return null;
+  }
+}
+
+async function deviceClientRateLimitKey(
+  request: Request,
+  route: string,
+): Promise<string> {
+  const clientIp = cloudflareAuthenticatedClientIp(request) ??
+    "missing-cloudflare-client-ip";
+  return sha256Hex(
+    JSON.stringify([
+      "quakesignal-device-rate-limit",
+      "cloudflare-client-ip",
+      route,
+      clientIp,
+    ]),
+  );
+}
+
 function logDeviceRateLimitOutcome(
   outcome:
     | "device_api_rate_limited"
-    | "device_api_rate_limit_unavailable"
-    | "app_attest_challenge_rate_limited"
-    | "app_attest_challenge_rate_limit_unavailable",
+    | "device_api_rate_limit_unavailable",
   route: string,
   actorKinds?: DeviceRateLimitActorKind[],
   error?: unknown,
@@ -7914,12 +12101,16 @@ function logDeviceRateLimitOutcome(
 }
 
 async function enforceDeviceEndpointRateLimit(
+  request: Request,
   env: Env,
   route: string,
 ): Promise<Response | null> {
   try {
-    const outcome = await env.DEVICE_API_RATE_LIMIT.limit({
-      key: await deviceRateLimitKey("endpoint", route),
+    // The historically named challenge binding is the lower per-client
+    // pre-proof budget for every public route. DEVICE_API_RATE_LIMIT is
+    // reserved for the materially higher route-wide circuit breaker below.
+    const outcome = await env.APP_ATTEST_CHALLENGE_RATE_LIMIT.limit({
+      key: await deviceClientRateLimitKey(request, route),
     });
     if (outcome.success) return null;
     logDeviceRateLimitOutcome("device_api_rate_limited", route);
@@ -7936,33 +12127,70 @@ async function enforceDeviceEndpointRateLimit(
   return deviceRateLimitResponse();
 }
 
-/**
- * New App Attest keys have no durable actor identity yet, so the ordinary
- * per-key mutation budget cannot protect challenge issuance by itself. Use a
- * dedicated native binding with a stable, route-only key before parsing a body
- * or touching D1. Cloudflare applies a Workers rate-limit binding per edge
- * location, which is why this remains an explicitly scoped low-cost quota
- * rather than claiming to be a global WAF.
- */
-async function enforceAppAttestChallengeRateLimit(
+async function enforceDeviceEndpointCircuitBreaker(
   env: Env,
+  route: string,
 ): Promise<Response | null> {
-  const route = "POST /v1/app-attest/challenge";
   try {
-    const outcome = await env.APP_ATTEST_CHALLENGE_RATE_LIMIT.limit({
+    const outcome = await env.DEVICE_API_RATE_LIMIT.limit({
       key: await deviceRateLimitKey("endpoint", route),
     });
     if (outcome.success) return null;
-    logDeviceRateLimitOutcome("app_attest_challenge_rate_limited", route);
+    logDeviceRateLimitOutcome("device_api_rate_limited", route);
   } catch (error) {
     logDeviceRateLimitOutcome(
-      "app_attest_challenge_rate_limit_unavailable",
+      "device_api_rate_limit_unavailable",
       route,
       undefined,
       error,
     );
   }
   return deviceRateLimitResponse();
+}
+
+async function enforceDeviceEndpointBudgets(
+  request: Request,
+  env: Env,
+  route: string,
+): Promise<Response | null> {
+  const clientResponse = await enforceDeviceEndpointRateLimit(
+    request,
+    env,
+    route,
+  );
+  if (clientResponse) return clientResponse;
+  // Only requests admitted by their pseudonymous client bucket consume this
+  // materially higher route-wide circuit breaker. This keeps distributed
+  // invalid proofs from removing the Worker's overall blast-radius cap.
+  return enforceDeviceEndpointCircuitBreaker(env, route);
+}
+
+function publicEndpointRateLimitRoute(request: Request, url: URL): string {
+  const method = ["GET", "POST", "DELETE", "OPTIONS"].includes(request.method)
+    ? request.method
+    : "OTHER";
+  const exactPaths = new Set([
+    "/",
+    "/privacy",
+    "/terms",
+    "/support",
+    "/healthz",
+    "/v1/app-attest/challenge",
+    "/v1/devices",
+    "/v1/devices/test",
+  ]);
+  if (exactPaths.has(url.pathname)) return `${method} ${url.pathname}`;
+  if (
+    url.pathname === "/v1/live" ||
+    url.pathname === "/v1/quakes/recent" ||
+    url.pathname.startsWith("/v1/quakes/")
+  ) return `${method} /v1/quakes/*`;
+  if (url.pathname.startsWith("/v1/app-attest/")) {
+    return `${method} /v1/app-attest/*`;
+  }
+  // Never incorporate attacker-selected unknown path/method text into the
+  // native limiter key: every unmatched request shares one bounded route.
+  return `${method} /unmatched`;
 }
 
 async function enforceDeviceMutationRateLimit(
@@ -8099,11 +12327,15 @@ function isDeviceRequestPayload(
 }
 
 function isValidDeviceToken(value: unknown): value is string {
+  // The Apple callback provides opaque, variable-length bytes; the client
+  // serializes those bytes as canonical lowercase hexadecimal. Validate that
+  // transport encoding without assuming today's APNs byte length.
   return (
     typeof value === "string" &&
     value.length >= 10 &&
     value.length <= MAX_DEVICE_TOKEN_LENGTH &&
-    value.trim() === value
+    value.length % 2 === 0 &&
+    /^[0-9a-f]+$/.test(value)
   );
 }
 
@@ -8620,6 +12852,7 @@ export function registrationStatement(
   guardBindings: unknown[] = [],
   allowAttestedTokenRebind = false,
 ): D1PreparedStatement {
+  const registrationRevision = crypto.randomUUID();
   return db
     .prepare(
       `INSERT INTO devices (
@@ -8627,8 +12860,8 @@ export function registrationStatement(
         critical_alerts_enabled, alert_sound, city_name, latitude, longitude, radius_km,
         include_test_alerts, utc_offset_minutes, notify_at_night,
         app_attest_key_id, app_identity, apns_topic, app_platform,
-        created_at, updated_at
-      ) SELECT ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        registration_revision, created_at, updated_at
+      ) SELECT ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       WHERE ${guardSql}
       ON CONFLICT(token) DO UPDATE SET
         environment = excluded.environment,
@@ -8648,6 +12881,7 @@ export function registrationStatement(
         app_identity = excluded.app_identity,
         apns_topic = excluded.apns_topic,
         app_platform = excluded.app_platform,
+        registration_revision = excluded.registration_revision,
         updated_at = excluded.updated_at
       WHERE devices.app_attest_key_id IS NULL
         OR devices.app_attest_key_id = excluded.app_attest_key_id
@@ -8671,10 +12905,41 @@ export function registrationStatement(
       appRoute.appIdentity,
       appRoute.apnsTopic,
       appRoute.platform,
+      registrationRevision,
       values.now,
       values.now,
       ...guardBindings,
       allowAttestedTokenRebind ? 1 : 0,
+    );
+}
+
+function registrationContinuityFenceStatement(
+  db: D1Database,
+  token: string,
+  tokenHashValue: string,
+  appAttestKeyId: string | null,
+  observedAtUtc: string,
+  guardSql = "1 = 1",
+  guardBindings: unknown[] = [],
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT OR IGNORE INTO apns_registration_revision_fences (
+         token_hash, registration_revision, app_attest_key_id,
+         decision_id, decision_kind,
+         blocks_lifecycle_replay, processed_at_utc
+       )
+       SELECT ?, registration_revision, ?, ?, 'registration_renewal', 0, ?
+       FROM devices
+       WHERE token = ? AND ${guardSql}`,
+    )
+    .bind(
+      tokenHashValue,
+      appAttestKeyId,
+      crypto.randomUUID(),
+      observedAtUtc,
+      token,
+      ...guardBindings,
     );
 }
 
@@ -8828,11 +13093,19 @@ export async function completeAttestedRegistration(
   const metadata = verification.metadata;
   const appAttestEnvironment = appAttestMutationEnvironment(authorization);
   const appRoute = appRouteForAuthorizedMutation(authorization);
-  const ownership = registrationOwnershipCondition(
+  const currentTokenHash = await tokenHash(values.token);
+  const baseOwnership = registrationOwnershipCondition(
     values.token,
     authorization.keyId,
     verification.proofType,
   );
+  const ownership = {
+    sql: `(${baseOwnership.sql}) AND NOT EXISTS (
+      SELECT 1 FROM apns_provider_attempts
+      WHERE token_hash = ? AND outcome_reconciled_at_utc IS NULL
+    )`,
+    bindings: [...baseOwnership.bindings, currentTokenHash],
+  };
   const commonStatements: D1PreparedStatement[] = [];
 
   if (verification.proofType === "attestation") {
@@ -8933,49 +13206,226 @@ export async function completeAttestedRegistration(
   // cross-key claim a harmless conflict instead of silently unsubscribing the
   // key's existing device.
   // A key can keep its integrity identity while APNs rotates its device token.
-  // Remove any prior subscription's token-hashed failure evidence in the same
-  // guarded transaction as its device row. Leaving an active failure behind
-  // would make readiness stay degraded for a subscription that no longer
-  // exists, and would retain its hash longer than operationally necessary.
+  // Remove a prior subscription's ordinary token-hashed failure evidence in
+  // the same guarded transaction as its device row. Active BadDeviceToken
+  // evidence is fenced and resolved instead. Dedicated processed-revision
+  // fences survive the device/failure cleanup: a duplicate stale APNs response
+  // for the retired token may arrive after it is registered again.
   const priorDevices = await db
     .prepare(
-      `SELECT token FROM devices
+      `SELECT token, registration_revision FROM devices
        WHERE app_attest_key_id = ? AND token <> ?`,
     )
     .bind(authorization.keyId, values.token)
-    .all<{ token: string }>();
+    .all<{ token: string; registration_revision: string }>();
   const priorDeviceFailureRecords = await Promise.all(
-    priorDevices.results.map(async ({ token }) => ({
+    priorDevices.results.map(async ({ token, registration_revision }) => ({
       token,
       tokenHash: await tokenHash(token),
+      registrationRevision: registration_revision,
     })),
   );
 
   const priorTokenCleanup = [
-    db
-      .prepare(
-        `DELETE FROM notification_deliveries
-         WHERE device_token IN (
-           SELECT token FROM devices
-           WHERE app_attest_key_id = ? AND token <> ?
-             AND ${consumed.sql} AND ${ownership.sql}
-         )`,
-      )
-      .bind(
-        authorization.keyId,
-        values.token,
-        ...consumed.bindings,
-        ...ownership.bindings,
-      ),
-    ...priorDeviceFailureRecords.map(({ token, tokenHash: hashedToken }) =>
+    // Keep bounded delivery dedupe for a retired token until its ordinary
+    // 14-day cleanup. A pre-send intent that crashed after its D1 acceptance
+    // uses this exact delivery/token row as the universal completion fence
+    // before remapping an unresolved recipient to the rotated token.
+    ...priorDeviceFailureRecords.flatMap(({
+      token,
+      tokenHash: hashedToken,
+      registrationRevision,
+    }) => {
+      // Every prior-token mutation is guarded by that token's own provider
+      // attempt hash. The target-token ownership predicate above deliberately
+      // cannot authorize cleanup of a rotated sibling.
+      const priorOwnership = {
+        sql: `NOT EXISTS (
+          SELECT 1 FROM apns_provider_attempts
+          WHERE token_hash = ? AND outcome_reconciled_at_utc IS NULL
+        )`,
+        bindings: [hashedToken],
+      };
+      return [
+      db
+        .prepare(
+          `INSERT INTO alert_lifecycle_recipients (
+             event_ref, token_hash, app_attest_key_id, registration_revision,
+             evidence_kind, first_evidence_at_utc, last_evidence_at_utc
+           )
+           SELECT outbox.event_ref, ?, ?, ?, 'apns_accepted',
+                  MIN(delivery.delivered_at_utc),
+                  MAX(delivery.delivered_at_utc)
+           FROM notification_deliveries AS delivery
+           JOIN alert_delivery_outbox AS outbox
+             ON outbox.delivery_id = delivery.delivery_id
+           WHERE delivery.device_token = ?
+             AND delivery.lifecycle_reconciled = 0
+             AND outbox.notification_reason IN ('new', 'updated')
+             AND json_valid(outbox.event_json)
+             AND EXISTS (
+               SELECT 1 FROM json_each(
+                 CASE WHEN json_valid(?) THEN ? ELSE '[]' END
+               ) WHERE value = json_extract(outbox.event_json, '$.sourceId')
+             )
+             AND EXISTS (
+               SELECT 1 FROM devices
+               WHERE token = ? AND registration_revision = ?
+                 AND app_attest_key_id = ? AND token <> ?
+                 AND ${consumed.sql} AND ${priorOwnership.sql}
+             )
+           GROUP BY outbox.event_ref
+           ON CONFLICT(event_ref, token_hash) DO UPDATE SET
+             app_attest_key_id = excluded.app_attest_key_id,
+             registration_revision = excluded.registration_revision,
+             evidence_kind = 'apns_accepted',
+             first_evidence_at_utc = MIN(
+               alert_lifecycle_recipients.first_evidence_at_utc,
+               excluded.first_evidence_at_utc
+             ),
+             last_evidence_at_utc = MAX(
+               alert_lifecycle_recipients.last_evidence_at_utc,
+               excluded.last_evidence_at_utc
+             )`,
+        )
+        .bind(
+          hashedToken,
+          authorization.keyId,
+          registrationRevision,
+          token,
+          values.sources,
+          values.sources,
+          token,
+          registrationRevision,
+          authorization.keyId,
+          values.token,
+          ...consumed.bindings,
+          ...priorOwnership.bindings,
+        ),
+      db
+        .prepare(
+          `UPDATE notification_deliveries
+           SET lifecycle_reconciled = 1
+           WHERE device_token = ? AND lifecycle_reconciled = 0
+             AND EXISTS (
+               SELECT 1 FROM devices
+               WHERE token = ? AND registration_revision = ?
+                 AND app_attest_key_id = ? AND token <> ?
+                 AND ${consumed.sql} AND ${priorOwnership.sql}
+             )`,
+        )
+        .bind(
+          token,
+          token,
+          registrationRevision,
+          authorization.keyId,
+          values.token,
+          ...consumed.bindings,
+          ...priorOwnership.bindings,
+        ),
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO apns_registration_revision_fences (
+             token_hash, registration_revision, app_attest_key_id,
+             decision_id, decision_kind,
+             blocks_lifecycle_replay, processed_at_utc
+           ) SELECT ?, ?, ?, ?, 'token_rotation', 0, ?
+           WHERE EXISTS (
+             SELECT 1 FROM devices
+             WHERE token = ? AND registration_revision = ?
+               AND app_attest_key_id = ? AND token <> ?
+               AND ${consumed.sql} AND ${priorOwnership.sql}
+           )`,
+        )
+        .bind(
+          hashedToken,
+          registrationRevision,
+          authorization.keyId,
+          crypto.randomUUID(),
+          now,
+          token,
+          registrationRevision,
+          authorization.keyId,
+          values.token,
+          ...consumed.bindings,
+          ...priorOwnership.bindings,
+        ),
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO apns_registration_revision_fences (
+             token_hash, registration_revision, app_attest_key_id,
+             decision_id, decision_kind,
+             blocks_lifecycle_replay, processed_at_utc
+           )
+           SELECT token_hash, registration_revision, ?,
+                  lower(hex(randomblob(16))), 'bad_device_token', 1,
+                  MAX(?, last_seen_utc)
+           FROM alert_delivery_failures
+           WHERE token_hash = ? AND status = 'active'
+             AND apns_reason = 'BadDeviceToken'
+             AND registration_revision IS NOT NULL
+             AND EXISTS (
+               SELECT 1 FROM devices
+               WHERE token = ? AND registration_revision = ?
+                 AND app_attest_key_id = ? AND token <> ?
+               AND ${consumed.sql} AND ${priorOwnership.sql}
+             )
+           ON CONFLICT(registration_revision) DO UPDATE SET
+             token_hash = COALESCE(
+               excluded.token_hash,
+               apns_registration_revision_fences.token_hash
+             ),
+             decision_kind = 'bad_device_token',
+             blocks_lifecycle_replay = 1,
+             processed_at_utc = MAX(
+               excluded.processed_at_utc,
+               apns_registration_revision_fences.processed_at_utc
+             )`,
+        )
+        .bind(
+          authorization.keyId,
+          now,
+          hashedToken,
+          token,
+          registrationRevision,
+          authorization.keyId,
+          values.token,
+          ...consumed.bindings,
+          ...priorOwnership.bindings,
+        ),
+      db
+        .prepare(
+          `UPDATE alert_delivery_failures
+           SET status = 'resolved',
+               resolved_at_utc = MAX(?, last_seen_utc),
+               last_seen_utc = MAX(?, last_seen_utc)
+           WHERE token_hash = ? AND apns_reason = 'BadDeviceToken'
+             AND status = 'active' AND EXISTS (
+               SELECT 1 FROM devices
+               WHERE token = ? AND app_attest_key_id = ? AND token <> ?
+                 AND ${consumed.sql} AND ${priorOwnership.sql}
+             )`,
+        )
+        .bind(
+          now,
+          now,
+          hashedToken,
+          token,
+          authorization.keyId,
+          values.token,
+          ...consumed.bindings,
+          ...priorOwnership.bindings,
+        ),
       db
         .prepare(
           `DELETE FROM alert_delivery_failures
-           WHERE token_hash = ? AND EXISTS (
-             SELECT 1 FROM devices
-             WHERE token = ? AND app_attest_key_id = ? AND token <> ?
-               AND ${consumed.sql} AND ${ownership.sql}
-           )`,
+           WHERE token_hash = ?
+             AND COALESCE(apns_reason, '') <> 'BadDeviceToken'
+             AND EXISTS (
+               SELECT 1 FROM devices
+               WHERE token = ? AND app_attest_key_id = ? AND token <> ?
+                 AND ${consumed.sql} AND ${priorOwnership.sql}
+             )`,
         )
         .bind(
           hashedToken,
@@ -8983,27 +13433,115 @@ export async function completeAttestedRegistration(
           authorization.keyId,
           values.token,
           ...consumed.bindings,
-          ...ownership.bindings,
+          ...priorOwnership.bindings,
         ),
+      ];
+    }),
+    ...priorDeviceFailureRecords.map(({
+      token,
+      tokenHash: hashedToken,
+      registrationRevision,
+    }) =>
+      db
+        .prepare(
+          `DELETE FROM devices
+           WHERE token = ? AND registration_revision = ?
+             AND app_attest_key_id = ?
+             AND ${consumed.sql}
+             AND NOT EXISTS (
+               SELECT 1 FROM apns_provider_attempts
+               WHERE token_hash = ? AND outcome_reconciled_at_utc IS NULL
+             )`,
+        )
+        .bind(
+          token,
+          registrationRevision,
+          authorization.keyId,
+          ...consumed.bindings,
+          hashedToken,
+        )
     ),
+  ];
+  // Capture the exact token's owner inside the D1 batch, before the UPSERT
+  // replaces it. Two concurrent fresh-key rebinds therefore serialize A→B→C:
+  // C observes B transactionally and carries every rotated-token lineage to C
+  // instead of relying on a stale JS pre-read of A.
+  const transactionalLineageRekey = [
     db
       .prepare(
-        `DELETE FROM devices
-         WHERE app_attest_key_id = ? AND token <> ?
-           AND ${consumed.sql} AND ${ownership.sql}`,
+        `UPDATE alert_lifecycle_recipients
+         SET app_attest_key_id = ?
+         WHERE (
+           token_hash = ?
+           OR app_attest_key_id IN (
+             SELECT app_attest_key_id FROM devices
+             WHERE token = ? AND app_attest_key_id IS NOT NULL
+           )
+         ) AND ${consumed.sql} AND ${ownership.sql}`,
       )
       .bind(
         authorization.keyId,
+        currentTokenHash,
+        values.token,
+        ...consumed.bindings,
+        ...ownership.bindings,
+      ),
+    db
+      .prepare(
+        `UPDATE apns_registration_revision_fences
+         SET app_attest_key_id = ?
+         WHERE (
+           token_hash = ?
+           OR app_attest_key_id IN (
+             SELECT app_attest_key_id FROM devices
+             WHERE token = ? AND app_attest_key_id IS NOT NULL
+           )
+         ) AND ${consumed.sql} AND ${ownership.sql}`,
+      )
+      .bind(
+        authorization.keyId,
+        currentTokenHash,
+        values.token,
+        ...consumed.bindings,
+        ...ownership.bindings,
+      ),
+    db
+      .prepare(
+        `UPDATE alert_lifecycle_possible_attempts
+         SET app_attest_key_id = ?
+         WHERE (
+           token_hash = ?
+           OR app_attest_key_id IN (
+             SELECT app_attest_key_id FROM devices
+             WHERE token = ? AND app_attest_key_id IS NOT NULL
+           )
+         ) AND ${consumed.sql} AND ${ownership.sql}`,
+      )
+      .bind(
+        authorization.keyId,
+        currentTokenHash,
         values.token,
         ...consumed.bindings,
         ...ownership.bindings,
       ),
   ];
-  const registrationIndex = commonStatements.length + priorTokenCleanup.length;
+  const sameTokenContinuityFence = registrationContinuityFenceStatement(
+    db,
+    values.token,
+    currentTokenHash,
+    authorization.keyId,
+    now,
+    consumed.sql,
+    consumed.bindings,
+  );
+  const registrationIndex = commonStatements.length +
+    priorTokenCleanup.length + transactionalLineageRekey.length + 1;
 
   const results = await db.batch([
     ...commonStatements,
     ...priorTokenCleanup,
+    ...transactionalLineageRekey,
+    sameTokenContinuityFence,
     registrationStatement(
       db,
       values,
@@ -9013,6 +13551,96 @@ export async function completeAttestedRegistration(
       consumed.bindings,
       verification.proofType === "attestation",
     ),
+    // A fallback BadDeviceToken failure can serialize just before this
+    // authenticated renewal. Fence each sent revision before resolving its
+    // active health row so a later duplicate response cannot act on the fresh
+    // registration.
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO apns_registration_revision_fences (
+           token_hash, registration_revision, app_attest_key_id,
+           decision_id, decision_kind,
+           blocks_lifecycle_replay, processed_at_utc
+         )
+         SELECT token_hash, registration_revision, ?,
+                lower(hex(randomblob(16))), 'bad_device_token', 1,
+                MAX(?, last_seen_utc)
+         FROM alert_delivery_failures
+         WHERE token_hash = ? AND apns_reason = 'BadDeviceToken'
+           AND status = 'active' AND registration_revision IS NOT NULL
+           AND EXISTS (
+             SELECT 1 FROM devices
+             WHERE token = ? AND app_attest_key_id = ? AND updated_at = ?
+               AND ${consumed.sql}
+           )
+         ON CONFLICT(registration_revision) DO UPDATE SET
+           token_hash = excluded.token_hash,
+           app_attest_key_id = excluded.app_attest_key_id,
+           decision_id = excluded.decision_id,
+           decision_kind = 'bad_device_token',
+           blocks_lifecycle_replay = 1,
+           processed_at_utc = MAX(
+             excluded.processed_at_utc,
+             apns_registration_revision_fences.processed_at_utc
+           )
+         WHERE apns_registration_revision_fences.decision_kind =
+                 'registration_renewal'
+           AND apns_registration_revision_fences.blocks_lifecycle_replay = 0`,
+      )
+      .bind(
+        authorization.keyId,
+        now,
+        currentTokenHash,
+        values.token,
+        authorization.keyId,
+        now,
+        ...consumed.bindings,
+      ),
+    // An authenticated same-token renewal serialized after quarantine is the
+    // intentional recovery boundary. Resolve its active BadDeviceToken state,
+    // while retaining the dedicated short-lived revision fence above.
+    db
+      .prepare(
+        `UPDATE alert_delivery_failures
+         SET status = 'resolved',
+             resolved_at_utc = MAX(?, last_seen_utc),
+             last_seen_utc = MAX(?, last_seen_utc)
+         WHERE token_hash = ? AND apns_reason = 'BadDeviceToken'
+           AND status = 'active' AND EXISTS (
+           SELECT 1 FROM devices
+           WHERE token = ? AND app_attest_key_id = ? AND updated_at = ?
+             AND ${consumed.sql}
+         )`,
+      )
+      .bind(
+        now,
+        now,
+        currentTokenHash,
+        values.token,
+        authorization.keyId,
+        now,
+        ...consumed.bindings,
+      ),
+    // Other per-token failure evidence does not participate in the stale APNs
+    // response fence and can keep the historical successful-renewal cleanup.
+    db
+      .prepare(
+        `DELETE FROM alert_delivery_failures
+         WHERE token_hash = ?
+           AND COALESCE(apns_reason, '') <> 'BadDeviceToken'
+           AND EXISTS (
+             SELECT 1 FROM devices
+             WHERE token = ? AND app_attest_key_id = ? AND updated_at = ?
+               AND ${consumed.sql}
+           )`,
+      )
+      .bind(
+        currentTokenHash,
+        values.token,
+        authorization.keyId,
+        now,
+        ...consumed.bindings,
+      ),
     ...appAttestRetentionCleanupStatements(db, now),
   ]);
   const coreCompleted =
@@ -9306,7 +13934,7 @@ export function validatedRegistrationValues(
     !isOptionalBoundedString(body.cityName, MAX_DEVICE_TEXT_LENGTH) ||
     (body.alertSound !== undefined && !isAlertSound(body.alertSound)) ||
     !isOptionalFiniteNumber(body.minMagnitude, 0, 10) ||
-    !isOptionalFiniteNumber(body.radiusKm, 0, 2_000) ||
+    !isOptionalFiniteNumber(body.radiusKm, 1, 2_000) ||
     !isOptionalFiniteNumber(body.utcOffsetMinutes, -840, 840) ||
     !isOptionalBoolean(body.includeTestAlerts) ||
     !isOptionalBoolean(body.notifyAtNight) ||
@@ -9327,6 +13955,13 @@ export function validatedRegistrationValues(
   if (body.radiusKm !== undefined && !hasLatitude) {
     return json(
       { error: "radiusKm requires latitude and longitude" },
+      400,
+      noStoreHeaders(),
+    );
+  }
+  if (!hasLatitude || body.radiusKm === undefined) {
+    return json(
+      { error: "latitude, longitude, and radiusKm are required" },
       400,
       noStoreHeaders(),
     );
@@ -9369,15 +14004,36 @@ async function handleDeviceRegistration(
         return appAttestConflictResponse();
       }
     } else {
-      await registrationStatement(
-        env.DB,
-        values,
-        null,
-        appRouteForAuthorizedMutation(authorization),
-        "1 = 1",
-        [],
-        false,
-      ).run();
+      const currentTokenHash = await tokenHash(values.token);
+      const registrationResults = await env.DB.batch([
+        registrationContinuityFenceStatement(
+          env.DB,
+          values.token,
+          currentTokenHash,
+          null,
+          values.now,
+          `NOT EXISTS (
+            SELECT 1 FROM apns_provider_attempts
+            WHERE token_hash = ? AND outcome_reconciled_at_utc IS NULL
+          )`,
+          [currentTokenHash],
+        ),
+        registrationStatement(
+          env.DB,
+          values,
+          null,
+          appRouteForAuthorizedMutation(authorization),
+          `NOT EXISTS (
+            SELECT 1 FROM apns_provider_attempts
+            WHERE token_hash = ? AND outcome_reconciled_at_utc IS NULL
+          )`,
+          [currentTokenHash],
+          false,
+        ),
+      ]);
+      if ((registrationResults[1]?.meta.changes ?? 0) === 0) {
+        throw new Error("device registration is fenced by an APNs attempt");
+      }
     }
   } catch (error) {
     console.error(
@@ -9467,22 +14123,27 @@ function isEmptyDeviceDeletionRequest(body: Record<string, unknown>): boolean {
  * anchored to `app_attest_key_id = authorization.keyId`; a valid key can
  * never delete a different key's subscription.
  */
-async function completeAttestedKeyBoundDeletion(
+export async function completeAttestedKeyBoundDeletion(
   db: D1Database,
   authorization: AttestedDeviceMutation,
 ): Promise<"completed" | "conflict"> {
+  const deletionObservedAt = new Date().toISOString();
   // The unique index normally means this contains zero or one row. Reading
   // the current token only lets us remove the corresponding sanitized APNs
   // failure hash; it is never returned or logged. Each deleting statement
   // below repeats the key ownership check so a stale read cannot cross keys.
   const ownedDevices = await db
-    .prepare("SELECT token FROM devices WHERE app_attest_key_id = ?")
+    .prepare(
+      `SELECT token, registration_revision FROM devices
+       WHERE app_attest_key_id = ?`,
+    )
     .bind(authorization.keyId)
-    .all<{ token: string }>();
+    .all<{ token: string; registration_revision: string }>();
   const ownedFailureRecords = await Promise.all(
-    ownedDevices.results.map(async ({ token }) => ({
+    ownedDevices.results.map(async ({ token, registration_revision }) => ({
       token,
       tokenHash: await tokenHash(token),
+      registrationRevision: registration_revision,
     })),
   );
 
@@ -9490,11 +14151,128 @@ async function completeAttestedKeyBoundDeletion(
     db,
     authorization,
     (consumed) => [
+      // Fence the revision observed by this transaction, not only the JS
+      // pre-read above. A same-key renewal can commit between that read and
+      // challenge consumption; the final key-wide DELETE must never retire an
+      // unfenced revision that an in-flight APNs response can later reuse.
+      db
+        .prepare(
+          `INSERT INTO apns_registration_revision_fences (
+             token_hash, registration_revision, app_attest_key_id,
+             decision_id, decision_kind,
+             blocks_lifecycle_replay, processed_at_utc
+           )
+           SELECT NULL, registration_revision, app_attest_key_id,
+                  lower(hex(randomblob(16))), 'explicit_removal', 1, ?
+           FROM devices
+           WHERE app_attest_key_id = ? AND ${consumed.sql}
+           ON CONFLICT(registration_revision) DO UPDATE SET
+             decision_kind = 'explicit_removal',
+             blocks_lifecycle_replay = 1,
+             processed_at_utc = MAX(
+               excluded.processed_at_utc,
+               apns_registration_revision_fences.processed_at_utc
+             )`,
+        )
+        .bind(
+          deletionObservedAt,
+          authorization.keyId,
+          ...consumed.bindings,
+        ),
       db
         .prepare(
           `DELETE FROM notification_deliveries
            WHERE device_token IN (
              SELECT token FROM devices
+             WHERE app_attest_key_id = ? AND ${consumed.sql}
+           )`,
+        )
+        .bind(authorization.keyId, ...consumed.bindings),
+      ...ownedFailureRecords.flatMap(({
+        token,
+        tokenHash: hashedToken,
+        registrationRevision,
+      }) => [
+        db
+          .prepare(
+            `INSERT OR IGNORE INTO apns_registration_revision_fences (
+               token_hash, registration_revision, app_attest_key_id,
+               decision_id, decision_kind,
+               blocks_lifecycle_replay, processed_at_utc
+             ) SELECT ?, ?, ?, ?, 'explicit_removal', 1, ?
+             WHERE EXISTS (
+               SELECT 1 FROM devices
+               WHERE token = ? AND registration_revision = ?
+                 AND app_attest_key_id = ? AND ${consumed.sql}
+             )`,
+          )
+          .bind(
+            hashedToken,
+            registrationRevision,
+            authorization.keyId,
+            crypto.randomUUID(),
+            deletionObservedAt,
+            token,
+            registrationRevision,
+            authorization.keyId,
+            ...consumed.bindings,
+          ),
+        db
+          .prepare(
+            `INSERT OR IGNORE INTO apns_registration_revision_fences (
+               token_hash, registration_revision, app_attest_key_id,
+               decision_id, decision_kind,
+               blocks_lifecycle_replay, processed_at_utc
+             )
+             SELECT token_hash, registration_revision, ?,
+                    lower(hex(randomblob(16))), 'bad_device_token', 1,
+                    MAX(?, last_seen_utc)
+             FROM alert_delivery_failures
+             WHERE token_hash = ? AND status = 'active'
+               AND apns_reason = 'BadDeviceToken'
+               AND registration_revision IS NOT NULL
+               AND EXISTS (
+                 SELECT 1 FROM devices
+                 WHERE token = ? AND registration_revision = ?
+                   AND app_attest_key_id = ? AND ${consumed.sql}
+               )`,
+          )
+          .bind(
+            authorization.keyId,
+            deletionObservedAt,
+            hashedToken,
+            token,
+            registrationRevision,
+            authorization.keyId,
+            ...consumed.bindings,
+          ),
+      ]),
+      // A pending acceptance can belong to an older token revision retired by
+      // this same key. Upgrade the entire authenticated continuity lineage,
+      // not only the current row, so an explicit opt-out cannot be undone by
+      // replay after a later same-token registration.
+      db
+        .prepare(
+          `UPDATE apns_registration_revision_fences
+           SET decision_kind = 'explicit_removal',
+               blocks_lifecycle_replay = 1,
+               processed_at_utc = MAX(processed_at_utc, ?)
+           WHERE app_attest_key_id = ? AND EXISTS (
+             SELECT 1 FROM devices
+             WHERE app_attest_key_id = ? AND ${consumed.sql}
+           )`,
+        )
+        .bind(
+          deletionObservedAt,
+          authorization.keyId,
+          authorization.keyId,
+          ...consumed.bindings,
+        ),
+      db
+        .prepare(
+          `DELETE FROM alert_delivery_failures
+           WHERE registration_revision IN (
+             SELECT registration_revision FROM devices
              WHERE app_attest_key_id = ? AND ${consumed.sql}
            )`,
         )
@@ -9516,13 +14294,36 @@ async function completeAttestedKeyBoundDeletion(
             ...consumed.bindings,
           ),
       ),
+      ...ownedFailureRecords.map(({ token, tokenHash: hashedToken }) =>
+        db
+          .prepare(
+            `DELETE FROM alert_lifecycle_recipients
+             WHERE token_hash = ? AND EXISTS (
+               SELECT 1 FROM devices
+               WHERE token = ? AND app_attest_key_id = ?
+                 AND ${consumed.sql}
+             )`,
+          )
+          .bind(
+            hashedToken,
+            token,
+            authorization.keyId,
+            ...consumed.bindings,
+          ),
+      ),
+      db
+        .prepare(
+          `DELETE FROM alert_lifecycle_recipients
+           WHERE app_attest_key_id = ? AND ${consumed.sql}`,
+        )
+        .bind(authorization.keyId, ...consumed.bindings),
       db
         .prepare(
           `DELETE FROM devices
            WHERE app_attest_key_id = ? AND ${consumed.sql}`,
         )
         .bind(authorization.keyId, ...consumed.bindings),
-      ...appAttestRetentionCleanupStatements(db, new Date().toISOString()),
+      ...appAttestRetentionCleanupStatements(db, deletionObservedAt),
     ],
   );
 }
@@ -9608,18 +14409,20 @@ export async function handleDeviceDeletion(
       // delivery-failure records—tokens themselves are never returned/logged.
       const deletionCandidates = await env.DB
         .prepare(
-          `SELECT token FROM devices
+          `SELECT token, registration_revision FROM devices
            WHERE app_attest_key_id = ?
               OR (token = ? AND app_attest_key_id IS NULL)`,
         )
         .bind(authorization.keyId, body.token)
-        .all<{ token: string }>();
+        .all<{ token: string; registration_revision: string }>();
       const deletionCandidateFailureRecords = await Promise.all(
-        deletionCandidates.results.map(async ({ token }) => ({
+        deletionCandidates.results.map(async ({ token, registration_revision }) => ({
           token,
           tokenHash: await tokenHash(token),
+          registrationRevision: registration_revision,
         })),
       );
+      const deletionObservedAt = new Date().toISOString();
       if (
         (await completeAttestedAuthorization(
           env.DB,
@@ -9630,11 +14433,132 @@ export async function handleDeviceDeletion(
               OR (token = ? AND app_attest_key_id IS NULL)
             ) AND ${consumed.sql}`;
             return [
+              // Repeat the fence selection inside the challenge-consuming D1
+              // transaction. The JS token/hash list can be stale if a
+              // same-key renewal commits while its proof is being verified.
+              env.DB
+                .prepare(
+                  `INSERT INTO apns_registration_revision_fences (
+                     token_hash, registration_revision, app_attest_key_id,
+                     decision_id, decision_kind,
+                     blocks_lifecycle_replay, processed_at_utc
+                   )
+                   SELECT NULL, registration_revision, app_attest_key_id,
+                          lower(hex(randomblob(16))),
+                          'explicit_removal', 1, ?
+                   FROM devices
+                   WHERE ${ownedOrLegacyDeviceCondition}
+                   ON CONFLICT(registration_revision) DO UPDATE SET
+                     decision_kind = 'explicit_removal',
+                     blocks_lifecycle_replay = 1,
+                     processed_at_utc = MAX(
+                       excluded.processed_at_utc,
+                       apns_registration_revision_fences.processed_at_utc
+                     )`,
+                )
+                .bind(
+                  deletionObservedAt,
+                  authorization.keyId,
+                  body.token,
+                  ...consumed.bindings,
+                ),
               env.DB
                 .prepare(
                   `DELETE FROM notification_deliveries
                    WHERE device_token IN (
                      SELECT token FROM devices
+                     WHERE ${ownedOrLegacyDeviceCondition}
+                   )`,
+                )
+                .bind(
+                  authorization.keyId,
+                  body.token,
+                  ...consumed.bindings,
+                ),
+              ...deletionCandidateFailureRecords.flatMap(({
+                token,
+                tokenHash: hashedToken,
+                registrationRevision,
+              }) => [
+                env.DB
+                  .prepare(
+                    `INSERT OR IGNORE INTO apns_registration_revision_fences (
+                       token_hash, registration_revision, app_attest_key_id,
+                       decision_id,
+                       decision_kind, blocks_lifecycle_replay, processed_at_utc
+                     ) SELECT ?, ?, ?, ?, 'explicit_removal', 1, ?
+                     WHERE EXISTS (
+                       SELECT 1 FROM devices
+                       WHERE token = ? AND registration_revision = ?
+                         AND ${ownedOrLegacyDeviceCondition}
+                     )`,
+                  )
+                  .bind(
+                    hashedToken,
+                    registrationRevision,
+                    authorization.keyId,
+                    crypto.randomUUID(),
+                    deletionObservedAt,
+                    token,
+                    registrationRevision,
+                    authorization.keyId,
+                    body.token,
+                    ...consumed.bindings,
+                  ),
+                env.DB
+                  .prepare(
+                    `INSERT OR IGNORE INTO apns_registration_revision_fences (
+                       token_hash, registration_revision, app_attest_key_id,
+                       decision_id,
+                       decision_kind, blocks_lifecycle_replay, processed_at_utc
+                     )
+                     SELECT token_hash, registration_revision, ?,
+                            lower(hex(randomblob(16))), 'bad_device_token', 1,
+                            MAX(?, last_seen_utc)
+                     FROM alert_delivery_failures
+                     WHERE token_hash = ? AND status = 'active'
+                       AND apns_reason = 'BadDeviceToken'
+                       AND registration_revision IS NOT NULL
+                       AND EXISTS (
+                         SELECT 1 FROM devices
+                         WHERE token = ? AND registration_revision = ?
+                           AND ${ownedOrLegacyDeviceCondition}
+                       )`,
+                  )
+                  .bind(
+                    authorization.keyId,
+                    deletionObservedAt,
+                    hashedToken,
+                    token,
+                    registrationRevision,
+                    authorization.keyId,
+                    body.token,
+                    ...consumed.bindings,
+                  ),
+              ]),
+              env.DB
+                .prepare(
+                  `UPDATE apns_registration_revision_fences
+                   SET decision_kind = 'explicit_removal',
+                       blocks_lifecycle_replay = 1,
+                       processed_at_utc = MAX(processed_at_utc, ?)
+                   WHERE app_attest_key_id = ? AND EXISTS (
+                     SELECT 1 FROM devices
+                     WHERE ${ownedOrLegacyDeviceCondition}
+                   )`,
+                )
+                .bind(
+                  deletionObservedAt,
+                  authorization.keyId,
+                  authorization.keyId,
+                  body.token,
+                  ...consumed.bindings,
+                ),
+              env.DB
+                .prepare(
+                  `DELETE FROM alert_delivery_failures
+                   WHERE registration_revision IN (
+                     SELECT registration_revision FROM devices
                      WHERE ${ownedOrLegacyDeviceCondition}
                    )`,
                 )
@@ -9661,6 +14585,33 @@ export async function handleDeviceDeletion(
                     ...consumed.bindings,
                   ),
               ),
+              ...deletionCandidateFailureRecords.map(({ token, tokenHash: hashedToken }) =>
+                env.DB
+                  .prepare(
+                    `DELETE FROM alert_lifecycle_recipients
+                     WHERE token_hash = ? AND EXISTS (
+                       SELECT 1 FROM devices
+                       WHERE token = ?
+                         AND ${ownedOrLegacyDeviceCondition}
+                     )`,
+                  )
+                  .bind(
+                    hashedToken,
+                    token,
+                    authorization.keyId,
+                    body.token,
+                    ...consumed.bindings,
+                  ),
+              ),
+              env.DB
+                .prepare(
+                  `DELETE FROM alert_lifecycle_recipients
+                   WHERE app_attest_key_id = ? AND ${consumed.sql}`,
+                )
+                .bind(
+                  authorization.keyId,
+                  ...consumed.bindings,
+                ),
               env.DB
                 .prepare(
                   `DELETE FROM devices
@@ -9673,7 +14624,7 @@ export async function handleDeviceDeletion(
                 ),
               ...appAttestRetentionCleanupStatements(
                 env.DB,
-                new Date().toISOString(),
+                deletionObservedAt,
               ),
             ];
           },
@@ -9687,8 +14638,8 @@ export async function handleDeviceDeletion(
       // statement includes this key binding.
       return new Response(null, { status: 204, headers: noStoreHeaders() });
     }
-    const outcome = await deleteDeviceRegistration(env.DB, body.token);
-    if (outcome === "not_deleted") {
+    const deletion = await deleteDeviceRegistration(env.DB, body.token);
+    if (deletion.outcome === "not_deleted") {
       console.error(JSON.stringify({ outcome: "device_deletion_not_completed" }));
       return json(
         { error: "device deletion is temporarily unavailable" },
@@ -10010,14 +14961,23 @@ export async function handleDeviceTestPush(
   const event = trainingTestEvent();
   const deviceTokenHash = await tokenHash(device.token);
   try {
-    const result = await sendPush(
-      env,
-      device,
-      event,
-      "training",
-      await cachedApnsAuthorizationFromRelay(env),
-      await apnsCollapseID(event),
-    );
+    const result = device.environment === "production"
+      ? await productionTrainingPushThroughRelay(
+          env,
+          device,
+          "immediate",
+          new Date(Date.now() + DELAYED_TRAINING_TEST_PUSH_MAX_LATE_MS)
+            .toISOString(),
+          await apnsCollapseID(event),
+        )
+      : await sendPush(
+          env,
+          device,
+          event,
+          "training",
+          await cachedApnsAuthorizationFromRelay(env),
+          await apnsCollapseID(event),
+        );
     if (!result.ok) {
       logApnsFailure(event, "training", deviceTokenHash, result);
       return json(
@@ -10041,12 +15001,18 @@ async function handleRequest(
   request: Request,
   env: Env,
 ): Promise<Response> {
+  const url = new URL(request.url);
+  const publicBudgetResponse = await enforceDeviceEndpointBudgets(
+    request,
+    env,
+    publicEndpointRateLimitRoute(request, url),
+  );
+  if (publicBudgetResponse) return publicBudgetResponse;
   // The public API is consumed by native clients, not browser JavaScript.
   // Deliberately do not grant a cross-origin browser read/write capability.
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 405, headers: { allow: "GET, POST, DELETE" } });
   }
-  const url = new URL(request.url);
 
   if (url.pathname === "/") {
     return json({
@@ -10068,7 +15034,7 @@ async function handleRequest(
         },
         {
           heading: "Data we process",
-          body: "If you enable alert registration on an iPhone or iPad, the service stores the APNs device token, app locale, selected JMA feed types, magnitude threshold, alert preferences (including the exact alert-sound identifier and a test-alert preference), alert radius, optional selected-city label, registration timestamps, and one approximate coordinate on a 0.1° grid. That coordinate is derived from either the selected city's coordinate or the current device location; neither an exact GPS fix nor an unrounded selected-city coordinate is sent. To prevent fraudulent subscription changes, the service also stores an opaque Apple App Attest key identifier, public verification key, attestation receipt, monotonic assertion counter, and integrity timestamps; newer Apple proofs may additionally carry the app build version and distribution category. QuakeSignal does not require an account, name, email address, contacts, photos, or advertising identifier for this registration.",
+          body: "If you enable alert registration on an iPhone or iPad, the service stores the APNs device token, app locale, selected JMA feed types, magnitude threshold, alert preferences (including the exact alert-sound identifier and a test-alert preference), alert radius, optional selected-city label, registration timestamps, a fresh opaque registration revision, and one approximate coordinate on a 0.1° grid. The opaque revision lets a stale APNs response act only on the exact registration snapshot that was sent. That coordinate is derived from either the selected city's coordinate or the most recent current-device location that the app successfully registered while open; neither an exact GPS fix nor an unrounded selected-city coordinate is sent. While the app is inactive, its last successfully registered bounded alert area remains in use until the next foreground renewal, removal, or retention cleanup. To prevent fraudulent subscription changes, the service also stores an opaque Apple App Attest key identifier, public verification key, attestation receipt, monotonic assertion counter, and integrity timestamps; newer Apple proofs may additionally carry the app build version and distribution category. QuakeSignal does not require an account, name, email address, contacts, photos, or advertising identifier for this registration.",
         },
         {
           heading: "Data kept on your device",
@@ -10076,11 +15042,19 @@ async function handleRequest(
         },
         {
           heading: "How data is used",
-          body: "The iPhone/iPad subscription data is used only to secure the notification service, apply your selected JMA feed type, magnitude, and radius filters to JMA-issued information relayed through Wolfx, send the requested Apple Push Notification, and investigate bounded delivery failures. These filters control relay delivery and presentation only; QuakeSignal does not forecast earthquakes or predict local intensity or arrival time. Location is not used for advertising, profiling, or sale.",
+          body: "The iPhone/iPad subscription data is used only to secure the notification service, apply your selected JMA feed type, magnitude, and radius filters to JMA-issued information relayed through Wolfx, send the requested Apple Push Notification, and investigate bounded delivery failures. A short-lived alert-lifecycle record lets a final or cancellation reach a current registration when APNs accepted the earlier active warning or a crash left provider acceptance unknowable, even if revised magnitude or location estimates no longer match; neither evidence kind proves display, and the current registration must still select that JMA feed. Before routing every public request—including this page, root, health, OPTIONS, disabled endpoints, and normalized unmatched paths—the Worker derives a route-scoped SHA-256 pseudonym from Cloudflare's authenticated client-IP header for a per-location counter that admits at most 60 requests per 60 seconds for that normalized method/route family; a missing or malformed header shares one bounded fallback bucket. Only admitted requests consume the separate 300-per-minute route-wide circuit breaker, so one client cannot consume more than 60 of that route budget. QuakeSignal never writes the raw IP or this pseudonym to D1 or application logs, although Cloudflare may separately process ordinary request/security metadata under its own policies. These filters control relay delivery and presentation only; QuakeSignal does not forecast earthquakes or predict local intensity or arrival time. Location is not used for advertising, profiling, or sale.",
         },
         {
           heading: "Storage and deletion",
-          body: "Subscription settings and the associated App Attest integrity record are stored in Cloudflare D1. Removing notification registration from the app deletes the matching device registration, even when this launch has no APNs token, if an existing App Attest key can prove it owns that subscription. A new key cannot claim a legacy subscription with an empty request. After reinstall or device restore, a fresh Apple attestation plus the exact APNs token may safely rebind that one token and retire its old key record; assertions and tokenless requests cannot transfer another key's subscription. If the old App Attest key and exact APNs token are both unavailable, a public support issue cannot privately identify or delete that unreachable registration; do not post either identifier or any proof there. Support can guide recovery. An old registration becomes eligible for deletion after it has not been refreshed for 90 days, together with its orphaned integrity record; the next successful daily cleanup removes them, and an operational cleanup failure can delay deletion. Normalized earthquake event rows and their revision history become eligible for deletion after 89 days and are removed by the next successful daily cleanup; an operational cleanup failure can delay deletion. If an in-app removal deletes the last registration using an App Attest key, the associated verifier, receipt, and assertion-counter record is deleted too. A reviewed production training test creates a separate token-free claim containing only the opaque App Attest key ID and UTC timestamps. The training-test claim becomes eligible for deletion after 14 days and is removed by the next successful routine cleanup; an operational cleanup failure can delay deletion. Its optional fixed-delay check also creates one private scheduler record containing only that opaque App Attest key ID, a due time, and an at-most-once attempted state; it contains no APNs token, request body, proof, preferences, location, or earthquake payload. That temporary record is deleted after its one scheduled attempt or cancellation; an alarm more than 30 seconds late is deleted without delivery. Each App Attest challenge becomes invalid in no more than five minutes; its expired row is removed by the next successful routine cleanup, and an operational cleanup failure can delay deletion. Sanitized delivery-failure token hashes become eligible for deletion after 14 days and are removed by the next successful routine cleanup; an operational cleanup failure can delay deletion. Disabling notifications or location access stops new collection but does not reliably send a deletion request, so use the in-app removal control before a reset when possible.",
+          body: [
+            "Subscription settings and the associated App Attest integrity record are stored in Cloudflare D1. A legacy registration whose stored source list is explicitly empty is deleted with its raw-token deduplication and orphaned App Attest state rather than silently assigned a feed. Any already-existing one-way failure hash cannot be safely joined by SQL; ordinary or resolved evidence remains on its 14-day last-seen cleanup, while active BadDeviceToken quarantine or retry evidence follows the rule below. During rolling deployment, revisionless legacy invalid-token evidence is conservatively pinned to the newest registration clock until authenticated new-Worker recovery resolves the matching hash; an old isolate's unfenced deletion fails closed and must retry after deployment convergence.",
+            "Removing notification registration from the app deletes the matching device registration, even when this launch has no APNs token, if an existing App Attest key can prove it owns that subscription. A new key cannot claim a legacy subscription with an empty request. After reinstall or device restore, a fresh Apple attestation plus the exact APNs token may safely rebind that one token and retire its old key record; assertions and tokenless requests cannot transfer another key's subscription. If the old App Attest key and exact APNs token are both unavailable, a public support issue cannot privately identify or delete that unreachable registration; do not post either identifier or any proof there. Support can guide recovery.",
+            "An old registration becomes eligible for deletion after it has not been refreshed for 90 days, together with its orphaned integrity record. The next successful daily cleanup first places a blocking opaque-revision fence and upgrades older continuity fences for the same opaque App Attest lineage, then removes the registration; an operational cleanup failure can delay deletion. Normalized earthquake event rows and their revision history become eligible for deletion after 89 days and are removed by the next successful daily cleanup; an operational cleanup failure can delay deletion. If an in-app removal deletes the last registration using an App Attest key, the associated verifier, receipt, and assertion-counter record is deleted too.",
+            "If APNs returns BadDeviceToken, only the exact opaque registration revision sent to APNs is removed with its orphaned verifier and active failure evidence. A separate processed-revision fence retains the opaque revision, optional SHA-256 token hash, optional opaque App Attest key ID, random decision ID, decision kind, replay-blocking flag, and timestamp for 14 days so a duplicate stale response cannot act on a re-registered token; it contains no raw APNs token, location, proof, or request body. A same-token registration serialized before the APNs cleanup transaction is preserved but its SHA-256 token hash is quarantined across alerts and degrades readiness unless that sent revision was already processed. An authenticated same-token renewal serialized after that transaction resolves the active quarantine while retaining the processed-revision fence. An immediate APNs 2xx resolves only matching evidence whose captured provider-response time is no later than that acceptance; delayed journal replay does not resolve active evidence merely because its D1 write runs later. Otherwise the active pseudonymous row follows a 90-day last-seen window aligned with stale registration cleanup, with last-seen never earlier than the preserved registration update time. If D1 cleanup or evidence storage fails, a bounded Queue attempt may contact APNs again because there is no separate cleanup-only record. The next foreground registration can replace its local integrity key once and retry with a fresh Apple attestation if that verifier is absent.",
+            "APNs and D1 cannot share a transaction. Before each small provider batch, the global relay stores the exact queued event/delivery data and one complete sent registration snapshot in a bounded Durable Object journal: raw APNs token and SHA-256 token hash, opaque current and original-lineage registration revisions, a stable original-recipient index, and optional App Attest key ID, server-selected environment/topic/platform route, coarse matching area, selected sources and alert preferences, registration timestamps, per-recipient bounded provider-attempt counts and retry times, latest attempt-observation time, and conservative-evidence marker. An observed batch can additionally contain the nullable APNs response ID, HTTP status/reason, accepted or invalidation timestamp, Retry-After value, and bounded cleanup/disposition flags. The journal retains at most 128 combined records, at most 64 KiB each. Before every bounded provider contact, D1 records unknown-provider-outcome lifecycle evidence for each still-consenting active-warning recipient; a known APNs 2xx separately promotes that evidence and writes exact delivery deduplication. Recovery allows the initial contact plus at most five later contacts per original recipient, honors a longer provider Retry-After, and lets unrelated alerts proceed while one intent waits. Recovery reuses the same stable collapse ID for at-least-once provider contact. Valid, integrity-matched records become eligible for safe retirement after 14 days; a D1 outage or consent race can delay deletion until evidence reconciliation succeeds. Malformed or token-hash/storage-key-mismatched records are preserved for operator repair, can exceed 14 days until repaired, and degrade readiness instead of being silently discarded. Replay maps only to a current registration that still selects the source and passes its current magnitude, location, training, and quiet-hour eligibility; ordinary token rotation or a fresh exact-token key rebind can preserve continuity, while explicit removal, empty-source remediation, or stale-registration retention blocks the retired authenticated lineage. A persisted delivery deadline prevents stale redispatch while retaining possible-contact continuity. Neither provider contact nor APNs acceptance proves device display or user receipt.",
+            "For alert closure, pseudonymous lifecycle row stores only an event reference, SHA-256 token hash, optional opaque App Attest key ID, and first/last evidence timestamps. Accepted-recipient rows add an opaque registration revision and an APNs-accepted evidence kind; pre-contact attempt rows add a possible-contact evidence kind and a random bounded attempt identifier. The lifecycle record set covers an opaque registration revision, an APNs-accepted or possible-contact evidence kind, and, during provider settlement, an APNs-accepted or unknown-provider-outcome evidence kind. It becomes eligible for deletion 14 days after the latest active-warning evidence. Possible-contact evidence does not create a notification-delivery deduplication row. The exact registration revision prevents an older removal fence from suppressing later accepted evidence after a new opt-in. A token-free provider-page or terminal-Queue incident stores event/delivery/source/reason/status/count/timestamp metadata. Confirmed later processing automatically resolves the matching provider-page failure; a terminal-Queue incident remains until an operator records both resolved status and a UTC resolution timestamp. Either becomes eligible 14 days after resolution; alert expiry alone starts no retention clock. These incident rows contain no APNs token, location preference, proof, or raw request/upstream body.",
+            "A reviewed production training test creates a separate token-free claim containing only the opaque App Attest key ID and UTC timestamps. The training-test claim becomes eligible for deletion after 14 days and is removed by the next successful routine cleanup; an operational cleanup failure can delay deletion. Immediately before either production training contact, the relay also writes a separate pseudonymous D1 provider-attempt fence containing a random attempt ID, the exact opaque registration revision, a SHA-256 APNs-token hash, synthetic training event/outbox references, and admission/reconciliation timestamps. It contains no raw APNs token, proof, request body, preferences, or location. Device mutation fails closed while that exact marker is unresolved; provider settlement resolves it, while a crash releases it after 60 seconds without claiming APNs acceptance. A resolved marker becomes eligible for deletion 14 days after admission; operational cleanup failure can delay deletion. The optional fixed-delay check also creates one private scheduler record containing only that opaque App Attest key ID, a due time, and an at-most-once attempted state; it contains no APNs token, request body, proof, preferences, location, or earthquake payload. That temporary record is deleted after its one scheduled attempt or cancellation; an alarm more than 30 seconds late is deleted without delivery. Each App Attest challenge becomes invalid in no more than five minutes; its expired row is removed by the next successful routine cleanup, and an operational cleanup failure can delay deletion. Ordinary and resolved sanitized delivery-failure token hashes and processed-revision fences become eligible for deletion 14 days after they were last seen, resolved, or processed and are removed by the next successful routine cleanup; active BadDeviceToken quarantine or retry evidence instead follows the 90-day rule above. An operational cleanup failure can delay deletion. When QuakeSignal is next active, losing a current-location fix replaces it with the saved city fallback when available; without a fallback it attempts to delete the stale relay row and reports a failed registration if deletion cannot be confirmed. Disabling notifications or location access cannot guarantee that cleanup runs, so use the in-app removal control before a reset when possible.",
+          ].join(" "),
         },
         {
           heading: "Third-party services",
@@ -10091,7 +15065,7 @@ async function handleRequest(
           body: "QuakeSignal is not an official government warning platform. Data and notifications can be delayed, incomplete, or inaccurate. Follow official announcements and local emergency instructions.",
         },
       ],
-      "20 August 2026",
+      "22 August 2026",
     );
   }
   if (url.pathname === "/terms" && request.method === "GET") {
@@ -10148,14 +15122,6 @@ async function handleRequest(
     );
   }
   if (url.pathname === "/healthz" && request.method === "GET") {
-    // Do this before obtaining the global relay stub. A health flood must be
-    // rejected at the edge rather than forcing the alert relay into startup,
-    // D1 health queries, or outbox recovery work.
-    const rateLimitResponse = await enforceDeviceEndpointRateLimit(
-      env,
-      "GET /healthz",
-    );
-    if (rateLimitResponse) return rateLimitResponse;
     // This read-only document is intentionally generated by the outer Worker,
     // not `QuakeRelay.statusResponse()`: it adds no Durable Object read/write
     // work and remains available when the relay cannot answer at all.
@@ -10207,6 +15173,7 @@ async function handleRequest(
             apnsConfigured: null,
             activeDlqIncidents: null,
             pendingDlqPersistenceFallbacks: null,
+            pendingApnsAcceptanceBatches: null,
             activePageFailures: null,
             activeQuarantinedFailures: null,
             activeRetryFailures: null,
@@ -10230,17 +15197,17 @@ async function handleRequest(
       error: "earthquake data endpoints are disabled; fetch directly from Wolfx",
     }, 410);
   }
+  const isAppAttestChallengeRequest =
+    url.pathname === "/v1/app-attest/challenge" && request.method === "POST";
+  if (isAppAttestChallengeRequest) {
+    return handleAppAttestChallenge(request, env);
+  }
   if (url.pathname.startsWith("/v1/app-attest/")) {
     // Reserve the same fail-closed limits for the App Attest challenge and
     // bootstrap routes. Their handlers are added separately, but this guard
     // means an unauthenticated route cannot become an unbounded mutation by
     // accident during that rollout.
     const route = appAttestRateLimitRoute(request, url.pathname);
-    const endpointRateLimitResponse = await enforceDeviceEndpointRateLimit(
-      env,
-      route,
-    );
-    if (endpointRateLimitResponse) return endpointRateLimitResponse;
     if (url.pathname !== "/v1/app-attest/challenge") {
       const mutationRateLimitResponse = await enforceDeviceMutationRateLimit(
         request,
@@ -10250,22 +15217,7 @@ async function handleRequest(
       if (mutationRateLimitResponse) return mutationRateLimitResponse;
     }
   }
-  if (
-    url.pathname === "/v1/app-attest/challenge" &&
-    request.method === "POST"
-  ) {
-    const challengeRateLimitResponse = await enforceAppAttestChallengeRateLimit(
-      env,
-    );
-    if (challengeRateLimitResponse) return challengeRateLimitResponse;
-    return handleAppAttestChallenge(request, env);
-  }
   if (url.pathname === "/v1/devices" && request.method === "POST") {
-    const rateLimitResponse = await enforceDeviceEndpointRateLimit(
-      env,
-      "POST /v1/devices",
-    );
-    if (rateLimitResponse) return rateLimitResponse;
     const payload = await deviceRequestBody(request);
     if (!isDeviceRequestPayload(payload)) return payload;
     const authorization = await authorizeAppAttestMutation(
@@ -10278,11 +15230,6 @@ async function handleRequest(
     return handleDeviceRegistration(request, env, payload, authorization);
   }
   if (url.pathname === "/v1/devices" && request.method === "DELETE") {
-    const rateLimitResponse = await enforceDeviceEndpointRateLimit(
-      env,
-      "DELETE /v1/devices",
-    );
-    if (rateLimitResponse) return rateLimitResponse;
     const payload = await deviceRequestBody(request);
     if (!isDeviceRequestPayload(payload)) return payload;
     const authorization = await authorizeAppAttestMutation(
@@ -10303,11 +15250,6 @@ async function handleRequest(
     return handleDeviceDeletion(request, env, payload, authorization);
   }
   if (url.pathname === "/v1/devices/test" && request.method === "POST") {
-    const rateLimitResponse = await enforceDeviceEndpointRateLimit(
-      env,
-      "POST /v1/devices/test",
-    );
-    if (rateLimitResponse) return rateLimitResponse;
     const payload = await deviceRequestBody(request);
     if (!isDeviceRequestPayload(payload)) return payload;
     const authorization = await authorizeAppAttestMutation(
@@ -10453,6 +15395,17 @@ async function handleAlertDeliveryQueue(
         }),
       );
       if (response.ok) {
+        if (
+          response.headers.get(DELIVERY_MAINTENANCE_DEFERRED_HEADER) === "1"
+        ) {
+          // The relay atomically released this outbox row to its short alarm
+          // before responding. Ack this Queue copy without terminalizing the
+          // outbox; the alarm creates a fresh Queue delivery after bounded D1
+          // maintenance, so recovery work cannot consume the five APNs retry
+          // attempts of an otherwise healthy page.
+          message.ack();
+          continue;
+        }
         // D1 remains the hand-off source of truth until delivery has completed
         // and this acknowledgement is durable. If the Queue ack itself is
         // lost, a later message sees the outbox record already acknowledged
@@ -10531,10 +15484,28 @@ async function handleAlertDeliveryDlq(
   for (const message of batch.messages) {
     const evidence = dlqIncidentEvidence(message);
     try {
-      const incidentRecorded = await persistDlqIncidentAndFinalizeOutbox(
-        env,
-        evidence,
+      const finalization = await relay.fetch(
+        new Request("https://relay.internal/dlq/finalize", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(evidence),
+        }),
       );
+      if (!finalization.ok) {
+        throw new Error(`DLQ finalization returned HTTP ${finalization.status}`);
+      }
+      const finalizationBody: unknown = await finalization.json();
+      if (
+        !finalizationBody ||
+        typeof finalizationBody !== "object" ||
+        Array.isArray(finalizationBody) ||
+        typeof (finalizationBody as { incidentRecorded?: unknown })
+            .incidentRecorded !== "boolean"
+      ) {
+        throw new Error("DLQ finalization response was invalid");
+      }
+      const incidentRecorded =
+        (finalizationBody as { incidentRecorded: boolean }).incidentRecorded;
       if (incidentRecorded) {
         console.error(
           JSON.stringify({
@@ -10563,10 +15534,10 @@ async function handleAlertDeliveryDlq(
       message.ack();
       continue;
     } catch (d1Error) {
-      // D1 is unavailable, but acknowledging the DLQ message would lose the
-      // only terminal-delivery evidence. First persist a token-free marker in
-      // the global Durable Object, which can later replay the identical D1
-      // transaction before normal outbox work resumes.
+      // The serialized finalization path (D1 or acceptance-journal replay) is
+      // unavailable. Acknowledging now would lose terminal-delivery evidence,
+      // so first persist a token-free fallback in the same global DO. Its
+      // alarm replays only after pending APNs acceptances are reconciled.
       try {
         const fallback = await relay.fetch(
           new Request("https://relay.internal/dlq/persistence-fallback", {

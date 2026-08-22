@@ -49,9 +49,8 @@ struct SettingsView: View {
     @State private var showingDelayedTestConfirmation = false
 #endif
     @State private var isUpdatingPushSubscription = false
-    @State private var isSynchronizingPushPreferences = false
-    @State private var needsPushPreferenceResync = false
     @State private var pushSubscriptionMessage: String?
+    @State private var pushSubscriptionMessageState: PushRegistrationState?
     @State private var showingRemovePushConfirmation = false
     @State private var showingCityPicker = false
 
@@ -99,12 +98,20 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("settings.section.sources") {
+                Section {
                     ForEach(AppSettings.allSources, id: \.self) { source in
                         Toggle(isOn: sourceBinding(source)) {
                             Text(NSLocalizedString("settings.source.\(source)", comment: "Earthquake data source"))
                         }
+                        .disabled(
+                            settings.enabledSources.count == 1 &&
+                                settings.enabledSources.contains(source)
+                        )
                     }
+                } header: {
+                    Text("settings.section.sources")
+                } footer: {
+                    Text("settings.sources.minimum")
                 }
 
                 Section("settings.section.notifications") {
@@ -288,18 +295,24 @@ struct SettingsView: View {
                 Text("settings.delayedTestAlert.confirmation.message")
             }
 #endif
-            .onChange(of: settings.minMagnitude) { _, _ in resyncPushPreferences() }
-            .onChange(of: settings.notifyAtNight) { _, _ in resyncPushPreferences() }
-            .onChange(of: settings.includeTestAlerts) { _, _ in resyncPushPreferences() }
-            .onChange(of: settings.alertSound) { _, _ in resyncPushPreferences() }
-            .onChange(of: settings.radiusKm) { _, _ in resyncPushPreferences() }
-            .onChange(of: settings.selectedCityId) { _, _ in resyncPushPreferences() }
-            .onChange(of: settings.useCurrentLocation) { _, _ in resyncPushPreferences() }
-                .sheet(isPresented: $showingCityPicker) {
-                    CityPickerView()
+            .sheet(isPresented: $showingCityPicker) {
+                CityPickerView()
+            }
+            .onChange(of: settings.pushRegistrationState) { _, _ in
+                // Keep a result produced by the manual operation that just
+                // completed, but retire a message whose tagged state no
+                // longer matches an external or centralized resync outcome.
+                guard pushSubscriptionMessageState != settings.pushRegistrationState else {
+                    return
                 }
+                setPushSubscriptionMessage(nil)
+            }
+            .onChange(of: settings.pushRegistrationPreferencesRevision) { _, _ in
+                setPushSubscriptionMessage(nil)
             }
         }
+    }
+
     }
 
     private func sourceBinding(_ source: String) -> Binding<Bool> {
@@ -311,7 +324,6 @@ struct SettingsView: View {
                 } else {
                     settings.enabledSources.remove(source)
                 }
-                resyncPushPreferences()
             }
         )
     }
@@ -325,47 +337,9 @@ struct SettingsView: View {
         )
     }
 
-    private func resyncPushPreferences() {
-        guard PlatformCapabilities.supportsAttestedAlertRegistration,
-              settings.pushSubscriptionEnabled,
-              notifications.canRegisterForRemoteNotifications,
-              notifications.deviceToken != nil else {
-            return
-        }
-
-        // Multiple controls can change in one interaction. Keep only one
-        // protected request in flight, then send a follow-up with the latest
-        // saved preferences if another change occurred while it was running.
-        needsPushPreferenceResync = true
-        guard !isSynchronizingPushPreferences else { return }
-        isSynchronizingPushPreferences = true
-
-        Task { @MainActor in
-            defer { isSynchronizingPushPreferences = false }
-
-            while needsPushPreferenceResync {
-                needsPushPreferenceResync = false
-                guard settings.pushSubscriptionEnabled,
-                      notifications.canRegisterForRemoteNotifications,
-                      let token = notifications.deviceToken else {
-                    return
-                }
-
-                do {
-                    try await QuakeStore.shared.registerForPush(token: token)
-                    pushSubscriptionMessage = nil
-                } catch {
-                    // `QuakeStore` has already persisted `.failed`; retain a
-                    // human-readable reason in this settings session and
-                    // leave the retry affordance visible.
-                    pushSubscriptionMessage = L(
-                        "settings.pushSubscription.sync.failure",
-                        error.localizedDescription
-                    )
-                    return
-                }
-            }
-        }
+    private func setPushSubscriptionMessage(_ message: String?) {
+        pushSubscriptionMessage = message
+        pushSubscriptionMessageState = message == nil ? nil : settings.pushRegistrationState
     }
 
     @ViewBuilder
@@ -481,7 +455,7 @@ struct SettingsView: View {
         guard PlatformCapabilities.supportsAttestedAlertRegistration,
               notifications.canRegisterForRemoteNotifications else { return }
         isUpdatingPushSubscription = true
-        pushSubscriptionMessage = nil
+        setPushSubscriptionMessage(nil)
         settings.pushSubscriptionEnabled = true
         settings.pushRegistrationState = .unregistered
         notifications.registerForRemoteNotificationsIfAuthorized()
@@ -489,12 +463,12 @@ struct SettingsView: View {
         if let token = notifications.deviceToken {
             do {
                 try await QuakeStore.shared.registerForPush(token: token)
-                pushSubscriptionMessage = String(localized: "settings.pushSubscription.resume.success")
+                setPushSubscriptionMessage(String(localized: "settings.pushSubscription.resume.success"))
             } catch {
-                pushSubscriptionMessage = L("settings.pushSubscription.resume.failure", error.localizedDescription)
+                setPushSubscriptionMessage(L("settings.pushSubscription.resume.failure", error.localizedDescription))
             }
         } else {
-            pushSubscriptionMessage = String(localized: "settings.pushSubscription.waiting")
+            setPushSubscriptionMessage(String(localized: "settings.pushSubscription.waiting"))
         }
         isUpdatingPushSubscription = false
     }
@@ -503,34 +477,34 @@ struct SettingsView: View {
         guard PlatformCapabilities.supportsAttestedAlertRegistration,
               settings.pushSubscriptionEnabled else { return }
         isUpdatingPushSubscription = true
-        pushSubscriptionMessage = nil
+        setPushSubscriptionMessage(nil)
         notifications.registerForRemoteNotificationsIfAuthorized()
 
         guard notifications.canRegisterForRemoteNotifications,
               let token = notifications.deviceToken else {
-            pushSubscriptionMessage = String(localized: "settings.pushSubscription.waiting")
+            setPushSubscriptionMessage(String(localized: "settings.pushSubscription.waiting"))
             isUpdatingPushSubscription = false
             return
         }
 
         do {
             try await QuakeStore.shared.registerForPush(token: token)
-            pushSubscriptionMessage = String(localized: "settings.pushSubscription.retry.success")
+            setPushSubscriptionMessage(String(localized: "settings.pushSubscription.retry.success"))
         } catch {
-            pushSubscriptionMessage = L("settings.pushSubscription.retry.failure", error.localizedDescription)
+            setPushSubscriptionMessage(L("settings.pushSubscription.retry.failure", error.localizedDescription))
         }
         isUpdatingPushSubscription = false
     }
 
     private func removePushSubscription() async {
         isUpdatingPushSubscription = true
-        pushSubscriptionMessage = nil
+        setPushSubscriptionMessage(nil)
         do {
             try await QuakeStore.shared.unregisterForPush(token: notifications.deviceToken)
             notifications.clearDeviceToken()
-            pushSubscriptionMessage = String(localized: "settings.pushSubscription.remove.success")
+            setPushSubscriptionMessage(String(localized: "settings.pushSubscription.remove.success"))
         } catch {
-            pushSubscriptionMessage = L("settings.pushSubscription.remove.failure", error.localizedDescription)
+            setPushSubscriptionMessage(L("settings.pushSubscription.remove.failure", error.localizedDescription))
         }
         isUpdatingPushSubscription = false
     }
@@ -628,28 +602,33 @@ private struct AlertSoundSelectionView: View {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: preference.systemImage)
                                 .font(.title3)
+                                .visionFont(.title2)
                                 .foregroundStyle(Color("BrandColor"))
-                                .frame(width: 30, height: 30)
+                                .frame(width: optionIconSize, height: optionIconSize)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(LocalizedStringKey(preference.titleKey))
                                     .font(.body.weight(.medium))
+                                    .visionFont(.title3.weight(.semibold))
                                     .foregroundStyle(.primary)
                                 Text(LocalizedStringKey(preference.detailKey))
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .visionFont(.body)
+                                    .visionSupportingText()
                                     .multilineTextAlignment(.leading)
                             }
                             Spacer(minLength: 8)
                             if selectedPreference == preference {
                                 Image(systemName: "checkmark.circle.fill")
+                                    .visionFont(.title3)
                                     .foregroundStyle(Color("BrandColor"))
                                     .accessibilityHidden(true)
                             }
                         }
-                        .padding(.vertical, 5)
+                        .padding(.vertical, optionVerticalPadding)
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(selectedPreference == preference ? .isSelected : [])
+                    .visionReadableRow()
                 }
             }
 
@@ -658,21 +637,47 @@ private struct AlertSoundSelectionView: View {
                     EmergencyAlertAudio.shared.preview(selectedPreference)
                 } label: {
                     Label("settings.alertSound.preview", systemImage: "play.circle.fill")
+                        .visionFont(.title3.weight(.semibold))
                 }
+                .visionReadableRow(minimumHeight: 76)
             }
 
             Section {
                 Label("settings.alertSound.disclosure", systemImage: "info.circle")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .visionFont(.body)
+                    .visionSupportingText()
+                    .visionReadableRow(minimumHeight: 96)
             }
         }
+        .visionReadableListSurface(
+            minimumRowHeight: VisionReadabilityMetrics.alertSoundMinimumRowHeight
+        )
         .navigationTitle("settings.alertSound.title")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            EmergencyAlertAudio.shared.stopPreview()
+        }
     }
 
     private var selectedPreference: AlertSoundPreference {
         screenshotSelectedPreference ?? settings.alertSound
+    }
+
+    private var optionIconSize: CGFloat {
+#if os(visionOS)
+        38
+#else
+        30
+#endif
+    }
+
+    private var optionVerticalPadding: CGFloat {
+#if os(visionOS)
+        10
+#else
+        5
+#endif
     }
 }
 

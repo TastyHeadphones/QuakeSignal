@@ -26,6 +26,56 @@ unless dashboard.include?("let shouldMonitor = scenePhase == .active && !Screens
   abort "error: TV dashboard must keep monitoring, audio, screenshot, focus, and accessibility lifecycle scene-bound"
 end
 
+dashboard_layout = dashboard[/private enum TVDashboardLayout \{.*?^\}/m]
+dashboard_surface = dashboard[/private var dashboard: some View \{.*?(?=\n    private var dashboardContent:)/m]
+dashboard_content = dashboard[/private var dashboardContent: some View \{.*?(?=\n    private var recentReportsDestination:)/m]
+recent_events = dashboard[/private var recentEvents: some View \{.*?(?=\n    \}\n\}\n\nprivate struct TVRecentReportsView)/m]
+
+required_layout_budgets = {
+  "dashboardOuterVerticalPadding" => 54,
+  "dashboardSectionSpacing" => 34,
+  "dashboardRowVerticalPadding" => 22,
+}
+required_layout_budgets.each do |name, value|
+  declaration = /^    static let #{Regexp.escape(name)}: CGFloat = #{value}$/
+  abort "error: TV dashboard layout budget #{name} must remain exactly #{value} points" unless dashboard_layout&.match?(declaration)
+end
+
+event_row = dashboard[/private struct TVEventRow: View \{.*?(?=\nprivate struct TVEventDetailView)/m]
+unless dashboard_surface&.include?(".padding(.vertical, TVDashboardLayout.dashboardOuterVerticalPadding)") &&
+       dashboard_content&.include?("VStack(alignment: .leading, spacing: TVDashboardLayout.dashboardSectionSpacing)") &&
+       event_row&.include?(".padding(.vertical, TVDashboardLayout.dashboardRowVerticalPadding)")
+  abort "error: TV dashboard must apply its reviewed outer, section, and complete-row layout budgets"
+end
+
+unless dashboard_layout&.include?("static let previewEventCount = 2") &&
+       recent_events&.include?("ForEach(store.events.prefix(TVDashboardLayout.previewEventCount))") &&
+       recent_events.include?("TVEventDetailView(event: event)") &&
+       recent_events.include?("recentReportsDestination") &&
+       !recent_events.include?("ScreenshotAutomation")
+  abort "error: TV dashboard must show exactly two complete production preview rows and retain the full reports destination"
+end
+
+report_card = dashboard[/private struct TVReportCard: View \{.*?(?=\nprivate struct TVEventRow)/m]
+unless report_card&.include?("let isFocused: Bool") &&
+       report_card.include?('isFocused ? Color("CautionColor") : .clear') &&
+       report_card.include?("lineWidth: 6")
+  abort "error: TV report cards must retain their explicit orange Remote-focus ring"
+end
+
+event_detail = dashboard[/private struct TVEventDetailView: View \{.*?(?=\nprivate func localizedDepthLabel)/m]
+unless event_detail&.scan(/\bScrollView \{/)&.length == 1 &&
+       event_detail.match?(/var body: some View \{\s*ZStack \{.*?ScrollView \{\s*VStack\(alignment: \.leading, spacing: 26\)/m) &&
+       event_detail.match?(/Label\("detail\.title", systemImage: "info\.circle\.fill"\).*?\.font\(\.largeTitle\.bold\(\)\).*?\.foregroundStyle\(\.primary\).*?\.accessibilityAddTraits\(\.isHeader\)/m) &&
+       event_detail.match?(/Label \{\s*Text\("shared\.disclaimer"\).*?\.fixedSize\(horizontal: false, vertical: true\).*?\} icon: \{\s*Image\(systemName: "exclamationmark\.shield\.fill"\).*?Color\("CautionColor"\).*?\.font\(\.headline\).*?\.foregroundStyle\(\.primary\).*?Color\("CardSecondaryColor"\)/m) &&
+       event_detail.include?('Label(localizedDepthLabel(depth), systemImage: "arrow.down")') &&
+       event_detail.include?('Label(event.sourceLabelKey, systemImage: "antenna.radiowaves.left.and.right")') &&
+       event_detail.include?("event.reportDate ?? event.originDate") &&
+       event_detail.include?('.navigationTitle("")') &&
+       !event_detail.include?("ScreenshotAutomation")
+  abort "error: TV detail must expose a semantic high-contrast title and readable contrast-backed disclosure"
+end
+
 unless monitor.include?("@MainActor") &&
        monitor.include?("guard isSceneActive else { return }") &&
        monitor.include?("socket.stop()") &&
@@ -87,4 +137,4 @@ unless alert.match?(/Button \{\s*playbackResult = playUserInitiated\(selectedSou
   abort "error: TV warning view must be visual-first, Remote-driven, focus-contained, and accessible"
 end
 
-puts "tvOS emergency interface tests passed"
+puts "tvOS emergency and visual interface tests passed"

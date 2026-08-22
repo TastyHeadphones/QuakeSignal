@@ -274,10 +274,10 @@ const foreignKey = await createTestKey();
 const idempotentKey = await createTestKey();
 const rotatedTokenKey = await createTestKey();
 const nonce = base64URL(webcrypto.getRandomValues(new Uint8Array(12)));
-const ownedToken = `owned-local-attested-delete-${nonce}`;
-const foreignToken = `foreign-local-attested-delete-${nonce}`;
-const priorRotatedToken = `prior-rotated-token-${nonce}`;
-const currentRotatedToken = `current-rotated-token-${nonce}`;
+const ownedToken = Buffer.from(webcrypto.getRandomValues(new Uint8Array(32))).toString("hex");
+const foreignToken = Buffer.from(webcrypto.getRandomValues(new Uint8Array(32))).toString("hex");
+const priorRotatedToken = Buffer.from(webcrypto.getRandomValues(new Uint8Array(32))).toString("hex");
+const currentRotatedToken = Buffer.from(webcrypto.getRandomValues(new Uint8Array(32))).toString("hex");
 const ownedDeliveryID = `owned-delivery-${nonce}`;
 const foreignDeliveryID = `foreign-delivery-${nonce}`;
 const rotatedDeliveryID = `rotated-delivery-${nonce}`;
@@ -402,6 +402,22 @@ try {
   // This script explicitly targets a disposable local state directory. Remove
   // only the exact random fixture records so repeated local runs stay clean.
   await runLocalD1(`
+    INSERT OR IGNORE INTO apns_registration_revision_fences (
+      registration_revision, token_hash, app_attest_key_id,
+      decision_id, decision_kind, blocks_lifecycle_replay, processed_at_utc
+    )
+    SELECT
+      registration_revision,
+      CASE token
+        WHEN ${sqlLiteral(ownedToken)} THEN ${sqlLiteral(ownedTokenHash)}
+        WHEN ${sqlLiteral(foreignToken)} THEN ${sqlLiteral(foreignTokenHash)}
+        WHEN ${sqlLiteral(priorRotatedToken)} THEN ${sqlLiteral(priorRotatedTokenHash)}
+      END,
+      app_attest_key_id,
+      'local-cleanup-' || registration_revision,
+      'test_cleanup', 0, ${sqlLiteral(new Date().toISOString())}
+    FROM devices
+    WHERE token IN (${sqlLiteral(ownedToken)}, ${sqlLiteral(foreignToken)}, ${sqlLiteral(priorRotatedToken)});
     DELETE FROM alert_delivery_failures
     WHERE delivery_id IN (${sqlLiteral(ownedDeliveryID)}, ${sqlLiteral(foreignDeliveryID)}, ${sqlLiteral(rotatedDeliveryID)});
     DELETE FROM notification_deliveries

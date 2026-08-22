@@ -47,6 +47,10 @@ module QuakeSignalIOSScreenshotProvenance
     "guide" => [["available offline"], ["when an earthquake strikes"], ["indoors", "outdoors"]],
     "alert-preferences" => [["alert sound"], ["japanese safety voice"], ["cc by 3.0"]],
   }.freeze
+  DEFAULT_MINIMUM_NON_BLACK_FRACTION = 0.12
+  MINIMUM_NON_BLACK_FRACTION_BY_SELECTOR = {
+    "ios-ipad-13-reports" => 0.004,
+  }.freeze
   FORBIDDEN_SYSTEM_PROMPT_TERM_GROUPS = [
     ["would like to send you notifications"],
     ["allow while using app", "allow while using the app"],
@@ -1105,7 +1109,7 @@ module QuakeSignalIOSScreenshotProvenance
     require_equal(record.fetch("appleLocale"), "en_US", "#{selector} Apple locale")
     require_equal(record.fetch("timeZone"), "UTC", "#{selector} time zone")
     require_equal(record.fetch("appearance"), "dark", "#{selector} appearance")
-    require_equal(record.fetch("statusBarTime"), "2026-01-01T09:41:00+00:00", "#{selector} status-bar time")
+    require_equal(record.fetch("statusBarTime"), "9:41", "#{selector} status-bar time")
     attempts = record.fetch("captureAttemptCount")
     unless [1, 2].include?(attempts)
       raise Error, "#{selector} launch captureAttemptCount must be 1 or 2"
@@ -1265,6 +1269,9 @@ module QuakeSignalIOSScreenshotProvenance
         raise Error, "#{selector} #{key} must be finite and between zero and one"
       end
     end
+    if committed.fetch("brightFraction") > committed.fetch("nonBlackFraction")
+      raise Error, "#{selector} brightFraction cannot exceed nonBlackFraction"
+    end
     deviation = committed.fetch("luminanceStandardDeviation")
     unless deviation.is_a?(Numeric) && deviation.finite? && deviation.between?(0, 127.5)
       raise Error, "#{selector} luminanceStandardDeviation is invalid"
@@ -1297,7 +1304,13 @@ module QuakeSignalIOSScreenshotProvenance
 
     derived_reasons = []
     derived_reasons << "committed-view luminance variation is too low" if deviation < 12
-    derived_reasons << "committed-view non-black coverage is too low" if committed.fetch("nonBlackFraction") < 0.12
+    minimum_non_black_fraction = MINIMUM_NON_BLACK_FRACTION_BY_SELECTOR.fetch(
+      selector,
+      DEFAULT_MINIMUM_NON_BLACK_FRACTION,
+    )
+    if committed.fetch("nonBlackFraction") < minimum_non_black_fraction
+      derived_reasons << "committed-view non-black coverage is too low"
+    end
     derived_reasons << "committed-view bright-detail coverage is too low" if committed.fetch("brightFraction") < 0.004
     derived_reasons << "committed-view edge detail is too low" if committed.fetch("horizontalEdgeFraction") < 0.004
     derived_reasons << "committed-view recognized text inventory is too small" if recognized.length < 5

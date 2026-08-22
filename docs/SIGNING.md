@@ -21,10 +21,13 @@ Rust tests before packaging and refuses a tag whose version differs from
 
 ## macOS
 
-> **Dormant for Apple release 1.1 build 8.** The sole current Mac storefront
+> **The Tauri lanes are dormant for Apple release 1.1 build 8.** The sole current Mac storefront
 > product is the shared SwiftUI Mac Catalyst target (`com.quakesignal.app`),
-> to be built with automatic signing by the coordinated Xcode Cloud workflow.
-> No Xcode Cloud signed build `8` exists yet. The
+> to be built by the protected manual-signing GitHub workflow in
+> `.github/workflows/apple-platforms.yml` (`platform=maccatalyst`). The
+> 2026-08-22 account audit found no configured Xcode Cloud workflow; the Cloud
+> specification remains a future alternative, not the current primary lane. No signed
+> build `8` exists yet. The
 > Tauri direct/Homebrew and separate Tauri Mac App Store lanes documented
 > below are retained only for a possible later release and must not be run,
 > uploaded, or substituted for the Catalyst build in this release.
@@ -110,14 +113,18 @@ Store Connect provisioning profile. It needs:
   `MACOS_APP_STORE_CONNECT_API_ISSUER` — protected Environment variables for
   that App Store Connect API key
 
-The resulting signed `.pkg` is a private Actions artifact, not a GitHub Release
-asset. It contains no signing key. A trusted maintainer can run **Desktop
+Because this repository is public, the resulting signed `.pkg` is never retained
+as a GitHub Actions artifact or GitHub Release asset. The hash/log-only mode keeps
+only verification logs and its SHA-256 digest, deletes the package during
+cleanup, and therefore cannot supply the signed binary required for visual
+approval. This dormant lane must not be reactivated until a release owner
+approves a separate private handoff mechanism and the review procedure is
+updated. With that evidence complete, a trusted maintainer can run **Desktop
 release** with `upload_macos_to_app_store_connect` enabled; the protected lane
-validates the package and uploads it to App Store Connect. Do this only after
-the Mac App Store record, screenshots, and review metadata are ready. The Mac
-App Store profile's App ID Prefix must match the values in the entitlement
-template; if Apple shows a different prefix, update the template and profile
-together.
+rechecks the verified digest, validates and uploads the same package using the
+exact macOS record coordinates, and deletes its local copy. The Mac App Store
+profile's App ID Prefix must match the values in the entitlement template; if
+Apple shows a different prefix, update the template and profile together.
 
 The App Store build intentionally omits the direct build's legacy
 LaunchAgent-based “Launch at Login” setting because it writes outside App

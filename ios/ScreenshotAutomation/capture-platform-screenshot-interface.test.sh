@@ -203,6 +203,23 @@ unless badges.match?(/\.lineLimit\(1\).*?\.minimumScaleFactor\(0\.78\)/m)
   abort "error: Watch context badges must stay single-line with a reviewed scale floor"
 end
 
+foreground_badge_icons = watch_source.scan(
+  /Label\("platform\.foreground\.badge", systemImage: "([^"]+)"\)/,
+).flatten
+unless foreground_badge_icons == Array.new(3, "applewatch")
+  abort "error: all three Watch foreground-only badges must use the Apple Watch glyph"
+end
+mutated_badge_source = watch_source.sub(
+  'Label("platform.foreground.badge", systemImage: "applewatch")',
+  'Label("platform.foreground.badge", systemImage: "eye")',
+)
+mutated_badge_icons = mutated_badge_source.scan(
+  /Label\("platform\.foreground\.badge", systemImage: "([^"]+)"\)/,
+).flatten
+if mutated_badge_icons == Array.new(3, "applewatch")
+  abort "error: Watch foreground-only icon contract did not reject an eye-glyph mutation"
+end
+
 dashboard = watch_source[/private var dashboard: some View \{.*?(?=\n    private var reports:)/m]
 abort "error: ordinary Watch dashboard is missing" unless dashboard
 unless dashboard.include?("WatchContextBadges") &&
@@ -293,12 +310,61 @@ end
 detail_declarations = watch_source.scan(/private struct WatchEventDetailView: View/).length
 abort "error: Watch must have exactly one production event-detail view" unless detail_declarations == 1
 detail = extract_view.call(watch_source, "WatchEventDetailView")
-unless detail.match?(/foregroundBadge.*?Text\(event\.magnitudeText\).*?Label\(localizedDepthLabel\(depth\).*?Text\(event\.hypocenter\).*?event\.reportStatus\.labelKey.*?date\.formatted\(date: \.numeric, time: \.shortened\)/m) &&
+unless detail.match?(/foregroundBadge.*?Text\(event\.magnitudeText\).*?event\.maxIntensity.*?Label\(localizedDepthLabel\(depth\).*?event\.reportStatus\.labelKey.*?event\.sourceLabelKey.*?Text\(event\.hypocenter\).*?date\.formatted\(date: \.numeric, time: \.shortened\)/m) &&
        detail.include?("ScrollView") &&
        detail.include?('L("quake.intensity.label", maxIntensity)') &&
        detail.include?('Text("platform.watch.foregroundOnly.detail")') &&
        detail.match?(/\.navigationTitle\("detail\.title"\)\s*\.navigationBarTitleDisplayMode\(\.inline\)/m)
   abort "error: production Watch detail must retain disclosure and all reviewed event fields"
+end
+
+
+watch_detail_layout_errors = lambda do |view|
+  errors = []
+  errors << "compact body spacing" unless view.match?(/VStack\(alignment: \.leading, spacing: 4\)/)
+  unless view.match?(/HStack\(alignment: \.firstTextBaseline, spacing: 5\).*?Text\(event\.magnitudeText\).*?size: 34.*?VStack\(alignment: \.trailing, spacing: 1\).*?event\.maxIntensity.*?localizedDepthLabel\(depth\).*?event\.reportStatus\.labelKey.*?event\.sourceLabelKey/m)
+    errors << "stacked summary facts"
+  end
+  errors << "one max-intensity field" unless view.scan("event.maxIntensity").length == 1
+  errors << "one depth field" unless view.scan("event.depth").length == 1
+  unless view.match?(/date\.formatted\(date: \.numeric, time: \.shortened\).*?Divider\(\)\s*\.padding\(\.top, 12\)/m)
+    errors << "clean initial viewport boundary after date"
+  end
+  disclosure = view[/Text\("platform\.watch\.foregroundOnly\.detail"\).*?(?=\n\s*\}\n\s*\.padding\(\.horizontal, 8\))/m]
+  unless disclosure&.match?(/\.font\(\.footnote\).*?\.fixedSize\(horizontal: false, vertical: true\)/m) &&
+         !disclosure.include?(".lineLimit(") &&
+         !disclosure.include?(".minimumScaleFactor(")
+    errors << "accessible complete disclosure"
+  end
+  unless view.match?(/\.fixedSize\(horizontal: false, vertical: true\)\s*\}\s*\.padding\(\.horizontal, 8\)\s*\.padding\(\.bottom, 10\)/m)
+    errors << "safe content insets"
+  end
+  errors
+end
+
+layout_errors = watch_detail_layout_errors.call(detail)
+unless layout_errors.empty?
+  abort "error: Watch detail layout contract failed: #{layout_errors.join(', ')}"
+end
+
+layout_mutations = {
+  "oversized magnitude" => detail.sub("size: 34", "size: 40"),
+  "missing horizontal inset" => detail.sub(".padding(.horizontal, 8)", ".padding(.horizontal, 0)"),
+  "missing bottom inset" => detail.sub(".padding(.bottom, 10)", ".padding(.bottom, 0)"),
+  "insufficient first-viewport disclosure separation" => detail.sub(
+    ".padding(.top, 12)",
+    ".padding(.top, 0)"
+  ),
+  "undersized disclosure" => detail.sub(".font(.footnote)", ".font(.system(size: 9.5))"),
+  "truncated disclosure" => detail.sub(
+    ".fixedSize(horizontal: false, vertical: true)",
+    ".lineLimit(3)"
+  ),
+}
+layout_mutations.each do |name, mutated_detail|
+  if watch_detail_layout_errors.call(mutated_detail).empty?
+    abort "error: Watch detail layout contract did not reject #{name} mutation"
+  end
 end
 
 if tv_source.include?("isRecentReportsScreenshot") || tv_source.include?("recentEventLimit")

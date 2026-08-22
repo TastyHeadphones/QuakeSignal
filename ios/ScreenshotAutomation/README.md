@@ -1,8 +1,14 @@
 # Apple screenshot automation harness
 
 This directory contains the source-addressed Debug capture harnesses for all
-five Apple listing platforms. They capture real Simulator or native-window
-output; they do not fabricate, decorate, commit, upload, or approve a frame.
+five Apple listing platforms. They capture real Simulator output or directly
+render the exact live Mac Catalyst UIWindow hierarchy; they do not fabricate,
+decorate, commit, upload, or approve a frame.
+For the build-8 release, every shell, Ruby, Simulator, and Xcode command in this
+document is hosted-workflow-internal reference or harness-maintainer diagnostic
+material. Release operators dispatch the canonical GitHub workflows and must
+not run these commands locally. A diagnostic invocation never produces release
+evidence.
 The checked-in plans require these exact English (U.S.) inventories:
 
 | Platform | Planned frames | Native pixels |
@@ -57,6 +63,9 @@ Release builds remain on production behavior. The visionOS selectors choose
 the real Home, Reports, Map, Guide, and Alert Sound destinations. TV and Watch
 use their real report rows and event-detail views; the recent-report selectors
 move genuine focus/scroll state instead of drawing a marketing composite.
+Mac Catalyst image publication has an additional independent gate:
+`--quakesignal-catalyst-hierarchy-capture` must appear exactly once and
+`QUAKESIGNAL_CATALYST_HIERARCHY_CAPTURE` must equal `1`.
 
 ## Native dimensions
 
@@ -69,27 +78,29 @@ Apple's current screenshot specification accepts:
 - Apple Watch: several device classes, but this plan selects exactly `410x502`
   from Apple Watch Ultra 2 / Ultra. The harness no longer falls back to a
   different Watch class because that would contradict every planned frame.
-- Mac Catalyst: this plan captures the exact committed native content area at
-  `2560x1600`; it never substitutes a desktop screenshot or resized raster.
+- Mac Catalyst: this plan directly rasterizes the exact live `1280x800`-point
+  UIKit window hierarchy at 2 pixels per point into `2560x1600`; the runner's
+  actual display scale is recorded separately and no resize or crop is allowed.
 
 Source: [Apple screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/).
 
-## Local capture
+## Hosted capture execution (job-internal reference)
 
-Use an already-installed runtime whenever possible. If a required runtime is
-absent, the harness exits before building and names the missing platform; it
-never downloads a runtime, changes resolution, or fabricates an image. An
-operator who deliberately chooses to install a missing component can use
-Xcode Settings or Apple's `xcodebuild -downloadPlatform` command separately.
+The hosted workflow first checks for each required Simulator runtime. When a
+reviewed runner image lacks one, its dedicated setup step may use
+`xcodebuild -downloadPlatform` before the capture harness starts. The harness
+itself never downloads a runtime, changes resolution, or fabricates an image;
+runtime setup is CI-managed and must not be performed on a workstation as part
+of this release.
 
-Start from a clean, source-frozen checkout and use the checked-in generated
-project. If the project graph intentionally changed, regenerate and review it
-before freezing the capture commit; do not regenerate as part of capture.
-Use a new external worktree or clone that has never been opened interactively
-in Xcode: ignored per-user `xcuserdata` is deliberately rejected as an
-unarchived working input, even when ordinary Git status reports a clean tree.
-Every set command refuses a destination inside the repository and publishes a
-new output directory only after the full planned inventory validates.
+The hosted job starts from a clean, source-frozen checkout and uses the
+checked-in generated project. If the project graph intentionally changed,
+regenerate and review it in a separately authorized change before freezing the
+capture commit; never regenerate it as part of capture. Ignored per-user
+`xcuserdata` is rejected as an unarchived working input even when ordinary Git
+status reports a clean tree. Every set command refuses a destination inside the
+repository and publishes a new output directory only after the full planned
+inventory validates.
 
 For the exact ten-frame iOS/iPadOS set, create only the destination parent and
 let the harness build once in fresh temporary DerivedData, use exactly one
@@ -123,8 +134,26 @@ semantic retry is used, it also retains the rejected first attempt as
 `semantic-rejections/<selector>-attempt-1.json` and the exact paired
 `semantic-rejections/<selector>-attempt-1.png` raster.
 
-Mac Catalyst uses the native Swift/AppKit window capture path. Run it on an
-interactive macOS host where the app window can be observed and captured:
+The committed-view non-black floor is 0.12 for every iOS/iPadOS selector
+except the exact `ios-ipad-13-reports` dark plain-list composition, whose four
+final historical rows intentionally leave most of the 13-inch canvas black.
+That selector uses a 0.004 floor, equal to the unchanged bright-detail floor:
+every bright sample is necessarily also non-black, and aggregate validation
+rejects evidence that violates that relationship. Luminance variation,
+bright detail, horizontal edges, at least five recognized-text observations,
+all Reports term groups, and forbidden-system-prompt checks remain independent
+mandatory gates. Rejections emit one sanitized JSON diagnostic containing
+only numeric metrics, counts, and reasons; OCR strings, selector/image
+identifiers, hashes, and paths are never logged in that summary.
+
+Mac Catalyst uses a distinct `macos-26-intel` GitHub-hosted job in
+`.github/workflows/apple-platform-screenshots.yml`, pinned to Xcode 26.6 build
+17F113. Before building, the job proves that the host is x86_64 and that its
+main display exposes at least 1280x800 visible logical points; the reviewed
+1280x800 live UIWindow cannot be presented on the smaller Arm64 hosted
+desktop. The job then invokes the same set harness against one exact clean
+`GITHUB_SHA`; no signing, Screen Recording, Accessibility, or App Store
+Connect credential is supplied:
 
 ```sh
 capture_parent="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/QuakeSignalScreenshotCandidates"
@@ -133,6 +162,22 @@ QUAKESIGNAL_CATALYST_SCREENSHOT_DERIVED_DATA="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/Qu
   bash ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh \
     "$capture_parent/maccatalyst"
 ```
+
+The host first observes exactly one visible layer-zero window for the launched
+PID and exact 1280x800 frame. It then atomically publishes a schema-exact
+request bound to PID, Core Graphics window ID, reviewed selector, and a fresh
+64-hex nonce. On the main actor, the app requires that its attached UIWindow is
+visible, key, foreground-active, and still exactly 1280x800, then uses
+`UIGraphicsImageRenderer` with scale 2 and
+`UIView.drawHierarchy(afterScreenUpdates: true)`. A false draw result, a pixel
+result other than 2560x1600, request mutation, or geometry/visibility drift
+publishes no successful response. Core Graphics must observe the same unique
+PID/window/frame afterward. The retained response distinguishes the runner's
+actual `sourceDisplayScale` from `rasterizationScale: 2`, identifies
+`UIKit.UIView.drawHierarchy` and `live-catalyst-uiwindow-hierarchy`, and records
+that no resize occurred. The raw renderer PNG, black-alpha-composited final PNG,
+request, response, before/after observations, and their hashes all remain in
+the explicitly unapproved package.
 
 Each accepted Catalyst semantic record binds its OCR and pixel metrics to the
 exact final PNG SHA-256 and image format. If the single allowed retry is used,
@@ -152,9 +197,10 @@ QUAKESIGNAL_SCREENSHOT_DERIVED_DATA="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/QuakeSignal
     tvos "$capture_parent/tvos"
 ```
 
-Run the same set command with `visionos` or `watchos` and a distinct, new
-output directory. The command refuses to overwrite an artifact directory and
-publishes it atomically only after every planned frame validates. Its layout is:
+The hosted job repeats the same set command for `visionos` and `watchos`, using
+a distinct, new output directory for each. The command refuses to overwrite an
+artifact directory and publishes it atomically only after every planned frame
+validates. Its layout is:
 
 ```text
 en-US/<all planned native PNGs>
@@ -173,8 +219,9 @@ an absolute directory outside the repository so later frames reuse unsigned
 build products. `QUAKESIGNAL_SCREENSHOT_KEEP_SIMULATOR=1` is only for manual
 visual debugging.
 
-For a diagnostic single frame, call the lower-level command with an exact
-selector and absolute PNG path:
+For hosted harness maintenance only, a diagnostic single frame can call the
+lower-level command with an exact selector and absolute PNG path. This path is
+not release evidence and is not a supported local build-8 action:
 
 ```sh
 debug_parent="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/QuakeSignalScreenshotDebug"
@@ -215,8 +262,11 @@ For watchOS the harness also creates and boots a disposable paired iPhone
 Simulator; no existing personal pair is reused. CoreSimulator may take longer
 than watchOS's two-minute return-to-clock interval to service its first
 screenshot. While that request is pending, the harness restarts QuakeSignal in
-the foreground every 45 seconds with the same dual-gated frame selector. The
-screenshot and restart children share a five-minute hard deadline and are both
+the foreground every 45 seconds with the same dual-gated frame selector. A
+periodic restart that returns CoreSimulator's transient FBS status 4 receives
+exactly one direct, tracked retry after five seconds; any other failure or a
+second status-4 failure remains operational status 70. The screenshot and
+restart children share a five-minute hard deadline and are both
 stopped with bounded TERM-to-KILL cleanup on timeout or interruption.
 Before settling or requesting that first screenshot, the initial exact-frame
 launch uses the same tracked helper as semantic recovery: at most two launch
@@ -258,9 +308,10 @@ status 65 is eligible for quarantine and retry; every other validator failure
 is returned as operational status 70 without relaunch. A second semantic
 rejection aborts the complete atomic set without an upload.
 
-Credential-free tests cover the exact plans, build/source binding, aggregate
-provenance, atomic interfaces, semantic validation, process supervision,
-selector preservation, package sealing, and native-window evidence:
+The hosted workflow's credential-free test job covers the exact plans,
+build/source binding, aggregate provenance, atomic interfaces, semantic
+validation, process supervision, selector preservation, package sealing, and
+native-window evidence. The command list is job-internal reference:
 
 ```sh
 /usr/bin/ruby ios/ScreenshotAutomation/ios-screenshot-plan.test.rb
@@ -304,9 +355,10 @@ host, device/window identity, source/build evidence, and per-frame hashes. Its
 platform-specific schema is always explicitly unapproved, with
 `uploadApproved: false`, `reviewer: null`, and no signed Release evidence.
 
-`.github/workflows/apple-platform-screenshots.yml` runs one credential-free
-matrix job for iOS/iPadOS, tvOS, visionOS, and watchOS. It captures the exact
-10/3/5/3 sets, verifies the first atomic seal, temporarily removes only that
+`.github/workflows/apple-platform-screenshots.yml` runs credential-free jobs
+for iOS/iPadOS, tvOS, visionOS, watchOS, and the distinct Mac Catalyst live
+hierarchy path. It captures the exact 10/3/5/3/5 sets, verifies the first atomic
+seal, temporarily removes only that
 manifest, adds `candidate-metadata.json` plus the runtime inventory, creates a
 new final seal, and validates it. It then creates a conventional
 `ditto -c -k --norsrc --keepParent` ZIP outside the raw capture root and proves
@@ -315,14 +367,16 @@ both together. No later step writes into the raw root. The workflow also proves
 that checked-out `HEAD` equals `GITHUB_SHA` and that the repository has zero
 tracked or untracked changes immediately before and after capture. Artifact
 names remain explicitly `UNAPPROVED`; no step has signing or App Store Connect
-credentials. Mac Catalyst stays on the interactive native-window path above.
+credentials.
 
 ## Sealed archive and release-set handoff
 
-Treat a successful set directory as immutable. If an operator must attach
-metadata, delete only its existing `capture-package-manifest.json`, add all
-metadata first, then run the seal helper once more. After that final seal, make
-no further writes in the raw root. Create an independent conventional archive:
+Treat a successful hosted set directory as immutable. If the workflow must
+attach metadata, delete only its existing `capture-package-manifest.json`, add
+all metadata first, then run the seal helper once more. After that final seal,
+make no further writes in the raw root. The following archive and assembly
+commands are finalizer job-internal reference, not workstation instructions.
+Create an independent conventional archive:
 
 ```sh
 /usr/bin/ditto -c -k --norsrc --keepParent \

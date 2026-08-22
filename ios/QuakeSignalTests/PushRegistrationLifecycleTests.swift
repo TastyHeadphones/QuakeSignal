@@ -51,6 +51,23 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "settings.pushRegistrationState"), PushRegistrationState.failed.rawValue)
     }
 
+    func testDisabledSubscriptionCannotRestoreContradictoryActiveState() throws {
+        let suiteName = "PushRegistrationLifecycleTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(false, forKey: "settings.pushSubscriptionEnabled")
+        defaults.set(PushRegistrationState.active.rawValue, forKey: "settings.pushRegistrationState")
+
+        let restored = AppSettings(defaults: defaults)
+        XCTAssertFalse(restored.pushSubscriptionEnabled)
+        XCTAssertEqual(restored.pushRegistrationState, .unregistered)
+        XCTAssertEqual(
+            defaults.string(forKey: "settings.pushRegistrationState"),
+            PushRegistrationState.unregistered.rawValue
+        )
+    }
+
     func testSettingsRegistrationControlRequiresConfirmedRegistrationBeforeOfferingRemoval() {
         XCTAssertEqual(
             PushSubscriptionControlAction.resolve(
@@ -147,6 +164,85 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "settings.cityId"), "tokyo")
     }
 
+    func testEveryServerAlertPreferenceAdvancesTheCentralRegistrationRevision() throws {
+        let suiteName = "PushRegistrationLifecycleTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let settings = AppSettings(defaults: defaults)
+        var previousRevision = settings.pushRegistrationPreferencesRevision
+        let mutations: [() -> Void] = [
+            { settings.selectedCityId = "tokyo" },
+            { settings.useCurrentLocation = true },
+            { settings.radiusKm = 300 },
+            { settings.minMagnitude = 4 },
+            { settings.enabledSources = ["jma_eew"] },
+            { settings.includeTestAlerts = true },
+            { settings.notifyAtNight = false },
+            { settings.alertSound = .japaneseVoice },
+        ]
+
+        for mutation in mutations {
+            mutation()
+            XCTAssertEqual(
+                settings.pushRegistrationPreferencesRevision,
+                previousRevision + 1
+            )
+            previousRevision = settings.pushRegistrationPreferencesRevision
+        }
+
+        settings.alertSound = .japaneseVoice
+        XCTAssertEqual(
+            settings.pushRegistrationPreferencesRevision,
+            previousRevision,
+            "Re-selecting an already-active value must not enqueue another server update."
+        )
+    }
+
+    func testSourceSelectionNeverBecomesEmptyOrRestoresAnEmptyLegacyValue() throws {
+        let suiteName = "PushRegistrationLifecycleTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set([], forKey: "settings.sources")
+        let settings = AppSettings(defaults: defaults)
+        XCTAssertEqual(settings.enabledSources, Set(AppSettings.allSources))
+        XCTAssertEqual(
+            Set(defaults.stringArray(forKey: "settings.sources") ?? []),
+            Set(AppSettings.allSources)
+        )
+
+        settings.enabledSources = ["jma_eew"]
+        let revision = settings.pushRegistrationPreferencesRevision
+        settings.enabledSources = []
+        XCTAssertEqual(settings.enabledSources, ["jma_eew"])
+        XCTAssertEqual(settings.pushRegistrationPreferencesRevision, revision)
+        XCTAssertEqual(defaults.stringArray(forKey: "settings.sources"), ["jma_eew"])
+    }
+
+    func testMissingLocationRegistrationErrorIsActionable() {
+        XCTAssertEqual(
+            PushRegistrationPreparationError.locationRequired.errorDescription,
+            String(localized: "settings.pushSubscription.locationRequired")
+        )
+        XCTAssertTrue(MissingLocationRegistrationPolicy.shouldDeleteServerRegistration(
+            registrationState: .active,
+            locationRequestInFlight: false
+        ))
+        XCTAssertFalse(MissingLocationRegistrationPolicy.shouldDeleteServerRegistration(
+            registrationState: .active,
+            locationRequestInFlight: true
+        ))
+        XCTAssertTrue(MissingLocationRegistrationPolicy.shouldDeleteServerRegistration(
+            registrationState: .failed,
+            locationRequestInFlight: false
+        ))
+        XCTAssertFalse(MissingLocationRegistrationPolicy.shouldDeleteServerRegistration(
+            registrationState: .unregistered,
+            locationRequestInFlight: false
+        ))
+    }
+
     func testAlertSoundPreferencePersistsAndUsesStableWireValue() throws {
         let suiteName = "PushRegistrationLifecycleTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -212,28 +308,100 @@ final class PushRegistrationLifecycleTests: XCTestCase {
 
         XCTAssertEqual(payload.compositeEventId, event.id)
         XCTAssertEqual(payload.eventSnapshot, event)
+        XCTAssertEqual(
+            payload.foregroundRevisionKey,
+            ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)
+        )
         XCTAssertTrue(payload.hasUsableMatchingEventSnapshot)
         XCTAssertEqual(AlertPresentationReason(wireValue: payload.reason), .updated)
+        XCTAssertTrue(ForegroundNotificationPresentationPolicy.allowsEmergencyPresentation(
+            for: payload,
+            isSceneActive: true
+        ))
         XCTAssertEqual(
             ForegroundNotificationPresentationPolicy.decision(
-                for: payload,
-                isSceneActive: true
+                didHandleEmergencyInApp: true
             ),
             ForegroundNotificationPresentationDecision(
                 systemPresentation: .listOnly,
-                shouldPresentEmergencyInApp: true
+                didHandleEmergencyInApp: true
             )
         )
+        XCTAssertFalse(ForegroundNotificationPresentationPolicy.allowsEmergencyPresentation(
+            for: payload,
+            isSceneActive: false
+        ))
+    }
+
+    func testSnapshotlessPushRequiresACompleteTypedRevisionBoundaryForReservation() throws {
+        let payload = PushPayload(userInfo: [
+            "sourceId": "jma_eew",
+            "eventId": "test",
+            "kind": "eew",
+            "serial": 2,
+            "originTimeUtc": "2026-08-19T01:00:00Z",
+            "reportTimeUtc": "2026-08-19T01:00:02.125Z",
+            "isWarn": true,
+            "isFinal": false,
+            "isCancel": false,
+            "isTraining": false,
+        ])
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let expectedTimestamp = try XCTUnwrap(
+            formatter.date(from: "2026-08-19T01:00:02.125Z")
+        )
+
+        XCTAssertNil(payload.eventSnapshot)
         XCTAssertEqual(
-            ForegroundNotificationPresentationPolicy.decision(
-                for: payload,
-                isSceneActive: false
-            ),
-            ForegroundNotificationPresentationDecision(
-                systemPresentation: .alert,
-                shouldPresentEmergencyInApp: false
+            payload.foregroundRevisionKey,
+            ForegroundEmergencyRevisionKey(
+                eventID: "jma_eew:test",
+                serial: 2,
+                kind: "eew",
+                isWarning: true,
+                isFinal: false,
+                isCancelled: false,
+                isTraining: false,
+                effectiveTimestamp: expectedTimestamp
             )
         )
+    }
+
+    func testSnapshotlessPushDoesNotReserveAnIncompleteOrMalformedRevisionBoundary() {
+        let base: [AnyHashable: Any] = [
+            "sourceId": "jma_eew",
+            "eventId": "test",
+            "kind": "eew",
+            "serial": 2,
+            "originTimeUtc": "2026-08-19T01:00:00Z",
+            "reportTimeUtc": "2026-08-19T01:00:02Z",
+            "isWarn": true,
+            "isFinal": false,
+            "isCancel": false,
+            "isTraining": false,
+        ]
+        let mutations: [(String, Any?)] = [
+            ("serial", nil),
+            ("serial", -1),
+            ("serial", true),
+            ("serial", NSNumber(value: Int64.max)),
+            ("isWarn", 1),
+            ("isFinal", nil),
+            ("kind", "report"),
+            ("reportTimeUtc", "not-a-date"),
+        ]
+
+        for (key, replacement) in mutations {
+            var userInfo = base
+            userInfo[key] = replacement
+            if key == "reportTimeUtc" {
+                userInfo["originTimeUtc"] = "also-not-a-date"
+            }
+            let payload = PushPayload(userInfo: userInfo)
+            XCTAssertNil(payload.eventSnapshot, "mutation: \(key)")
+            XCTAssertNil(payload.foregroundRevisionKey, "mutation: \(key)")
+        }
     }
 
     func testForegroundNotificationKeepsSystemAlertForMissingMalformedOrMismatchedSnapshot() throws {
@@ -295,17 +463,12 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         for payload in payloads {
             XCTAssertNotNil(payload.compositeEventId)
             XCTAssertNil(payload.eventSnapshot)
+            XCTAssertNil(payload.foregroundRevisionKey)
             XCTAssertFalse(payload.hasUsableMatchingEventSnapshot)
-            XCTAssertEqual(
-                ForegroundNotificationPresentationPolicy.decision(
-                    for: payload,
-                    isSceneActive: true
-                ),
-                ForegroundNotificationPresentationDecision(
-                    systemPresentation: .alert,
-                    shouldPresentEmergencyInApp: false
-                )
-            )
+            XCTAssertFalse(ForegroundNotificationPresentationPolicy.allowsEmergencyPresentation(
+                for: payload,
+                isSceneActive: true
+            ))
         }
     }
 
@@ -343,6 +506,7 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertNil(payload.sourceId)
         XCTAssertNil(payload.compositeEventId)
         XCTAssertNil(payload.eventSnapshot)
+        XCTAssertNil(payload.foregroundRevisionKey)
         XCTAssertFalse(payload.hasUsableMatchingEventSnapshot)
     }
 
@@ -395,6 +559,34 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertFalse(LocationSelectionStatus.denied.canRequestCurrentLocation)
         XCTAssertTrue(LocationSelectionStatus.permissionRequired.canRequestCurrentLocation)
         XCTAssertTrue(LocationSelectionStatus.current.canRequestCurrentLocation)
+    }
+
+    func testAuthorizationContinuationRequiresExplicitCurrentLocationIntent() {
+        XCTAssertTrue(LocationAuthorizationContinuationPolicy.shouldRequestFix(
+            authorizationStatus: .authorizedWhenInUse,
+            useCurrentLocation: true,
+            pendingPurpose: .subscription
+        ))
+        XCTAssertFalse(LocationAuthorizationContinuationPolicy.shouldRequestFix(
+            authorizationStatus: .authorizedWhenInUse,
+            useCurrentLocation: false,
+            pendingPurpose: .subscription
+        ))
+        XCTAssertTrue(LocationAuthorizationContinuationPolicy.shouldRequestFix(
+            authorizationStatus: .authorizedWhenInUse,
+            useCurrentLocation: false,
+            pendingPurpose: .mapFocus
+        ))
+        XCTAssertFalse(LocationAuthorizationContinuationPolicy.shouldRequestFix(
+            authorizationStatus: .denied,
+            useCurrentLocation: true,
+            pendingPurpose: .subscription
+        ))
+        XCTAssertFalse(LocationAuthorizationContinuationPolicy.shouldRequestFix(
+            authorizationStatus: .authorizedWhenInUse,
+            useCurrentLocation: true,
+            pendingPurpose: nil
+        ))
     }
 
     func testLocationFixRemainingLifetimeUsesOriginalTimestampBoundaries() {

@@ -81,9 +81,11 @@ The pull-request workflow may use an ad-hoc macOS signature for a test build.
 That artifact is never a public release. The protected release workflow can
 produce two macOS lanes when its environments are configured: a Developer ID
 signed, notarized, stapled universal DMG for direct download/Homebrew, and a
-separate sandboxed Mac App Store `.pkg` artifact. The App Store package is
-retained only as a workflow artifact; it is not attached to the public GitHub
-Release.
+separate sandboxed Mac App Store `.pkg`. Because this repository is public, the
+App Store package is never retained as a workflow artifact or attached to the
+public GitHub Release. Its dormant hash/log-only mode records verification logs and
+a SHA-256 digest, then deletes the package; signed-build visual approval remains
+blocked until a release owner approves a separate private handoff mechanism.
 
 No supported macOS binary or Homebrew cask is public yet. The `v0.1.0` GitHub
 Release predates Developer ID signing and notarization, and the

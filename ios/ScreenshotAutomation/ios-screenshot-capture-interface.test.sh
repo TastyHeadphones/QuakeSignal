@@ -82,6 +82,12 @@ fi
   abort "single capture lost no-resize JPEG transform" unless
     single.include?("sips -s format jpeg -s formatOptions 100") &&
     single.include?(%q["resizePerformed" => false])
+  status_time_argument = "--time " + 39.chr + "9:41" + 39.chr
+  abort "single capture lost Apple-documented simulator status-bar time" unless
+    single.scan(%r{--time(?:\s|$)}).length == 1 &&
+    single.include?(status_time_argument) &&
+    single.scan(%q["statusBarTime" => "9:41"]).length == 1 &&
+    !single.match?(%r{--time[^\n]*\d{4}-\d{2}-\d{2}T})
   abort "single capture lost source/Debug.local pre/post checks" unless
     single.scan(%r{git -C "\$repo_root" status --porcelain=v1 --untracked-files=all}).length == 2 &&
     single.scan(%r{\[ -e "\$debug_local_override" \] \|\| \[ -L "\$debug_local_override" \]}).length == 2
@@ -111,6 +117,11 @@ fi
     single.include?("simctl get_app_container") &&
     single.include?("installed_tree == app.fetch(\"bundleTree\")") &&
     single.include?(%q[[ -e "$installed_app_path/Watch" ] || [ -L "$installed_app_path/Watch" ]])
+  unsafe_install_log = %q["installLogFile" => "install-logs/#{ENV.fetch(] +
+    39.chr + "IOS_INSTALL_SELECTOR" + 39.chr + %q[)}.log"]
+  abort "install-log selector interpolation is not shell-quote-safe" unless
+    single.include?(%q["installLogFile" => "install-logs/#{ENV.fetch("IOS_INSTALL_SELECTOR")}.log"]) &&
+    !single.include?(unsafe_install_log)
   abort "single capture lost parent-owned reused-simulator lease" unless
     single.include?("QUAKESIGNAL_IOS_SCREENSHOT_SIMULATOR_LEASE_TOKEN") &&
     single.include?("ios-screenshot-simulator-lease.rb\" verify")
@@ -166,10 +177,18 @@ fi
     [single, set].all? do |source|
       %w[SYMROOT OBJROOT BUILD_DIR BUILD_ROOT CONFIGURATION_BUILD_DIR SHARED_PRECOMPS_DIR CLANG_MODULE_CACHE_PATH DSTROOT].all? do |key|
         source.include?(%Q["#{key}=$derived_data/])
-      end && source.include?(%q["ARCHS=$host_architecture"])
+      end &&
+        source.scan(/"ARCHS=[^"]*"/).length == 1 &&
+        source.include?(%q["ARCHS=$host_architecture"]) &&
+        source.scan(/"ONLY_ACTIVE_ARCH=[^"]*"/).length == 1 &&
+        source.include?(%q["ONLY_ACTIVE_ARCH=NO"]) &&
+        source.scan(%q["${build_overrides[@]}"]).length == 2
     end
-  abort "set capture architecture is not fail-closed to runner architecture" unless
-    set.include?(%q[host_architecture="$(uname -m)"]) && set.include?("arm64|x86_64")
+  abort "set/direct capture architecture is not fail-closed to one supported runner architecture" unless
+    [single, set].all? do |source|
+      source.include?(%q[host_architecture="$(uname -m)"]) &&
+        source.scan("arm64|x86_64").length == 1
+    end
 ' "$script_dir/capture-ios-screenshot.sh" \
   "$script_dir/capture-ios-screenshot-set.sh" \
   "$script_dir/ios-screenshot-plan.rb" \

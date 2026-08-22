@@ -62,12 +62,8 @@ if grep -q 'AXIsProcessTrusted\|AXUIElement' "$script_dir/maccatalyst-window-evi
   echo "error: Mac Catalyst window evidence must not depend on Accessibility permission" >&2
   exit 1
 fi
-if ! grep -q 'CGPreflightScreenCaptureAccess' "$script_dir/maccatalyst-capture-window.swift"; then
-  echo "error: Mac Catalyst native capture lost Screen Recording preflight" >&2
-  exit 1
-fi
-if grep -q '/usr/sbin/screencapture' "$script_dir/capture-maccatalyst-screenshot.sh"; then
-  echo "error: capture must stay in the PID/window-bound ScreenCaptureKit helper" >&2
+if grep -q '/usr/sbin/screencapture\|maccatalyst-capture-window\|SCScreenshotManager' "$script_dir/capture-maccatalyst-screenshot.sh"; then
+  echo "error: direct hierarchy capture must not fall back to a host screen-capture backend" >&2
   exit 1
 fi
 if [ "$(grep -c 'matchedForbiddenSystemPromptGroups' "$script_dir/capture-maccatalyst-screenshot.sh")" -ne 2 ]; then
@@ -76,26 +72,53 @@ if [ "$(grep -c 'matchedForbiddenSystemPromptGroups' "$script_dir/capture-maccat
 fi
 
 /usr/bin/ruby -e '
-  helper, capture, set, native = ARGV.map { |path| File.read(path) }
+  helper, capture, set, root_view, automation = ARGV.map { |path| File.read(path) }
   abort "window helper must require exactly five user arguments" unless
     helper.include?("CommandLine.arguments.count == 6") &&
     helper.include?("<pid> <bundle-id> <capture-selector> <geometry-evidence.json> <timeout-seconds>")
   abort "window helper arguments are not all consumed" unless
     (1..5).all? { |index| helper.include?("CommandLine.arguments[#{index}]") }
+  abort "window helper no longer rejects an ambiguous visible PID window set" unless
+    helper.include?("let windows = visibleWindows(processID: processID)") &&
+    helper.include?("if windows.count == 1,")
   abort "capture does not bind window evidence to selector and app geometry" unless
     capture.match?(/"\$window_helper"\s+\\?\s*"\$app_pid" "\$bundle_identifier" "\$frame_selector" "\$attempt_geometry" 5/m) &&
     capture.match?(/"\$window_helper"\s+\\?\s*"\$app_pid" "\$bundle_identifier" "\$frame_selector" "\$attempt_geometry" 2/m)
   abort "single capture lost explicit tracked-child execution" unless
-    capture.scan("xcrun swiftc -O").length == 4 &&
+    capture.scan("xcrun swiftc -O").length == 3 &&
     capture.include?("quakesignal_maccatalyst_run_tracked xcodebuild build") &&
     capture.include?("quakesignal_maccatalyst_run_tracked xcodebuild -showBuildSettings") &&
-    capture.include?(%q["$capture_helper" "$app_pid" "$window_id" 1280 800]) &&
     capture.scan(%q[quakesignal_maccatalyst_run_tracked "$window_helper"]).length == 2
-  abort "native helper lost exact no-resize ScreenCaptureKit contract" unless
-    native.include?("SCScreenshotManager.captureImage") &&
-    native.include?("configuration.captureResolution = .best") &&
-    native.include?("configuration.scalesToFit = false") &&
-    native.include?(%q["postCaptureResizePerformed": false])
+  abort "failed app geometry no longer emits bounded JSON and app-log diagnostics" unless
+    capture.include?(%q[warn "Catalyst geometry evidence rejected: #{JSON.generate(diagnostic)}"]) &&
+    capture.include?(%q[tail -n 120 "$attempt_app_log" >&2 || true])
+  abort "shell lost exact PID/window/selector/nonce request-response handshake" unless
+    capture.include?(%q[capture_request_path="$payload/capture-request-evidence/$frame_selector.json"]) &&
+    capture.include?(%q[capture_request_source="$geometry_root/capture-request.json"]) &&
+    capture.include?(%q[capture_response_source="$geometry_root/capture-response.json"]) &&
+    capture.include?("SecureRandom.hex(32)") &&
+    capture.include?(%q[request.fetch("nonce").match?(/\A[0-9a-f]{64}\z/)]) &&
+    capture.include?(%q[capture["rawSha256"] == Digest::SHA256.file(raw_path).hexdigest])
+  abort "app lost dual-gated exact live UIWindow hierarchy renderer" unless
+    automation.include?(%q[--quakesignal-catalyst-hierarchy-capture]) &&
+    automation.include?(%q[QUAKESIGNAL_CATALYST_HIERARCHY_CAPTURE]) &&
+    root_view.include?("UIGraphicsImageRenderer(bounds: boundsBefore, format: format)") &&
+    root_view.include?("format.scale = ScreenshotAutomation.macCaptureRasterizationScale") &&
+    root_view.include?("window.drawHierarchy(") &&
+    root_view.include?("afterScreenUpdates: true") &&
+    root_view.include?(%q["captureApi": "UIKit.UIView.drawHierarchy"]) &&
+    root_view.include?(%q["captureSurface": "live-catalyst-uiwindow-hierarchy"]) &&
+    root_view.include?(%q["postCaptureResizePerformed": false]) &&
+    root_view.include?("cgImage.width == 2_560") &&
+    root_view.include?("cgImage.height == 1_600") &&
+    root_view.include?("scene.activationState == .foregroundActive") &&
+    root_view.include?("window.isKeyWindow") &&
+    root_view.include?("!window.isHidden") &&
+    root_view.scan("window.alpha >= 0.999").length == 2 &&
+    root_view.scan("probe.window === window").length >= 3 &&
+    root_view.include?("exactSystemFrame(systemFrameAfter)") &&
+    root_view.include?("sourceDisplayScaleAfter") &&
+    root_view.include?("approximatelyEqual(systemFrameBefore, systemFrameAfter)")
   abort "set capture lost tracked single-capture child" unless set.include?("quakesignal_maccatalyst_run_tracked env")
   abort "single capture lost ignored Debug.local.xcconfig pre/post refusal" unless
     capture.scan(%r{\[ -e "\$debug_local_override" \] \|\| \[ -L "\$debug_local_override" \]}).length == 2
@@ -112,6 +135,7 @@ fi
 ' "$script_dir/maccatalyst-window-evidence.swift" \
   "$script_dir/capture-maccatalyst-screenshot.sh" \
   "$script_dir/capture-maccatalyst-screenshot-set.sh" \
-  "$script_dir/maccatalyst-capture-window.swift"
+  "$repo_root/ios/QuakeSignal/Features/Root/RootView.swift" \
+  "$repo_root/ios/QuakeSignalShared/ScreenshotAutomation.swift"
 
 echo "Mac Catalyst capture interface tests passed"

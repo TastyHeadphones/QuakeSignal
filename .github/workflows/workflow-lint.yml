@@ -130,7 +130,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.24.13"
+          go-version: "1.25.0"
           cache: false
 
       # Pin the actionlint module version so syntax and expression validation
@@ -139,7 +139,7 @@ jobs:
         run: |
           set -euo pipefail
           go version
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 .github/workflows/*.yml
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
 
       - name: Reject forbidden monitor GitHub secret names
         run: |

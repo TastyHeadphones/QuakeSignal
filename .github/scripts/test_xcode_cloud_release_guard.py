@@ -481,7 +481,7 @@ class GuardContextTests(unittest.TestCase):
                 with self.assertRaisesRegex(guard.ReleaseGuardError, message):
                     guard.verify_jma_only_source_contract(mutated)
 
-    def test_foreground_push_suppression_requires_an_immediately_usable_snapshot(self):
+    def test_foreground_push_suppression_requires_confirmed_revision_ownership(self):
         sources = {
             relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
             for relative in guard.PLATFORM_CAPABILITY_POLICY_PATHS
@@ -493,19 +493,379 @@ class GuardContextTests(unittest.TestCase):
                 "ios/QuakeSignal/Notifications/PushPayload.swift",
                 "WolfxClient.sources.contains($0) ? $0 : nil",
                 "$0",
-                "structurally usable",
+                "strictly typed",
             ),
             (
                 "ios/QuakeSignal/Notifications/PushPayload.swift",
                 'event.id == "\\(sourceID):\\(eventID)",',
                 "true,",
-                "structurally usable",
+                "strictly typed",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/PushPayload.swift",
+                'let serial = nonnegativeInteger(userInfo["serial"]),',
+                'let serial = userInfo["serial"] as? Int,',
+                "strictly typed",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/PushPayload.swift",
+                '(sourceID == "jma_eew" && kind == "eew") ||\n'
+                '                (sourceID == "jma_eqlist" && kind == "report"),',
+                "true,",
+                "strictly typed",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/PushPayload.swift",
+                '?? parsedTimestamp(userInfo["originTimeUtc"]) else {',
+                "?? Date.distantPast else {",
+                "strictly typed",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/PushPayload.swift",
+                "kind: kind,",
+                'kind: "report",',
+                "strictly typed",
             ),
             (
                 "ios/QuakeSignal/State/AlertPolicy.swift",
-                "guard payload.hasUsableMatchingEventSnapshot, isSceneActive else {",
-                "guard isSceneActive else {",
-                "may be suppressed only",
+                "payload.hasUsableMatchingEventSnapshot && isSceneActive",
+                "isSceneActive",
+                "may be attempted only",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "let eventID: String",
+                "var eventID: String",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "let serial: Int",
+                "var serial: Int",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "let kind: String",
+                "var kind: String",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "let isWarning: Bool",
+                "var isWarning: Bool",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "let isFinal: Bool",
+                "var isFinal: Bool",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "let isCancelled: Bool",
+                "var isCancelled: Bool",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "let isTraining: Bool",
+                "var isTraining: Bool",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "let effectiveTimestamp: Date?",
+                "var effectiveTimestamp: Date?",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "eventID: event.id,",
+                "eventID: event.eventId,",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "serial: event.serial,",
+                "serial: 0,",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "kind: event.kind,",
+                'kind: "report",',
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "isWarning: event.isWarn,",
+                "isWarning: false,",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "isFinal: event.isFinal,",
+                "isFinal: false,",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "isCancelled: event.isCancel,",
+                "isCancelled: false,",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "isTraining: event.isTraining,",
+                "isTraining: false,",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "effectiveTimestamp: event.reportDate ?? event.originDate",
+                "effectiveTimestamp: nil",
+                "complete typed revision identity",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "guard allowsEmergencyPresentation else { return false }",
+                "if !allowsEmergencyPresentation { return true }",
+                "exact or monotonically dominated",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "if handledRevisionKeys.contains(incoming) { return true }",
+                "if handledRevisionKeys.contains(incoming) { return false }",
+                "exact or monotonically dominated",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "guard event.isActiveWarning else { return false }",
+                "guard event.isEew else { return false }",
+                "exact or monotonically dominated",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "handled.monotonicallyDominates(incoming)",
+                "incoming.monotonicallyDominates(handled)",
+                "exact or monotonically dominated",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                'kind == "eew" && isWarning && !isFinal && !isCancelled && !isTraining',
+                "isWarning && !isFinal",
+                "exact or monotonically dominated",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                'kind == "eew" && !isTraining && (isFinal || isCancelled)',
+                "isFinal || isCancelled",
+                "exact or monotonically dominated",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "if isTerminalWarningLifecycle && incoming.isActiveWarning {",
+                "if false {",
+                "exact or monotonically dominated",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "return serial > incoming.serial",
+                "return serial < incoming.serial",
+                "exact or monotonically dominated",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "return effectiveTimestamp > incomingTimestamp",
+                "return effectiveTimestamp < incomingTimestamp",
+                "exact or monotonically dominated",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "static let lifetime: TimeInterval = 15",
+                "static let lifetime: TimeInterval = 300",
+                "short-lived revision-bound system presentation reservation",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "let expiresAt = receivedAt.addingTimeInterval(lifetime)",
+                "let expiresAt = now.addingTimeInterval(lifetime)",
+                "short-lived revision-bound system presentation reservation",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "guard expiresAt >= now else { return }",
+                "guard expiresAt >= receivedAt else { return }",
+                "short-lived revision-bound system presentation reservation",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "reservations.removeValue(forKey: revisionKey)",
+                "reservations[revisionKey]",
+                "short-lived revision-bound system presentation reservation",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "reserved.monotonicallyDominates(revisionKey)",
+                "revisionKey.monotonicallyDominates(reserved)",
+                "short-lived revision-bound system presentation reservation",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "event.isActiveWarning ||",
+                "event.isActiveWarning &&",
+                "owned foreground audio",
+            ),
+            (
+                "ios/QuakeSignal/State/AlertPolicy.swift",
+                "guard preferences.includeTraining, !isBackfill || previous != nil else { return nil }",
+                "guard !isBackfill || previous != nil else { return nil }",
+                "owned foreground audio",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/NotificationManager.swift",
+                "var onForegroundNotification: ((ForegroundNotificationDelivery) -> Bool)?",
+                "var onForegroundNotification: ((ForegroundNotificationDelivery) -> Void)?",
+                "synchronously confirm in-app ownership",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/NotificationManager.swift",
+                "let receivedAt: Date",
+                "let receivedAt: TimeInterval",
+                "keep buffered delivery system-owned",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/NotificationManager.swift",
+                "receivedAt: delivery.receivedAt",
+                "receivedAt: Date()",
+                "keep buffered delivery system-owned",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/NotificationManager.swift",
+                "let receivedAt = Date()",
+                "let receivedAt = Date.distantFuture",
+                "keep buffered delivery system-owned",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/NotificationManager.swift",
+                "receivedAt: receivedAt",
+                "receivedAt: Date()",
+                "keep buffered delivery system-owned",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/NotificationManager.swift",
+                "didHandleEmergencyInApp: allowsEmergencyPresentation && didHandleEmergencyInApp",
+                "didHandleEmergencyInApp: allowsEmergencyPresentation || didHandleEmergencyInApp",
+                "synchronously confirm in-app ownership",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/NotificationManager.swift",
+                "pendingForegroundPayloads = Array(pendingForegroundPayloads.suffix(5))\n        return false",
+                "pendingForegroundPayloads = Array(pendingForegroundPayloads.suffix(5))\n        return true",
+                "keep buffered delivery system-owned",
+            ),
+            (
+                "ios/QuakeSignal/Features/Root/RootView.swift",
+                "return store.ingestForegroundNotification(",
+                "store.ingestForegroundNotification(",
+                "return synchronous snapshot ownership",
+            ),
+            (
+                "ios/QuakeSignal/Features/Root/RootView.swift",
+                "store.reserveSystemPresentation(",
+                "store.skipSystemPresentationReservation(",
+                "fallbacks system-owned",
+            ),
+            (
+                "ios/QuakeSignal/Features/Root/RootView.swift",
+                "if let revisionKey = payload.foregroundRevisionKey",
+                "if let revisionKey = payload.compositeEventId",
+                "fallbacks system-owned",
+            ),
+            (
+                "ios/QuakeSignal/Features/Root/RootView.swift",
+                "receivedAt: delivery.receivedAt",
+                "receivedAt: Date()",
+                "fallbacks system-owned",
+            ),
+            (
+                "ios/QuakeSignal/State/QuakeStore.swift",
+                "receivedAt: receivedAt,",
+                "receivedAt: Date(),",
+                "exact or dominated previously handled revision",
+            ),
+            (
+                "ios/QuakeSignal/State/QuakeStore.swift",
+                "let previous = events.first(where: { $0.id == event.id })\n"
+                "        let systemOwnsPresentation = consumeSystemPresentationReservation(",
+                "let previous = events.first(where: { $0.id == event.id })\n"
+                "        guard EventMergePolicy.shouldAccept(event, replacing: previous) else { return false }\n"
+                "        let systemOwnsPresentation = consumeSystemPresentationReservation(",
+                "foreground-push reservations must be consumed",
+            ),
+            (
+                "ios/QuakeSignal/State/QuakeStore.swift",
+                "let systemOwnsPresentation = consumeSystemPresentationReservation(\n"
+                "            for: event,\n"
+                "            now: Date()\n"
+                "        )\n"
+                "        let previous = events.first(where: { $0.id == event.id })\n"
+                "        guard EventMergePolicy.shouldAccept(event, replacing: previous) else { return }",
+                "let previous = events.first(where: { $0.id == event.id })\n"
+                "        guard EventMergePolicy.shouldAccept(event, replacing: previous) else { return }\n"
+                "        let systemOwnsPresentation = consumeSystemPresentationReservation(\n"
+                "            for: event,\n"
+                "            now: Date()\n"
+                "        )",
+                "direct-event reservations must be consumed",
+            ),
+            (
+                "ios/QuakeSignal/State/QuakeStore.swift",
+                "for event in fetchedEvents {\n"
+                "            _ = consumeSystemPresentationReservation(for: event, now: Date())\n"
+                "            if let current = newestByID[event.id],\n"
+                "               !EventMergePolicy.shouldAccept(event, replacing: current) {\n"
+                "                continue\n"
+                "            }",
+                "for event in fetchedEvents {\n"
+                "            if let current = newestByID[event.id],\n"
+                "               !EventMergePolicy.shouldAccept(event, replacing: current) {\n"
+                "                continue\n"
+                "            }\n"
+                "            _ = consumeSystemPresentationReservation(for: event, now: Date())",
+                "fallback reservations must be consumed",
+            ),
+            (
+                "ios/QuakeSignal/State/QuakeStore.swift",
+                "guard !systemOwnsPresentation else { return true }",
+                "guard !systemOwnsPresentation else { return false }",
+                "exact or dominated previously handled revision",
+            ),
+            (
+                "ios/QuakeSignal/State/QuakeStore.swift",
+                "if let reason, !systemOwnsPresentation {",
+                "if let reason {",
+                "exact or dominated previously handled revision",
+            ),
+            (
+                "ios/QuakeSignal/State/QuakeStore.swift",
+                "_ = consumeSystemPresentationReservation(for: event, now: Date())",
+                "_ = event // skipped fallback reservation consumption",
+                "exact or dominated previously handled revision",
+            ),
+            (
+                "ios/QuakeSignal/State/QuakeStore.swift",
+                "guard alertedRevisionKeys.insert(key).inserted else { return true }",
+                "guard alertedRevisionKeys.insert(key).inserted else { return false }",
+                "exact or dominated previously handled revision",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
+                "guard ForegroundEmergencyAudioPolicy.shouldPlay(event: event, reason: reason) else {",
+                "guard event.isActiveWarning else {",
+                "foreground warning and opted-in training audio",
             ),
             (
                 "ios/QuakeSignal/Notifications/NotificationManager.swift",
@@ -522,6 +882,100 @@ class GuardContextTests(unittest.TestCase):
                 with self.assertRaisesRegex(guard.ReleaseGuardError, message):
                     guard.verify_foreground_push_presentation_contract(mutated)
 
+    def test_foreground_ownership_contract_rejects_decentralized_registration_location_or_audio(self):
+        sources = {
+            relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+            for relative in guard.PLATFORM_CAPABILITY_POLICY_PATHS
+        }
+        mutations = (
+            (
+                "ios/QuakeSignal/State/AppSettings.swift",
+                "pushRegistrationPreferencesRevision &+= 1",
+                "pushRegistrationPreferencesRevision = 0",
+                "centralized registration revision",
+            ),
+            (
+                "ios/QuakeSignal/Features/Root/RootView.swift",
+                ".onChange(of: settings.pushRegistrationPreferencesRevision)",
+                ".onChange(of: settings.alertSound)",
+                "centralized registration revision",
+            ),
+            (
+                "ios/QuakeSignal/Features/Root/RootView.swift",
+                "locationManager.currentLocation == nil,\n"
+                "           locationManager.isRequestingLocation {",
+                "store.effectiveCoordinate == nil,\n"
+                "           locationManager.isRequestingLocation {",
+                "centralized registration revision",
+            ),
+            (
+                "ios/QuakeSignal/Features/Root/RootView.swift",
+                ".onChange(of: locationManager.isRequestingLocation)",
+                ".onChange(of: locationManager.lastRequestFailed)",
+                "location-request completion must resume deferred protected registration",
+            ),
+            (
+                "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
+                "locationManager.requestCurrentLocation(purpose: .mapFocus)",
+                "locationManager.requestCurrentLocation()",
+                "location-purpose ownership",
+            ),
+            (
+                "ios/QuakeSignal/State/LocationManager.swift",
+                "guard purpose == .mapFocus || AppSettings.shared.useCurrentLocation else {",
+                "guard purpose == .mapFocus else {",
+                "location-purpose ownership",
+            ),
+            (
+                "ios/QuakeSignal/State/LocationManager.swift",
+                "self.activeRequestPurpose = nil\n"
+                "            guard purpose == .mapFocus || AppSettings.shared.useCurrentLocation else {",
+                "self.activeRequestPurpose = nil\n"
+                "            guard purpose == .mapFocus else {",
+                "location-purpose ownership",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
+                "play(preference, deduplicationKey: nil, owner: .preview)",
+                "play(preference, deduplicationKey: nil, owner: .emergency)",
+                "alert-audio ownership",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
+                "guard playbackOwner == .preview else { return }",
+                "guard playbackOwner != nil else { return }",
+                "alert-audio ownership",
+            ),
+            (
+                "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
+                "let key = ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)",
+                "let key = ForegroundEmergencyRevisionOwnershipPolicy.key(for: event).serial",
+                "alert-audio ownership",
+            ),
+            (
+                "ios/QuakeSignal/Features/Settings/SettingsView.swift",
+                "EmergencyAlertAudio.shared.stopPreview()",
+                "EmergencyAlertAudio.shared.stop()",
+                "alert-audio ownership",
+            ),
+            (
+                "ios/QuakeSignal/State/QuakeStore.swift",
+                "EmergencyAlertAudio.shared.stop()",
+                "_ = presentedAlert // skipped app-owned emergency audio stop",
+                "presented-alert replacement or dismissal",
+            ),
+        )
+        for path, old, new, message in mutations:
+            with self.subTest(path=path):
+                mutated = dict(sources)
+                mutated[path] = mutated[path].replace(old, new, 1)
+                self.assertNotEqual(mutated[path], sources[path])
+                with self.assertRaisesRegex(
+                    guard.ReleaseGuardError,
+                    message,
+                ):
+                    guard.verify_foreground_emergency_parity_contract(mutated)
+
     def test_platform_capability_policy_rejects_lifecycle_and_cache_mutations(self):
         sources = {
             relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
@@ -535,7 +989,7 @@ class GuardContextTests(unittest.TestCase):
             ),
             (
                 "ios/QuakeSignal/Notifications/NotificationManager.swift",
-                "self.isForegroundSceneActive &&\n                    UIApplication.shared.applicationState == .active",
+                "self.isForegroundSceneActive &&\n                UIApplication.shared.applicationState == .active",
                 "self.isForegroundSceneActive",
             ),
             (
@@ -773,8 +1227,10 @@ class LiveWorkerContractTests(unittest.TestCase):
 
     def test_live_release_contract_rejects_stale_or_incomplete_legal_pages(self):
         for target_path, marker in (
-            ("/privacy", "QuakeSignal · Effective 20 August 2026"),
+            ("/privacy", "QuakeSignal · Effective 22 August 2026"),
             ("/privacy", "Only the app when running on an iPhone or iPad can register"),
+            ("/privacy", "last successfully registered bounded alert area remains in use until the next foreground renewal"),
+            ("/privacy", "without a fallback it attempts to delete the stale relay row"),
             ("/privacy", "watches only the jma_eew and jma_eqlist Wolfx feeds"),
             ("/privacy", "does not create an earthquake forecast or predict local intensity or arrival time"),
             ("/support", "support cannot identify the old registration from a public issue"),

@@ -13,6 +13,7 @@ module QuakeSignalMacCatalystScreenshotProvenance
   DIRECTORY_NAMES = %w[
     app-logs
     build-logs
+    capture-request-evidence
     en-US
     frame-capture-evidence
     geometry-evidence
@@ -58,6 +59,7 @@ module QuakeSignalMacCatalystScreenshotProvenance
         frame.fetch("file"),
         "app-logs/#{selector}.log",
         "build-logs/#{selector}.log",
+        "capture-request-evidence/#{selector}.json",
         "frame-capture-evidence/#{selector}.json",
         "geometry-evidence/#{selector}.json",
         "native-capture-evidence/#{selector}.json",
@@ -85,6 +87,12 @@ module QuakeSignalMacCatalystScreenshotProvenance
     require_equal(frames.map { |frame| frame.fetch("app") }.uniq.length, 1, "app evidence")
     require_equal(frames.map { |frame| frame.fetch("product") }.uniq.length, 1, "product evidence")
     require_equal(frames.map { |frame| frame.fetch("host") }.uniq.length, 1, "host evidence")
+    require_equal(frames.map { |frame| frame.fetch("sourceDisplayScale") }.uniq.length, 1, "source-display scale evidence")
+    require_equal(
+      frames.map { |frame| frame.fetch("captureRequest").fetch("nonce") }.uniq.length,
+      frames.length,
+      "capture-request nonce uniqueness",
+    )
 
     captured_at_values = frames.map { |frame| frame.fetch("capturedAtUtc") }
     aggregate = {
@@ -105,6 +113,17 @@ module QuakeSignalMacCatalystScreenshotProvenance
       "product" => frames.first.fetch("product"),
       "host" => frames.first.fetch("host"),
       "app" => frames.first.fetch("app"),
+      "captureEnvironment" => {
+        "kind" => "maccatalyst-uikit-hierarchy",
+        "captureApi" => "UIKit.UIView.drawHierarchy",
+        "captureSurface" => "live-catalyst-uiwindow-hierarchy",
+        "sourceDisplayScale" => frames.first.fetch("sourceDisplayScale"),
+        "rasterizationScale" => 2,
+        "logicalViewPoints" => [1_280, 800],
+        "pixels" => [2_560, 1_600],
+        "afterScreenUpdates" => true,
+        "postCaptureResizePerformed" => false,
+      },
       "captureWindowUtc" => {
         "startedAt" => captured_at_values.min,
         "completedAt" => captured_at_values.max,
@@ -126,7 +145,7 @@ module QuakeSignalMacCatalystScreenshotProvenance
     evidence = parse_json(evidence_source, evidence_relative)
     require_exact_keys(
       evidence,
-      %w[approval app artifacts build captureSelector capturedAtUtc geometryEvidence host locale nativeCapture planManifest plannedFile platform product reviewer schemaVersion semanticValidation source status transformation uploadApproved window],
+      %w[approval app artifacts build captureRequest captureSelector capturedAtUtc geometryEvidence host locale nativeCapture planManifest plannedFile platform product reviewer schemaVersion semanticValidation source status transformation uploadApproved window],
       "#{selector} frame evidence",
     )
     require_equal(evidence.fetch("schemaVersion"), 1, "#{selector} schemaVersion")
@@ -211,8 +230,28 @@ module QuakeSignalMacCatalystScreenshotProvenance
     window = evidence.fetch("window")
     validate_window(root, window, selector: selector, geometry_record: geometry_record)
 
+    capture_request = evidence.fetch("captureRequest")
+    request_record = validate_capture_request(
+      root,
+      capture_request,
+      selector: selector,
+      window: window,
+    )
+
     native_capture = evidence.fetch("nativeCapture")
-    validate_native_capture(root, native_capture, selector: selector, window: window)
+    validate_native_capture(
+      root,
+      native_capture,
+      selector: selector,
+      window: window,
+      geometry_record: geometry_record,
+      request_record: request_record,
+    )
+    require_equal(
+      native_capture.fetch("capturedAtUtc"),
+      evidence.fetch("capturedAtUtc"),
+      "#{selector} native/frame capture timestamp",
+    )
 
     transformation = evidence.fetch("transformation")
     transformation_record = require_json_artifact(
@@ -278,7 +317,9 @@ module QuakeSignalMacCatalystScreenshotProvenance
       "processId" => window.fetch("processId"),
       "windowId" => window.fetch("windowId"),
       "logicalFrame" => window.fetch("logicalFrame"),
-      "backingScale" => window.fetch("backingScale"),
+      "sourceDisplayScale" => window.fetch("sourceDisplayScale"),
+      "rasterizationScale" => native_capture.fetch("rasterizationScale"),
+      "captureRequest" => capture_request,
       "nativeCapture" => native_capture,
       "semanticValidation" => semantic_validation,
       "frameCaptureEvidenceFile" => evidence_relative,
@@ -292,14 +333,16 @@ module QuakeSignalMacCatalystScreenshotProvenance
   private_class_method :validate_frame
 
   def validate_geometry_record(record, selector:, recorded_at:)
-    require_exact_keys(record, %w[backingScale captureSelector logicalFrame processId reason recordedAtUtc schemaVersion status], "#{selector} geometry record")
+    require_exact_keys(record, %w[captureSelector logicalFrame processId reason recordedAtUtc schemaVersion sourceDisplayScale status], "#{selector} geometry record")
     require_equal(record.fetch("schemaVersion"), 1, "#{selector} geometry schemaVersion")
     require_equal(record.fetch("status"), "ready", "#{selector} geometry status")
     require_equal(record.fetch("reason"), nil, "#{selector} geometry reason")
     require_equal(record.fetch("captureSelector"), selector, "#{selector} geometry selector")
     require_positive_integer(record.fetch("processId"), "#{selector} geometry PID")
-    require_equal(record.fetch("backingScale"), 2, "#{selector} geometry backingScale")
+    require_source_display_scale(record.fetch("sourceDisplayScale"), "#{selector} geometry sourceDisplayScale")
     validate_frame_hash(record.fetch("logicalFrame"), "#{selector} geometry frame")
+    require_equal(record.fetch("logicalFrame").fetch("width"), 1_280, "#{selector} geometry width")
+    require_equal(record.fetch("logicalFrame").fetch("height"), 800, "#{selector} geometry height")
     require_utc_time(record.fetch("recordedAtUtc"), "#{selector} geometry recordedAtUtc")
     require_equal(record.fetch("recordedAtUtc"), recorded_at, "#{selector} geometry recordedAtUtc binding")
   end
@@ -460,14 +503,19 @@ module QuakeSignalMacCatalystScreenshotProvenance
   def validate_window(root, window, selector:, geometry_record:)
     require_exact_keys(
       window,
-      %w[afterObservationFile afterObservationSha256 backingScale beforeObservationFile beforeObservationSha256 captureSelector logicalFrame ownerName processId windowId windowTitle],
+      %w[afterObservationFile afterObservationSha256 beforeObservationFile beforeObservationSha256 captureSelector logicalFrame ownerName processId sourceDisplayScale windowId windowTitle],
       "#{selector} window",
     )
     require_positive_integer(window.fetch("processId"), "#{selector} window PID")
     require_positive_integer(window.fetch("windowId"), "#{selector} window ID")
     require_equal(window.fetch("captureSelector"), selector, "#{selector} window selector")
     require_equal(window.fetch("processId"), geometry_record.fetch("processId"), "#{selector} geometry/window PID")
-    require_equal(window.fetch("backingScale"), 2, "#{selector} window backingScale")
+    require_source_display_scale(window.fetch("sourceDisplayScale"), "#{selector} window sourceDisplayScale")
+    require_equal(
+      window.fetch("sourceDisplayScale"),
+      geometry_record.fetch("sourceDisplayScale"),
+      "#{selector} geometry/window sourceDisplayScale",
+    )
     validate_frame_hash(window.fetch("logicalFrame"), "#{selector} window frame")
     require_equal(window.fetch("logicalFrame").fetch("width"), 1_280, "#{selector} window width")
     require_equal(window.fetch("logicalFrame").fetch("height"), 800, "#{selector} window height")
@@ -503,8 +551,41 @@ module QuakeSignalMacCatalystScreenshotProvenance
   end
   private_class_method :validate_window
 
-  def validate_native_capture(root, native_capture, selector:, window:)
-    record_keys = %w[captureApi captureResolution ignoreShadowsSingleWindow logicalFrame pixels postCaptureResizePerformed processId scalesToFit schemaVersion showsCursor windowId]
+  def validate_capture_request(root, capture_request, selector:, window:)
+    record_keys = %w[captureSelector logicalViewPoints nonce processId rasterizationScale schemaVersion windowId]
+    record = require_json_artifact(
+      root,
+      capture_request,
+      expected_file: "capture-request-evidence/#{selector}.json",
+      label: "#{selector} capture request",
+      extra_keys: record_keys,
+    )
+    require_exact_keys(record, record_keys, "#{selector} capture-request record")
+    record_keys.each do |key|
+      require_equal(capture_request.fetch(key), record.fetch(key), "#{selector} capture-request #{key} binding")
+    end
+    require_equal(record.fetch("schemaVersion"), 1, "#{selector} capture-request schemaVersion")
+    require_equal(record.fetch("processId"), window.fetch("processId"), "#{selector} capture-request PID")
+    require_equal(record.fetch("windowId"), window.fetch("windowId"), "#{selector} capture-request window ID")
+    require_equal(record.fetch("captureSelector"), selector, "#{selector} capture-request selector")
+    require_equal(record.fetch("logicalViewPoints"), [1_280, 800], "#{selector} capture-request logical points")
+    require_equal(record.fetch("rasterizationScale"), 2, "#{selector} capture-request rasterization scale")
+    unless record.fetch("nonce").is_a?(String) && record.fetch("nonce").match?(/\A[0-9a-f]{64}\z/)
+      raise Error, "#{selector} capture-request nonce is invalid"
+    end
+    record
+  end
+  private_class_method :validate_capture_request
+
+  def validate_native_capture(root, native_capture, selector:, window:, geometry_record:, request_record:)
+    record_keys = %w[
+      afterScreenUpdates captureApi captureSelector captureSurface capturedAtUtc
+      drawHierarchyComplete logicalViewPoints nonce pixels postCaptureResizePerformed
+      processId rasterizationScale rawOutputFile rawSha256 reason rendererOpaque
+      rendererPreferredRange sceneActivationState schemaVersion sourceDisplayScale
+      status systemFrameAfter systemFrameBefore windowAlpha windowBounds windowId
+      windowIsHidden windowIsKey
+    ]
     record = require_json_artifact(
       root,
       native_capture,
@@ -517,16 +598,66 @@ module QuakeSignalMacCatalystScreenshotProvenance
       require_equal(native_capture.fetch(key), record.fetch(key), "#{selector} native-capture #{key} binding")
     end
     require_equal(record.fetch("schemaVersion"), 1, "#{selector} native-capture schemaVersion")
-    require_equal(record.fetch("captureApi"), "ScreenCaptureKit.SCScreenshotManager", "#{selector} capture API")
+    require_equal(record.fetch("status"), "captured", "#{selector} native-capture status")
+    require_equal(record.fetch("reason"), nil, "#{selector} native-capture reason")
+    require_equal(record.fetch("captureApi"), "UIKit.UIView.drawHierarchy", "#{selector} capture API")
+    require_equal(
+      record.fetch("captureSurface"),
+      "live-catalyst-uiwindow-hierarchy",
+      "#{selector} capture surface",
+    )
+    %w[processId windowId captureSelector nonce logicalViewPoints rasterizationScale].each do |key|
+      require_equal(record.fetch(key), request_record.fetch(key), "#{selector} request/response #{key}")
+    end
     require_equal(record.fetch("processId"), window.fetch("processId"), "#{selector} native-capture PID")
     require_equal(record.fetch("windowId"), window.fetch("windowId"), "#{selector} native-capture window ID")
-    require_equal(record.fetch("logicalFrame"), window.fetch("logicalFrame"), "#{selector} native-capture logical frame")
+    require_equal(record.fetch("captureSelector"), selector, "#{selector} native-capture selector")
+    require_equal(record.fetch("logicalViewPoints"), [1_280, 800], "#{selector} native-capture logical points")
     require_equal(record.fetch("pixels"), [2_560, 1_600], "#{selector} native-capture pixels")
-    require_equal(record.fetch("captureResolution"), "best", "#{selector} native capture resolution")
-    require_equal(record.fetch("scalesToFit"), false, "#{selector} native capture scalesToFit")
+    require_equal(record.fetch("rasterizationScale"), 2, "#{selector} native capture rasterization scale")
+    require_source_display_scale(record.fetch("sourceDisplayScale"), "#{selector} native sourceDisplayScale")
+    require_equal(
+      record.fetch("sourceDisplayScale"),
+      geometry_record.fetch("sourceDisplayScale"),
+      "#{selector} native/geometry sourceDisplayScale",
+    )
+    require_equal(record.fetch("afterScreenUpdates"), true, "#{selector} native afterScreenUpdates")
+    require_equal(record.fetch("drawHierarchyComplete"), true, "#{selector} native drawHierarchy completion")
     require_equal(record.fetch("postCaptureResizePerformed"), false, "#{selector} native capture resize")
-    require_equal(record.fetch("showsCursor"), false, "#{selector} native capture cursor")
-    require_equal(record.fetch("ignoreShadowsSingleWindow"), true, "#{selector} native capture shadow policy")
+    require_equal(record.fetch("rendererOpaque"), false, "#{selector} native renderer opacity")
+    require_equal(record.fetch("rendererPreferredRange"), "standard", "#{selector} native renderer range")
+    require_equal(record.fetch("windowIsKey"), true, "#{selector} native key-window state")
+    require_equal(record.fetch("windowIsHidden"), false, "#{selector} native hidden-window state")
+    require_equal(record.fetch("sceneActivationState"), "foregroundActive", "#{selector} native scene state")
+    unless record.fetch("windowAlpha").is_a?(Numeric) && record.fetch("windowAlpha").finite? && record.fetch("windowAlpha") >= 0.999
+      raise Error, "#{selector} native window alpha is invalid"
+    end
+    validate_frame_hash(record.fetch("windowBounds"), "#{selector} native UIWindow bounds")
+    require_equal(
+      record.fetch("windowBounds"),
+      { "x" => 0, "y" => 0, "width" => 1_280, "height" => 800 },
+      "#{selector} native UIWindow bounds",
+    )
+    validate_frame_hash(record.fetch("systemFrameBefore"), "#{selector} native system frame before")
+    validate_frame_hash(record.fetch("systemFrameAfter"), "#{selector} native system frame after")
+    require_equal(
+      record.fetch("systemFrameBefore"),
+      record.fetch("systemFrameAfter"),
+      "#{selector} native system-frame drift",
+    )
+    require_equal(
+      record.fetch("systemFrameBefore"),
+      geometry_record.fetch("logicalFrame"),
+      "#{selector} native stable system-frame binding",
+    )
+    require_equal(record.fetch("rawOutputFile"), "capture-raw.png", "#{selector} native raw output filename")
+    require_sha256(record.fetch("rawSha256"), "#{selector} native raw image")
+    require_equal(
+      record.fetch("rawSha256"),
+      Digest::SHA256.file(root.join("raw-window-captures/#{selector}.png")).hexdigest,
+      "#{selector} native raw image binding",
+    )
+    require_utc_time(record.fetch("capturedAtUtc"), "#{selector} native capturedAtUtc")
   end
   private_class_method :validate_native_capture
 
@@ -570,6 +701,13 @@ module QuakeSignalMacCatalystScreenshotProvenance
     raise Error, "#{label} must be a positive integer" unless value.is_a?(Integer) && value.positive?
   end
   private_class_method :require_positive_integer
+
+  def require_source_display_scale(value, label)
+    unless value.is_a?(Numeric) && value.finite? && value.between?(0.5, 4)
+      raise Error, "#{label} must be a plausible finite positive scale"
+    end
+  end
+  private_class_method :require_source_display_scale
 
   def require_sha256(value, label)
     raise Error, "#{label} is invalid" unless value.is_a?(String) && value.match?(/\A[0-9a-f]{64}\z/)

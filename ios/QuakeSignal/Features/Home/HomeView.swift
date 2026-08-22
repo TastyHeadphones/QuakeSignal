@@ -112,7 +112,7 @@ private struct StatusCardView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: symbolName)
-                    .foregroundStyle(bannerState.color)
+                    .foregroundStyle(coordinate == nil ? .orange : bannerState.color)
                 Text(titleKey)
                     .font(.headline)
                 Spacer()
@@ -128,6 +128,7 @@ private struct StatusCardView: View {
     }
 
     private var symbolName: String {
+        if coordinate == nil { return "location.slash.fill" }
         switch bannerState {
         case .normal: return "checkmark.circle.fill"
         case .caution: return "exclamationmark.circle.fill"
@@ -136,6 +137,7 @@ private struct StatusCardView: View {
     }
 
     private var titleKey: LocalizedStringKey {
+        if coordinate == nil { return "home.status.locationRequired" }
         switch bannerState {
         case .normal: return "home.status.normal"
         case .caution: return "home.status.caution"
@@ -144,6 +146,9 @@ private struct StatusCardView: View {
     }
 
     private var detailText: String {
+        guard coordinate != nil else {
+            return String(localized: "home.status.locationRequired.detail")
+        }
         switch bannerState {
         case .normal:
             return L("home.status.normal.detail", Int(radiusKm))

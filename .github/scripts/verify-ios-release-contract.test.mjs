@@ -237,7 +237,7 @@ schemes:
       "        type: string\nenv:\n",
       `        type: string
       archive_only:
-        description: Archive, export, and validate a signed IPA without uploading it to App Store Connect
+        description: Archive, verify, and hash a signed IPA without retaining or uploading it
         required: false
         default: false
         type: boolean
@@ -403,7 +403,9 @@ async function writeFixture(options = {}) {
     "ios/QuakeSignalVision/Supporting/QuakeSignalVision-Release.entitlements",
     "ios/QuakeSignal/App/AppDelegate.swift",
     "ios/QuakeSignal/App/PlatformCapabilities.swift",
+    "ios/QuakeSignal/App/QuakeSignalApp.swift",
     "ios/QuakeSignal/Features/Detail/QuakeDetailView.swift",
+    "ios/QuakeSignal/Features/Guide/DisasterGuideView.swift",
     "ios/QuakeSignal/Features/List/QuakeListView.swift",
     "ios/QuakeSignal/Features/Home/QuakeRowView.swift",
     "ios/QuakeSignal/Features/Map/EpicenterMapView.swift",
@@ -463,6 +465,8 @@ async function writeFixture(options = {}) {
     ".github/scripts/assemble-apple-screenshot-release-set.test.rb",
     ".github/scripts/verify-apple-screenshot-release-set.rb",
     ".github/scripts/verify-apple-screenshot-release-set.test.rb",
+    ".github/scripts/verify-store-assets.rb",
+    ".github/scripts/verify-store-assets.test.rb",
     "ios/AppStore/README.md",
     "ios/AppStore/screenshot-manifest-v1.1-build8.template.json",
   ]) {
@@ -762,7 +766,7 @@ test("keeps historical Mac Catalyst report rows date-qualified", async (t) => {
   });
 });
 
-test("fails closed when foreground-only Vision capability or localized disclosure drifts", async (t) => {
+test("fails closed when foreground-only Vision capability, layout, or localized disclosure drifts", async (t) => {
   await withFixture(t, {}, async (root) => {
     const path = join(root, "ios/QuakeSignal/App/PlatformCapabilities.swift");
     const source = await readFile(path, "utf8");
@@ -776,6 +780,92 @@ test("fails closed when foreground-only Vision capability or localized disclosur
       /foreground-only Apple platform policy must match the reviewed fingerprint/i,
     );
   });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignal/App/QuakeSignalApp.swift");
+    const source = await readFile(path, "utf8");
+    const mutated = source.replace(
+      "static let defaultWindowWidth: CGFloat = 1_600",
+      "static let defaultWindowWidth: CGFloat = 1_200",
+    );
+    assert.notEqual(mutated, source);
+    await writeFile(path, mutated, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /foreground-only Apple platform policy must match the reviewed fingerprint/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignal/App/QuakeSignalApp.swift");
+    const source = await readFile(path, "utf8");
+    const mutated = source.replace(
+      "static let minimumControlTargetSize: CGFloat = 60",
+      "static let minimumControlTargetSize: CGFloat = 44",
+    );
+    assert.notEqual(mutated, source);
+    await writeFile(path, mutated, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /foreground-only Apple platform policy must match the reviewed fingerprint/i,
+    );
+  });
+  await withFixture(t, {}, async (root) => {
+    const path = join(root, "ios/QuakeSignal/Features/Guide/DisasterGuideView.swift");
+    const source = await readFile(path, "utf8");
+    const mutated = source.replace(
+      ".visionReadableListSurface(",
+      ".listStyle(.plain)\n            .visionReadableListSurface(",
+    );
+    assert.notEqual(mutated, source);
+    await writeFile(path, mutated, "utf8");
+    await assert.rejects(
+      verifyIOSReleaseContract({ root }),
+      /foreground-only Apple platform policy must match the reviewed fingerprint/i,
+    );
+  });
+  for (const [name, from, to] of [
+    [
+      "visionOS-only post-quake composition",
+      "#if os(visionOS)\n                    VisionAfterQuakeItems",
+      "#if os(iOS)\n                    VisionAfterQuakeItems",
+    ],
+    [
+      "wide post-quake row",
+      "AnyLayout(HStackLayout(alignment: .top, spacing: 24))",
+      "AnyLayout(VStackLayout(alignment: .leading, spacing: 24))",
+    ],
+    [
+      "accessibility Dynamic Type fallback",
+      "!dynamicTypeSize.isAccessibilitySize",
+      "true",
+    ],
+    [
+      "post-quake row bottom inset regression",
+      "static let afterQuakeRowBottomInset: CGFloat = 44",
+      "static let afterQuakeRowBottomInset: CGFloat = 32",
+    ],
+    [
+      "post-quake row bottom inset application",
+      ".padding(.bottom, VisionGuideLayoutPolicy.afterQuakeRowBottomInset)",
+      ".padding(.bottom, 0)",
+    ],
+    [
+      "multi-line localized post-quake actions",
+      ".fixedSize(horizontal: false, vertical: true)",
+      ".lineLimit(1)",
+    ],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, "ios/QuakeSignal/Features/Guide/DisasterGuideView.swift");
+      const source = await readFile(path, "utf8");
+      const mutated = source.replace(from, to);
+      assert.notEqual(mutated, source, `${name} fixture mutation must apply`);
+      await writeFile(path, mutated, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /foreground-only Apple platform policy must match the reviewed fingerprint/i,
+      );
+    });
+  }
   await withFixture(t, {}, async (root) => {
     const path = join(root, "ios/QuakeSignal/Resources/en.lproj/Localizable.strings");
     const source = await readFile(path, "utf8");
@@ -818,8 +908,8 @@ test("fails closed when foreground lifecycle or nonpersistent Wolfx transport po
   for (const [relativePath, from, to] of [
     [
       "ios/QuakeSignal/State/AlertPolicy.swift",
-      "guard payload.hasUsableMatchingEventSnapshot, isSceneActive else {",
-      "guard isSceneActive else {",
+      "payload.hasUsableMatchingEventSnapshot && isSceneActive",
+      "isSceneActive",
     ],
     [
       "ios/QuakeSignal/State/AlertPolicy.swift",
@@ -828,7 +918,7 @@ test("fails closed when foreground lifecycle or nonpersistent Wolfx transport po
     ],
     [
       "ios/QuakeSignal/Notifications/NotificationManager.swift",
-      "self.isForegroundSceneActive &&\n                    UIApplication.shared.applicationState == .active",
+      "self.isForegroundSceneActive &&\n                UIApplication.shared.applicationState == .active",
       "self.isForegroundSceneActive",
     ],
     [
@@ -1298,7 +1388,7 @@ test("fails closed on quoted keys and intervening steps in the pre-secret sequen
       ),
       "utf8",
     );
-    await assert.rejects(verifyIOSReleaseContract({ root }), /must run checkout, static release contract, and remote policy smoke consecutively/i);
+      await assert.rejects(verifyIOSReleaseContract({ root }), /must run exact checkout, immutable-source validation, static release contract, and remote policy smoke consecutively/i);
   });
 });
 
@@ -1319,8 +1409,8 @@ test("fails closed when the protected signing lane or dispatch consent widens", 
       "  cancel-in-progress: true\n",
     ),
     (contents) => contents.replace(
-      "      archive_only:\n        description: Archive, export, and validate a signed IPA without uploading it to App Store Connect\n        required: false\n        default: false\n        type: boolean\n",
-      "      archive_only:\n        description: Archive, export, and validate a signed IPA without uploading it to App Store Connect\n        required: false\n        default: true\n        type: boolean\n",
+      "      archive_only:\n        description: Archive, verify, and hash a signed IPA without retaining or uploading it\n        required: false\n        default: false\n        type: boolean\n",
+      "      archive_only:\n        description: Archive, verify, and hash a signed IPA without retaining or uploading it\n        required: false\n        default: true\n        type: boolean\n",
     ),
   ];
   for (const mutate of mutations) {
@@ -1383,6 +1473,148 @@ test("fails closed when a post-smoke step can alter the signed artifact sequence
       await assert.rejects(
         verifyIOSReleaseContract({ root }),
         /post-remote signing sequence must match the reviewed fingerprint/i,
+      );
+    });
+  }
+});
+
+test("fails closed when iOS IPA export, digest binding, or App Store coordinates drift", async (t) => {
+  const mutations = [
+    [
+      "Add :manageAppVersionAndBuildNumber bool false",
+      "Add :manageAppVersionAndBuildNumber bool true",
+    ],
+    [
+      'ipas=("$export_path"/*.ipa)',
+      'ipas=("$export_path"/*)',
+    ],
+    [
+      '[ "${#ipas[@]}" -ne 1 ]',
+      '[ "${#ipas[@]}" -lt 1 ]',
+    ],
+    [
+      '[ "${#unexpected[@]}" -ne 0 ]',
+      'false',
+    ],
+    [
+      '[ ! -f "${ipas[0]:-}" ]',
+      '[ ! -e "${ipas[0]:-}" ]',
+    ],
+    [
+      '[ -L "${ipas[0]:-}" ]',
+      'false',
+    ],
+    [
+      'ipa_sha256="$(/usr/bin/shasum -a 256 "$IPA_PATH")"',
+      'ipa_sha256="0000000000000000000000000000000000000000000000000000000000000000"',
+    ],
+    [
+      'echo "IPA_SHA256=$ipa_sha256" >> "$GITHUB_ENV"',
+      'echo "IPA_SHA256=unreviewed" >> "$GITHUB_ENV"',
+    ],
+    [
+      "          IOS_ALTOOL_PLATFORM: ios\n",
+      "          IOS_ALTOOL_PLATFORM: watchos\n",
+    ],
+    [
+      '            --platform "$IOS_ALTOOL_PLATFORM"\n',
+      '            --type "$IOS_ALTOOL_PLATFORM"\n',
+    ],
+    [
+      '          APP_STORE_CONNECT_APPLE_ID: "6800642443"\n',
+      '          APP_STORE_CONNECT_APPLE_ID: "6800642853"\n',
+    ],
+    [
+      "          IOS_BUNDLE_IDENTIFIER: com.quakesignal.app\n",
+      "          IOS_BUNDLE_IDENTIFIER: com.quakesignal.app.watchkitapp\n",
+    ],
+    [
+      '--bundle-version "$BUILD_NUMBER"',
+      '--bundle-version 7',
+    ],
+    [
+      "--bundle-short-version-string 1.1",
+      "--bundle-short-version-string 1.0",
+    ],
+    [
+      'if [ "$upload_sha256" != "${IPA_SHA256:?Verified iOS IPA SHA-256 is missing}" ]; then',
+      'if [ "$upload_sha256" != "$upload_sha256" ]; then',
+    ],
+    [
+      'if [ "${IPA_VERIFIED:-false}" != true ]; then',
+      'if false; then',
+    ],
+    [
+      'xcrun altool --validate-app "$IPA_PATH" "${upload_arguments[@]}"',
+      'xcrun altool --validate-app "/tmp/unreviewed.ipa" "${upload_arguments[@]}"',
+    ],
+    [
+      'xcrun altool --upload-package "$IPA_PATH" "${upload_arguments[@]}"',
+      'xcrun altool --upload-package "/tmp/unreviewed.ipa" "${upload_arguments[@]}"',
+    ],
+  ];
+
+  for (const [from, to] of mutations) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/ios.yml");
+      const source = await readFile(path, "utf8");
+      assert.ok(source.includes(from), `fixture must contain ${from}`);
+      const mutated = source.replace(from, to);
+      assert.notEqual(mutated, source, "iOS signed lane mutation must apply");
+      await writeFile(path, mutated, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /iOS workflow exported IPA|iOS signed artifact verifier|iOS App Store Connect upload|post-remote signing sequence/i,
+      );
+    });
+  }
+});
+
+test("fails closed when a native signed release job reintroduces Actions retention", async (t) => {
+  const cases = [
+    [".github/workflows/ios.yml", "      - name: Remove signing material\n", "${{ env.IPA_PATH }}"],
+    [".github/workflows/apple-platforms.yml", "      - name: Remove signing material\n", "${{ env.APPLE_ARTIFACT_PATH }}"],
+  ];
+  for (const [relativePath, cleanupMarker, artifactPath] of cases) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, relativePath);
+      const source = await readFile(path, "utf8");
+      assert.ok(source.includes(cleanupMarker), `fixture must contain cleanup marker in ${relativePath}`);
+      const retained = [
+        "      - name: Retain signed release binary",
+        "        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+        "        with:",
+        "          name: forbidden-signed-release-binary",
+        `          path: ${artifactPath}`,
+        "",
+      ].join("\n");
+      await writeFile(path, source.replace(cleanupMarker, `${retained}${cleanupMarker}`), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /must not retain signed release binaries as GitHub Actions artifacts/i,
+      );
+    });
+  }
+});
+
+test("fails closed when a signed lane loses its immutable source checkout", async (t) => {
+  for (const relativePath of [
+    ".github/workflows/ios.yml",
+    ".github/workflows/apple-platforms.yml",
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, relativePath);
+      const source = await readFile(path, "utf8");
+      const immutableRef = "          ref: ${{ inputs.source_commit }}\n";
+      assert.ok(source.includes(immutableRef), `fixture must contain immutable source checkout in ${relativePath}`);
+      await writeFile(
+        path,
+        source.replace(immutableRef, "          ref: ${{ github.sha }}\n"),
+        "utf8",
+      );
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /checkout|immutable signed source|protected-release graph|release-job graph/i,
       );
     });
   }
@@ -1687,8 +1919,8 @@ test("fails closed when a native platform release gate or selected profile mappi
       "      name: unprotected-native-platform-release\n",
     ),
     (contents) => contents.replace(
-      "TVOS_APP_STORE_PROVISIONING_PROFILE' || 'VISIONOS_APP_STORE_PROVISIONING_PROFILE",
-      "UNREVIEWED_PROFILE' || 'VISIONOS_APP_STORE_PROVISIONING_PROFILE",
+      "TVOS_APP_STORE_PROVISIONING_PROFILE' || inputs.platform == 'visionos' && 'VISIONOS_APP_STORE_PROVISIONING_PROFILE",
+      "UNREVIEWED_PROFILE' || inputs.platform == 'visionos' && 'VISIONOS_APP_STORE_PROVISIONING_PROFILE",
     ),
     (contents) => contents.replace(
       "jobs:\n  release:\n",
@@ -1698,10 +1930,102 @@ test("fails closed when a native platform release gate or selected profile mappi
   for (const mutate of mutations) {
     await withFixture(t, {}, async (root) => {
       const path = join(root, ".github/workflows/apple-platforms.yml");
-      await writeFile(path, mutate(await readFile(path, "utf8")), "utf8");
+      const source = await readFile(path, "utf8");
+      const mutated = mutate(source);
+      assert.notEqual(mutated, source, "native platform release mutation must apply");
+      await writeFile(path, mutated, "utf8");
       await assert.rejects(
         verifyIOSReleaseContract({ root }),
         /native platform release job header|reviewed protected release job|protected-release graph fingerprint/i,
+      );
+    });
+  }
+});
+
+test("fails closed when the Mac Catalyst signed-package route drifts", async (t) => {
+  const mutations = [
+    ["          - maccatalyst\n", ""],
+    [
+      "'generic/platform=macOS,variant=Mac Catalyst' }}",
+      "'generic/platform=macOS' }}",
+    ],
+    [
+      "'MACCATALYST_APP_STORE_PROVISIONING_PROFILE' }}",
+      "'UNREVIEWED_CATALYST_PROFILE' }}",
+    ],
+    [
+      "secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || ''",
+      "secrets.UNREVIEWED_INSTALLER_CERTIFICATE || ''",
+    ],
+    [
+      "vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || ''",
+      "vars.UNREVIEWED_INSTALLER_IDENTITY || ''",
+    ],
+    [
+      "inputs.platform == 'visionos' && 'visionos' || 'macos'",
+      "inputs.platform == 'visionos' && 'visionos' || 'ios'",
+    ],
+    [
+      "Add :manageAppVersionAndBuildNumber bool false",
+      "Add :manageAppVersionAndBuildNumber bool true",
+    ],
+    [
+      '[ ! -f "${artifacts[0]:-}" ]',
+      '[ ! -e "${artifacts[0]:-}" ]',
+    ],
+    [
+      '[ "${#artifacts[@]}" -ne 1 ]',
+      '[ "${#artifacts[@]}" -lt 1 ]',
+    ],
+    [
+      '[ "${#unexpected[@]}" -ne 0 ]',
+      'false',
+    ],
+    [
+      '[ -L "${artifacts[0]:-}" ]',
+      'false',
+    ],
+    [
+      "Add :installerSigningCertificate string $PLATFORM_INSTALLER_IDENTITY",
+      "Add :installerSigningCertificate string Apple Distribution",
+    ],
+    [
+      "verifier_arguments+=(--installer-identity",
+      "verifier_arguments+=(--host-profile-name",
+    ],
+    [
+      'xcrun altool --validate-app "$APPLE_ARTIFACT_PATH" "${upload_arguments[@]}"',
+      'xcrun altool --validate-app "/tmp/unreviewed.pkg" "${upload_arguments[@]}"',
+    ],
+    [
+      'xcrun altool --upload-package "$APPLE_ARTIFACT_PATH" "${upload_arguments[@]}"',
+      'xcrun altool --upload-package "/tmp/unreviewed.pkg" "${upload_arguments[@]}"',
+    ],
+    [
+      'APP_STORE_CONNECT_APPLE_ID: "6800642443"',
+      'APP_STORE_CONNECT_APPLE_ID: "6800642853"',
+    ],
+    [
+      'upload_sha256="$(/usr/bin/shasum -a 256 "$APPLE_ARTIFACT_PATH")"',
+      'upload_sha256="${APPLE_ARTIFACT_SHA256}"',
+    ],
+    [
+      'if [ "${APPLE_ARTIFACT_VERIFIED:-false}" != true ]; then',
+      'if false; then',
+    ],
+  ];
+
+  for (const [from, to] of mutations) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/apple-platforms.yml");
+      const source = await readFile(path, "utf8");
+      assert.ok(source.includes(from), `fixture must contain ${from}`);
+      const mutated = source.replace(from, to);
+      assert.notEqual(mutated, source, "Mac Catalyst package mutation must apply");
+      await writeFile(path, mutated, "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /native platform|credential-bearing workflows|workflow directory/i,
       );
     });
   }
@@ -1812,6 +2136,18 @@ test("fails closed when build or release jobs reintroduce Simulator downloads", 
 
 test("fails closed when the credential-free screenshot harness checks drift", async (t) => {
   for (const [from, to] of [
+    [
+      '          if [ "$host_architecture" != "x86_64" ]; then\n',
+      '          if false; then # skipped x86_64 hosted-runner proof\n',
+    ],
+    [
+      "          expected_xcode=$'Xcode 26.6\\nBuild version 17F113'\n",
+      "          expected_xcode=\"$(xcodebuild -version)\" # skipped exact Xcode proof\n",
+    ],
+    [
+      '             [ "$visible_height" -lt 800 ]; then\n',
+      '             [ "$visible_height" -lt 1 ]; then # skipped logical-display capacity proof\n',
+    ],
     [
       "          QUAKESIGNAL_TEST_TEMP_ROOT: ${{ runner.temp }}\n",
       "          QUAKESIGNAL_TEST_TEMP_ROOT: /tmp # skipped runner-scoped test temp root\n",
@@ -2021,6 +2357,26 @@ test("fails closed when the credential-free screenshot harness checks drift", as
       "              debugLocalOverridePresent: false,\n",
       "              debugLocalOverridePresent: true,\n",
     ],
+    [
+      '          ios/ScreenshotAutomation/capture-maccatalyst-screenshot-set.sh "$artifact_dir"\n',
+      "          true # skipped exact Mac Catalyst hierarchy set capture\n",
+    ],
+    [
+      '                  response.fetch("captureApi") == "UIKit.UIView.drawHierarchy" &&\n',
+      '                  response.fetch("captureApi") == "ScreenCaptureKit.SCScreenshotManager" &&\n',
+    ],
+    [
+      '                  response.fetch("drawHierarchyComplete") == true &&\n',
+      '                  response.fetch("drawHierarchyComplete") == false &&\n',
+    ],
+    [
+      '                  response.fetch("postCaptureResizePerformed") == false &&\n',
+      '                  response.fetch("postCaptureResizePerformed") == true &&\n',
+    ],
+    [
+      '              abort "Catalyst capture request hash mismatch" unless\n',
+      '              true # skipped Catalyst request hash binding\n',
+    ],
   ]) {
     await withFixture(t, {}, async (root) => {
       const path = join(root, ".github/workflows/apple-platform-screenshots.yml");
@@ -2031,6 +2387,98 @@ test("fails closed when the credential-free screenshot harness checks drift", as
         verifyIOSReleaseContract({ root }),
         /native screenshot candidate workflow jobs must match the reviewed capture graph fingerprint/i,
       );
+    });
+  }
+});
+
+test("fails closed when hosted screenshot approval, run binding, or retention drifts", async (t) => {
+  for (const [from, to] of [
+    [
+      '              expected_workflow_path?(run.fetch("path"), ".github/workflows/apple-platform-screenshots.yml")\n',
+      '              true # skipped capture workflow path binding\n',
+    ],
+    [
+      "            --require-build8-screenshot-release-ready \\\n",
+      "            --require-build8-screenshot-release-ready=false \\\n",
+    ],
+    [
+      "          retention-days: 3\n",
+      "          retention-days: 30\n",
+    ],
+    [
+      "          merge-multiple: false\n",
+      "          merge-multiple: true\n",
+    ],
+    [
+      '            fail!("post-download artifact records changed") unless second_artifacts == expected_records\n',
+      '            fail!("post-download artifact records changed") unless true\n',
+    ],
+    [
+      '              ENV.fetch("GITHUB_REPOSITORY") == "TastyHeadphones/QuakeSignal"\n',
+      '              ENV.fetch("GITHUB_REPOSITORY") == "UntrustedFork/QuakeSignal"\n',
+    ],
+    [
+      '              abort "#{kind} approval reviewer is a placeholder" if placeholder\n',
+      '              abort "#{kind} approval reviewer is a placeholder" if false\n',
+    ],
+    [
+      '              [expected, "#{expected}@main"].include?(actual)\n',
+      '              actual.start_with?(expected) # unsafe workflow path normalization\n',
+    ],
+    [
+      "              run_ids.values.uniq.length == 4\n",
+      "              run_ids.values.uniq.length >= 3\n",
+    ],
+    [
+      "                approved_logins.include?(login)\n",
+      "                true # skipped protected-environment reviewer binding\n",
+    ],
+    [
+      '                attestation.fetch("distributionMode") == "testflight-upload"\n',
+      '                attestation.fetch("distributionMode") != "untrusted"\n',
+    ],
+    [
+      '              records.values.map { |_run, artifact| artifact.fetch("sha256") }.uniq.length == 4\n',
+      '              records.values.map { |_run, artifact| artifact.fetch("sha256") }.length >= 4\n',
+    ],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/apple-screenshot-release-ready.yml");
+      const source = await readFile(path, "utf8");
+      assert.ok(source.includes(from), `release-ready screenshot fixture must contain ${from.trim()}`);
+      await writeFile(path, source.replace(from, to), "utf8");
+      await assert.rejects(
+        verifyIOSReleaseContract({ root }),
+        /Apple screenshot release-ready workflow|hosted approval graph fingerprint|complete workflow directory/i,
+      );
+    });
+  }
+});
+
+test("fails closed when the Mac Catalyst capture runner or toolchain loses exact geometry capacity", async (t) => {
+  for (const [from, to, error] of [
+    [
+      "    runs-on: macos-26-intel\n",
+      "    runs-on: macos-latest\n",
+      /Mac Catalyst screenshot capture must run on macos-26-intel/i,
+    ],
+    [
+      "      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer\n",
+      "      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer\n",
+      /Mac Catalyst screenshot capture toolchain/i,
+    ],
+    [
+      "    runs-on: macos-26-intel\n    timeout-minutes: 90\n",
+      "    runs-on: macos-26-intel\n    timeout-minutes: 30\n",
+      /Mac Catalyst screenshot capture timeout must remain 90 minutes/i,
+    ],
+  ]) {
+    await withFixture(t, {}, async (root) => {
+      const path = join(root, ".github/workflows/apple-platform-screenshots.yml");
+      const contents = await readFile(path, "utf8");
+      assert.ok(contents.includes(from), `screenshot workflow fixture must contain ${from.trim()}`);
+      await writeFile(path, contents.replace(from, to), "utf8");
+      await assert.rejects(verifyIOSReleaseContract({ root }), error);
     });
   }
 });
@@ -2148,7 +2596,7 @@ test("fails closed when the normal lint runner's pinned Go toolchain is missing 
   const setupGo = `      - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: "1.24.13"
+          go-version: "1.25.0"
           cache: false
 
 `;
@@ -2158,7 +2606,7 @@ test("fails closed when the normal lint runner's pinned Go toolchain is missing 
         run: |
           set -euo pipefail
           go version
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 .github/workflows/*.yml
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
 
 `;
   const mutations = [
@@ -2177,7 +2625,7 @@ test("fails closed when the normal lint runner's pinned Go toolchain is missing 
     },
     {
       label: "drifted Go version",
-      mutate: (contents) => contents.replace('go-version: "1.24.13"', 'go-version: "1.25.0"'),
+      mutate: (contents) => contents.replace('go-version: "1.25.0"', 'go-version: "1.24.13"'),
       error: /workflow-lint pinned Go setup step\.with must be exactly/i,
     },
     {

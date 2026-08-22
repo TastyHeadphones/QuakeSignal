@@ -28,6 +28,7 @@ class ParseIOSScreenshotBuildSettingsTest < Minitest::Test
     assert_equal "#{fixture_root}/Build/Products/Debug-iphonesimulator",
                  parsed.fetch("targetBuildDirectory")
     assert_equal "arm64", parsed.fetch("architectures")
+    assert_equal "NO", parsed.fetch("onlyActiveArchitecture")
     assert_equal "NO", parsed.fetch("codeSigningRequired")
   end
 
@@ -43,6 +44,67 @@ class ParseIOSScreenshotBuildSettingsTest < Minitest::Test
       wrong = Marshal.load(Marshal.dump(block))
       wrong.fetch("buildSettings")["PRODUCT_BUNDLE_IDENTIFIER"] = "com.example.wrong"
       QuakeSignalIOSBuildSettings.parse(JSON.generate([wrong]))
+    end
+  end
+
+  def test_accepts_xcode_26_6_omitted_identity_only_when_signing_is_fully_disabled
+    settings = exact_settings
+    settings.delete("CODE_SIGN_IDENTITY")
+
+    parsed = QuakeSignalIOSBuildSettings.parse(build_settings_source(settings))
+
+    assert_equal "NO", parsed.fetch("codeSigningAllowed")
+    assert_equal "NO", parsed.fetch("codeSigningRequired")
+    assert_equal "", parsed.fetch("codeSignIdentity")
+  end
+
+  def test_rejects_omitted_identity_when_either_signing_guard_is_not_disabled
+    %w[CODE_SIGNING_ALLOWED CODE_SIGNING_REQUIRED].each do |unsafe_key|
+      settings = exact_settings
+      settings.delete("CODE_SIGN_IDENTITY")
+      settings[unsafe_key] = "YES"
+
+      assert_error(/omitted CODE_SIGN_IDENTITY requires CODE_SIGNING_ALLOWED=NO and CODE_SIGNING_REQUIRED=NO/) do
+        QuakeSignalIOSBuildSettings.parse(build_settings_source(settings))
+      end
+    end
+  end
+
+  def test_rejects_a_retained_nonempty_identity_even_when_signing_is_disabled
+    settings = exact_settings.merge("CODE_SIGN_IDENTITY" => "Apple Development")
+
+    assert_error(/codeSignIdentity is not the exact credential-free screenshot value/) do
+      QuakeSignalIOSBuildSettings.parse(build_settings_source(settings))
+    end
+  end
+
+  def test_rejects_missing_or_noncanonical_only_active_architecture
+    missing = exact_settings
+    missing.delete("ONLY_ACTIVE_ARCH")
+    assert_error(/target build settings are incomplete/) do
+      QuakeSignalIOSBuildSettings.parse(build_settings_source(missing))
+    end
+
+    %w[YES no FALSE 0].each do |value|
+      settings = exact_settings.merge("ONLY_ACTIVE_ARCH" => value)
+      assert_error(/onlyActiveArchitecture is not the exact deterministic screenshot value/) do
+        QuakeSignalIOSBuildSettings.parse(build_settings_source(settings))
+      end
+    end
+  end
+
+  def test_rejects_multiple_or_noncanonical_architectures
+    missing = exact_settings
+    missing.delete("ARCHS")
+    assert_error(/target build settings are incomplete/) do
+      QuakeSignalIOSBuildSettings.parse(build_settings_source(missing))
+    end
+
+    ["arm64 x86_64", "x86_64 arm64", "arm64, x86_64", "$(ARCHS_STANDARD)", "i386"].each do |value|
+      settings = exact_settings.merge("ARCHS" => value)
+      assert_error(/architectures is not one exact supported host architecture/) do
+        QuakeSignalIOSBuildSettings.parse(build_settings_source(settings))
+      end
     end
   end
 
@@ -65,7 +127,7 @@ class ParseIOSScreenshotBuildSettingsTest < Minitest::Test
       "SDK_NAME" => "iphonesimulator26.5",
       "SDKROOT" => "/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk",
       "ARCHS" => "arm64",
-      "ONLY_ACTIVE_ARCH" => "YES",
+      "ONLY_ACTIVE_ARCH" => "NO",
       "CODE_SIGNING_ALLOWED" => "NO",
       "CODE_SIGNING_REQUIRED" => "NO",
       "CODE_SIGN_IDENTITY" => "",
@@ -79,6 +141,16 @@ class ParseIOSScreenshotBuildSettingsTest < Minitest::Test
       "CLANG_MODULE_CACHE_PATH" => "#{root}/ModuleCache.noindex",
       "DSTROOT" => "#{root}/Dst",
     }
+  end
+
+  def build_settings_source(settings)
+    JSON.generate([
+      {
+        "target" => "QuakeSignal",
+        "action" => "build",
+        "buildSettings" => settings,
+      },
+    ])
   end
 
   def assert_error(pattern)

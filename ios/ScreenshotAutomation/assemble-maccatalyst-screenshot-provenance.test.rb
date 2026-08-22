@@ -22,7 +22,10 @@ class MacCatalystScreenshotProvenanceTest < Minitest::Test
       assert_nil aggregate.fetch("releaseBinaryEvidence")
       assert_equal 5, aggregate.fetch("frames").length
       assert_equal [2_560, 1_600], aggregate.fetch("frames").first.fetch("pixels")
-      assert_equal 2, aggregate.fetch("frames").first.fetch("backingScale")
+      assert_equal 1, aggregate.fetch("frames").first.fetch("sourceDisplayScale")
+      assert_equal 2, aggregate.fetch("frames").first.fetch("rasterizationScale")
+      assert_equal "maccatalyst-uikit-hierarchy", aggregate.fetch("captureEnvironment").fetch("kind")
+      assert_equal "UIKit.UIView.drawHierarchy", aggregate.fetch("frames").first.fetch("nativeCapture").fetch("captureApi")
       assert_equal "accepted", aggregate.fetch("frames").first.fetch("semanticValidation").fetch("status")
       assert_equal false, aggregate.fetch("frames").first.fetch("semanticValidation").fetch("retryPerformed")
       assert output.file?
@@ -32,7 +35,7 @@ class MacCatalystScreenshotProvenanceTest < Minitest::Test
   def test_rejects_tampered_hash_window_or_approval
     with_capture_fixture do |capture_root, output|
       capture_root.join("raw-window-captures/maccatalyst-home.png").binwrite("tampered")
-      assert_rejected(capture_root, output, /actual SHA-256/)
+      assert_rejected(capture_root, output, /actual SHA-256|native raw image binding/)
     end
     with_capture_fixture do |capture_root, output|
       mutate_frame_evidence(capture_root, "maccatalyst-map") do |evidence|
@@ -51,6 +54,36 @@ class MacCatalystScreenshotProvenanceTest < Minitest::Test
         evidence.fetch("nativeCapture")["postCaptureResizePerformed"] = true
       end
       assert_rejected(capture_root, output, /native-capture postCaptureResizePerformed binding|native capture resize/)
+    end
+    with_capture_fixture do |capture_root, output|
+      mutate_frame_evidence(capture_root, "maccatalyst-home") do |evidence|
+        evidence.fetch("nativeCapture")["drawHierarchyComplete"] = false
+      end
+      assert_rejected(capture_root, output, /drawHierarchyComplete binding|drawHierarchy completion/)
+    end
+    with_capture_fixture do |capture_root, output|
+      mutate_frame_evidence(capture_root, "maccatalyst-home") do |evidence|
+        evidence.fetch("captureRequest")["nonce"] = "f" * 64
+      end
+      assert_rejected(capture_root, output, /capture-request nonce binding|request\/response nonce/)
+    end
+    with_capture_fixture do |capture_root, output|
+      mutate_frame_evidence(capture_root, "maccatalyst-home") do |evidence|
+        evidence.fetch("nativeCapture")["rasterizationScale"] = 1
+      end
+      assert_rejected(capture_root, output, /rasterizationScale binding|rasterization scale/)
+    end
+    with_capture_fixture do |capture_root, output|
+      mutate_frame_evidence(capture_root, "maccatalyst-home") do |evidence|
+        evidence.fetch("nativeCapture")["sourceDisplayScale"] = 2
+      end
+      assert_rejected(capture_root, output, /sourceDisplayScale binding|sourceDisplayScale/)
+    end
+    with_capture_fixture do |capture_root, output|
+      mutate_geometry(capture_root, "maccatalyst-home") do |record|
+        record.fetch("logicalFrame")["width"] = 1_279
+      end
+      assert_rejected(capture_root, output, /geometry width/)
     end
   end
 
@@ -265,7 +298,7 @@ class MacCatalystScreenshotProvenanceTest < Minitest::Test
           "processId" => process_id,
           "captureSelector" => selector,
           "logicalFrame" => logical_frame,
-          "backingScale" => 2,
+          "sourceDisplayScale" => 1,
           "recordedAtUtc" => timestamp,
         }
         geometry_path = capture_root.join("geometry-evidence/#{selector}.json")
@@ -322,18 +355,47 @@ class MacCatalystScreenshotProvenanceTest < Minitest::Test
         semantic_path = capture_root.join("semantic-evidence/#{selector}.json")
         write_json(semantic_path, semantic_record)
 
-        native_capture_record = {
+        capture_request_record = {
           "schemaVersion" => 1,
-          "captureApi" => "ScreenCaptureKit.SCScreenshotManager",
           "processId" => process_id,
           "windowId" => window_id,
-          "logicalFrame" => logical_frame,
+          "captureSelector" => selector,
+          "nonce" => ("%064x" % (index + 1)),
+          "logicalViewPoints" => [1_280, 800],
+          "rasterizationScale" => 2,
+        }
+        capture_request_path = capture_root.join("capture-request-evidence/#{selector}.json")
+        write_json(capture_request_path, capture_request_record)
+
+        native_capture_record = {
+          "schemaVersion" => 1,
+          "status" => "captured",
+          "reason" => nil,
+          "captureApi" => "UIKit.UIView.drawHierarchy",
+          "captureSurface" => "live-catalyst-uiwindow-hierarchy",
+          "processId" => process_id,
+          "windowId" => window_id,
+          "captureSelector" => selector,
+          "nonce" => capture_request_record.fetch("nonce"),
+          "sourceDisplayScale" => 1,
+          "rasterizationScale" => 2,
+          "logicalViewPoints" => [1_280, 800],
           "pixels" => [2_560, 1_600],
-          "captureResolution" => "best",
-          "scalesToFit" => false,
+          "afterScreenUpdates" => true,
+          "drawHierarchyComplete" => true,
           "postCaptureResizePerformed" => false,
-          "showsCursor" => false,
-          "ignoreShadowsSingleWindow" => true,
+          "rendererOpaque" => false,
+          "rendererPreferredRange" => "standard",
+          "windowBounds" => { "x" => 0, "y" => 0, "width" => 1_280, "height" => 800 },
+          "systemFrameBefore" => logical_frame,
+          "systemFrameAfter" => logical_frame,
+          "windowIsKey" => true,
+          "windowIsHidden" => false,
+          "windowAlpha" => 1,
+          "sceneActivationState" => "foregroundActive",
+          "rawOutputFile" => "capture-raw.png",
+          "rawSha256" => Digest::SHA256.file(raw_path).hexdigest,
+          "capturedAtUtc" => timestamp,
         }
         native_capture_path = capture_root.join("native-capture-evidence/#{selector}.json")
         write_json(native_capture_path, native_capture_record)
@@ -396,11 +458,14 @@ class MacCatalystScreenshotProvenanceTest < Minitest::Test
             "retryPerformed" => false,
             "firstRejection" => nil
           ),
+          "captureRequest" => capture_request_record.merge(
+            file_record(capture_request_path, "capture-request-evidence/#{selector}.json")
+          ),
           "nativeCapture" => native_capture_record.merge(
             file_record(native_capture_path, "native-capture-evidence/#{selector}.json")
           ),
           "window" => window_record.merge(
-            "backingScale" => 2,
+            "sourceDisplayScale" => 1,
             "beforeObservationFile" => before_record.fetch("file"),
             "beforeObservationSha256" => before_record.fetch("sha256"),
             "afterObservationFile" => after_record.fetch("file"),
@@ -438,6 +503,16 @@ class MacCatalystScreenshotProvenanceTest < Minitest::Test
     write_json(path, record)
     mutate_frame_evidence(capture_root, selector) do |evidence|
       evidence.fetch("transformation")["sha256"] = Digest::SHA256.file(path).hexdigest
+    end
+  end
+
+  def mutate_geometry(capture_root, selector)
+    path = capture_root.join("geometry-evidence/#{selector}.json")
+    record = JSON.parse(path.read)
+    yield record
+    write_json(path, record)
+    mutate_frame_evidence(capture_root, selector) do |evidence|
+      evidence.fetch("geometryEvidence")["sha256"] = Digest::SHA256.file(path).hexdigest
     end
   end
 

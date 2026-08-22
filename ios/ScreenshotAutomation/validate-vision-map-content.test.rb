@@ -67,7 +67,7 @@ Dir.mktmpdir("quakesignal-vision-validator-test.") do |directory|
     shade = ((x / 8) + (y / 8)).even? ? 24 : 232
     [shade, shade, shade]
   end
-  (REVIEWED_FRAMES - ["visionos-map"]).each do |frame|
+  (REVIEWED_FRAMES - ["visionos-map", "visionos-guide"]).each do |frame|
     stdout, stderr, status = run_validator(valid_app_panel_path, frame: frame)
     assert(status.success?, "structured app-panel fixture should pass #{frame}: #{stderr}")
     assert(
@@ -75,6 +75,140 @@ Dir.mktmpdir("quakesignal-vision-validator-test.") do |directory|
       "validator should report accepted metrics for #{frame}",
     )
   end
+
+  # Model the reviewed opaque Guide window: a broad, slowly changing neutral
+  # surface supplies readable contrast and color-bin diversity while four
+  # sparse text-detail samples keep the edge fraction below the generic 1%
+  # route floor. This exercises the Guide-only structural contract instead of
+  # weakening readiness for every Vision route.
+  reviewed_guide_path = File.join(directory, "reviewed-guide.bmp")
+  reviewed_guide_details = {
+    [140, 87] => 15,
+    [180, 111] => 240,
+    [220, 135] => 15,
+    [260, 159] => 240,
+  }.freeze
+  channel_offsets = [-12, 0, 12].freeze
+  build_bitmap(reviewed_guide_path) do |x, y|
+    detail_shade = reviewed_guide_details[[x, y]]
+    if detail_shade
+      [detail_shade, detail_shade, detail_shade]
+    else
+      shade = 75 + ((x + y - 187) * 127 / 260)
+      shade = [[shade, 75].max, 202].min
+      red = shade + channel_offsets[(x / 16) % channel_offsets.length]
+      green = shade + channel_offsets[(y / 16) % channel_offsets.length]
+      blue = shade + channel_offsets[((x + y) / 16) % channel_offsets.length]
+      [red, green, blue]
+    end
+  end
+  stdout, stderr, status = run_validator(
+    reviewed_guide_path,
+    frame: "visionos-guide",
+  )
+  assert(status.success?, "reviewed low-edge Guide structure should pass: #{stderr}")
+  assert(
+    stdout.include?("Validated Vision frame semantic pixels for visionos-guide"),
+    "validator should report accepted Guide metrics",
+  )
+
+  low_edge_guide_path = File.join(directory, "low-edge-guide.bmp")
+  low_edge_guide_details = {
+    [180, 111] => 240,
+    [220, 135] => 15,
+  }.freeze
+  build_bitmap(low_edge_guide_path) do |x, y|
+    detail_shade = low_edge_guide_details[[x, y]]
+    if detail_shade
+      [detail_shade, detail_shade, detail_shade]
+    else
+      shade = 75 + ((x + y - 187) * 127 / 260)
+      shade = [[shade, 75].max, 202].min
+      red = shade + channel_offsets[(x / 16) % channel_offsets.length]
+      green = shade + channel_offsets[(y / 16) % channel_offsets.length]
+      blue = shade + channel_offsets[((x + y) / 16) % channel_offsets.length]
+      [red, green, blue]
+    end
+  end
+  _stdout, stderr, status = run_validator(
+    low_edge_guide_path,
+    frame: "visionos-guide",
+  )
+  assert(!status.success?, "Guide-like gradient without enough text edges must fail")
+  assert(status.exitstatus == 65, "low-edge Guide rejection must use status 65")
+
+  high_edge_guide_path = File.join(directory, "high-edge-guide.bmp")
+  high_edge_guide_details = reviewed_guide_details.merge(
+    [132, 79] => 15,
+    [156, 99] => 240,
+    [204, 123] => 15,
+    [244, 147] => 240,
+  ).freeze
+  build_bitmap(high_edge_guide_path) do |x, y|
+    detail_shade = high_edge_guide_details[[x, y]]
+    if detail_shade
+      [detail_shade, detail_shade, detail_shade]
+    else
+      shade = 75 + ((x + y - 187) * 127 / 260)
+      shade = [[shade, 75].max, 202].min
+      red = shade + channel_offsets[(x / 16) % channel_offsets.length]
+      green = shade + channel_offsets[(y / 16) % channel_offsets.length]
+      blue = shade + channel_offsets[((x + y) / 16) % channel_offsets.length]
+      [red, green, blue]
+    end
+  end
+  _stdout, stderr, status = run_validator(
+    high_edge_guide_path,
+    frame: "visionos-guide",
+  )
+  assert(!status.success?, "unreviewed high-edge layout must fail the Guide envelope")
+  assert(status.exitstatus == 65, "high-edge Guide rejection must use status 65")
+
+  _stdout, stderr, status = run_validator(
+    reviewed_guide_path,
+    frame: "visionos-home",
+  )
+  assert(!status.success?, "Guide exception must not weaken the generic Home edge floor")
+  assert(status.exitstatus == 65, "Guide-as-Home rejection must use status 65")
+  assert(stderr.include?("refusing blank launch placeholder"), "Guide-as-Home rejection should be explicit")
+
+  _stdout, stderr, status = run_validator(
+    valid_app_panel_path,
+    frame: "visionos-guide",
+  )
+  assert(!status.success?, "generic high-edge app panel must not impersonate the reviewed Guide")
+  assert(status.exitstatus == 65, "wrong-route Guide rejection must use status 65")
+  assert(stderr.include?("Vision Guide lacks reviewed list-and-text pixel structure"), "Guide rejection should identify its route contract")
+
+  # A bright system sheet with dark text bars has substantial variance and
+  # edges, but its low color-bin inventory is not the reviewed Guide surface.
+  system_dialog_path = File.join(directory, "system-dialog.bmp")
+  build_bitmap(system_dialog_path) do |x, y|
+    if x.between?(90, 310) && y.between?(45, 195)
+      if y.between?(88, 95) || y.between?(112, 119) || y.between?(150, 157)
+        [35, 35, 35]
+      else
+        [240, 240, 240]
+      end
+    else
+      [145, 145, 145]
+    end
+  end
+  _stdout, stderr, status = run_validator(
+    system_dialog_path,
+    frame: "visionos-guide",
+  )
+  assert(!status.success?, "system dialog structure must not impersonate the reviewed Guide")
+  assert(status.exitstatus == 65, "system-dialog Guide rejection must use status 65")
+  assert(stderr.include?("Vision Guide lacks reviewed list-and-text pixel structure"), "system-dialog rejection should identify the Guide contract")
+
+  _stdout, stderr, status = run_validator(
+    valid_map_path,
+    frame: "visionos-guide",
+  )
+  assert(!status.success?, "chromatic Map pixels must not impersonate the reviewed Guide")
+  assert(status.exitstatus == 65, "Map-as-Guide rejection must use status 65")
+  assert(stderr.include?("Vision Guide lacks reviewed list-and-text pixel structure"), "Map-as-Guide rejection should identify the Guide contract")
 
   smooth_high_variance_path = File.join(directory, "smooth-high-variance.bmp")
   build_bitmap(smooth_high_variance_path) do |x, _y|

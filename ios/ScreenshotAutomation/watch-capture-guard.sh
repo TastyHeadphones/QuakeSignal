@@ -170,6 +170,10 @@ quakesignal_launch_exact_watch_frame() {
     fi
 
     echo "Watch exact-frame launch attempt ${launch_attempt}/${launch_max_attempts} failed with status $launch_status" >&2
+    if [ "$launch_status" -ne 4 ]; then
+      echo "error: exact-frame Watch launch failed with nontransient status $launch_status" >&2
+      return 70
+    fi
     if [ "$launch_attempt" -ge "$launch_max_attempts" ]; then
       echo "error: could not launch the exact Watch frame after $launch_max_attempts attempts" >&2
       return 70
@@ -234,6 +238,9 @@ quakesignal_capture_watch_screenshot() {
   local started_at_seconds="$SECONDS"
   local elapsed_seconds=0
   local next_reactivation_seconds="$reactivation_interval_seconds"
+  local reactivation_attempt=0
+  local reactivation_backoff_seconds=5
+  local reactivation_recovery_required=0
   local reactivation_status=0
   local screenshot_status=0
   local spawned_pid=""
@@ -272,10 +279,22 @@ quakesignal_capture_watch_screenshot() {
       fi
       watch_reactivation_pid=""
       if [ "$reactivation_status" -ne 0 ]; then
-        quakesignal_stop_processes "$screenshot_pid"
-        screenshot_pid=""
-        echo "error: deterministic Watch foreground restart failed with status $reactivation_status" >&2
-        return 70
+        if [ "$reactivation_status" -eq 4 ] && \
+            [ "$reactivation_attempt" -eq 1 ] && \
+            [ "$reactivation_recovery_required" -eq 0 ]; then
+          reactivation_recovery_required=1
+          next_reactivation_seconds=$((elapsed_seconds + reactivation_backoff_seconds))
+          echo "Watch foreground restart hit transient FBS status 4; retrying once after ${reactivation_backoff_seconds}s" >&2
+        else
+          quakesignal_stop_processes "$screenshot_pid"
+          screenshot_pid=""
+          echo "error: deterministic Watch foreground restart failed with status $reactivation_status" >&2
+          return 70
+        fi
+      else
+        reactivation_attempt=0
+        reactivation_recovery_required=0
+        next_reactivation_seconds=$((elapsed_seconds + reactivation_interval_seconds))
       fi
     fi
 
@@ -285,7 +304,13 @@ quakesignal_capture_watch_screenshot() {
 
     if [ -z "$watch_reactivation_pid" ] && \
         [ "$elapsed_seconds" -ge "$next_reactivation_seconds" ]; then
-      echo "Watch screenshot still pending after ${elapsed_seconds}s; restarting QuakeSignal in foreground"
+      if [ "$reactivation_recovery_required" -eq 1 ]; then
+        reactivation_attempt=2
+        echo "Watch screenshot still pending after ${elapsed_seconds}s; retrying QuakeSignal foreground restart (2/2)"
+      else
+        reactivation_attempt=1
+        echo "Watch screenshot still pending after ${elapsed_seconds}s; restarting QuakeSignal in foreground (1/2)"
+      fi
       # Spawn the external command directly. Backgrounding a shell function
       # here would make $! identify a wrapper and could orphan its xcrun child.
       quakesignal_defer_tracked_spawn_signals
@@ -304,16 +329,30 @@ quakesignal_capture_watch_screenshot() {
       fi
       watch_reactivation_pid="$spawned_pid"
       quakesignal_restore_tracked_spawn_signals
-      next_reactivation_seconds=$((elapsed_seconds + reactivation_interval_seconds))
     fi
   done
 
+  local finishing_reactivation_pid="$watch_reactivation_pid"
+  local finishing_reactivation_was_live=0
+  if [ -n "$finishing_reactivation_pid" ] && \
+      kill -0 "$finishing_reactivation_pid" >/dev/null 2>&1; then
+    finishing_reactivation_was_live=1
+  fi
   if quakesignal_stop_process_with_status "$watch_reactivation_pid"; then
     reactivation_status=0
   else
     reactivation_status=$?
   fi
   watch_reactivation_pid=""
+  if [ "$reactivation_recovery_required" -eq 1 ] && \
+      [ "$reactivation_status" -eq 0 ]; then
+    if [ -n "$finishing_reactivation_pid" ] && \
+        [ "$finishing_reactivation_was_live" -eq 0 ]; then
+      reactivation_recovery_required=0
+    else
+      reactivation_status=4
+    fi
+  fi
   if wait "$screenshot_pid"; then
     screenshot_status=0
   else

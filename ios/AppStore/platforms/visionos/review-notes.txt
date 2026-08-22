@@ -5,9 +5,12 @@ For a permission-free route, skip location access during onboarding and choose
 a listed city. Home, Reports, Map, Guide, and Settings remain reviewable.
 Location is optional. This target does not request notification permission.
 
-Apple's current visionOS provisioning-capability table does not include Push
-Notifications or Time Sensitive Notifications. The Release target therefore
-has no APNs, App Attest, Time Sensitive, Critical Alerts, or background
+Apple's current visionOS provisioning-capability table lists App Attest, but
+does not include Push Notifications or Time Sensitive Notifications.
+QuakeSignal's protected alert registration requires both App Attest and APNs;
+because APNs is unavailable on this target, the Release app does not start that
+registration path. It obtains no APNs token, does not invoke App Attest for
+alert registration, and has no Time Sensitive, Critical Alerts, or background
 emergency-alert path. While the app is open, a qualifying JMA-issued update can
 be presented in the app and play the selected local alert sound. Closing or
 backgrounding the app stops that foreground monitoring. Simulator screenshots

@@ -2,29 +2,46 @@ import AudioToolbox
 import AVFAudio
 import Foundation
 
-/// Plays the same user-selected sound used by APNs when a warning arrives
-/// while QuakeSignal is already in the foreground. APNs handles suspended and
-/// terminated delivery. The `.ambient` audio session intentionally respects
-/// Silent Mode, Focus, and the person's volume; this is not a Critical Alert.
+/// Mirrors the user-selected custom APNs sound when a warning arrives while
+/// QuakeSignal is already in the foreground. The System Default choice uses a
+/// short platform system alert because Apple's default notification sound is
+/// not exposed as a playable file. APNs handles suspended and terminated
+/// delivery. The `.ambient` audio session intentionally respects Silent Mode,
+/// Focus, and the person's volume; this is not a Critical Alert.
 @MainActor
 final class EmergencyAlertAudio {
     static let shared = EmergencyAlertAudio()
 
+    private enum PlaybackOwner {
+        case preview
+        case emergency
+    }
+
     private var player: AVAudioPlayer?
     private var playbackCompletionTask: Task<Void, Never>?
-    private var recentPlaybackKeys: [String: Date] = [:]
+    private var playbackOwner: PlaybackOwner?
+    private var recentPlaybackKeys: [ForegroundEmergencyRevisionKey: Date] = [:]
     private let duplicateWindow: TimeInterval = 15
 
     private init() {}
 
     func preview(_ preference: AlertSoundPreference) {
-        play(preference, deduplicationKey: nil)
+        play(preference, deduplicationKey: nil, owner: .preview)
     }
 
     func playSelectedSound(for event: EEWEvent, reason: AlertPresentationReason) {
-        guard event.isActiveWarning else { return }
-        let key = "\(event.id)#\(event.serial)#\(reason.rawValue)"
-        play(AppSettings.shared.alertSound, deduplicationKey: key)
+        guard ForegroundEmergencyAudioPolicy.shouldPlay(event: event, reason: reason) else {
+            return
+        }
+        let key = ForegroundEmergencyRevisionOwnershipPolicy.key(for: event)
+        play(AppSettings.shared.alertSound, deduplicationKey: key, owner: .emergency)
+    }
+
+    /// Navigation owns previews, but not a warning that may have replaced one
+    /// while the preview screen was disappearing.
+    func stopPreview() {
+        guard playbackOwner == .preview else { return }
+        stop()
     }
 
     /// Scene deactivation ends any app-owned playback immediately. APNs owns
@@ -35,6 +52,7 @@ final class EmergencyAlertAudio {
         playbackCompletionTask = nil
         player?.stop()
         player = nil
+        playbackOwner = nil
         try? AVAudioSession.sharedInstance().setActive(
             false,
             options: .notifyOthersOnDeactivation
@@ -43,7 +61,8 @@ final class EmergencyAlertAudio {
 
     private func play(
         _ preference: AlertSoundPreference,
-        deduplicationKey: String?
+        deduplicationKey: ForegroundEmergencyRevisionKey?,
+        owner: PlaybackOwner
     ) {
         let now = Date()
         recentPlaybackKeys = recentPlaybackKeys.filter {
@@ -81,6 +100,7 @@ final class EmergencyAlertAudio {
                 return
             }
             player = nextPlayer
+            playbackOwner = owner
             let duration = max(nextPlayer.duration, 0)
             playbackCompletionTask = Task { @MainActor [weak self] in
                 do {
@@ -99,6 +119,7 @@ final class EmergencyAlertAudio {
     private func finishCompletedPlayback() {
         playbackCompletionTask = nil
         player = nil
+        playbackOwner = nil
         try? AVAudioSession.sharedInstance().setActive(
             false,
             options: .notifyOthersOnDeactivation

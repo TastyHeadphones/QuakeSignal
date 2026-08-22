@@ -10,7 +10,7 @@ public release.
 | Apple Watch companion | `QuakeSignalWatch` | `com.quakesignal.app.watchkitapp` | Embedded in the `QuakeSignal` iOS IPA |
 | Apple TV | `QuakeSignalTV` | `com.quakesignal.app` | `.github/workflows/apple-platforms.yml`, select `tvos` |
 | Apple Vision Pro | `QuakeSignalVision` | `com.quakesignal.app` | `.github/workflows/apple-platforms.yml`, select `visionos` |
-| Mac Catalyst | `QuakeSignal` | `com.quakesignal.app` | Xcode Cloud macOS → Mac Catalyst Archive action |
+| Mac Catalyst | `QuakeSignal` | `com.quakesignal.app` | `.github/workflows/apple-platforms.yml`, select `maccatalyst` |
 
 The native TV, Vision, and Mac Catalyst uploads use the existing shared App
 Store Connect record (Apple ID `6800642443`) and matching bundle ID. Watch
@@ -20,8 +20,8 @@ separate Tauri product (`com.quakesignal.desktop`, Apple ID `6800642853`) and
 not the iPhone/iPad binary offered as Designed for iPad on Mac. Leave the
 separate Tauri record and its historical evidence unchanged.
 Use [`platforms/`](./platforms/) for reviewed copy and screenshot plans. The
-read-only portal contradictions and non-destructive action order are recorded in
-[`app-store-connect-portal-audit-2026-08-20.md`](./app-store-connect-portal-audit-2026-08-20.md).
+current saved portal state, remaining contradictions, and non-destructive action order are recorded in
+[`app-store-connect-portal-audit-2026-08-22.md`](./app-store-connect-portal-audit-2026-08-22.md).
 
 ## Version contract
 
@@ -31,7 +31,10 @@ workflow defaults, and Worker App Attest allow-list must agree before any
 signing secret is materialized. Never reuse build `7` after adding the embedded
 Watch product.
 
-Run the offline contract before requesting a protected archive:
+The hosted `workflow-lint` and protected archive jobs run this offline contract
+before any build or signing step. The commands below document that job-internal
+gate; they are not a supported local release path and must not be run locally
+for build 8:
 
 ```sh
 node --test .github/scripts/verify-ios-release-contract.test.mjs
@@ -39,6 +42,14 @@ node .github/scripts/verify-ios-release-contract.mjs --build-number 8
 ```
 
 ## Xcode Cloud protected native release workflow
+
+Action-time portal inspection on 2026-08-22 shows no configured QuakeSignal
+workflow or build history; App Store Connect remains on the initial screen that
+requires creating the first workflow in Xcode. Under this release's no-local-
+Xcode/build constraint, the workflow described below is a future configuration
+specification, not an available lane. Use the protected GitHub workflows in
+this runbook for build 8 unless an initial Xcode Cloud workflow is created by an
+authorized release owner outside this run.
 
 Configure exactly one Xcode Cloud workflow named
 `QuakeSignal 1.1 (8) Native Release`. A single workflow is required because
@@ -197,10 +208,11 @@ the Cloud workflow; absent values intentionally leave each conditional
 identifiers.
 
 The existing protected GitHub environment `ios-app-store-release` is a
-separate manual-signing fallback for iOS/Watch, tvOS, and visionOS. It must
-contain all selected inputs before those workflows are dispatched. The GitHub
-fallback does not sign or upload Mac Catalyst; `.github/workflows/ios.yml`
-only gives Catalyst a credential-free Release compilation gate.
+separate manual-signing fallback for iOS/Watch, tvOS, visionOS, and Mac
+Catalyst. It must contain all selected inputs before those workflows are
+dispatched. Ordinary `.github/workflows/ios.yml` CI still gives Catalyst a
+credential-free Release compilation gate; only an explicitly approved
+`apple-platforms.yml` dispatch may materialize its signing credentials.
 
 Shared certificate and upload configuration:
 
@@ -222,13 +234,42 @@ Target profiles:
   `TVOS_APP_STORE_PROFILE_NAME`
 - Secret `VISIONOS_APP_STORE_PROVISIONING_PROFILE` and variable
   `VISIONOS_APP_STORE_PROFILE_NAME`
+- Secret `MACCATALYST_APP_STORE_PROVISIONING_PROFILE` and variable
+  `MACCATALYST_APP_STORE_PROFILE_NAME`
+- Secrets `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE` and
+  `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD` for the base64-encoded
+  Mac Installer Distribution `.p12`
+- Variable `MACCATALYST_APP_STORE_INSTALLER_IDENTITY`, the exact imported
+  `Mac Installer Distribution: … (5TT564H883)` or legacy
+  `3rd Party Mac Developer Installer: … (5TT564H883)` identity
+
+Apple Developer portal state recorded on 2026-08-22:
+
+- `QuakeSignal App Store Release` — iOS host
+- `QuakeSignal Watch App Store Release` — embedded Watch app
+- `QuakeSignal tvOS App Store Release` — tvOS app
+- `QuakeSignal visionOS App Store Release` — visionOS app
+- `QuakeSignal Mac Catalyst App Store Release` — Mac Catalyst app
+
+All five profiles authorize the intended QuakeSignal identifiers, use the
+current UniSphereco LLC Distribution certificate, and expire on 2027-08-12.
+The four newly generated profiles were downloaded from the portal. This portal
+state does not prove that their base64 contents or exact names have been added
+to the protected GitHub environment; keep that environment-configuration gate
+open until a protected workflow confirms each selected profile.
 
 The Watch profile must authorize `com.quakesignal.app.watchkitapp`; the host,
 TV, Vision, and Catalyst profiles authorize `com.quakesignal.app` for their
 respective platforms. Xcode Cloud resolves those profiles automatically; the
 manual profile names above apply only to the GitHub fallback. The signed
 verifier checks team, application ID, platform, build number,
-certificate/profile coherence, and the exact signed capability policy. iOS
+certificate/profile coherence, and the exact signed capability policy. The
+Catalyst fallback additionally requires a Mac App Store provisioning profile
+whose leaf certificate matches the imported Apple Distribution identity. Its
+exported `.pkg` must have a trusted, exact-team installer signature; a safe
+single-app payload without installer scripts or symlinks; readable/searchable
+BOM permissions; and the same verified inner-app metadata, profile, signature,
+resources, and entitlements as the archive. iOS
 alone requires the reviewed production APS, App Attest, and Time Sensitive
 Notification entitlements. Mac Catalyst, TV, Vision, and Watch are
 foreground-only and must not claim them. This Vision split follows Apple's
@@ -254,27 +295,78 @@ policy lock. Do not dispatch these commands until the Worker build-8 policy and
 profiles are approved:
 
 ```sh
+QUAKESIGNAL_REPOSITORY=TastyHeadphones/QuakeSignal
+QUAKESIGNAL_SOURCE_COMMIT="$(
+  gh api "repos/$QUAKESIGNAL_REPOSITORY/commits/main" --jq .sha
+)"
+test "${#QUAKESIGNAL_SOURCE_COMMIT}" -eq 40
+case "$QUAKESIGNAL_SOURCE_COMMIT" in
+  *[!0-9a-f]*) echo "main is not a full lowercase Git SHA" >&2; exit 1 ;;
+esac
+
 gh workflow run ios.yml --ref main \
+  --repo "$QUAKESIGNAL_REPOSITORY" \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=8
+  -f build_number=8 \
+  -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 
 gh workflow run apple-platforms.yml --ref main \
+  --repo "$QUAKESIGNAL_REPOSITORY" \
   -f platform=tvos \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=8
+  -f build_number=8 \
+  -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 
 gh workflow run apple-platforms.yml --ref main \
+  --repo "$QUAKESIGNAL_REPOSITORY" \
   -f platform=visionos \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=8
+  -f build_number=8 \
+  -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
+
+gh workflow run apple-platforms.yml --ref main \
+  --repo "$QUAKESIGNAL_REPOSITORY" \
+  -f platform=maccatalyst \
+  -f archive_only=true \
+  -f upload_to_testflight=false \
+  -f build_number=8 \
+  -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 ```
 
-After the signed archives, platform QA, metadata, screenshots, and legal gates
-pass, repeat each run with `archive_only=false` and
-`upload_to_testflight=true`. Archive-only runs never contact App Store Connect.
+The four archive-only dispatches are optional signing rehearsals. Once the exact
+source, Worker build-8 policy, distribution profiles/certificates/API-key
+configuration, and store-complete icon catalogs pass their gates, repeat the
+four commands with `archive_only=false` and `upload_to_testflight=true`.
+Do this before TestFlight/physical-platform QA and signed screenshot comparison:
+the protected upload creates the builds those checks need. It does **not** select
+or attach a build to version `1.1`, add anything to App Review, submit a version,
+or choose a release mode. Those actions remain blocked on the later QA,
+screenshot, metadata, privacy, legal, and approval gates.
+
+Archive-only runs never contact App Store Connect and are not accepted by the
+screenshot finalizer as signed release evidence.
+Each protected lane exports and verifies exactly one regular, non-symlink
+artifact and records its SHA-256 digest. Because this repository is public, the
+workflows never upload the signed iOS, tvOS, or visionOS `.ipa` files or the
+Catalyst `.pkg` as GitHub Actions artifacts. An archive-only run therefore
+retains a 30-day machine-readable attestation and digest, not the binary. With explicit upload
+consent, the lane rehashes, validates, and directly uploads the same binary
+with shared Apple ID
+`6800642443`, `com.quakesignal.app` bundle ID, marketing version `1.1`, and the
+selected build number. The iOS/Watch host uses `ios`, Catalyst uses `macos`, and
+the tvOS and visionOS lanes use `appletvos` and `visionos`, respectively.
+A successful upload starts Apple's asynchronous processing; it is not evidence
+that the build is processed, selectable, attached to version `1.1`, or
+submitted for review.
+Only the four successful upload runs (one combined iOS/iPadOS+embedded-Watch
+run, plus tvOS, visionOS, and Mac Catalyst) are eligible for the finalizer. Each
+attestation binds its immutable protected-main head SHA, run ID/attempt,
+workflow, product version/build, platform set, artifact kind/hash, and upload
+mode. Preserve the four canonical run URLs/IDs; iOS/iPadOS and watchOS must use
+the same combined run and IPA evidence.
 
 ## Distribution blockers outside workflow automation
 
@@ -292,21 +384,331 @@ pass, repeat each run with `archive_only=false` and
   five unapproved `2560 × 1600` frames from a `1280 × 800` point window at 2×,
   using the exact `maccatalyst-*`
   selectors. Existing Tauri screenshots cannot serve as Catalyst evidence.
-- Preserve every existing screenshot tree as historical evidence. Final images
-  are one indivisible 26-frame package under
-  `screenshot-release-sets-v1.1-build8/<source-commit>/`, addressed by
-  `screenshot-set-index-v1.1-build8.json`. Ordinary listing CI may leave its
-  `activeReleaseSet` null. The protected handoff must run:
+- Preserve every existing screenshot tree as historical evidence. Dispatch
+  `apple-platform-screenshots.yml` once at the exact protected-main source and
+  use its successful run ID only if it contains the exact five expected
+  candidate artifacts. After named visual, privacy, and signed-parity review,
+  dispatch `apple-screenshot-release-ready.yml` with that run ID, the full
+  source SHA, four exact successful upload-run IDs, and the three real review
+  completion times. It creates one
+  indivisible 26-frame package in an external hosted evidence root while the
+  checked-in `screenshot-set-index-v1.1-build8.json` remains pending. The
+  protected handoff must run:
+
+  ```bash
+  set -euo pipefail
+  QUAKESIGNAL_REPOSITORY=TastyHeadphones/QuakeSignal
+  QUAKESIGNAL_CAPTURE_DISPATCH_OUTPUT="$(
+    gh workflow run apple-platform-screenshots.yml \
+      --repo "$QUAKESIGNAL_REPOSITORY" \
+      --ref main 2>&1
+  )"
+  printf '%s\n' "$QUAKESIGNAL_CAPTURE_DISPATCH_OUTPUT"
+  QUAKESIGNAL_CAPTURE_RUN_URL="$(
+    printf '%s\n' "$QUAKESIGNAL_CAPTURE_DISPATCH_OUTPUT" |
+      /usr/bin/sed -nE \
+        's#^.*(https://github\.com/TastyHeadphones/QuakeSignal/actions/runs/[1-9][0-9]*).*$#\1#p'
+  )"
+  QUAKESIGNAL_CAPTURE_RUN_ID="$(
+    printf '%s\n' "${QUAKESIGNAL_CAPTURE_RUN_URL##*/}"
+  )"
+  case "$QUAKESIGNAL_CAPTURE_RUN_ID" in
+    ""|0|*[!0-9]*) echo "capture dispatch did not return one positive run ID" >&2; exit 1 ;;
+  esac
+  test "$QUAKESIGNAL_CAPTURE_RUN_URL" = \
+    "https://github.com/$QUAKESIGNAL_REPOSITORY/actions/runs/$QUAKESIGNAL_CAPTURE_RUN_ID"
+
+  gh run watch "$QUAKESIGNAL_CAPTURE_RUN_ID" \
+    --repo "$QUAKESIGNAL_REPOSITORY" \
+    --exit-status
+
+  QUAKESIGNAL_CAPTURE_RUN_FIELDS="$(
+    gh run view "$QUAKESIGNAL_CAPTURE_RUN_ID" \
+      --repo "$QUAKESIGNAL_REPOSITORY" \
+      --json databaseId,url,headSha,event,headBranch,conclusion \
+      --jq '[.databaseId,.url,.headSha,.event,.headBranch,.conclusion] | @tsv'
+  )"
+  IFS=$'\t' read -r QUAKESIGNAL_VIEW_RUN_ID QUAKESIGNAL_VIEW_RUN_URL \
+    QUAKESIGNAL_SOURCE_COMMIT QUAKESIGNAL_CAPTURE_EVENT \
+    QUAKESIGNAL_CAPTURE_BRANCH QUAKESIGNAL_CAPTURE_CONCLUSION \
+    <<< "$QUAKESIGNAL_CAPTURE_RUN_FIELDS"
+  test "$QUAKESIGNAL_VIEW_RUN_ID" = "$QUAKESIGNAL_CAPTURE_RUN_ID"
+  test "$QUAKESIGNAL_VIEW_RUN_URL" = "$QUAKESIGNAL_CAPTURE_RUN_URL"
+  test "$QUAKESIGNAL_CAPTURE_EVENT" = workflow_dispatch
+  test "$QUAKESIGNAL_CAPTURE_BRANCH" = main
+  test "$QUAKESIGNAL_CAPTURE_CONCLUSION" = success
+  test "${#QUAKESIGNAL_SOURCE_COMMIT}" -eq 40
+  case "$QUAKESIGNAL_SOURCE_COMMIT" in
+    *[!0-9a-f]*) echo "capture run headSha is not a full lowercase Git SHA" >&2; exit 1 ;;
+  esac
+
+  # Replace these placeholders with the four exact successful upload-run IDs,
+  # canonical UTC review completion times, and the GitHub login that will
+  # approve ios-app-store-release. iOS/iPadOS and watchOS intentionally share
+  # one combined signed-run ID.
+  QUAKESIGNAL_IOS_WATCH_SIGNED_RUN_ID='<positive-run-id>'
+  QUAKESIGNAL_TVOS_SIGNED_RUN_ID='<positive-run-id>'
+  QUAKESIGNAL_VISIONOS_SIGNED_RUN_ID='<positive-run-id>'
+  QUAKESIGNAL_MACCATALYST_SIGNED_RUN_ID='<positive-run-id>'
+  QUAKESIGNAL_VISUAL_REVIEWED_AT='<YYYY-MM-DDTHH:MM:SSZ>'
+  QUAKESIGNAL_PRIVACY_REVIEWED_AT='<YYYY-MM-DDTHH:MM:SSZ>'
+  QUAKESIGNAL_SIGNED_PARITY_REVIEWED_AT='<YYYY-MM-DDTHH:MM:SSZ>'
+  QUAKESIGNAL_APPROVED_REVIEWER_LOGIN='<approved-environment-reviewer-login>'
+  QUAKESIGNAL_SIGNED_RELEASE_EVIDENCE_JSON="$(
+    jq -cn \
+      --argjson ios "$QUAKESIGNAL_IOS_WATCH_SIGNED_RUN_ID" \
+      --argjson tvos "$QUAKESIGNAL_TVOS_SIGNED_RUN_ID" \
+      --argjson visionos "$QUAKESIGNAL_VISIONOS_SIGNED_RUN_ID" \
+      --argjson maccatalyst "$QUAKESIGNAL_MACCATALYST_SIGNED_RUN_ID" \
+      --arg visual "$QUAKESIGNAL_VISUAL_REVIEWED_AT" \
+      --arg privacy "$QUAKESIGNAL_PRIVACY_REVIEWED_AT" \
+      --arg parity "$QUAKESIGNAL_SIGNED_PARITY_REVIEWED_AT" \
+      '{signedRunIds:{"ios-ipados":$ios,tvos:$tvos,watchos:$ios,visionos:$visionos,maccatalyst:$maccatalyst},reviewedAtUtc:{visual:$visual,privacy:$privacy,signedReleaseParity:$parity}}'
+  )"
+
+  QUAKESIGNAL_FINALIZER_DISPATCH_OUTPUT="$(
+    gh workflow run apple-screenshot-release-ready.yml \
+      --repo "$QUAKESIGNAL_REPOSITORY" \
+      --ref main \
+      -f capture_run_id="$QUAKESIGNAL_CAPTURE_RUN_ID" \
+      -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT" \
+      -f visual_reviewer="$QUAKESIGNAL_APPROVED_REVIEWER_LOGIN" \
+      -f visual_review_approved=true \
+      -f privacy_reviewer="$QUAKESIGNAL_APPROVED_REVIEWER_LOGIN" \
+      -f privacy_review_approved=true \
+      -f signed_parity_reviewer="$QUAKESIGNAL_APPROVED_REVIEWER_LOGIN" \
+      -f signed_release_parity_approved=true \
+      -f signed_release_evidence="$QUAKESIGNAL_SIGNED_RELEASE_EVIDENCE_JSON" \
+      2>&1
+  )"
+  printf '%s\n' "$QUAKESIGNAL_FINALIZER_DISPATCH_OUTPUT"
+  QUAKESIGNAL_FINALIZER_RUN_URL="$(
+    printf '%s\n' "$QUAKESIGNAL_FINALIZER_DISPATCH_OUTPUT" |
+      /usr/bin/sed -nE \
+        's#^.*(https://github\.com/TastyHeadphones/QuakeSignal/actions/runs/[1-9][0-9]*).*$#\1#p'
+  )"
+  QUAKESIGNAL_FINALIZER_RUN_ID="${QUAKESIGNAL_FINALIZER_RUN_URL##*/}"
+  case "$QUAKESIGNAL_FINALIZER_RUN_ID" in
+    ""|0|*[!0-9]*) echo "finalizer dispatch did not return one positive run ID" >&2; exit 1 ;;
+  esac
+  test "$QUAKESIGNAL_FINALIZER_RUN_URL" = \
+    "https://github.com/$QUAKESIGNAL_REPOSITORY/actions/runs/$QUAKESIGNAL_FINALIZER_RUN_ID"
+
+  gh run watch "$QUAKESIGNAL_FINALIZER_RUN_ID" \
+    --repo "$QUAKESIGNAL_REPOSITORY" \
+    --exit-status
+
+  QUAKESIGNAL_FINALIZER_RUN_FIELDS="$(
+    gh api \
+      "repos/$QUAKESIGNAL_REPOSITORY/actions/runs/$QUAKESIGNAL_FINALIZER_RUN_ID" \
+      --jq '[.id,.html_url,.head_sha,.event,.head_branch,.conclusion,.path,.repository.full_name,.head_repository.full_name] | @tsv'
+  )"
+  IFS=$'\t' read -r QUAKESIGNAL_VIEW_FINALIZER_RUN_ID \
+    QUAKESIGNAL_VIEW_FINALIZER_RUN_URL QUAKESIGNAL_FINALIZER_SOURCE_COMMIT \
+    QUAKESIGNAL_FINALIZER_EVENT QUAKESIGNAL_FINALIZER_BRANCH \
+    QUAKESIGNAL_FINALIZER_CONCLUSION QUAKESIGNAL_FINALIZER_WORKFLOW_PATH \
+    QUAKESIGNAL_FINALIZER_REPOSITORY QUAKESIGNAL_FINALIZER_HEAD_REPOSITORY \
+    <<< "$QUAKESIGNAL_FINALIZER_RUN_FIELDS"
+  test "$QUAKESIGNAL_VIEW_FINALIZER_RUN_ID" = "$QUAKESIGNAL_FINALIZER_RUN_ID"
+  test "$QUAKESIGNAL_VIEW_FINALIZER_RUN_URL" = "$QUAKESIGNAL_FINALIZER_RUN_URL"
+  test "$QUAKESIGNAL_FINALIZER_SOURCE_COMMIT" = "$QUAKESIGNAL_SOURCE_COMMIT"
+  test "$QUAKESIGNAL_FINALIZER_EVENT" = workflow_dispatch
+  test "$QUAKESIGNAL_FINALIZER_BRANCH" = main
+  test "$QUAKESIGNAL_FINALIZER_CONCLUSION" = success
+  test "$QUAKESIGNAL_FINALIZER_REPOSITORY" = "$QUAKESIGNAL_REPOSITORY"
+  test "$QUAKESIGNAL_FINALIZER_HEAD_REPOSITORY" = "$QUAKESIGNAL_REPOSITORY"
+  case "$QUAKESIGNAL_FINALIZER_WORKFLOW_PATH" in
+    .github/workflows/apple-screenshot-release-ready.yml|\
+    .github/workflows/apple-screenshot-release-ready.yml@main) ;;
+    *) echo "finalizer run used an unexpected workflow path" >&2; exit 1 ;;
+  esac
+
+  QUAKESIGNAL_APPROVED_ARTIFACT_NAME="APPROVED-build8-apple-screenshots-$QUAKESIGNAL_SOURCE_COMMIT"
+  QUAKESIGNAL_APPROVED_ARTIFACT_FIELDS="$(
+    gh api \
+      "repos/$QUAKESIGNAL_REPOSITORY/actions/runs/$QUAKESIGNAL_FINALIZER_RUN_ID/artifacts?per_page=100" |
+      jq -er --arg name "$QUAKESIGNAL_APPROVED_ARTIFACT_NAME" '
+        select(.total_count == 1 and (.artifacts | length) == 1) |
+        .artifacts[0] |
+        select(
+          .name == $name and
+          .expired == false and
+          (.id | type) == "number" and .id > 0 and
+          (.size_in_bytes | type) == "number" and .size_in_bytes > 0 and
+          (.digest | type) == "string" and
+          (.digest | test("^sha256:[0-9a-f]{64}$"))
+        ) |
+        [.id,.name,.size_in_bytes,.digest] | @tsv
+      '
+  )"
+  IFS=$'\t' read -r QUAKESIGNAL_APPROVED_ARTIFACT_ID \
+    QUAKESIGNAL_VIEW_APPROVED_ARTIFACT_NAME \
+    QUAKESIGNAL_APPROVED_ARTIFACT_SIZE \
+    QUAKESIGNAL_APPROVED_ARTIFACT_DIGEST \
+    <<< "$QUAKESIGNAL_APPROVED_ARTIFACT_FIELDS"
+  test "$QUAKESIGNAL_VIEW_APPROVED_ARTIFACT_NAME" = \
+    "$QUAKESIGNAL_APPROVED_ARTIFACT_NAME"
+  case "$QUAKESIGNAL_APPROVED_ARTIFACT_ID" in
+    ""|0|*[!0-9]*) echo "approved artifact ID is invalid" >&2; exit 1 ;;
+  esac
+  case "$QUAKESIGNAL_APPROVED_ARTIFACT_SIZE" in
+    ""|0|*[!0-9]*) echo "approved artifact size is invalid" >&2; exit 1 ;;
+  esac
+
+  QUAKESIGNAL_APPROVED_DOWNLOAD_ROOT="$(
+    mktemp -d \
+      "${TMPDIR:-/tmp}/QuakeSignalApprovedScreenshots.${QUAKESIGNAL_FINALIZER_RUN_ID}.XXXXXX"
+  )"
+  test -d "$QUAKESIGNAL_APPROVED_DOWNLOAD_ROOT"
+  test ! -L "$QUAKESIGNAL_APPROVED_DOWNLOAD_ROOT"
+  gh run download "$QUAKESIGNAL_FINALIZER_RUN_ID" \
+    --repo "$QUAKESIGNAL_REPOSITORY" \
+    --name "$QUAKESIGNAL_APPROVED_ARTIFACT_NAME" \
+    --dir "$QUAKESIGNAL_APPROVED_DOWNLOAD_ROOT"
+
+  QUAKESIGNAL_APPROVED_INDEX="$QUAKESIGNAL_APPROVED_DOWNLOAD_ROOT/screenshot-set-index-v1.1-build8.json"
+  QUAKESIGNAL_RELEASE_SET_ROOT="$QUAKESIGNAL_APPROVED_DOWNLOAD_ROOT/screenshot-release-sets-v1.1-build8/$QUAKESIGNAL_SOURCE_COMMIT"
+  test -f "$QUAKESIGNAL_APPROVED_INDEX"
+  test ! -L "$QUAKESIGNAL_APPROVED_INDEX"
+  test -f "$QUAKESIGNAL_RELEASE_SET_ROOT/release-set.json"
+  test ! -L "$QUAKESIGNAL_RELEASE_SET_ROOT/release-set.json"
+  test -f "$QUAKESIGNAL_RELEASE_SET_ROOT/release-approval.json"
+  test ! -L "$QUAKESIGNAL_RELEASE_SET_ROOT/release-approval.json"
+  jq -e --arg source "$QUAKESIGNAL_SOURCE_COMMIT" '
+    .activeReleaseSet.sourceCommit == $source and
+    .activeReleaseSet.rootDirectory ==
+      ("ios/AppStore/screenshot-release-sets-v1.1-build8/" + $source)
+  ' "$QUAKESIGNAL_APPROVED_INDEX" >/dev/null
+  QUAKESIGNAL_APPROVED_INDEX_HASH_FIELDS="$(
+    jq -er '
+      .activeReleaseSet |
+      select(
+        (.manifestSha256 | type) == "string" and
+        (.manifestSha256 | test("^[0-9a-f]{64}$")) and
+        (.approvalSha256 | type) == "string" and
+        (.approvalSha256 | test("^[0-9a-f]{64}$"))
+      ) |
+      [.manifestSha256,.approvalSha256] | @tsv
+    ' "$QUAKESIGNAL_APPROVED_INDEX"
+  )"
+  IFS=$'\t' read -r QUAKESIGNAL_APPROVED_MANIFEST_SHA256 \
+    QUAKESIGNAL_APPROVAL_SHA256 \
+    <<< "$QUAKESIGNAL_APPROVED_INDEX_HASH_FIELDS"
+  test "$(
+    shasum -a 256 "$QUAKESIGNAL_RELEASE_SET_ROOT/release-set.json" |
+      awk '{print $1}'
+  )" = "$QUAKESIGNAL_APPROVED_MANIFEST_SHA256"
+  test "$(
+    shasum -a 256 "$QUAKESIGNAL_RELEASE_SET_ROOT/release-approval.json" |
+      awk '{print $1}'
+  )" = "$QUAKESIGNAL_APPROVAL_SHA256"
+  jq -e \
+    --arg source "$QUAKESIGNAL_SOURCE_COMMIT" \
+    --argjson run_id "$QUAKESIGNAL_FINALIZER_RUN_ID" '
+      .sourceCommit == $source and
+      .status == "approved-for-build8-upload" and
+      .uploadApproved == true and
+      .environmentApproval.runId == $run_id and
+      .environmentApproval.headSha == $source
+    ' "$QUAKESIGNAL_RELEASE_SET_ROOT/release-approval.json" >/dev/null
+
+  quakesignal_require_upload_surface() {
+    local directory="$1" expected_count="$2" extension="$3"
+    test -d "$directory"
+    test ! -L "$directory"
+    set -- "$directory"/*."$extension"
+    test "$#" -eq "$expected_count"
+    for frame in "$@"; do
+      test -f "$frame"
+      test ! -L "$frame"
+    done
+  }
+  quakesignal_require_upload_surface \
+    "$QUAKESIGNAL_RELEASE_SET_ROOT/ios-ipados/en-US/iphone-6.5" 5 jpg
+  quakesignal_require_upload_surface \
+    "$QUAKESIGNAL_RELEASE_SET_ROOT/ios-ipados/en-US/ipad-13" 5 jpg
+  quakesignal_require_upload_surface \
+    "$QUAKESIGNAL_RELEASE_SET_ROOT/tvos/en-US" 3 png
+  quakesignal_require_upload_surface \
+    "$QUAKESIGNAL_RELEASE_SET_ROOT/watchos/en-US" 3 png
+  quakesignal_require_upload_surface \
+    "$QUAKESIGNAL_RELEASE_SET_ROOT/visionos/en-US" 5 png
+  quakesignal_require_upload_surface \
+    "$QUAKESIGNAL_RELEASE_SET_ROOT/maccatalyst/en-US" 5 png
+  printf '%s\n' \
+    "source_commit=$QUAKESIGNAL_SOURCE_COMMIT" \
+    "capture_run_url=$QUAKESIGNAL_CAPTURE_RUN_URL" \
+    "finalizer_run_url=$QUAKESIGNAL_FINALIZER_RUN_URL" \
+    "approved_artifact_id=$QUAKESIGNAL_APPROVED_ARTIFACT_ID" \
+    "approved_artifact_name=$QUAKESIGNAL_APPROVED_ARTIFACT_NAME" \
+    "approved_artifact_size=$QUAKESIGNAL_APPROVED_ARTIFACT_SIZE" \
+    "approved_artifact_digest=$QUAKESIGNAL_APPROVED_ARTIFACT_DIGEST" \
+    "release_set_manifest_sha256=$QUAKESIGNAL_APPROVED_MANIFEST_SHA256" \
+    "release_approval_sha256=$QUAKESIGNAL_APPROVAL_SHA256" \
+    "download_root=$QUAKESIGNAL_APPROVED_DOWNLOAD_ROOT"
+  ```
+
+  Both dispatches must return one canonical run URL; absence or ambiguity is a
+  stop condition. Never pre-read moving `main` or select a subsequently listed
+  run. Watch each returned positive run ID. The handoff verifies the capture
+  run's exact `headSha`, event, branch, URL, and successful conclusion, then
+  verifies the finalizer's exact source SHA, repository, workflow path, event,
+  branch, URL, and successful conclusion. It accepts exactly one unexpired
+  finalizer artifact with the source-addressed name and GitHub SHA-256 digest,
+  downloads that exact run/name pair, and checks its active index, approval, and
+  six upload directories. The finalizer independently rechecks the capture run,
+  canonical repository, and all five candidate artifact identities before and
+  after its own downloads.
+
+  Upload the files from the downloaded package in filename order, without
+  copying, renaming, resizing, recompressing, or mixing another run:
+
+  | App Store Connect surface | Exact approved source directory | Ordered files |
+  | --- | --- | --- |
+  | iPhone 6.5-inch | `ios-ipados/en-US/iphone-6.5/` | `01-home.jpg`, `02-reports.jpg`, `03-map.jpg`, `04-guide.jpg`, `05-alert-preferences.jpg` |
+  | iPad 13-inch | `ios-ipados/en-US/ipad-13/` | `01-home.jpg`, `02-reports.jpg`, `03-map.jpg`, `04-guide.jpg`, `05-alert-preferences.jpg` |
+  | Apple TV | `tvos/en-US/` | `01-dashboard.png`, `02-recent-reports.png`, `03-event-detail.png` |
+  | Apple Watch | `watchos/en-US/` | `01-headline.png`, `02-recent-reports.png`, `03-event-detail.png` |
+  | Apple Vision Pro | `visionos/en-US/` | `01-home.png`, `02-reports.png`, `03-map.png`, `04-guide.png`, `05-alert-preferences.png` |
+  | Mac | `maccatalyst/en-US/` | `01-home.png`, `02-reports.png`, `03-map.png`, `04-guide.png`, `05-alert-preferences.png` |
+
+  Before leaving the authenticated App Store Connect session, retain an external
+  upload receipt containing the source commit, capture and finalizer run URLs/IDs,
+  approved artifact name/ID/digest/size, active manifest and approval SHA-256
+  values from the downloaded index, upload time, and the exact source directory
+  used for each surface. Retain a portal screenshot or export that visibly shows
+  the app/version, all six surface counts (`5`, `5`, `3`, `3`, `5`, and `5` in
+  the table's order), thumbnail order, and successful save.
+  App Store Connect does not expose a per-file upload hash in this path, so the
+  finalizer artifact/index hashes bind the source bytes and the portal capture is
+  the visual receipt; do not claim the portal itself verified those hashes. A
+  missing count, reordered thumbnail, processing error, expired artifact, or
+  receipt that cannot be tied to this exact finalizer is a stop condition.
+
+  Inside the protected finalizer, the strict verifier invocation is:
 
   ```sh
   ruby .github/scripts/verify-store-assets.rb \
     --require-build8-screenshot-release-ready \
-    --expected-source-commit=<40-character-source-commit>
+    --expected-source-commit=<40-character-source-commit> \
+    --screenshot-release-evidence-root="$EVIDENCE_ROOT"
   ```
 
   That command must not pass without exact-current product source and plan
-  bytes, all five platform packages, and a separate named approval proving
-  signed public-Release parity for each platform.
+  bytes, all five platform packages, the exact successful capture-run binding,
+  four exact successful signed-upload runs, and separate named
+  visual/privacy/signed-parity approvals. Only one
+  three-day screenshot artifact is retained; signed `.ipa`/`.pkg` binaries and
+  generated screenshots are never committed or uploaded by this handoff.
+  The finalizer downloads only the four small attestation artifacts and derives
+  all four distinct binary hashes from them; it never downloads an IPA or PKG.
+  It requires the iOS/iPadOS and watchOS entries to share one combined run and
+  IPA hash. The canonical `ios-app-store-release` environment must require an
+  independent reviewer and prevent self-review. The job queries its own
+  canonical run approval history and requires every supplied reviewer identifier
+  to equal an approved GitHub login distinct from the dispatch actor. Generic
+  placeholders, archive-only attestations, fabricated/future review times, or
+  fewer/more than four distinct successful upload runs are stop conditions.
 - Exercise iOS/iPadOS notifications and App Attest on physical hardware or
   TestFlight. Simulator/generic builds are not evidence for APNs, App Attest,
   background delivery, Focus, Silent Mode, or alert sounds.

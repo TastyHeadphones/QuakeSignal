@@ -80,8 +80,12 @@ export interface QuakeSignalPushPayload {
   /** Typed snapshot used when a notification opens after the live feed moved on. */
   event: PushEventSnapshot;
   // Retained for clients released before the typed snapshot was introduced.
+  // Together these fields also form a complete revision boundary when a
+  // foreground client cannot decode the nested snapshot; event ID alone is
+  // deliberately insufficient to reserve system-owned presentation.
   eventId: string;
   sourceId: NormalizedEvent["sourceId"];
+  serial: number;
   kind: NormalizedEvent["kind"];
   reason: NotifyReason;
   magnitude: number | null;
@@ -89,6 +93,11 @@ export interface QuakeSignalPushPayload {
   latitude: number | null;
   longitude: number | null;
   originTimeUtc: string | null;
+  reportTimeUtc: string | null;
+  isWarn: boolean;
+  isFinal: boolean;
+  isCancel: boolean;
+  isTraining: boolean;
 }
 
 export function isAlertSound(value: unknown): value is AlertSound {
@@ -299,6 +308,7 @@ export function buildPushPayload(
     event: snapshot,
     eventId: snapshot.eventId,
     sourceId: snapshot.sourceId,
+    serial: snapshot.serial,
     kind: snapshot.kind,
     reason,
     magnitude: snapshot.magnitude,
@@ -306,6 +316,11 @@ export function buildPushPayload(
     latitude: snapshot.latitude,
     longitude: snapshot.longitude,
     originTimeUtc: snapshot.originTimeUtc,
+    reportTimeUtc: snapshot.reportTimeUtc,
+    isWarn: snapshot.isWarn,
+    isFinal: snapshot.isFinal,
+    isCancel: snapshot.isCancel,
+    isTraining: snapshot.isTraining,
   };
   const byteLength = pushPayloadSizeBytes(payload);
   if (byteLength > APNS_REGULAR_PAYLOAD_LIMIT_BYTES) {

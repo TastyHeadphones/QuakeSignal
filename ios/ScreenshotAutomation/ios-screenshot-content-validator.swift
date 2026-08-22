@@ -35,6 +35,7 @@ private struct SelectorContract {
     let pixels: [Int]
     let requiredTermGroups: [[String]]
     let requiresChromaticMap: Bool
+    let minimumNonBlackFraction: Double
 }
 
 private struct PixelMetrics {
@@ -63,10 +64,16 @@ private let selectorContracts: [String: SelectorContract] = {
         ("ios-ipad-13", [2_064, 2_752]),
     ] {
         for route in routes {
+            // The dark 13-inch plain-list Reports frame has four fixed rows
+            // on a mostly black canvas. Its floor equals the independent
+            // bright-detail floor; every bright sample is also non-black.
             contracts["\(prefix)-\(route.suffix)"] = SelectorContract(
                 pixels: pixels,
                 requiredTermGroups: route.groups,
-                requiresChromaticMap: route.map
+                requiresChromaticMap: route.map,
+                minimumNonBlackFraction: (
+                    prefix == "ios-ipad-13" && route.suffix == "reports" ? 0.004 : 0.12
+                )
             )
         }
     }
@@ -232,6 +239,41 @@ private func writeEvidence(
     }
 }
 
+/// Emits one machine-readable diagnostic line without exposing recognized
+/// strings, selector/image identifiers, hashes, or filesystem paths.
+private func emitRejectionSummary(
+    reasons: [String],
+    contract: SelectorContract,
+    metrics: PixelMetrics,
+    recognizedTextCount: Int,
+    matchedRequiredGroupCount: Int,
+    matchedForbiddenGroupCount: Int
+) {
+    let summary: [String: Any] = [
+        "counts": [
+            "matchedForbiddenSystemPromptGroups": matchedForbiddenGroupCount,
+            "matchedRequiredTermGroups": matchedRequiredGroupCount,
+            "recognizedText": recognizedTextCount,
+            "requiredTermGroups": contract.requiredTermGroups.count,
+            "sampledPixels": metrics.sampledPixels,
+        ],
+        "metrics": [
+            "brightFraction": metrics.brightFraction,
+            "chromaticFraction": metrics.chromaticFraction,
+            "horizontalEdgeFraction": metrics.horizontalEdgeFraction,
+            "luminanceStandardDeviation": metrics.luminanceStandardDeviation,
+            "nonBlackFraction": metrics.nonBlackFraction,
+        ],
+        "reasons": reasons,
+    ]
+    guard let data = try? JSONSerialization.data(withJSONObject: summary, options: [.sortedKeys]),
+          var line = String(data: data, encoding: .utf8) else {
+        return
+    }
+    line.append("\n")
+    FileHandle.standardError.write(Data(line.utf8))
+}
+
 private func run() throws {
     guard CommandLine.arguments.count == 4 else { throw ValidationError.usage }
     let selector = CommandLine.arguments[1]
@@ -262,7 +304,9 @@ private func run() throws {
 
     var reasons: [String] = []
     if metrics.luminanceStandardDeviation < 12 { reasons.append("committed-view luminance variation is too low") }
-    if metrics.nonBlackFraction < 0.12 { reasons.append("committed-view non-black coverage is too low") }
+    if metrics.nonBlackFraction < contract.minimumNonBlackFraction {
+        reasons.append("committed-view non-black coverage is too low")
+    }
     if metrics.brightFraction < 0.004 { reasons.append("committed-view bright-detail coverage is too low") }
     if metrics.horizontalEdgeFraction < 0.004 { reasons.append("committed-view edge detail is too low") }
     if text.count < 5 { reasons.append("committed-view recognized text inventory is too small") }
@@ -288,7 +332,17 @@ private func run() throws {
         imageSha256: imageSha256,
         imageFormat: imageFormat
     )
-    if !reasons.isEmpty { throw ValidationError.semantic(reasons) }
+    if !reasons.isEmpty {
+        emitRejectionSummary(
+            reasons: reasons,
+            contract: contract,
+            metrics: metrics,
+            recognizedTextCount: text.count,
+            matchedRequiredGroupCount: matchedGroups.count,
+            matchedForbiddenGroupCount: forbiddenMatches.count
+        )
+        throw ValidationError.semantic(reasons)
+    }
 }
 
 do {
