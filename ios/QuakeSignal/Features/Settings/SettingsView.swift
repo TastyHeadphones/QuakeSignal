@@ -313,6 +313,8 @@ struct SettingsView: View {
         }
     }
 
+    }
+
     private func sourceBinding(_ source: String) -> Binding<Bool> {
         Binding(
             get: { settings.enabledSources.contains(source) },
