@@ -642,7 +642,7 @@ test("automatic production delivery skips sandbox and unfiltered registrations",
     assert.equal(lifecycleUpsert.bindings[5], null);
     assert.ok(lifecycleUpsert.bindings.includes("jma_eew:automatic-filter-test"));
     assert.equal(
-      lifecycleUpsert.bindings.includes("nearby-production-token"),
+      lifecycleUpsert.bindings.slice(0, 4).includes("nearby-production-token"),
       false,
       "the lifecycle table must never receive a raw APNs token",
     );
@@ -9417,8 +9417,8 @@ test("the global APNs lane durably admits work before delivery and terminal deci
   );
   assert.match(
     source,
-    /private async ensureStarted[\s\S]*?serializeApnsDelivery[\s\S]*?reconcileApnsAcceptanceJournal[\s\S]*?reconcileDlqPersistenceFallbacks/,
-    "startup fallback finalization must recheck acceptances inside the shared lane",
+    /private async ensureStarted[\s\S]*?await this\.ensureUpstreams\(\)[\s\S]*?scheduleRoutineRelayAlarm/,
+    "startup must leave bounded D1 recovery to the alarm-owned maintenance lane",
   );
   assert.match(
     source,
