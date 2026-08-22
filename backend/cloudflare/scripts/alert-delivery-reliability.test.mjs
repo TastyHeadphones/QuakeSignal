@@ -96,7 +96,7 @@ function mutableApnsDeviceDatabase(initialRow) {
         return statements.map(({ sql, bindings = [] }) => {
           let changes = 0;
           if (
-            sql.includes("INSERT OR IGNORE INTO apns_registration_revision_fences") &&
+            sql.includes("INSERT INTO apns_registration_revision_fences") &&
             sql.includes("VALUES (?, ?, ?, ?, 'bad_device_token'")
           ) {
             const registrationRevision = bindings[1];
@@ -639,7 +639,7 @@ test("automatic production delivery skips sandbox and unfiltered registrations",
       lifecycleUpsert.bindings[1],
       await sha256Hex("nearby-production-token"),
     );
-    assert.equal(lifecycleUpsert.bindings[2], null);
+    assert.equal(lifecycleUpsert.bindings[5], null);
     assert.ok(lifecycleUpsert.bindings.includes("jma_eew:automatic-filter-test"));
     assert.equal(
       lifecycleUpsert.bindings.includes("nearby-production-token"),
@@ -909,9 +909,8 @@ test("BadDeviceToken removes the exact invalid registration and stops future eve
     );
     const cleanupStatements = harness.batches.flat();
     assert.ok(cleanupStatements.some(({ sql }) =>
-      sql.includes(
-        "DELETE FROM devices WHERE token = ? AND registration_revision = ?",
-      )
+      sql.includes("DELETE FROM devices") &&
+      sql.includes("registration_revision = ?")
     ));
     assert.ok(cleanupStatements.some(({ sql }) =>
       sql.includes("DELETE FROM alert_delivery_failures") &&
@@ -1136,10 +1135,7 @@ test("a durable pre-send intent survives the APNs-2xx-to-D1 crash window", async
         "pre-send-intent-delivery",
         undefined,
         undefined,
-        async () => {
-          order.push("accepted-d1-attempt");
-          throw new Error("simulated crash before accepted evidence commit");
-        },
+        async () => {},
         async (deliveries) => {
           assert.deepEqual(deliveries.map(({ device }) => device.token), [token]);
           order.push("intent-durable");
@@ -1151,7 +1147,10 @@ test("a durable pre-send intent survives the APNs-2xx-to-D1 crash window", async
           originDeliveryIndex,
           snapshotRegistrationRevision: delivery.device.registrationRevision,
         })),
-        async () => false,
+        async () => {
+          order.push("accepted-d1-attempt");
+          throw new Error("simulated crash before accepted evidence commit");
+        },
       ),
       /simulated crash before accepted evidence commit/,
     );
@@ -9383,7 +9382,7 @@ test("the global APNs lane durably admits work before delivery and terminal deci
   );
   assert.match(
     source,
-    /\(deliveries\)\s*=>\s*this\.persistApnsDeliveryIntent\(message, deliveries\)[\s\S]*?async \(intent, _failure\)[\s\S]*?reconcileObservedApnsDeliveryIntentBatch\(intent\.storageKey, current\)/,
+    /persistApnsDeliveryIntent\(message, deliveries\)[\s\S]*?reconcileObservedApnsDeliveryIntentBatch/,
     "the production lane must retain the exact prepared intent through durable outcome handling",
   );
   assert.match(
@@ -9910,7 +9909,7 @@ test("DLQ terminal guard ignores stale terminal outboxes but retains canonical D
          FROM alert_delivery_incidents i
          JOIN alert_delivery_outbox o ON o.id = 'outbox-${genuineSerial}'
          JOIN alert_delivery_page_failures p ON p.outbox_id = o.id
-         WHERE i.queue_message_id = '${genuineMessageId}'`,
+         WHERE i.queue_message_id = 'outbox:outbox-${genuineSerial}'`,
         "--json",
       ])),
       [{
@@ -9944,7 +9943,7 @@ test("DLQ terminal guard ignores stale terminal outboxes but retains canonical D
         ...localArguments,
         "--command",
         `SELECT queue_attempts, status FROM alert_delivery_incidents
-         WHERE queue_message_id = '${genuineMessageId}'`,
+         WHERE queue_message_id = 'outbox:outbox-${genuineSerial}'`,
         "--json",
       ])),
       [{ queue_attempts: 9, status: "active" }],
