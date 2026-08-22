@@ -601,6 +601,7 @@ create_mac_catalyst_package_fixture "$catalyst_fixture"
 expect_failure catalyst-package-symlinked-main-executable 'payload must not contain symbolic links' run_catalyst_package_verifier "$catalyst_fixture"
 create_mac_catalyst_fixture "$catalyst_fixture"
 
+create_mac_catalyst_package_fixture "$catalyst_fixture"
 mkdir -p "$catalyst_fixture/QuakeSignal.pkg.expanded/Scripts"
 expect_failure catalyst-package-installer-scripts 'must not contain installer scripts' run_catalyst_package_verifier "$catalyst_fixture"
 create_mac_catalyst_package_fixture "$catalyst_fixture"
