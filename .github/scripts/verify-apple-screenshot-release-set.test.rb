@@ -587,7 +587,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     error = assert_raises(AppleScreenshotReleaseSetValidationError) do
       validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
     end
-    assert_match(/parity review must not predate screenshot capture completion/, error.message)
+    assert_match(/signedReleaseParity review must not predate screenshot capture completion/, error.message)
 
     add_release_approval(reset: true)
     approval = JSON.parse(approval_path.read)
