@@ -1253,7 +1253,7 @@ def verify_foreground_emergency_parity_contract(sources: Mapping[str, str]) -> N
         alert_audio,
     ):
         fail(
-            "foreground emergency audio must pass the complete typed revision key "
+            "alert-audio ownership: foreground emergency audio must pass the complete typed revision key "
             "without projecting or weakening its ownership identity."
         )
     location_ownership_guard = (
