@@ -424,8 +424,8 @@ const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:YuHjBNk9q2O71xPlIAkcPG
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:9gIZr4z1GYeDv68V0t1HQp2BYebmJp47LMPmw2La6dU";
 const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:rmRQNbDzFDCBLFDneiZaX8XKIZOfWiP00UE9WVSd1PQ";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:k8xcHBwBaKe_YafkK70Rf7CHk5f3nC5HaJFaobeLqrY";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:HnQY2wIFmNtPin57Voz4lbUUbcBY9umNLd25x_F-TvY";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:mEfigWWSkmx1AidcePsOoqOWfIXdjlRWxo3lMLA2XAs";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:IJ76lcMY5QNZhpIaq_C7lEw3y8dhR9cO635KHVBoqUs";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:gNHr13EktFUXs0KiPpLYbdaL3I7IApzP4PQjaDmX2Gk";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -1642,7 +1642,7 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
         name: "Set up Go",
         uses: "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
         with: {
-          "go-version": "1.24.13",
+          "go-version": "1.25.0",
           cache: false,
         },
       }, "workflow-lint pinned Go setup step");
