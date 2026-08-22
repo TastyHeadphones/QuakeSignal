@@ -515,6 +515,7 @@ interface ProductionTrainingRelayRequest {
   appAttestKeyId: string;
   kind: "immediate" | "delayed";
   deadlineUtc: string;
+  collapseId: string;
 }
 
 function isProductionTrainingRelayRequest(
@@ -523,7 +524,7 @@ function isProductionTrainingRelayRequest(
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const candidate = value as Partial<ProductionTrainingRelayRequest>;
   return (
-    Object.keys(value).length === 5 &&
+    Object.keys(value).length === 6 &&
     isValidDeviceToken(candidate.token) &&
     typeof candidate.registrationRevision === "string" &&
     candidate.registrationRevision.length > 0 &&
@@ -532,7 +533,9 @@ function isProductionTrainingRelayRequest(
       candidate.appAttestKeyId &&
     (candidate.kind === "immediate" || candidate.kind === "delayed") &&
     typeof candidate.deadlineUtc === "string" &&
-    Number.isFinite(Date.parse(candidate.deadlineUtc))
+    Number.isFinite(Date.parse(candidate.deadlineUtc)) &&
+    typeof candidate.collapseId === "string" &&
+    /^quake-[0-9a-f]{56}$/.test(candidate.collapseId)
   );
 }
 
@@ -4381,6 +4384,7 @@ async function productionTrainingPushThroughRelay(
   device: RoutedDeviceRecord,
   kind: "immediate" | "delayed",
   deadlineUtc: string,
+  collapseId: string,
 ): Promise<ApnsDeliveryResult> {
   if (device.appAttestKeyId === null || device.environment !== "production") {
     throw new Error("production training relay requires an attested production device");
@@ -4397,6 +4401,7 @@ async function productionTrainingPushThroughRelay(
         appAttestKeyId: device.appAttestKeyId,
         kind,
         deadlineUtc,
+        collapseId,
       } satisfies ProductionTrainingRelayRequest),
     },
   ));
@@ -5740,8 +5745,15 @@ export class QuakeRelay {
             );
           }
           const event = trainingTestEvent();
+          const expectedCollapseId = await apnsCollapseID(event);
+          if (body.collapseId !== expectedCollapseId) {
+            return Response.json(
+              { error: "invalid production training collapse ID" },
+              { status: 400 },
+            );
+          }
           const authorization = await this.apnsAuthorization();
-          const collapseId = await apnsCollapseID(event);
+          const collapseId = body.collapseId;
           const finalDevice = rowToDevice(row);
           const trainingAttemptId = `training:${crypto.randomUUID()}`;
           const admittedAtUtc = new Date().toISOString();
@@ -11851,6 +11863,10 @@ export class TrainingPushScheduler {
     // before any D1, relay, or APNs I/O so retries cannot deliver twice.
     await this.state.storage.put(DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY, { ...job, state: "attempted" } satisfies DelayedTrainingTestPushJob);
     try {
+      // Prepare the deterministic training collapse ID before the ownership
+      // lookup. A delayed appointment that is deleted while this preparation
+      // waits must never carry a stale row into the relay.
+      const collapseId = await apnsCollapseID(trainingTestEvent());
       // The global relay performs a second exact-revision lookup inside its
       // APNs serial lane. This local read avoids scheduling an obviously
       // deleted key, while the relay closes the final read/send race.
@@ -11881,6 +11897,7 @@ export class TrainingPushScheduler {
         new Date(
           job.dueAtMs + DELAYED_TRAINING_TEST_PUSH_MAX_LATE_MS,
         ).toISOString(),
+        collapseId,
       );
       if (!result.ok) return;
     } catch {
@@ -14951,6 +14968,7 @@ export async function handleDeviceTestPush(
           "immediate",
           new Date(Date.now() + DELAYED_TRAINING_TEST_PUSH_MAX_LATE_MS)
             .toISOString(),
+          await apnsCollapseID(event),
         )
       : await sendPush(
           env,
