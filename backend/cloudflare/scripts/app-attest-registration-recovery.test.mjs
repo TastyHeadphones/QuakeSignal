@@ -938,6 +938,7 @@ test("a pre-send intent recovers the APNs-to-D1 crash window before a newer supe
       records.set(storageKey, {
         ...value,
         nextProviderAttemptAtUtc: new Date(Date.now() - 1).toISOString(),
+        recipientRetryNotBeforeUtc: {},
       });
     }
     let apnsRequests = 0;
@@ -1035,6 +1036,7 @@ test("a pre-send intent recovers the APNs-to-D1 crash window before a newer supe
       records.set(storageKey, {
         ...value,
         nextProviderAttemptAtUtc: new Date(Date.now() - 1).toISOString(),
+        recipientRetryNotBeforeUtc: {},
       });
     }
     let retryProviderRequests = 0;
@@ -1052,6 +1054,7 @@ test("a pre-send intent recovers the APNs-to-D1 crash window before a newer supe
       records.set(storageKey, {
         ...value,
         nextProviderAttemptAtUtc: new Date(Date.now() - 1).toISOString(),
+        recipientRetryNotBeforeUtc: {},
       });
     }
     await relay.reconcileApnsAcceptanceJournal();
