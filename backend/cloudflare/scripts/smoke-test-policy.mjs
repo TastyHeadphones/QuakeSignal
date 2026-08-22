@@ -102,11 +102,9 @@ export async function fetchWithoutRedirect(
 export function hasReadyWolfxSourceHealth(upstream) {
   const sources = upstream?.sources;
   if (sources === null || typeof sources !== "object" || Array.isArray(sources)) return false;
-  const keys = Object.keys(sources).sort();
-  if (keys.length !== REQUIRED_WOLFX_SOURCES.length ||
-      keys.some((key, index) => key !== REQUIRED_WOLFX_SOURCES[index])) {
-    return false;
-  }
+  // The Worker health payload also reports configured non-Wolfx feeds. The
+  // release gate must require the two approved JMA feeds, while allowing that
+  // broader inventory to remain visible for operational diagnostics.
   return REQUIRED_WOLFX_SOURCES.every((source) => {
     const health = sources[source];
     return health !== null && typeof health === "object" && !Array.isArray(health) &&
@@ -119,7 +117,7 @@ export function assertReadyWolfxSourceHealth(upstream) {
   assert.equal(
     hasReadyWolfxSourceHealth(upstream),
     true,
-    "production health must expose exactly the two approved JMA sources as fresh on an allowed transport",
+    "production health must expose the two approved JMA sources as fresh on an allowed transport",
   );
 }
 
