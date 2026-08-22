@@ -152,17 +152,17 @@ private struct ScreenshotGuideSummary: View {
                     guideRow(
                         title: "guide.section.duringQuake",
                         symbol: "figure.wave",
-                        detail: "Drop, cover, and hold on. Move away from windows and stay calm."
+                        detail: "Drop, cover, and hold on."
                     )
                     guideRow(
                         title: "guide.section.afterQuake",
                         symbol: "checkmark.circle",
-                        detail: "Check for injuries, watch for aftershocks, and follow local instructions."
+                        detail: "Check injuries and aftershocks."
                     )
                     guideRow(
                         title: "guide.section.kit",
                         symbol: "cross.case",
-                        detail: "Water · First aid · Flashlight · Power bank · Documents"
+                        detail: "Water, first aid, flashlight."
                     )
                 }
                 .padding(24)
