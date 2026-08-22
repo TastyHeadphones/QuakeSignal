@@ -107,11 +107,18 @@ function localD1Adapter(databaseFile) {
             `registration-batch entry ${index} must be a prepared SQL statement`,
           );
           try {
+            if (/\bRETURNING\b/i.test(statement.sql)) {
+              const results = sqlite.prepare(statement.sql).all(...statement.bindings);
+              return { results, meta: { changes: results.length } };
+            }
             const output = sqlite.prepare(statement.sql).run(...statement.bindings);
-            return { meta: { changes: Number(output.changes) } };
+            return { results: [], meta: { changes: Number(output.changes) } };
           } catch (error) {
             if (error instanceof Error) {
-              error.message = `${error.message}; statement=${statement.sql}`;
+              const fences = sqlite.prepare(
+                "SELECT registration_revision, decision_kind FROM apns_registration_revision_fences",
+              ).all();
+              error.message = `${error.message}; statement=${statement.sql}; fences=${JSON.stringify(fences)}`;
             }
             throw error;
           }

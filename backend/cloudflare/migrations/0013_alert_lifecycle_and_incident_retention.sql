@@ -75,15 +75,18 @@ BEGIN
   -- Do not rely on recursive trigger execution for the nested revision UPDATE.
   -- Preserve the exact retired revision directly so later opt-out can upgrade
   -- its full lineage and a late BadDeviceToken response can still claim it.
-  INSERT OR IGNORE INTO apns_registration_revision_fences (
+  INSERT INTO apns_registration_revision_fences (
     registration_revision, token_hash, app_attest_key_id,
     decision_id, decision_kind,
     blocks_lifecycle_replay, processed_at_utc
-  ) VALUES (
+  ) SELECT
     OLD.registration_revision, NULL,
     COALESCE(NEW.app_attest_key_id, OLD.app_attest_key_id),
     lower(hex(randomblob(16))), 'registration_renewal', 0,
     strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE NOT EXISTS (
+    SELECT 1 FROM apns_registration_revision_fences
+    WHERE registration_revision = OLD.registration_revision
   );
   UPDATE devices
   SET registration_revision = lower(hex(randomblob(16)))
@@ -209,15 +212,18 @@ BEFORE UPDATE OF registration_revision ON devices
 WHEN NEW.registration_revision <> OLD.registration_revision
   AND OLD.registration_revision <> 'legacy'
 BEGIN
-  INSERT OR IGNORE INTO apns_registration_revision_fences (
+  INSERT INTO apns_registration_revision_fences (
     registration_revision, token_hash, app_attest_key_id,
     decision_id, decision_kind,
     blocks_lifecycle_replay, processed_at_utc
-  ) VALUES (
+  ) SELECT
     OLD.registration_revision, NULL,
     COALESCE(NEW.app_attest_key_id, OLD.app_attest_key_id),
     lower(hex(randomblob(16))), 'registration_renewal', 0,
     strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE NOT EXISTS (
+    SELECT 1 FROM apns_registration_revision_fences
+    WHERE registration_revision = OLD.registration_revision
   );
 END;
 
