@@ -5312,15 +5312,9 @@ export async function dispatchPushPage(
           durableResults,
         );
       }
-      const observedRetryPolicy = apnsObservedBatchRetryPolicy(durableResults);
-      retryRequired ||= observedRetryPolicy.retryRequired;
-      retryDelaySeconds = Math.max(
-        retryDelaySeconds,
-        observedRetryPolicy.retryDelaySeconds,
-      );
-      const providerFailure = deterministicPageFailure(durableResults);
       const intentOwnsOutcomePersistence =
         preparedIntent !== null && completeApnsBatch !== undefined;
+      const providerFailure = deterministicPageFailure(durableResults);
       if (intentOwnsOutcomePersistence) {
         // The durable observed-batch reconciler owns every D1 mutation. Do not
         // repeat accepted/failure/cleanup statements in this request: keeping
@@ -5396,6 +5390,38 @@ export async function dispatchPushPage(
         }
       }
 
+      // A terminal-token response is only retryable while its exact sent
+      // revision still needs cleanup. Apply that cleanup before deriving the
+      // page retry policy; otherwise the pre-cleanup observation permanently
+      // marks a successfully deleted BadDeviceToken as Queue-retry work.
+      // Intent-owned outcomes are reconciled from their durable journal, where
+      // an unresolved cleanup remains pending and therefore still retries.
+      if (!intentOwnsOutcomePersistence) {
+        const observedRetryPolicy = apnsObservedBatchRetryPolicy(
+          results.map((result, index) =>
+            result.status === "fulfilled"
+              ? result.value
+              : durableResults[index]
+          ),
+        );
+        retryRequired ||= observedRetryPolicy.retryRequired;
+        retryDelaySeconds = Math.max(
+          retryDelaySeconds,
+          observedRetryPolicy.retryDelaySeconds,
+        );
+      } else {
+        const observedRetryPolicy = apnsObservedBatchRetryPolicy(
+          durableResults.filter((result) =>
+            !result.terminalInvalidToken && !result.terminalUnregistration
+          ),
+        );
+        retryRequired ||= observedRetryPolicy.retryRequired;
+        retryDelaySeconds = Math.max(
+          retryDelaySeconds,
+          observedRetryPolicy.retryDelaySeconds,
+        );
+      }
+
       // Classify every fulfilled peer before acting on a page-scoped failure.
       // APNs can return a provider-token error for one concurrent request and
       // a longer Retry-After or terminal-token result for another; neither
@@ -5461,22 +5487,28 @@ export async function dispatchPushPage(
             retryDelaySeconds,
             APNS_TRANSIENT_RETRY_DELAY_SECONDS,
           );
-          if (!intentOwnsOutcomePersistence) await recordDeliveryFailure(
-            env.DB,
-            deliveryId,
-            event,
-            reason,
-            delivery.device.token,
-            delivery.tokenHash,
-            delivery.device.registrationRevision,
-            delivery.device.updatedAt,
-            {
-              ok: false,
-              apnsId: null,
-              apnsReason: "TransportError",
-            },
-            "retry",
-          );
+          // A rejected send can be a deterministic stored-route mismatch,
+          // not an uncertain token-level transport outcome. Preserve the
+          // page/topic failure without manufacturing retry evidence for a
+          // device that was never contacted.
+          const durableResult = durableResults[index];
+          if (
+            !intentOwnsOutcomePersistence &&
+            !isTopicScopedApnsFailure(durableResult)
+          ) {
+            await recordDeliveryFailure(
+              env.DB,
+              deliveryId,
+              event,
+              reason,
+              delivery.device.token,
+              delivery.tokenHash,
+              delivery.device.registrationRevision,
+              delivery.device.updatedAt,
+              durableResult,
+              "retry",
+            );
+          }
         }
       }
       if (providerFailure) {
@@ -7162,12 +7194,22 @@ export class QuakeRelay {
    * fail closed for operator repair.
    */
   private async apnsDurabilityMaintenanceOwnsInvocation(): Promise<boolean> {
+    const database = this.env.DB;
+    if (
+      !database ||
+      typeof database.prepare !== "function" ||
+      typeof database.batch !== "function"
+    ) {
+      return false;
+    }
     const crashedTrainingCutoff = new Date(
       Date.now() - TRAINING_APNS_ATTEMPT_RECOVERY_MS,
     ).toISOString();
-    const d1Pending = await this.env.DB
-      .prepare(
-        `SELECT (
+    let pendingStatement: D1PreparedStatement;
+    try {
+      pendingStatement = database
+        .prepare(
+          `SELECT (
            EXISTS (SELECT 1 FROM legacy_device_removal_tokens)
            OR EXISTS (
              SELECT 1 FROM notification_deliveries
@@ -7180,9 +7222,13 @@ export class QuakeRelay {
                AND admitted_at_utc <= ?
            )
          ) AS pending`,
-      )
-      .bind(crashedTrainingCutoff)
-      .first<number>("pending");
+          )
+        .bind(crashedTrainingCutoff);
+    } catch {
+      return false;
+    }
+    if (typeof pendingStatement.first !== "function") return false;
+    const d1Pending = await pendingStatement.first<number>("pending");
     if ((d1Pending ?? 0) !== 0) return true;
     const pending = await this.state.storage.list<unknown>({
       prefix: APNS_ACCEPTANCE_JOURNAL_PREFIX,
@@ -7218,17 +7264,90 @@ export class QuakeRelay {
         "APNs acceptance journal replay limit must be a positive bounded safe integer",
       );
     }
-    // Some isolated maintenance callers (and the credential-free structural
-    // harness) intentionally provide only Durable Object storage. Production
-    // always supplies a complete D1 binding; keep those storage-only paths
-    // free of an accidental partial-D1 call while preserving fail-closed
-    // behavior for the real Worker binding.
     const database = this.env.DB;
-    if (
-      !database ||
-      typeof database.prepare !== "function" ||
-      typeof database.batch !== "function"
-    ) {
+    const d1MaintenanceAvailable = Boolean(
+      database &&
+      typeof database.prepare === "function" &&
+      typeof database.batch === "function"
+    );
+    const pending = await this.state.storage.list<unknown>({
+      prefix: APNS_ACCEPTANCE_JOURNAL_PREFIX,
+      limit: APNS_ACCEPTANCE_JOURNAL_MAX_RECORDS + 1,
+    });
+    if (!d1MaintenanceAvailable) {
+      // Storage-only harnesses still exercise the journal's fail-closed
+      // integrity boundary. Validate every visible record before declining
+      // D1 work; malformed or tampered evidence must never disappear merely
+      // because a maintenance caller lacks a database binding.
+      for (const [key, value] of pending) {
+        if (isPendingApnsDeliveryIntentRecord(value)) {
+          const computedTokenHashes = await Promise.all(
+            value.deliveries.map((delivery) => tokenHash(delivery.device.token)),
+          );
+          const expectedKey = await apnsDeliveryIntentStorageKey(
+            value.message,
+            value.deliveries,
+          );
+          const observedTokenHashes = value.observedBatch === null
+            ? []
+            : await Promise.all(
+                value.observedBatch.deliveries.map(({ delivery }) =>
+                  tokenHash(delivery.device.token)
+                ),
+              );
+          const intentMismatch = expectedKey !== key ||
+            value.deliveries.some((delivery, index) =>
+              delivery.tokenHash !== computedTokenHashes[index]
+            ) ||
+            (value.observedBatch !== null &&
+              value.observedBatch.deliveries.some((recipient, index) => {
+                const original = value.deliveries[recipient.originDeliveryIndex];
+                const delivery = recipient.delivery;
+                return delivery.tokenHash !== observedTokenHashes[index] ||
+                  original === undefined ||
+                  original.device.registrationRevision !==
+                    recipient.snapshotRegistrationRevision ||
+                  (original.device.token !== delivery.device.token &&
+                    (original.device.appAttestKeyId === null ||
+                      original.device.appAttestKeyId !==
+                        delivery.device.appAttestKeyId));
+              }));
+          if (intentMismatch) {
+            await this.scheduleRelayAlarm(
+              Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+            );
+            throw new Error("APNs delivery intent integrity check failed");
+          }
+          continue;
+        }
+        if (!isPendingApnsAcceptanceRecord(value)) {
+          await this.scheduleRelayAlarm(
+            Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+          );
+          throw new Error("APNs acceptance journal record is invalid");
+        }
+        const computedTokenHashes = await Promise.all(
+          value.deliveries.map((delivery) => tokenHash(delivery.token)),
+        );
+        const expectedKey = await apnsAcceptanceJournalStorageKey(
+          value.deliveryId,
+          value.eventRef,
+          value.sourceId,
+          value.reason,
+          value.deliveries,
+        );
+        if (
+          expectedKey !== key ||
+          value.deliveries.some((delivery, index) =>
+            delivery.tokenHash !== computedTokenHashes[index]
+          )
+        ) {
+          await this.scheduleRelayAlarm(
+            Date.now() + PENDING_INGEST_RETRY_DELAY_MS,
+          );
+          throw new Error("APNs acceptance journal integrity check failed");
+        }
+      }
       return false;
     }
     const crashedTrainingCutoff = new Date(
@@ -7280,10 +7399,6 @@ export class QuakeRelay {
     // intent cannot hide an independent due record or malformed evidence.
     // Provider/D1 work remains capped by `limit`; Durable Object reads do not
     // consume the Worker's D1 subrequest budget.
-    const pending = await this.state.storage.list<unknown>({
-      prefix: APNS_ACCEPTANCE_JOURNAL_PREFIX,
-      limit: APNS_ACCEPTANCE_JOURNAL_MAX_RECORDS + 1,
-    });
     let replayed = 0;
     let maintenancePerformed = false;
     for (const [key, value] of pending) {

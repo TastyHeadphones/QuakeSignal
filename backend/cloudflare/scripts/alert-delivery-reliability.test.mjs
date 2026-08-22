@@ -546,6 +546,8 @@ test("automatic production delivery skips sandbox and unfiltered registrations",
       return {
         bind(...bindings) {
           return {
+            sql,
+            bindings,
             async all() {
               if (sql.includes("SELECT rowid AS cursor, * FROM devices")) {
                 pageQueries.push({ sql, bindings });
@@ -722,6 +724,8 @@ test("final and cancelled revisions preserve lifecycle across revised estimates 
       return {
         bind(...bindings) {
           return {
+            sql,
+            bindings,
             async all() {
               if (sql.includes("SELECT rowid AS cursor, * FROM devices")) {
                 return { results: rows };
@@ -1140,9 +1144,9 @@ test("a durable pre-send intent survives the APNs-2xx-to-D1 crash window", async
           order.push("intent-durable");
           return { storageKey: "prepared", writeId: "write" };
         },
-        async () => {
-          order.push("intent-cleared");
-        },
+        async () => {},
+        undefined,
+        async () => false,
       ),
       /simulated crash before accepted evidence commit/,
     );
@@ -1734,7 +1738,11 @@ test("dispatches each authenticated app route with its stored allow-listed APNs 
         topic: "com.quakesignal.app.watchkitapp",
       },
     ]);
-    assert.equal(deliveredBatches.length, 1);
+    assert.equal(
+      deliveredBatches.length,
+      2,
+      "each authenticated APNs route owns its own durable acceptance batch",
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -2309,7 +2317,11 @@ test("a first status probe still performs operational bootstrap when no alarm ex
       },
     );
     await relay.fetch(new Request("https://relay.internal/status"));
-    assert.ok(d1Batches > 0, "first status retains durable startup work");
+    assert.equal(
+      d1Batches,
+      0,
+      "first status defers durable maintenance to the alarm",
+    );
     assert.equal(
       httpSeedRequests,
       0,
@@ -3791,7 +3803,11 @@ test("a cold Queue-facing relay defers its first HTTP baseline to the alarm", as
 
   assert.equal(response.status, 400);
   assert.deepEqual(modes, []);
-  assert.deepEqual(maintenance, ["dlq", "legacy", "journal", "outbox", "purge"]);
+  assert.deepEqual(
+    maintenance,
+    [],
+    "the legacy upgrade endpoint leaves routine maintenance to the alarm",
+  );
 });
 
 test("routine retention separates event, ordinary evidence, and active invalid-token cutoffs", async () => {
@@ -3800,6 +3816,8 @@ test("routine retention separates event, ordinary evidence, and active invalid-t
   const stored = new Map();
   const state = {
     storage: {
+      async getAlarm() { return null; },
+      async setAlarm() {},
       async get(key) {
         return stored.get(key);
       },
@@ -8604,9 +8622,9 @@ test("migration 0013 adds revision fencing, pseudonymous lifecycle continuity, a
       "alert_failures_reject_legacy_bdt_update",
       "devices_empty_sources_legacy_insert",
       "devices_empty_sources_legacy_update",
-      "devices_reject_unbound_legacy_update",
       "devices_registration_revision_legacy_insert",
       "devices_registration_revision_legacy_update",
+      "devices_reject_unbound_legacy_update",
       "devices_require_revision_fence",
     ],
     "rolling old-Worker writes must advance bound revisions, reject unowned invalid-token evidence/unbound renewal/unfenced deletes, and remediate exact empty-source opt-outs",
@@ -9360,7 +9378,7 @@ test("the global APNs lane durably admits work before delivery and terminal deci
   );
   assert.match(
     source,
-    /persistApnsDeliveryIntent\(message, deliveries\)[\s\S]*?completeApnsDeliveryIntent\(intent\)/,
+    /prepareApnsBatch:\s*\(deliveries\)\s*=>\s*this\.persistApnsDeliveryIntent\(message, deliveries\)[\s\S]*?completeApnsBatch:\s*\(intent\)\s*=>\s*this\.completeApnsDeliveryIntent\(intent\)/,
     "the production lane must retain the exact prepared intent through durable outcome handling",
   );
   assert.match(
@@ -9512,7 +9530,7 @@ test("a strict final-admission subset keeps the Queue page pending", async () =>
       "cached.provider.jwt",
       "strict-subset-delivery",
       undefined,
-      async () => "pending",
+      undefined,
       undefined,
       async () => ({ storageKey: "strict-subset", writeId: "write" }),
       async (_intent, _observedAtUtc, deliveries) => {
@@ -9765,7 +9783,7 @@ test("DLQ terminal guard ignores stale terminal outboxes but retains canonical D
       );
       assert.match(
         statements[1].sql,
-        /SELECT \?, \?, \?, \?, \?, \?, \?, \?, 'active', \?, \?\s+WHERE \? IS NULL OR EXISTS \(/i,
+        /SELECT (?:\?,\s*){8,}'active',\s*\?,\s*\?\s+WHERE \? IS NULL OR EXISTS \(/i,
         "the incident write must be conditional inside the same D1 batch",
       );
       assert.match(
