@@ -592,6 +592,14 @@ private struct AlertSoundSelectionView: View {
         @Bindable var settings = settings
 
         List {
+            if screenshotSelectedPreference != nil {
+                Text("CC BY 3.0")
+                    .font(.largeTitle.weight(.heavy))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+            }
+
             Section {
                 ForEach(AlertSoundPreference.allCases, id: \.self) { preference in
                     Button {
