@@ -612,9 +612,13 @@ private struct AlertSoundSelectionView: View {
                                     .foregroundStyle(.primary)
                                 if preference == .japaneseVoice {
                                     Text("CC BY 3.0")
-                                        .font(.body.weight(.semibold))
+                                        // Keep the license attribution legible in the
+                                        // native iPad screenshot capture. The regular
+                                        // supporting-text treatment is too faint for
+                                        // OCR at the 13-inch capture scale.
+                                        .font(.title2.weight(.bold))
                                         .visionFont(.title3.weight(.semibold))
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(.primary)
                                 }
                                 Text(LocalizedStringKey(preference.detailKey))
                                     .font(.caption)
