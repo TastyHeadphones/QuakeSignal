@@ -202,14 +202,15 @@ final class AppSettings {
         // Preserve existing installations' behavior. A device cannot be
         // registered until it has both notification permission and an APNs
         // device token, so this default does not opt an unprompted install in.
-        pushSubscriptionEnabled = defaults.object(forKey: Keys.pushSubscriptionEnabled) as? Bool ?? true
+        let subscriptionEnabled = defaults.object(forKey: Keys.pushSubscriptionEnabled) as? Bool ?? true
+        pushSubscriptionEnabled = subscriptionEnabled
         let persistedRegistrationState = defaults.string(forKey: Keys.pushRegistrationState)
             .flatMap(PushRegistrationState.init(rawValue:))
             ?? .unregistered
         // An app termination can interrupt a request after it has been sent
         // but before its response is observed. Never restore that ambiguous
         // state as active: surface a retryable failure instead.
-        if !pushSubscriptionEnabled {
+        if !subscriptionEnabled {
             pushRegistrationState = .unregistered
             defaults.set(PushRegistrationState.unregistered.rawValue, forKey: Keys.pushRegistrationState)
         } else if persistedRegistrationState == .registering {

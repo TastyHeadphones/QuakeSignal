@@ -807,7 +807,7 @@ final class QuakeStore {
     /// "caution" banner state.
     var recentNearbyReport: EEWEvent? {
         guard effectiveCoordinate != nil else { return nil }
-        HomeReportSelectionPolicy.newestReport(
+        return HomeReportSelectionPolicy.newestReport(
             from: nearbyEvents,
             now: clockNow,
             maximumAge: HomeReportSelectionPolicy.maximumRecentAge
