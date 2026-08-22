@@ -106,8 +106,15 @@ function localD1Adapter(databaseFile) {
             "string",
             `registration-batch entry ${index} must be a prepared SQL statement`,
           );
-          const output = sqlite.prepare(statement.sql).run(...statement.bindings);
-          return { meta: { changes: Number(output.changes) } };
+          try {
+            const output = sqlite.prepare(statement.sql).run(...statement.bindings);
+            return { meta: { changes: Number(output.changes) } };
+          } catch (error) {
+            if (error instanceof Error) {
+              error.message = `${error.message}; statement=${statement.sql}`;
+            }
+            throw error;
+          }
         });
         sqlite.exec("COMMIT");
         return results;
@@ -863,6 +870,7 @@ test("a pre-send intent recovers the APNs-to-D1 crash window before a newer supe
       {
         storage: {
           async getAlarm() { return alarmAt; },
+          async get(key) { return records.get(key); },
           async setAlarm(value) { alarmAt = value; },
           async list({ prefix, limit }) {
             return new Map(

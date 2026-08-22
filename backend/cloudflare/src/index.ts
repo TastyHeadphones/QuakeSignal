@@ -13218,7 +13218,18 @@ export async function completeAttestedRegistration(
       token,
       tokenHash: hashedToken,
       registrationRevision,
-    }) => [
+    }) => {
+      // Every prior-token mutation is guarded by that token's own provider
+      // attempt hash. The target-token ownership predicate above deliberately
+      // cannot authorize cleanup of a rotated sibling.
+      const priorOwnership = {
+        sql: `NOT EXISTS (
+          SELECT 1 FROM apns_provider_attempts
+          WHERE token_hash = ? AND outcome_reconciled_at_utc IS NULL
+        )`,
+        bindings: [hashedToken],
+      };
+      return [
       db
         .prepare(
           `INSERT INTO alert_lifecycle_recipients (
@@ -13244,7 +13255,7 @@ export async function completeAttestedRegistration(
                SELECT 1 FROM devices
                WHERE token = ? AND registration_revision = ?
                  AND app_attest_key_id = ? AND token <> ?
-                 AND ${consumed.sql} AND ${ownership.sql}
+                 AND ${consumed.sql} AND ${priorOwnership.sql}
              )
            GROUP BY outbox.event_ref
            ON CONFLICT(event_ref, token_hash) DO UPDATE SET
@@ -13272,7 +13283,7 @@ export async function completeAttestedRegistration(
           authorization.keyId,
           values.token,
           ...consumed.bindings,
-          ...ownership.bindings,
+          ...priorOwnership.bindings,
         ),
       db
         .prepare(
@@ -13283,7 +13294,7 @@ export async function completeAttestedRegistration(
                SELECT 1 FROM devices
                WHERE token = ? AND registration_revision = ?
                  AND app_attest_key_id = ? AND token <> ?
-                 AND ${consumed.sql} AND ${ownership.sql}
+                 AND ${consumed.sql} AND ${priorOwnership.sql}
              )`,
         )
         .bind(
@@ -13293,7 +13304,7 @@ export async function completeAttestedRegistration(
           authorization.keyId,
           values.token,
           ...consumed.bindings,
-          ...ownership.bindings,
+          ...priorOwnership.bindings,
         ),
       db
         .prepare(
@@ -13306,7 +13317,7 @@ export async function completeAttestedRegistration(
              SELECT 1 FROM devices
              WHERE token = ? AND registration_revision = ?
                AND app_attest_key_id = ? AND token <> ?
-               AND ${consumed.sql} AND ${ownership.sql}
+               AND ${consumed.sql} AND ${priorOwnership.sql}
            )`,
         )
         .bind(
@@ -13320,7 +13331,7 @@ export async function completeAttestedRegistration(
           authorization.keyId,
           values.token,
           ...consumed.bindings,
-          ...ownership.bindings,
+          ...priorOwnership.bindings,
         ),
       db
         .prepare(
@@ -13340,7 +13351,7 @@ export async function completeAttestedRegistration(
                SELECT 1 FROM devices
                WHERE token = ? AND registration_revision = ?
                  AND app_attest_key_id = ? AND token <> ?
-                 AND ${consumed.sql} AND ${ownership.sql}
+               AND ${consumed.sql} AND ${priorOwnership.sql}
              )
            ON CONFLICT(registration_revision) DO UPDATE SET
              token_hash = COALESCE(
@@ -13363,7 +13374,7 @@ export async function completeAttestedRegistration(
           authorization.keyId,
           values.token,
           ...consumed.bindings,
-          ...ownership.bindings,
+          ...priorOwnership.bindings,
         ),
       db
         .prepare(
@@ -13375,7 +13386,7 @@ export async function completeAttestedRegistration(
              AND status = 'active' AND EXISTS (
                SELECT 1 FROM devices
                WHERE token = ? AND app_attest_key_id = ? AND token <> ?
-                 AND ${consumed.sql} AND ${ownership.sql}
+                 AND ${consumed.sql} AND ${priorOwnership.sql}
              )`,
         )
         .bind(
@@ -13386,7 +13397,7 @@ export async function completeAttestedRegistration(
           authorization.keyId,
           values.token,
           ...consumed.bindings,
-          ...ownership.bindings,
+          ...priorOwnership.bindings,
         ),
       db
         .prepare(
@@ -13396,7 +13407,7 @@ export async function completeAttestedRegistration(
              AND EXISTS (
                SELECT 1 FROM devices
                WHERE token = ? AND app_attest_key_id = ? AND token <> ?
-                 AND ${consumed.sql} AND ${ownership.sql}
+                 AND ${consumed.sql} AND ${priorOwnership.sql}
              )`,
         )
         .bind(
@@ -13405,21 +13416,34 @@ export async function completeAttestedRegistration(
           authorization.keyId,
           values.token,
           ...consumed.bindings,
-          ...ownership.bindings,
+          ...priorOwnership.bindings,
         ),
-    ]),
-    db
-      .prepare(
-        `DELETE FROM devices
-         WHERE app_attest_key_id = ? AND token <> ?
-           AND ${consumed.sql} AND ${ownership.sql}`,
-      )
-      .bind(
-        authorization.keyId,
-        values.token,
-        ...consumed.bindings,
-        ...ownership.bindings,
-      ),
+      ];
+    }),
+    ...priorDeviceFailureRecords.map(({
+      token,
+      tokenHash: hashedToken,
+      registrationRevision,
+    }) =>
+      db
+        .prepare(
+          `DELETE FROM devices
+           WHERE token = ? AND registration_revision = ?
+             AND app_attest_key_id = ?
+             AND ${consumed.sql}
+             AND NOT EXISTS (
+               SELECT 1 FROM apns_provider_attempts
+               WHERE token_hash = ? AND outcome_reconciled_at_utc IS NULL
+             )`,
+        )
+        .bind(
+          token,
+          registrationRevision,
+          authorization.keyId,
+          ...consumed.bindings,
+          hashedToken,
+        )
+    ),
   ];
   // Capture the exact token's owner inside the D1 batch, before the UPSERT
   // replaces it. Two concurrent fresh-key rebinds therefore serialize A→B→C:
