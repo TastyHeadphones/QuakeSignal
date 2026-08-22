@@ -417,6 +417,11 @@ private struct CatalystScreenshotGeometryProbe: UIViewRepresentable {
                 titlebar.separatorStyle = .none
             }
 
+            // Catalyst can leave the UIKit window backed by the host display
+            // after a scene geometry request. Bind the live content window to
+            // the reviewed system frame before publishing capture readiness.
+            window.frame = targetFrame
+
             windowScene.requestGeometryUpdate(
                 UIWindowScene.GeometryPreferences.Mac(systemFrame: targetFrame)
             ) { [weak self, weak probe] error in
