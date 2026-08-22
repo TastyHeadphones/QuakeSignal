@@ -154,13 +154,11 @@ private struct ScreenshotGuideSummary: View {
                         symbol: "figure.wave",
                         detail: "Drop, cover, and hold on. Move away from windows and stay calm."
                     )
-                    Divider()
                     guideRow(
                         title: "guide.section.afterQuake",
                         symbol: "checkmark.circle",
                         detail: "Check for injuries, watch for aftershocks, and follow local instructions."
                     )
-                    Divider()
                     guideRow(
                         title: "guide.section.kit",
                         symbol: "cross.case",
