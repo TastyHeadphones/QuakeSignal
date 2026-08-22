@@ -759,7 +759,17 @@ final class QuakeStore {
         if settings.useCurrentLocation, let gps = LocationManager.shared.currentLocation {
             return gps
         }
-        return settings.selectedCity?.coordinate
+        if let city = settings.selectedCity {
+            return city.coordinate
+        }
+        // Screenshot-only Debug launches intentionally use a fresh simulator
+        // with no persisted onboarding choice. Bind the seeded historical
+        // Noto report to its own epicenter so the reviewed Home frame can show
+        // the normal no-nearby-activity state alongside the latest report.
+        if screenshotAutomationEnabled {
+            return ScreenshotAutomation.finalizedHistoricalEvents.first?.coordinate
+        }
+        return nil
     }
 
     /// True when `effectiveCoordinate` came from GPS rather than a picked city -- Views use this to
