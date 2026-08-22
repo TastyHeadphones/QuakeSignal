@@ -189,7 +189,7 @@ end
 class NativeAppleScreenshotCandidateValidator
   CANDIDATE_ROOT = "ios/AppStore/platforms/screenshot-candidates-v1.1-build8"
   README_NAME = "README.md"
-  README_SHA256 = "540abb1b547f3dba2f25f6cea5c8ec3fb2c2ffc6e6e62876f71a817942bc66c8"
+  README_SHA256 = "8b80ede571fe71ac30845eb9724231b36103dcde031afbd6c75b2d956d1be6cc"
   RECEIPT_NAME = "capture-run-receipt.json"
   SOURCE_COMMIT = "b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2"
   WORKFLOW_RUN_ID = 32_347_549_322
