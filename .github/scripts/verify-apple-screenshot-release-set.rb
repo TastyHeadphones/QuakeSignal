@@ -315,8 +315,8 @@ class AppleScreenshotReleaseSetValidator
       "eligibleForBuild8Upload" => false,
       "paths" => ["ios/AppStore/platforms/screenshot-candidates-v1.1-build8"],
       "fileCount" => 33,
-      "totalBytes" => 31_940_779,
-      "contentManifestSha256" => "e08b34fd0b2ecf3aaec93a4de738850f7c8ad6f5b12c9f427c6e90f590d3f7b3",
+      "totalBytes" => 31_940_854,
+      "contentManifestSha256" => "89f679e7d457bf74b1fb7e4bcef46a24bf5aa300b6882a88ccd8cffab6e001aa",
     },
   ].freeze
   FRAME_NAMES = %w[home reports map guide alert-preferences].freeze
