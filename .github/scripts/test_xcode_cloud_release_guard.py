@@ -493,13 +493,13 @@ class GuardContextTests(unittest.TestCase):
                 "ios/QuakeSignal/Notifications/PushPayload.swift",
                 "WolfxClient.sources.contains($0) ? $0 : nil",
                 "$0",
-                "structurally usable",
+                "strictly typed",
             ),
             (
                 "ios/QuakeSignal/Notifications/PushPayload.swift",
                 'event.id == "\\(sourceID):\\(eventID)",',
                 "true,",
-                "structurally usable",
+                "strictly typed",
             ),
             (
                 "ios/QuakeSignal/Notifications/PushPayload.swift",
@@ -989,7 +989,7 @@ class GuardContextTests(unittest.TestCase):
             ),
             (
                 "ios/QuakeSignal/Notifications/NotificationManager.swift",
-                "self.isForegroundSceneActive &&\n                    UIApplication.shared.applicationState == .active",
+                "self.isForegroundSceneActive &&\n                UIApplication.shared.applicationState == .active",
                 "self.isForegroundSceneActive",
             ),
             (
