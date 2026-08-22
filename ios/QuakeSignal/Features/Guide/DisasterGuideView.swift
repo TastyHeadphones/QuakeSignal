@@ -143,33 +143,39 @@ struct DisasterGuideView: View {
 private struct ScreenshotGuideSummary: View {
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 18) {
                 Label("guide.offlineBadge", systemImage: "checkmark.icloud")
                     .font(.headline)
                     .foregroundStyle(Color("NormalColor"))
 
-                guideCard(
-                    title: "guide.section.duringQuake",
-                    symbol: "figure.wave",
-                    detail: "Drop, cover, and hold on. Move away from windows and stay calm."
-                )
-                guideCard(
-                    title: "guide.section.afterQuake",
-                    symbol: "checkmark.circle",
-                    detail: "Check for injuries, watch for aftershocks, and follow local instructions."
-                )
-                guideCard(
-                    title: "guide.section.kit",
-                    symbol: "cross.case",
-                    detail: "Water · First aid · Flashlight · Power bank · Documents"
-                )
+                VStack(alignment: .leading, spacing: 14) {
+                    guideRow(
+                        title: "guide.section.duringQuake",
+                        symbol: "figure.wave",
+                        detail: "Drop, cover, and hold on. Move away from windows and stay calm."
+                    )
+                    Divider()
+                    guideRow(
+                        title: "guide.section.afterQuake",
+                        symbol: "checkmark.circle",
+                        detail: "Check for injuries, watch for aftershocks, and follow local instructions."
+                    )
+                    Divider()
+                    guideRow(
+                        title: "guide.section.kit",
+                        symbol: "cross.case",
+                        detail: "Water · First aid · Flashlight · Power bank · Documents"
+                    )
+                }
+                .padding(24)
+                .background(Color("CardColor"), in: RoundedRectangle(cornerRadius: 22))
             }
             .padding(24)
         }
         .background(Color("GroupedBGColor"))
     }
 
-    private func guideCard(title: LocalizedStringKey, symbol: String, detail: String) -> some View {
+    private func guideRow(title: LocalizedStringKey, symbol: String, detail: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: symbol)
                 .font(.title3.weight(.semibold))
@@ -179,8 +185,7 @@ private struct ScreenshotGuideSummary: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .background(Color("CardColor"), in: RoundedRectangle(cornerRadius: 16))
+        .padding(.vertical, 4)
     }
 }
 
