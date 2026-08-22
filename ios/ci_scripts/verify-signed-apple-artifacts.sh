@@ -599,7 +599,19 @@ verify_watch_app() {
   assert_plist_value "$profile_plist" TeamIdentifier:0 "$team_id" "$label provisioning profile"
   assert_plist_value "$profile_plist" Entitlements:application-identifier "$watch_application_id" "$label provisioning profile"
   assert_plist_value "$profile_plist" Entitlements:com.apple.developer.team-identifier "$team_id" "$label provisioning profile"
-  assert_plist_array_contains "$profile_plist" Platform watchOS "$label provisioning profile"
+  # Apple currently emits App Store profiles for a watch companion with the
+  # companion bundle's Platform array headed by iOS (and, on newer portals,
+  # xrOS/visionOS), even though the embedded product itself is watchOS. Older
+  # profiles used watchOS directly. Accept either Apple representation while
+  # retaining the explicit watch bundle identifier and entitlements checks.
+  if assert_plist_array_contains "$profile_plist" Platform watchOS "$label provisioning profile" >/dev/null 2>&1; then
+    :
+  elif assert_plist_array_contains "$profile_plist" Platform iOS "$label provisioning profile" >/dev/null 2>&1; then
+    :
+  else
+    error "$label provisioning profile does not include watchOS or Apple's iOS companion platform"
+    return 1
+  fi
   assert_app_store_profile "$profile_plist" "$label provisioning profile"
   for capability in aps-environment com.apple.developer.devicecheck.appattest-environment com.apple.developer.usernotifications.time-sensitive; do
     assert_plist_absent "$entitlements" "$capability" "$label signed entitlements"

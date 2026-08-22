@@ -181,8 +181,9 @@ create_app() {
   local alerts="$4"
   local profile_name="$5"
   local companion="${6:-}"
+  local info_platform="${7:-$profile_platform}"
   mkdir -p "$app"
-  write_info_plist "$app/Info.plist" "$bundle_id" "$profile_platform" "$alerts" "$companion"
+  write_info_plist "$app/Info.plist" "$bundle_id" "$info_platform" "$alerts" "$companion"
   write_entitlements "$app/.test-entitlements.plist" "$team.$bundle_id" "$alerts"
   write_profile "$app/embedded.mobileprovision" "$profile_name" "$team.$bundle_id" "$profile_platform" "$alerts"
   printf '%s\n' "$team" > "$app/.test-team"
@@ -210,7 +211,7 @@ create_fixture() {
   mkdir -p "$(dirname "$exported_app")"
   cp -R "$archive_app" "$exported_app"
   if [ "$fixture_platform" = ios ]; then
-    create_app "$archive_app/Watch/QuakeSignalWatch.app" com.quakesignal.app.watchkitapp watchOS false 'Watch Profile' com.quakesignal.app
+    create_app "$archive_app/Watch/QuakeSignalWatch.app" com.quakesignal.app.watchkitapp iOS false 'Watch Profile' com.quakesignal.app watchOS
     cp "$repository_root/ios/QuakeSignal/Resources/Audio/quakesignal_urgent.caf" "$archive_app/Watch/QuakeSignalWatch.app/"
     cp "$repository_root/ios/QuakeSignal/Resources/Audio/quakesignal_japanese_voice.caf" "$archive_app/Watch/QuakeSignalWatch.app/"
     cp "$repository_root/ios/QuakeSignal/Resources/Audio/ATTRIBUTION.md" "$archive_app/Watch/QuakeSignalWatch.app/"
