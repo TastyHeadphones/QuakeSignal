@@ -918,7 +918,7 @@ test("fails closed when foreground lifecycle or nonpersistent Wolfx transport po
     ],
     [
       "ios/QuakeSignal/Notifications/NotificationManager.swift",
-      "self.isForegroundSceneActive &&\n                    UIApplication.shared.applicationState == .active",
+      "self.isForegroundSceneActive &&\n                UIApplication.shared.applicationState == .active",
       "self.isForegroundSceneActive",
     ],
     [
@@ -2625,7 +2625,7 @@ test("fails closed when the normal lint runner's pinned Go toolchain is missing 
     },
     {
       label: "drifted Go version",
-      mutate: (contents) => contents.replace('go-version: "1.24.13"', 'go-version: "1.25.0"'),
+      mutate: (contents) => contents.replace('go-version: "1.25.0"', 'go-version: "1.24.13"'),
       error: /workflow-lint pinned Go setup step\.with must be exactly/i,
     },
     {
