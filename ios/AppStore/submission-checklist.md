@@ -13,7 +13,7 @@ value.
 - [ ] Confirm that this is not the legacy TestFlight `1.0 (2)` InternalQA-only
   evidence build and that it contains no delayed background-training control.
 - [ ] Confirm the App Attest version policy admits exactly that public build and
-  record the live production `/healthz` policy-fingerprint proof from the
+  record the live production service-metadata policy-fingerprint proof from the
   protected archive workflow.
 - [ ] Complete the required physical-device/TestFlight evidence, including the
   production App Attest and APNs checks, then obtain the required protected

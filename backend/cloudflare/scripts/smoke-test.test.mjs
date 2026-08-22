@@ -5,9 +5,9 @@ import {
   APP_ATTEST_POLICY_FORMAT,
   REQUIRED_WOLFX_SOURCES,
   SMOKE_MAX_RESPONSE_BYTES,
-  assertAppAttestPolicyHealth,
-  assertReadyDeliveryHealth,
-  assertReadyWolfxSourceHealth,
+  assertAppAttestPolicyMetadata,
+  assertReadyDeliveryTelemetry,
+  assertReadyWolfxSourceTelemetry,
   fetchWithoutRedirect,
   parseSmokeTestArguments,
 } from "./smoke-test-policy.mjs";
@@ -64,7 +64,7 @@ test("release smoke refuses redirects from the configured Worker origin", async 
       assert.equal(init.redirect, "error");
       return new Response(null, { status: 200 });
     },
-    "https://quakesignal-api.hopeso.workers.dev/healthz",
+    "https://quakesignal-api.hopeso.workers.dev/",
   );
   assert.equal(response.status, 200);
 });
@@ -75,7 +75,7 @@ test("release smoke aborts a request that exceeds its deadline", async () => {
       async (_input, init) => new Promise((_resolve, reject) => {
         init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true });
       }),
-      "https://quakesignal-api.hopeso.workers.dev/healthz",
+      "https://quakesignal-api.hopeso.workers.dev/",
       {},
       { timeoutMs: 5 },
     ),
@@ -87,7 +87,7 @@ test("release smoke rejects an oversized response body", async () => {
   await assert.rejects(
     fetchWithoutRedirect(
       async () => new Response(new Uint8Array(SMOKE_MAX_RESPONSE_BYTES + 1)),
-      "https://quakesignal-api.hopeso.workers.dev/healthz",
+      "https://quakesignal-api.hopeso.workers.dev/",
     ),
     /response exceeded 1048576 bytes/i,
   );
@@ -123,21 +123,21 @@ test("rejects incomplete or malformed App Attest policy assertions", () => {
 });
 
 test("validates the deployed App Attest fingerprint and required build", () => {
-  const policy = assertAppAttestPolicyHealth(policyHealth(), {
+  const policy = assertAppAttestPolicyMetadata(policyHealth(), {
     expectedAppAttestPolicyFingerprint: fingerprint,
     requiredAppAttestBundleVersion: "2",
   });
   assert.equal(policy.fingerprint, fingerprint);
 
   assert.throws(
-    () => assertAppAttestPolicyHealth(policyHealth(), {
+    () => assertAppAttestPolicyMetadata(policyHealth(), {
       expectedAppAttestPolicyFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       requiredAppAttestBundleVersion: "2",
     }),
     /reviewed contract/i,
   );
   assert.throws(
-    () => assertAppAttestPolicyHealth(policyHealth({ allowedBundleVersions: ["1"] }), {
+    () => assertAppAttestPolicyMetadata(policyHealth({ allowedBundleVersions: ["1"] }), {
       expectedAppAttestPolicyFingerprint: fingerprint,
       requiredAppAttestBundleVersion: "2",
     }),
@@ -145,20 +145,20 @@ test("validates the deployed App Attest fingerprint and required build", () => {
   );
 });
 
-test("rejects a malformed effective health allow-list", () => {
+test("rejects a malformed effective metadata allow-list", () => {
   assert.throws(
-    () => assertAppAttestPolicyHealth(policyHealth({ allowedBundleVersions: ["2", "1"] })),
+    () => assertAppAttestPolicyMetadata(policyHealth({ allowedBundleVersions: ["2", "1"] })),
     /sorted, de-duplicated/i,
   );
   assert.throws(
-    () => assertAppAttestPolicyHealth(policyHealth({ allowedBundleVersions: [] })),
+    () => assertAppAttestPolicyMetadata(policyHealth({ allowedBundleVersions: [] })),
     /non-empty/i,
   );
 });
 
-test("requires fresh approved JMA health while allowing diagnostic sources", () => {
-  assert.doesNotThrow(() => assertReadyWolfxSourceHealth({ sources: readySources() }));
-  assert.doesNotThrow(() => assertReadyWolfxSourceHealth({
+test("validates fresh approved JMA source telemetry", () => {
+  assert.doesNotThrow(() => assertReadyWolfxSourceTelemetry({ sources: readySources() }));
+  assert.doesNotThrow(() => assertReadyWolfxSourceTelemetry({
     sources: { ...readySources(), cenc_eew: { stale: false, transport: "http-polling" } },
   }));
   const missing = readySources();
@@ -170,20 +170,20 @@ test("requires fresh approved JMA health while allowing diagnostic sources", () 
     readySources({ jma_eew: { transport: "unavailable" } }),
   ]) {
     assert.throws(
-      () => assertReadyWolfxSourceHealth({ sources }),
+      () => assertReadyWolfxSourceTelemetry({ sources }),
       /two approved JMA sources/i,
     );
   }
 });
 
 test("requires explicit Boolean APNs readiness", () => {
-  assert.doesNotThrow(() => assertReadyDeliveryHealth({ status: "ready", apnsConfigured: true }));
+  assert.doesNotThrow(() => assertReadyDeliveryTelemetry({ status: "ready", apnsConfigured: true }));
   for (const delivery of [
     { status: "ready" },
     { status: "ready", apnsConfigured: null },
     { status: "ready", apnsConfigured: "true" },
     { status: "degraded", apnsConfigured: true },
   ]) {
-    assert.throws(() => assertReadyDeliveryHealth(delivery), /APNs readiness|APNs signing/i);
+    assert.throws(() => assertReadyDeliveryTelemetry(delivery), /APNs readiness|APNs signing/i);
   }
 });

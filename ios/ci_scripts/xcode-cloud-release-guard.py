@@ -1534,33 +1534,14 @@ def _json_response(
     return status, headers, value
 
 
-def _sources_ready(upstream: Any) -> bool:
-    if not isinstance(upstream, dict):
-        return False
-    sources = upstream.get("sources")
-    if not isinstance(sources, dict) or sorted(sources) != list(REQUIRED_WOLFX_SOURCES):
-        return False
-    return all(
-        isinstance(sources[source], dict)
-        and sources[source].get("stale") is False
-        and sources[source].get("transport") in {"websocket", "http-polling"}
-        for source in REQUIRED_WOLFX_SOURCES
-    )
-
-
 def _ready(body: Any, status: int) -> bool:
     return (
         status == 200
         and isinstance(body, dict)
-        and body.get("ok") is True
-        and isinstance(body.get("delivery"), dict)
-        and body["delivery"].get("status") == "ready"
-        and body["delivery"].get("apnsConfigured") is True
-        and isinstance(body.get("upstream"), dict)
-        and body["upstream"].get("status") == "ready"
-        and body["upstream"].get("staleSources") == []
-        and body["upstream"].get("transport") in {"websocket", "http-polling", "mixed"}
-        and _sources_ready(body["upstream"])
+        and body.get("purpose") == "APNs alert delivery only"
+        and body.get("earthquakeData") == "Clients fetch directly from Wolfx"
+        and isinstance(body.get("appAttestPolicy"), dict)
+        and body["appAttestPolicy"].get("format") == POLICY_FORMAT
     )
 
 
@@ -1575,10 +1556,8 @@ def wait_for_readiness(
     while now() < deadline:
         remaining = deadline - now()
         try:
-            status, _, body = _json_response("/healthz", fetcher=fetcher, timeout=min(REQUEST_TIMEOUT_SECONDS, remaining))
+            status, _, body = _json_response("/", fetcher=fetcher, timeout=min(REQUEST_TIMEOUT_SECONDS, remaining))
             last = {"status": status, "body": body}
-            if isinstance(body, dict) and isinstance(body.get("delivery"), dict) and body["delivery"].get("apnsConfigured") is False:
-                fail("Worker reports APNs signing material is not configured.")
             if _ready(body, status):
                 return body
         except ReleaseGuardError:
@@ -1618,30 +1597,22 @@ def verify_live_worker_release(
     parsed = urlsplit(WORKER_ORIGIN)
     if parsed.scheme != "https" or parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password or parsed.port:
         fail("Worker origin must remain the exact bare reviewed HTTPS origin.")
-    health = wait_for_readiness(fetcher=fetcher)
-    status, headers, body_bytes = _fetch("/healthz", fetcher=fetcher)
+    wait_for_readiness(fetcher=fetcher)
+    status, headers, body_bytes = _fetch("/", fetcher=fetcher)
     if status != 200 or headers.get("cache-control") != "no-store":
-        fail("health endpoint must return uncached HTTP 200.")
+        fail("service metadata must return uncached HTTP 200.")
     try:
-        health = strict_json_loads(body_bytes)
+        metadata = strict_json_loads(body_bytes)
     except (UnicodeDecodeError, TypeError, ValueError):
-        fail("health endpoint must return JSON.")
+        fail("service metadata must return JSON.")
     if (
         content_type_essence(headers) != "application/json"
-        or not _ready(health, status)
-        or health.get("mode") != "notification-only"
+        or not _ready(metadata, status)
     ):
-        fail("health endpoint is not fully ready notification-only production.")
-    delivery = health.get("delivery")
-    if (
-        not isinstance(delivery, dict)
-        or type(delivery.get("activeDlqIncidents")) is not int
-        or delivery.get("activeDlqIncidents") != 0
-    ):
-        fail("health endpoint must report zero active DLQ incidents.")
-    policy = health.get("appAttestPolicy")
+        fail("service metadata is not the reviewed notification-only production contract.")
+    policy = metadata.get("appAttestPolicy")
     if not isinstance(policy, dict):
-        fail("health endpoint is missing App Attest policy.")
+        fail("service metadata is missing App Attest policy.")
     versions = policy.get("allowedBundleVersions")
     if (
         policy.get("format") != POLICY_FORMAT

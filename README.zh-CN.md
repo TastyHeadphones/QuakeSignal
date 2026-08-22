@@ -117,7 +117,7 @@ npm run tauri dev
 公开发布 Apple 各平台前，请完成以下事项：
 
 - 验证用户批准的生产 Cloudflare Workers endpoint
-  `https://quakesignal-api.hopeso.workers.dev`、其公开 TLS 和 `/healthz`。
+  `https://quakesignal-api.hopeso.workers.dev`、其公开 TLS 和 `/` 服务元数据。
   其他 `workers.dev` hostname 仅限隔离的 Debug/staging 服务，绝不能作为 Release
   备用地址。
 - 确认已注册的 `com.quakesignal.app`、Watch App ID 与已审核 capability，并从 Xcode

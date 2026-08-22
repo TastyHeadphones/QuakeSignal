@@ -1939,11 +1939,11 @@ test("app identity routing is backward compatible, strict, and Watch-disabled by
   }
 });
 
-test("rejects an over-limit health probe before it can activate the global relay", async () => {
+test("rejects an over-limit metadata probe before it can activate the global relay", async () => {
   const { default: worker } = await workerModule();
   let relayTouched = false;
   const response = await worker.fetch(
-    new Request("https://quakesignal-api.example/healthz"),
+    new Request("https://quakesignal-api.example/"),
     {
       APP_ATTEST_CHALLENGE_RATE_LIMIT: {
         async limit() {
@@ -1953,11 +1953,11 @@ test("rejects an over-limit health probe before it can activate the global relay
       RELAY: {
         idFromName() {
           relayTouched = true;
-          throw new Error("an over-limit health request must not obtain a relay id");
+          throw new Error("an over-limit metadata request must not obtain a relay id");
         },
         get() {
           relayTouched = true;
-          throw new Error("an over-limit health request must not obtain a relay stub");
+          throw new Error("an over-limit metadata request must not obtain a relay stub");
         },
       },
     },
@@ -1966,7 +1966,7 @@ test("rejects an over-limit health probe before it can activate the global relay
   assert.equal(relayTouched, false);
 });
 
-test("health exposes a stable non-secret App Attest policy fingerprint without extra relay work", async () => {
+test("metadata exposes a stable non-secret App Attest policy fingerprint without relay work", async () => {
   const {
     AppIdentityRouteConfigurationError,
     appAttestPolicyFingerprint,
@@ -2063,12 +2063,12 @@ test("health exposes a stable non-secret App Attest policy fingerprint without e
       ]),
     }),
     (error) => error instanceof AppIdentityRouteConfigurationError,
-    "a wrong App Attest identity-to-topic route must fail health policy construction",
+    "a wrong App Attest identity-to-topic route must fail policy construction",
   );
 
   let relayRequests = 0;
   const response = await worker.fetch(
-    new Request("https://quakesignal-api.example/healthz"),
+    new Request("https://quakesignal-api.example/"),
     {
       ...policyEnvironment,
       APP_ATTEST_CHALLENGE_RATE_LIMIT: {
@@ -2089,11 +2089,7 @@ test("health exposes a stable non-secret App Attest policy fingerprint without e
           return {
             async fetch(request) {
               relayRequests += 1;
-              assert.equal(
-                new URL(typeof request === "string" ? request : request.url).pathname,
-                "/status",
-              );
-              return Response.json({ ok: true, mode: "notification-only" });
+              throw new Error("metadata must not touch the relay");
             },
           };
         },
@@ -2102,7 +2098,7 @@ test("health exposes a stable non-secret App Attest policy fingerprint without e
   );
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
-  assert.equal(relayRequests, 1, "health must make only its one status request to the relay");
+  assert.equal(relayRequests, 0, "metadata must not make a relay request");
   const body = await response.json();
   assert.deepEqual(body.appAttestPolicy, {
     format: policyFormat,
@@ -2111,7 +2107,7 @@ test("health exposes a stable non-secret App Attest policy fingerprint without e
   });
 });
 
-test("health returns a no-store structured 503 when the relay status call fails", async () => {
+test("metadata remains available when private relay status is unavailable", async () => {
   const {
     appAttestPolicyFingerprint,
     effectiveAppAttestPolicy,
@@ -2126,7 +2122,7 @@ test("health returns a no-store structured 503 when the relay status call fails"
     APP_ATTEST_REQUIRE_RELEASE_METADATA: "false",
   };
   const response = await worker.fetch(
-    new Request("https://quakesignal-api.example/healthz"),
+    new Request("https://quakesignal-api.example/"),
     {
       ...policyEnvironment,
       APP_ATTEST_CHALLENGE_RATE_LIMIT: {
@@ -2153,14 +2149,9 @@ test("health returns a no-store structured 503 when the relay status call fails"
       },
     },
   );
-  assert.equal(response.status, 503);
+  assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
   const body = await response.json();
-  assert.equal(body.ok, false);
-  assert.equal(body.delivery.status, "degraded");
-  assert.equal(body.delivery.apnsConfigured, null);
-  assert.equal(body.upstream.status, "degraded");
-  assert.deepEqual(body.upstream.staleSources, ["jma_eew", "jma_eqlist"]);
   assert.deepEqual(body.appAttestPolicy, {
     format: policyFormat,
     fingerprint: await appAttestPolicyFingerprint(
@@ -6961,8 +6952,8 @@ test("App Attest challenge quota is per-client before D1 and ignores caller key 
     "missing headers must share one bounded fallback bucket");
   assert.ok(challengeKeys.every((key) => /^[0-9a-f]{64}$/.test(key)));
   const endpointKeys = [];
-  const health = await worker.fetch(
-    new Request("https://quakesignal-api.example/healthz", {
+  const metadata = await worker.fetch(
+    new Request("https://quakesignal-api.example/", {
       headers: { "cf-connecting-ip": "203.0.113.10" },
     }),
     {
@@ -6974,7 +6965,7 @@ test("App Attest challenge quota is per-client before D1 and ignores caller key 
       },
     },
   );
-  assert.equal(health.status, 429);
+  assert.equal(metadata.status, 429);
   assert.notEqual(
     endpointKeys[0],
     challengeKeys[0],
@@ -6989,7 +6980,7 @@ test("App Attest challenge quota is per-client before D1 and ignores caller key 
 
 test("Cloudflare client IP rate-limit identity rejects malformed values and canonicalizes aliases", async () => {
   const { cloudflareAuthenticatedClientIp } = await workerModule();
-  const request = (value) => new Request("https://quakesignal-api.example/healthz", {
+  const request = (value) => new Request("https://quakesignal-api.example/", {
     headers: value === undefined ? {} : { "cf-connecting-ip": value },
   });
   assert.equal(cloudflareAuthenticatedClientIp(request("203.000.113.010")), "203.0.113.10");

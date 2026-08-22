@@ -236,7 +236,7 @@ npm test
 npm run package
 ```
 
-The remote smoke test checks notification-watcher health, device-registration validation, and verifies that public earthquake history/detail/live-relay endpoints stay disabled.
+The remote smoke test checks service metadata, device-registration validation, and verifies that public earthquake history/detail/live-relay endpoints stay disabled.
 
 ## Native Apple production-release prerequisites
 
@@ -244,7 +244,7 @@ Before a public Apple-platform release:
 
 - Verify the user-approved production Worker endpoint
   `https://quakesignal-api.hopeso.workers.dev`, its public Cloudflare TLS, and
-  `/healthz`. A different `workers.dev` hostname is only for isolated
+  the service metadata at `/`. A different `workers.dev` hostname is only for isolated
   Debug/staging service and must not be used as a Release fallback.
 - Confirm the registered `com.quakesignal.app` and Watch App IDs and their
   reviewed capabilities. The 2026-08-22 account audit found no configured
@@ -268,7 +268,7 @@ The user-approved production notification origin is
 [`quakesignal-api.hopeso.workers.dev`](https://quakesignal-api.hopeso.workers.dev).
 It is a separate opt-in alert-delivery service:
 
-- Workers provides device registration, removal, test-alert, legal, and health endpoints.
+- Workers provides device registration, removal, test-alert, legal, and service-metadata endpoints.
 - A Durable Object maintains the two reviewed JMA watcher sockets solely to detect push-worthy events.
 - D1 stores notification subscriptions and internal deduplication state.
 - Cloudflare Queues bounds APNs fan-out, retries transient delivery failures, and retains failed work for operator review.

@@ -196,7 +196,7 @@ separate Cloudflare Worker secrets; never read, copy, or reference the
 production Worker's secret store. Set `CLOUDFLARE_STAGING_WORKER_URL`, then
 rerun the protected workflow with both `deploy_staging=true` and
 `verify_staging_apns=true`. That optional phase verifies only secret *names*,
-checks `/healthz`, legal URLs, and the remote smoke suite against the staging
+checks service metadata, legal URLs, and the remote smoke suite against the staging
 `workers.dev` origin.
 
 The rendered staging configuration fixes `APP_ATTEST_ENFORCEMENT=development`
@@ -381,7 +381,7 @@ new reviewed Release candidate. The iOS release-contract
 verifier then rejects any mismatched dispatch build, generated Xcode setting,
 Worker policy, or archive invocation before signing secrets are imported. Its
 non-secret App Attest policy fingerprint must match the deployed production
-Worker's `/healthz` response and allow that selected build before a signed
+Worker's service metadata response and allow that selected build before a signed
 archive can start. This is a deployment-consistency gate; it does not claim
 that optional release metadata is present in every valid iOS 17–26 proof.
 The signed TestFlight lane and protected production Worker deploy also share a

@@ -85,7 +85,7 @@ to the global Durable Object—never a device token, raw upstream payload, or
 event body. It acknowledges the DLQ message only after that Durable Object
 write succeeds. The relay retries that marker into the same atomic D1 incident
 and terminal-outbox transaction before normal outbox replay; while any marker
-exists, `/healthz` returns `503` with
+exists, the private relay status returns `503` with
 `delivery.pendingDlqPersistenceFallbacks=true`. If both D1 and Durable Object
 storage are unavailable, the DLQ message remains retriable. Its bounded DLQ
 consumer policy finally routes the original message to the intentionally
@@ -124,7 +124,7 @@ one intent waits. Valid, integrity-matched records become eligible for safe
 retirement after 14 days; a D1 outage or consent race can delay deletion until
 the conservative evidence transaction succeeds. Malformed or
 hash/key-mismatched records are preserved for operator repair, can exceed that
-age until repaired, and make `/healthz` return `503` with a
+age until repaired, and make the private relay status return `503` with a
 nonzero or unavailable `delivery.pendingApnsAcceptanceBatches`; they are not
 silently treated as delivered. The relay reconciles this journal before every
 outbox acknowledgement, supersession, expiry, or DLQ terminalization, and on
@@ -236,7 +236,7 @@ that no longer selects the event's JMA feed is excluded before lifecycle lookup.
 The protected **Cloudflare Worker → Run workflow → deploy_production** job is
 the sole normal route for remote D1 migrations and `wrangler deploy`. It runs
 the schema in order after validation, checks APNs secret names, deploys, and
-smoke-tests `/healthz`, `/privacy`, `/support`, and `/terms` through the exact
+smoke-tests the service metadata at `/`, `/privacy`, `/support`, and `/terms` through the exact
 approved public `workers.dev` origin. Do not make a routine production release
 by running remote migration or deployment commands from a workstation. Its
 Cloudflare token needs permission to deploy this Worker, manage its Durable
@@ -322,11 +322,11 @@ provisioning capabilities; the Vision app is foreground-only. The
 the complete enabled public platform scope. Watch has a distinct identity and
 topic and remains disabled as described below.
 
-The public `quakesignal-app-attest-policy/v2` health fingerprint includes this
+The public `quakesignal-app-attest-policy/v2` metadata fingerprint includes this
 validated route array after rebuilding every entry in fixed key order and
 sorting by `appIdentity`. The build-8 release contract requires the normalized
 array above exactly, so a missing, changed, or additional production route
-cannot pass the pre-signing source check or the live `/healthz` fingerprint
+cannot pass the pre-signing source check or the live service-metadata fingerprint
 check. Route JSON whitespace and object-key order do not affect the digest.
 The legacy single-iOS fallback remains deliberate for configurations where
 `APP_ATTEST_APNS_ROUTES` is entirely absent, but it is not accepted by the
@@ -414,7 +414,7 @@ npx wrangler secret put APNS_BUNDLE_ID
 - The DLQ consumer stores sanitized delivery metadata in
   `alert_delivery_incidents` and then acknowledges the DLQ message. It never
   automatically replays an alert. A nonzero active incident count makes
-  `/healthz` return `503` with `delivery.status: "degraded"`; resolve the
+  the private relay status return `503` with `delivery.status: "degraded"`; resolve the
   incident deliberately in D1 by setting `status = 'resolved'` and
   `resolved_at_utc` to the same reviewed current UTC timestamp in one guarded
   update of the exact `queue_message_id` (or exact page-failure `outbox_id`). A
@@ -423,35 +423,35 @@ npx wrangler secret put APNS_BUNDLE_ID
 - If that initial DLQ D1 write fails, the Worker retains token-free incident
   evidence in the global Durable Object and acknowledges the DLQ message only
   after that independent durable write. The relay retries it into D1 before
-  ordinary outbox replay. Any pending fallback marker makes `/healthz` return
+  ordinary outbox replay. Any pending fallback marker makes the private relay status return
   `503` with `delivery.pendingDlqPersistenceFallbacks=true`; do not delete the
   marker manually. If both D1 and Durable Object storage fail, the original
   DLQ message remains retriable and ultimately enters the consumerless
-  `quakesignal-alert-delivery-dlq-fallback` Queue. `/healthz` cannot inspect
+  `quakesignal-alert-delivery-dlq-fallback` Queue. the private relay status cannot inspect
   Queue backlog, so monitor that Queue externally and recover its evidence
   before Cloudflare's consumerless-DLQ retention expires. A production
   deployment does not attest that the monitor is deployed or healthy; it does
   not claim to query Queue depth or dashboard alert wiring automatically.
 - A nonzero or unavailable `delivery.pendingApnsAcceptanceBatches` also makes
-  `/healthz` return `503`. It means a bounded pre-send provider intent needs
+  the private relay status return `503`. It means a bounded pre-send provider intent needs
   recovery, a rolling post-2xx record still needs D1 replay, or its integrity
   shape/hash/storage key needs operator
   repair. Do not delete it merely to clear health; outbox acknowledgement,
   supersession, expiry, and DLQ finalization all wait behind this gate.
 - Active per-device quarantines or transient retry failures also make
-  `/healthz` return `503`. They store only a token hash, delivery/event
+  the private relay status return `503`. They store only a token hash, delivery/event
   metadata, APNs status, and reason; resolve the underlying
   topic/payload/configuration issue and mark the D1 row resolved only after
   review. An immediate later APNs acceptance resolves only matching evidence
   whose recorded provider-response time is no later; delayed journal replay
   restores acceptance state without clearing active evidence by D1 order alone.
-- Active `alert_delivery_page_failures` also make `/healthz` return `503`.
+- Active `alert_delivery_page_failures` also make the private relay status return `503`.
   They identify provider/topic/payload failure for one alert page without a
   token hash. A successful later page resolves the record; a final DLQ record
   replaces it with the durable DLQ incident. Expiry does not resolve a provider
   failure automatically, because the underlying configuration may still be
   broken.
-- `/healthz` is a readiness endpoint: it is route-rate-limited before entering
+- the private relay status is a readiness endpoint: it is route-rate-limited before entering
   the global relay and returns `503` for missing APNs configuration or invalid
   local signing key, a stale pending outbox row,
   DLQ/Durable-Object-persistence-fallback/retry/quarantine incident, or any
@@ -471,7 +471,7 @@ npx wrangler secret put APNS_BUNDLE_ID
   bounded snapshot cursor and then deduplicated by a post-D1 fingerprint, so
   they do not create one journal row per list entry. Each list source holds at
   most an active cursor plus two newer accepted snapshots. The third distinct
-  frame is made durable before it marks the source overloaded and `/healthz`
+  frame is made durable before it marks the source overloaded and the private relay status
   fails closed; only then does the relay close that list socket. Later frames
   after explicit backpressure are not admitted, so the path remains bounded
   rather than spending one write per frame. The relay drains active → latest →
@@ -484,7 +484,7 @@ npx wrangler secret put APNS_BUNDLE_ID
   not an unlimited-capacity claim: unusual sustained changed-event, reconnect, or recovery
   activity can still exhaust the quota. Monitor Durable Object usage; a failed
   durable checkpoint is not treated as fresh and the three-minute stale policy
-  makes `/healthz` fail closed.
+  makes the private relay status fail closed.
 - Keep `ENABLE_PRODUCTION_TEST_PUSH=false` unless a reviewed delayed
   background-training exercise explicitly requires the InternalQA scheduler.
   The ordinary foreground **Send Test Alert** remains available to an active,
@@ -542,11 +542,11 @@ npx wrangler secret put APNS_BUNDLE_ID
 - Device APIs use JSON request bodies and `Cache-Control: no-store`; there is
   intentionally no permissive browser CORS policy. Native iOS networking is
   unaffected. Before routing every public request—including root/legal pages,
-  `OPTIONS`, health, disabled endpoints, and normalized unmatched paths—the historically named
+  `OPTIONS`, metadata, disabled endpoints, and normalized unmatched paths—the historically named
   `APP_ATTEST_CHALLENGE_RATE_LIMIT` first allows at most 60 requests/minute for
   each normalized method/route family plus a route-scoped
   SHA-256 pseudonym derived only from Cloudflare's authenticated client-IP
-  header at a Cloudflare location, including `GET /healthz` before the relay is
+  header at a Cloudflare location before the relay is
   activated. Missing or malformed headers share one bounded fallback bucket.
   Only requests admitted by that client/fallback bucket consume the separate
   `DEVICE_API_RATE_LIMIT` 300/minute route-wide key for the same normalized family,

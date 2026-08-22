@@ -47,7 +47,7 @@ recorded in the existing submission documents.
   and a separate named approval records signed-Release parity for iOS/iPadOS,
   tvOS, watchOS, visionOS, and Mac Catalyst.
 - Deploy all D1 migrations through 0013 and the build-8 Worker contract first.
-  Confirm the production health endpoint accepts App Attest bundle versions
+  Confirm the production service metadata accepts App Attest bundle versions
   1–8 and reports exactly `jma_eew` and `jma_eqlist` as its upstream source
   inventory.
 - Upload only the public `Release` archive. Never submit the `InternalQA`

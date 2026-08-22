@@ -67,7 +67,7 @@ export interface AlertDeliveryQueueNameEnvironment {
    * Terminal evidence queue for a DLQ message whose D1 incident write keeps
    * failing. This queue intentionally has no consumer; Cloudflare Queue
    * metrics must be monitored externally so an operator can intervene before
-   * its bounded Queue retention ends. `/healthz` reports only the preceding
+   * its bounded Queue retention ends. The private relay status reports only the preceding
    * Durable Object fallback marker, never inferred Queue depth.
    */
   ALERT_DELIVERY_DLQ_FALLBACK_NAME?: string;
@@ -471,7 +471,7 @@ const DEFAULT_ALERT_DELIVERY_QUEUE_NAME = "quakesignal-alert-delivery";
 const DEFAULT_ALERT_DELIVERY_DLQ_NAME = "quakesignal-alert-delivery-dlq";
 // The terminal evidence queue deliberately has no consumer. Cloudflare keeps
 // messages in a consumerless DLQ for its bounded retention period; its Queue
-// metrics are monitored externally. `/healthz` reports only the preceding
+// metrics are monitored externally. The Worker exposes only the preceding
 // Durable Object persistence marker, not Queue depth.
 const DEFAULT_ALERT_DELIVERY_DLQ_FALLBACK_NAME =
   "quakesignal-alert-delivery-dlq-fallback";
@@ -5886,7 +5886,7 @@ export class QuakeRelay {
       try {
         await this.ensureStatusStarted();
       } catch (error) {
-        // `/healthz` must still return a structured degraded response when
+        // the internal status path must still return a structured degraded response when
         // start-up work (usually D1 recovery) fails. The status reader has its
         // own guarded D1 queries and a direct Durable Object fallback marker.
         console.error(
@@ -5986,7 +5986,7 @@ export class QuakeRelay {
 
   /**
    * Preserve the first-request operational bootstrap, but never let every
-   * `/healthz` probe flush the outbox, replay D1 fallbacks, or seed upstream
+   * an internal status probe flush the outbox, replay D1 fallbacks, or seed upstream
    * HTTP. When an alarm already exists (including after a failed initial
    * attempt), that alarm is the sole routine-recovery owner.
    */
@@ -6008,7 +6008,7 @@ export class QuakeRelay {
         try {
           await this.ensureStarted(alarm);
         } catch (error) {
-          // A failed first start used to make every health probe retry D1
+          // A failed first start used to make every status probe retry D1
           // immediately. Leave a bounded alarm retry behind before reporting
           // the structured degraded status instead.
           try {
@@ -10059,7 +10059,7 @@ export class QuakeRelay {
   /**
    * Return only the persisted alternate-transport state. Unlike
    * `refreshHttpFallbackActive`, this method never clears or activates the
-   * marker, so `/healthz` remains safe to serve when Durable Object writes are
+   * marker, so the private relay status remains safe to serve when Durable Object writes are
    * temporarily unavailable.
    */
   private async readHttpFallbackActive(): Promise<boolean> {
@@ -10439,7 +10439,7 @@ export class QuakeRelay {
     let apnsConfigured = false;
     if (hasApnsConfiguration(this.env)) {
       try {
-        // This validates the key material locally without turning `/healthz`
+        // This validates the key material locally without turning a status probe
         // into an APNs network probe. APNs response failures are represented by
         // active retry/quarantine rows once a delivery is attempted.
         await this.apnsAuthorization();
@@ -10473,7 +10473,7 @@ export class QuakeRelay {
     const now = Date.now();
     // This status calculation is read-only. The alarm owns changes to this
     // marker; in particular, a Durable Object write-quota failure must leave
-    // `/healthz` able to return a structured, fail-closed response rather
+    // the status path able to return a structured, fail-closed response rather
     // than turning a status probe into an exception.
     const httpFallbackActive = await this.readHttpFallbackActive();
     const sourceHealth = await Promise.all(
@@ -10565,7 +10565,7 @@ export class QuakeRelay {
           websocketStale,
           httpStale,
           // A partially persisted HTTP snapshot is deliberately not ready
-          // even when WebSocket traffic has recovered: otherwise /healthz
+          // even when WebSocket traffic has recovered: otherwise status
           // could declare success before the alternate transport's durable
           // cursor has finished committing its bounded event slices.
           stale: transport === "unavailable" || hasPendingHttpSnapshot ||
@@ -10620,8 +10620,7 @@ export class QuakeRelay {
       ),
     };
     // A notification service with a stale/closed upstream route or missing
-    // APNs authentication must fail health checks; this is intentionally a
-    // readiness signal, not a superficial process liveness probe.
+    // APNs authentication remains visible in the private relay status record.
     const healthy = delivery.status === "ready" && upstream.status === "ready";
     return Response.json(
       {
@@ -12174,7 +12173,6 @@ function publicEndpointRateLimitRoute(request: Request, url: URL): string {
     "/privacy",
     "/terms",
     "/support",
-    "/healthz",
     "/v1/app-attest/challenge",
     "/v1/devices",
     "/v1/devices/test",
@@ -12611,16 +12609,16 @@ export async function appAttestPolicyFingerprint(
   return `sha256:${base64URL(new Uint8Array(digest))}`;
 }
 
-interface AppAttestHealthPolicy {
+interface AppAttestPolicyMetadata {
   format: typeof APP_ATTEST_POLICY_FORMAT;
   fingerprint: string;
   /** Needed for the release smoke test to prove the expected build is accepted. */
   allowedBundleVersions: string[];
 }
 
-async function appAttestHealthPolicy(
+async function appAttestPolicyMetadata(
   env: AppAttestPolicyEnvironment & AppIdentityRoutingEnvironment,
-): Promise<AppAttestHealthPolicy> {
+): Promise<AppAttestPolicyMetadata> {
   const policy = effectiveAppAttestPolicy(env);
   return {
     format: APP_ATTEST_POLICY_FORMAT,
@@ -15015,13 +15013,17 @@ async function handleRequest(
   }
 
   if (url.pathname === "/") {
-    return json({
-      name: "QuakeSignal Notification Service",
-      runtime: "Cloudflare Workers + Durable Objects + D1",
-      purpose: "APNs alert delivery only",
-      earthquakeData: "Clients fetch directly from Wolfx",
-      health: "/healthz",
-    });
+    return json(
+      {
+        name: "QuakeSignal Notification Service",
+        runtime: "Cloudflare Workers + Durable Objects + D1",
+        purpose: "APNs alert delivery only",
+        earthquakeData: "Clients fetch directly from Wolfx",
+        appAttestPolicy: await appAttestPolicyMetadata(env),
+      },
+      200,
+      noStoreHeaders(),
+    );
   }
   if (url.pathname === "/privacy" && request.method === "GET") {
     return legalPage(
@@ -15120,73 +15122,6 @@ async function handleRequest(
       ],
       "20 August 2026",
     );
-  }
-  if (url.pathname === "/healthz" && request.method === "GET") {
-    // This read-only document is intentionally generated by the outer Worker,
-    // not `QuakeRelay.statusResponse()`: it adds no Durable Object read/write
-    // work and remains available when the relay cannot answer at all.
-    const appAttestPolicy = await appAttestHealthPolicy(env);
-    try {
-      const relay = env.RELAY.get(env.RELAY.idFromName("global"));
-      const response = await relay.fetch("https://relay.internal/status");
-      const relayHealth = await response.json();
-      return json(
-        {
-          ...(typeof relayHealth === "object" && relayHealth !== null &&
-              !Array.isArray(relayHealth)
-            ? relayHealth
-            : {}),
-          appAttestPolicy,
-        },
-        response.status,
-        noStoreHeaders(),
-      );
-    } catch (error) {
-      // A relay storage outage (including exhausted Durable Object writes)
-      // must not turn readiness into a Worker exception. Do not expose the
-      // provider error; return an explicitly fail-closed, cache-bypassing
-      // health document so monitors can distinguish this from a healthy 200.
-      console.error(
-        JSON.stringify({
-          outcome: "relay_health_status_unavailable",
-          errorName: error instanceof Error ? error.name : "UnknownError",
-        }),
-      );
-      return json(
-        {
-          ok: false,
-          mode: "notification-only",
-          error: "relay health status is temporarily unavailable",
-          upstreams: Object.fromEntries(
-            APNS_RELAY_SOURCES.map((source) => [source, "unavailable"]),
-          ),
-          upstream: {
-            status: "degraded",
-            transport: "degraded",
-            websocketStatus: "degraded",
-            httpFallbackActive: null,
-            staleSources: APNS_RELAY_SOURCES,
-            pendingIngestSources: APNS_RELAY_SOURCES,
-            sources: {},
-          },
-          delivery: {
-            apnsConfigured: null,
-            activeDlqIncidents: null,
-            pendingDlqPersistenceFallbacks: null,
-            pendingApnsAcceptanceBatches: null,
-            activePageFailures: null,
-            activeQuarantinedFailures: null,
-            activeRetryFailures: null,
-            pendingOutboxRows: null,
-            staleOutboxRows: null,
-            status: "degraded",
-          },
-          appAttestPolicy,
-        },
-        503,
-        noStoreHeaders(),
-      );
-    }
   }
   if (
     url.pathname === "/v1/live" ||

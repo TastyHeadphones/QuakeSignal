@@ -65,24 +65,12 @@ def json_bytes(value):
     return json.dumps(value, separators=(",", ":")).encode()
 
 
-def ready_health(fingerprint=guard.APP_ATTEST_FINGERPRINT):
+def ready_metadata(fingerprint=guard.APP_ATTEST_FINGERPRINT):
     return {
-        "ok": True,
-        "mode": "notification-only",
-        "delivery": {
-            "status": "ready",
-            "apnsConfigured": True,
-            "activeDlqIncidents": 0,
-        },
-        "upstream": {
-            "status": "ready",
-            "staleSources": [],
-            "transport": "http-polling",
-            "sources": {
-                source: {"stale": False, "transport": "http-polling"}
-                for source in guard.REQUIRED_WOLFX_SOURCES
-            },
-        },
+        "name": "QuakeSignal Notification Service",
+        "runtime": "Cloudflare Workers + Durable Objects + D1",
+        "purpose": "APNs alert delivery only",
+        "earthquakeData": "Clients fetch directly from Wolfx",
         "appAttestPolicy": {
             "format": guard.POLICY_FORMAT,
             "fingerprint": fingerprint,
@@ -1175,12 +1163,8 @@ class GuardContextTests(unittest.TestCase):
 
 
 class LiveWorkerContractTests(unittest.TestCase):
-    def fetcher(self, fingerprint=guard.APP_ATTEST_FINGERPRINT, health_override=None):
-        health = copy.deepcopy(health_override or ready_health(fingerprint))
-        root = {
-            "purpose": "APNs alert delivery only",
-            "earthquakeData": "Clients fetch directly from Wolfx",
-        }
+    def fetcher(self, fingerprint=guard.APP_ATTEST_FINGERPRINT, metadata_override=None):
+        metadata = copy.deepcopy(metadata_override or ready_metadata(fingerprint))
 
         def fetch(url, method="GET", headers=None, body=None, timeout=None):
             del headers, timeout
@@ -1190,10 +1174,8 @@ class LiveWorkerContractTests(unittest.TestCase):
                 "cache-control": "no-store",
                 "content-type": "application/json; charset=utf-8",
             }
-            if path == "/healthz":
-                return 200, response_headers, json_bytes(health)
             if path == "/":
-                return 200, response_headers, json_bytes(root)
+                return 200, response_headers, json_bytes(metadata)
             if path in {"/privacy", "/support", "/terms"}:
                 contract = next(
                     value for value in guard.LEGAL_PAGE_CONTRACTS
@@ -1251,7 +1233,6 @@ class LiveWorkerContractTests(unittest.TestCase):
 
     def test_live_release_contract_requires_exact_mime_essences(self):
         for target_path, mutated_content_type, message in (
-            ("/healthz", "application/jsonp", "fully ready"),
             ("/", "application/jsonp", "metadata contract"),
             ("/privacy", "text/html-malware", "legal/support page"),
         ):
@@ -1271,46 +1252,10 @@ class LiveWorkerContractTests(unittest.TestCase):
     def test_live_release_contract_rejects_non_exact_bundle_version_list(self):
         for versions in (["8"], [str(value) for value in range(1, 10)], [1, 2, 3, 4, 5, 6, 7, 8]):
             with self.subTest(versions=versions):
-                health = ready_health()
-                health["appAttestPolicy"]["allowedBundleVersions"] = versions
+                metadata = ready_metadata()
+                metadata["appAttestPolicy"]["allowedBundleVersions"] = versions
                 with self.assertRaisesRegex(guard.ReleaseGuardError, "allow-list"):
-                    guard.verify_live_worker_release(fetcher=self.fetcher(health_override=health))
-
-    def test_readiness_requires_exact_true_apns_configuration(self):
-        for value in (False, None, 1, "true"):
-            with self.subTest(value=value):
-                health = ready_health()
-                if value is None:
-                    del health["delivery"]["apnsConfigured"]
-                else:
-                    health["delivery"]["apnsConfigured"] = value
-                self.assertFalse(guard._ready(health, 200))
-
-    def test_readiness_requires_exact_fresh_wolfx_source_inventory(self):
-        mutations = []
-        missing = ready_health()
-        del missing["upstream"]["sources"]["jma_eew"]
-        mutations.append(missing)
-        empty = ready_health()
-        empty["upstream"]["sources"] = {}
-        mutations.append(empty)
-        stale = ready_health()
-        stale["upstream"]["sources"]["jma_eew"]["stale"] = True
-        mutations.append(stale)
-        unavailable = ready_health()
-        unavailable["upstream"]["sources"]["jma_eew"]["transport"] = "unavailable"
-        mutations.append(unavailable)
-        for health in mutations:
-            with self.subTest(sources=health["upstream"]["sources"]):
-                self.assertFalse(guard._ready(health, 200))
-
-    def test_live_release_contract_requires_integer_zero_dlq_incidents(self):
-        for value in (False, 0.0, "0", None, 1):
-            with self.subTest(value=value):
-                health = ready_health()
-                health["delivery"]["activeDlqIncidents"] = value
-                with self.assertRaisesRegex(guard.ReleaseGuardError, "DLQ"):
-                    guard.verify_live_worker_release(fetcher=self.fetcher(health_override=health))
+                    guard.verify_live_worker_release(fetcher=self.fetcher(metadata_override=metadata))
 
     def test_redirect_handler_never_follows(self):
         handler = guard.RejectRedirects()
@@ -1340,7 +1285,7 @@ class LiveWorkerContractTests(unittest.TestCase):
         started = time.monotonic()
         with patch.object(guard, "build_opener", return_value=opener):
             with self.assertRaisesRegex(guard.ReleaseGuardError, "overall deadline"):
-                guard._request(f"{guard.WORKER_ORIGIN}/healthz", timeout=0.05)
+                guard._request(f"{guard.WORKER_ORIGIN}/", timeout=0.05)
         elapsed = time.monotonic() - started
         self.assertLess(
             elapsed,
