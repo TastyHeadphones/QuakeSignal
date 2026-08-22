@@ -780,7 +780,12 @@ private struct CatalystScreenshotGeometryProbe: UIViewRepresentable {
                 geometryFailures.append("source-display scale")
             }
             if !geometryFailures.isEmpty {
-                throw CaptureError.unsafeWindow(geometryFailures.joined(separator: ", "))
+                throw CaptureError.unsafeWindow(
+                    "\(geometryFailures.joined(separator: ", ")) " +
+                        "bounds=\(boundsBefore.integral) frame=\(window.frame.integral) " +
+                        "system=\(systemFrameBefore.integral) stable=\(stableSystemFrame.integral) " +
+                        "scale=\(sourceDisplayScale)"
+                )
             }
 
             let format = UIGraphicsImageRendererFormat()
