@@ -209,10 +209,10 @@ identifiers.
 
 The existing protected GitHub environment `ios-app-store-release` signs
 iOS/Watch, tvOS, and visionOS with their reviewed profiles. Its Mac Catalyst
-route uses Xcode's API-key-backed automatic signing for the archive and imports
-a dedicated Mac Installer Distribution `.p12` only to sign the exported App
-Store package. This avoids requiring cloud-signing permission to create or
-retrieve the installer certificate while preserving automatic app signing.
+route uses the reviewed Mac App Store profile and Apple Distribution identity
+for the archive, then imports a dedicated Mac Installer Distribution `.p12` to
+sign the exported App Store package. This keeps both signed artifacts bound to
+the same explicit App Store profile without cloud-signing permission.
 Ordinary `.github/workflows/ios.yml` CI still gives Catalyst a credential-free
 Release compilation gate; only an explicitly approved `apple-platforms.yml`
 dispatch may materialize signing credentials.
@@ -224,12 +224,9 @@ Shared certificate and upload configuration:
 - Secret `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE` (required only for the
   protected Catalyst package export)
 - Secret `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD`
-- Secret `APP_STORE_CONNECT_API_KEY` (required for upload and the protected
-  Mac Catalyst automatic-signing archive)
-- Variable `APP_STORE_CONNECT_API_KEY_ID` (required for upload and Mac
-  Catalyst automatic signing)
-- Variable `APP_STORE_CONNECT_API_ISSUER` (required for upload and Mac
-  Catalyst automatic signing)
+- Secret `APP_STORE_CONNECT_API_KEY` (required for upload)
+- Variable `APP_STORE_CONNECT_API_KEY_ID` (required for upload)
+- Variable `APP_STORE_CONNECT_API_ISSUER` (required for upload)
 - Variable `CLOUDFLARE_WORKER_URL`, exactly
   `https://quakesignal-api.hopeso.workers.dev` (used by the iOS lane only)
 
@@ -248,9 +245,9 @@ Target profiles:
 - Variable `MACCATALYST_APP_STORE_INSTALLER_IDENTITY`, the expected
   `Mac Installer Distribution: … (5TT564H883)` or legacy
   `3rd Party Mac Developer Installer: … (5TT564H883)` package identity.
-  The protected Catalyst lane uses `xcodebuild -allowProvisioningUpdates` with
-  the App Store Connect key for its archive, then imports the separate
-  password-protected installer `.p12` for the manual exported-package signature.
+  The protected Catalyst lane archives with the reviewed Apple Distribution
+  certificate and exact Catalyst App Store profile, then imports the separate
+  password-protected installer `.p12` for the exported-package signature.
 
 Apple Developer portal state recorded on 2026-08-22:
 

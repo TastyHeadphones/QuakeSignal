@@ -42,9 +42,9 @@ environment review history and fails closed when this machine binding is absent.
 | `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE` | Secret | Base64-encoded Mac Installer Distribution `.p12` used only to sign the exported App Store `.pkg` |
 | `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD` | Secret | Password used when exporting the Mac Installer Distribution `.p12` |
 | `MACCATALYST_APP_STORE_INSTALLER_IDENTITY` | Environment variable | Expected `Mac Installer Distribution: … (5TT564H883)` or legacy `3rd Party Mac Developer Installer: … (5TT564H883)` package identity |
-| `APP_STORE_CONNECT_API_KEY` | Secret | Team App Store Connect API private `.p8`; uploads builds and enables the protected Catalyst archive's automatic signing |
-| `APP_STORE_CONNECT_API_KEY_ID` | Environment variable | App Store Connect API key ID for upload and Catalyst automatic signing |
-| `APP_STORE_CONNECT_API_ISSUER` | Environment variable | App Store Connect API issuer UUID for upload and Catalyst automatic signing |
+| `APP_STORE_CONNECT_API_KEY` | Secret | Team App Store Connect API private `.p8` used to upload builds |
+| `APP_STORE_CONNECT_API_KEY_ID` | Environment variable | App Store Connect API key ID for build upload |
+| `APP_STORE_CONNECT_API_ISSUER` | Environment variable | App Store Connect API issuer UUID for build upload |
 | `CLOUDFLARE_WORKER_URL` | Environment variable | Exactly `https://quakesignal-api.hopeso.workers.dev`; the Release archive verifies this user-approved public Workers.dev production origin |
 
 The Account Holder must first enable App Store Connect API access. Use a
