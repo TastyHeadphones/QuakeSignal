@@ -186,7 +186,7 @@ class StoreAssetScreenshotReleaseModeTest < Minitest::Test
     refute status.success?
     assert_equal "", output
     assert_match(
-      /complete active build-8 screenshot release set|active\/expected screenshot source commit/,
+      /complete active build-9 screenshot release set|active\/expected screenshot source commit/,
       error_output,
     )
   end

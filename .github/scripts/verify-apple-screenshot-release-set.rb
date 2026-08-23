@@ -427,6 +427,13 @@ class AppleScreenshotReleaseSetValidator
     end
 
     index_path = @release_evidence_root.join(INDEX_PATH)
+    unless index_path.exist? || index_path.symlink?
+      if require_release_ready
+        raise AppleScreenshotReleaseSetValidationError,
+              "a complete active build-9 screenshot release set is required"
+      end
+      return :pending
+    end
     ensure_plain_file!(index_path, "screenshot set index")
     index = parse_json_object!(index_path)
     validate_index_header!(index)
