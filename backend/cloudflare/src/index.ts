@@ -15032,7 +15032,7 @@ async function handleRequest(
       [
         {
           heading: "Platform scope",
-          body: "Only the app when running on an iPhone or iPad can register with the QuakeSignal notification relay in this release. The embedded Apple Watch companion and Apple TV app request recent reports directly from Wolfx over encrypted WebSocket and HTTPS connections while open, keep current report state in memory, and store only the selected alert presentation mode locally. Apple Vision Pro and Mac Catalyst use the full interface, contact Wolfx directly while open, and keep preferences and guide details in local app storage. Those foreground-only Apple experiences do not independently use the notification relay, App Attest, or APNs and do not provide background emergency alerts. A system-mirrored iPhone notification on a paired Watch remains part of the iPhone registration. The separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 13), and Chrome extension also contact Wolfx directly and do not register with the relay.",
+          body: "Only the app when running on an iPhone or iPad can register with the QuakeSignal notification relay in this release. The embedded Apple Watch companion and Apple TV app request recent reports directly from Wolfx over encrypted WebSocket and HTTPS connections while open, keep current report state in memory, and store only the selected alert presentation mode locally. Apple Vision Pro and Mac Catalyst use the full interface, contact Wolfx directly while open, and keep preferences and guide details in local app storage. Those foreground-only Apple experiences do not independently use the notification relay, App Attest, or APNs and do not provide background emergency alerts. A system-mirrored iPhone notification on a paired Watch remains part of the iPhone registration. The separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 14), and Chrome extension also contact Wolfx directly and do not register with the relay.",
         },
         {
           heading: "Data we process",
@@ -15113,7 +15113,7 @@ async function handleRequest(
         },
         {
           heading: "Native desktop and Chrome",
-          body: "The separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 13), and Chrome extension connect directly to Wolfx and keep preferences and recent event state locally. They do not register with the QuakeSignal iPhone/iPad notification service. Check the app or extension connection status, selected sources and thresholds, local notification permission, and network access when troubleshooting.",
+          body: "The separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 14), and Chrome extension connect directly to Wolfx and keep preferences and recent event state locally. They do not register with the QuakeSignal iPhone/iPad notification service. Check the app or extension connection status, selected sources and thresholds, local notification permission, and network access when troubleshooting.",
         },
         {
           heading: "Report an issue",

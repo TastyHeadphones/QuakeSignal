@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "status": "planned-not-captured",
+  "purpose": "Build-14 iPhone and iPad screenshot plan. This template has no capture approval or hashes.",
+  "product": {
+    "appleId": "6800642443",
+    "platform": "iOS/iPadOS",
+    "marketingVersion": "1.1",
+    "build": 14,
+    "bundleIdentifier": "com.quakesignal.app",
+    "configuration": "Debug"
+  },
+  "rootDirectory": "screenshots-v1.1-build14",
+  "captureEvidence": {
+    "sourceBaselineCommit": null,
+    "artifactSha256": null,
+    "xcode": null,
+    "runtime": null,
+    "devices": [],
+    "capturedAtUtcRange": null,
+    "reviewer": null
+  },
+  "locales": [
+    {"directory": "en-US", "appleLanguage": "en-US", "appleLocale": "en_US", "publicationStatus": "approved-primary-only"},
+    {"directory": "ja", "appleLanguage": "ja", "appleLocale": "ja_JP", "publicationStatus": "pending-name-and-availability-approval"},
+    {"directory": "zh-Hans", "appleLanguage": "zh-Hans", "appleLocale": "zh_CN", "publicationStatus": "pending-name-and-availability-approval"}
+  ],
+  "displayClasses": {
+    "iphone-6.5": {"device": "iPhone 11 Pro Max", "portraitPixels": [1242, 2688], "requiredFramesPerApprovedLocale": 5},
+    "ipad-13": {"device": "iPad Pro 13-inch (M4)", "portraitPixels": [2064, 2752], "requiredFramesPerApprovedLocale": 5}
+  },
+  "frames": [
+    {"captureSelector": "ios-iphone-6.5-home", "displayClass": "iphone-6.5", "file": "01-home.jpg", "screen": "Home", "purpose": "Normal nearby report and service state", "captureStatus": "pending"},
+    {"captureSelector": "ios-iphone-6.5-reports", "displayClass": "iphone-6.5", "file": "02-reports.jpg", "screen": "Reports", "purpose": "Filterable current and historical reports", "captureStatus": "pending"},
+    {"captureSelector": "ios-iphone-6.5-map", "displayClass": "iphone-6.5", "file": "03-map.jpg", "screen": "Map", "purpose": "Epicenter context, filters, and current-location control without a displayed private coordinate", "captureStatus": "pending"},
+    {"captureSelector": "ios-iphone-6.5-guide", "displayClass": "iphone-6.5", "file": "04-guide.jpg", "screen": "Preparedness Guide", "purpose": "Offline safety guidance without personal notes", "captureStatus": "pending"},
+    {"captureSelector": "ios-iphone-6.5-alert-preferences", "displayClass": "iphone-6.5", "file": "05-alert-preferences.jpg", "screen": "Alert Sound", "purpose": "Selectable sounds and full Japanese voice attribution/non-official disclosure", "captureStatus": "pending"},
+    {"captureSelector": "ios-ipad-13-home", "displayClass": "ipad-13", "file": "01-home.jpg", "screen": "Home", "purpose": "Normal nearby report and service state", "captureStatus": "pending"},
+    {"captureSelector": "ios-ipad-13-reports", "displayClass": "ipad-13", "file": "02-reports.jpg", "screen": "Reports", "purpose": "Filterable current and historical reports", "captureStatus": "pending"},
+    {"captureSelector": "ios-ipad-13-map", "displayClass": "ipad-13", "file": "03-map.jpg", "screen": "Map", "purpose": "Epicenter context, filters, and current-location control without a displayed private coordinate", "captureStatus": "pending"},
+    {"captureSelector": "ios-ipad-13-guide", "displayClass": "ipad-13", "file": "04-guide.jpg", "screen": "Preparedness Guide", "purpose": "Offline safety guidance without personal notes", "captureStatus": "pending"},
+    {"captureSelector": "ios-ipad-13-alert-preferences", "displayClass": "ipad-13", "file": "05-alert-preferences.jpg", "screen": "Alert Sound", "purpose": "Selectable sounds and full Japanese voice attribution/non-official disclosure", "captureStatus": "pending"}
+  ],
+  "requiredBeforeApproval": [
+    "Generate an explicit file entry and SHA-256 for every captured file.",
+    "Validate exact dimensions, opaque JPEG encoding, locale, and visual quality.",
+    "Bind the capture to the frozen build-14 source commit and record named reviewer approval.",
+    "Do not copy hashes or approval status from screenshot-provenance-v1.1-build8.json, which records build 8."
+  ]
+}
