@@ -245,7 +245,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse --verify HEAD)" = "$SOURCE_COMMIT"
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
-          node .github/scripts/verify-ios-release-contract.mjs --build-number 8
+          node .github/scripts/verify-ios-release-contract.mjs --build-number 10
 
       - name: Verify exact successful signed release runs and attestation artifacts
         id: signed-runs
