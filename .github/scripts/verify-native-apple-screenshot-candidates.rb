@@ -200,6 +200,7 @@ class NativeAppleScreenshotCandidateValidator
     "sha256 of sorted UTF-8 records: <file-sha256><two spaces><relative-path><newline>"
   XCODE_VERSION = "Xcode 26.6 Build version 17F113 "
   PLATFORMS = %w[tvos watchos visionos].freeze
+  HISTORICAL_PLAN_EXPECTED = QuakeSignalPlatformScreenshotPlan::HISTORICAL_BUILD8_EXPECTED
 
   PLAN_SHA256 = {
     "tvos" => "996df610ad57ba0b83fe4aa9a16a15b9e8ed94267ae2bb9f63837b4d4ecf9647",
@@ -515,7 +516,7 @@ class NativeAppleScreenshotCandidateValidator
   def load_plans!
     PLATFORMS.each_with_object({}) do |platform, plans|
       manifest_path = @root.join(
-        QuakeSignalPlatformScreenshotPlan::EXPECTED.fetch(platform).fetch(:manifest),
+        HISTORICAL_PLAN_EXPECTED.fetch(platform).fetch(:manifest),
       )
       ensure_plain_directory!(
         manifest_path.dirname,
@@ -526,7 +527,11 @@ class NativeAppleScreenshotCandidateValidator
         raise NativeAppleScreenshotCandidateValidationError,
               "#{platform} screenshot plan manifest must be a plain file, not a symlink"
       end
-      plan = QuakeSignalPlatformScreenshotPlan.load(platform, repository_root: @root)
+      plan = QuakeSignalPlatformScreenshotPlan.load(
+        platform,
+        repository_root: @root,
+        expected_plans: HISTORICAL_PLAN_EXPECTED,
+      )
       require_equal(plan.fetch("schemaVersion"), 1, "#{platform} normalized plan schemaVersion")
       require_equal(plan.fetch("platform"), platform, "#{platform} normalized plan platform")
       require_equal(plan.fetch("locale"), "en-US", "#{platform} normalized plan locale")

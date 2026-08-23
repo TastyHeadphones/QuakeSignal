@@ -97,14 +97,24 @@ module QuakeSignalPlatformScreenshotPlan
     },
   }.freeze
 
+  # Build 8 captures are retained as immutable historical evidence.  They must
+  # continue to be interpreted against their own plan instead of the active
+  # build 9 release plan.
+  HISTORICAL_BUILD8_EXPECTED = EXPECTED.each_with_object({}) do |(platform, expected), historical|
+    historical[platform] = expected.merge(
+      manifest: expected.fetch(:manifest).sub("build9", "build8"),
+      product: expected.fetch(:product).merge("build" => 8),
+    ).freeze
+  end.freeze
+
   module_function
 
   def repository_root
     Pathname.new(__dir__).join("../..").realpath
   end
 
-  def load(platform, repository_root: self.repository_root)
-    expected = EXPECTED.fetch(platform) do
+  def load(platform, repository_root: self.repository_root, expected_plans: EXPECTED)
+    expected = expected_plans.fetch(platform) do
       raise Error, "unsupported platform #{platform.inspect}; expected tvos, visionos, or watchos"
     end
     root = Pathname.new(repository_root).realpath
