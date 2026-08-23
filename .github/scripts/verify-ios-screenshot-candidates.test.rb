@@ -495,7 +495,7 @@ class IOSBuild8ScreenshotCandidateValidatorTest < Minitest::Test
       ->(manifest, _) { manifest["product"]["build"] = 7 },
       ->(manifest, _) { manifest["product"]["configuration"] = "Release" },
       ->(_, provenance) { provenance["product"]["platform"] = "iOS" },
-      ->(_, provenance) { provenance["product"]["build"] = 9 },
+      ->(_, provenance) { provenance["product"]["build"] = 8 },
       ->(_, provenance) { provenance["product"]["configuration"] = "Release" },
       ->(_, provenance) { provenance["product"]["sdk"] = "iphoneos26.5" },
       ->(_, provenance) { provenance["product"]["signing"] = "automatic" },
