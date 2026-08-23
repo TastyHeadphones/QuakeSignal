@@ -819,6 +819,7 @@ resolve_installer_package_app() {
     return 1
   fi
   printf '%s\n' "$signature" > "$signature_listing"
+  printf 'Mac Catalyst installer package signature:\n%s\n' "$signature" >&2
   if ! /usr/bin/python3 -I - "$installer_identity" "$signature_listing" <<'PY'
 import re
 import sys
