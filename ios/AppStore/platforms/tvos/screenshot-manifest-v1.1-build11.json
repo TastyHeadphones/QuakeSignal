@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "status": "planned-not-captured",
+  "product": {
+    "appleId": "6800642443",
+    "platform": "tvOS",
+    "marketingVersion": "1.1",
+    "build": 11,
+    "bundleIdentifier": "com.quakesignal.app",
+    "scheme": "QuakeSignalTV"
+  },
+  "specification": {
+    "officialUrl": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/",
+    "minimumCount": 1,
+    "maximumCount": 10,
+    "acceptedLandscapePixels": [[1920, 1080], [3840, 2160]],
+    "selectedPixels": [1920, 1080],
+    "acceptedFormats": ["jpeg", "jpg", "png"],
+    "alphaAllowed": false
+  },
+  "captureEvidence": {
+    "sourceBaselineCommit": null,
+    "signedArtifactSha256": null,
+    "runtime": null,
+    "device": null,
+    "capturedAtUtc": null,
+    "reviewer": null
+  },
+  "locales": [{"directory": "en-US", "publicationStatus": "approved-primary-only"}],
+  "frames": [
+    {"file": "en-US/01-dashboard.png", "captureSelector": "tvos-dashboard", "screen": "Dashboard", "purpose": "Normal headline, recent reports, source context, and visible foreground-only disclosure", "setup": "Benign finalized historical reports; no active warning, training alert, private location, or notification artwork.", "pixels": [1920, 1080], "captureStatus": "pending", "sha256": null},
+    {"file": "en-US/02-recent-reports.png", "captureSelector": "tvos-recent-reports", "screen": "Recent reports", "purpose": "Remote-focusable report list and manual refresh", "setup": "Focus ring visible on a genuine interactive element; no fabricated platform chrome.", "pixels": [1920, 1080], "captureStatus": "pending", "sha256": null},
+    {"file": "en-US/03-event-detail.png", "captureSelector": "tvos-event-detail", "screen": "Event detail", "purpose": "Magnitude, status, source, time, available intensity and depth, plus non-official disclaimer", "setup": "A finalized historical report, not a live or simulated emergency.", "pixels": [1920, 1080], "captureStatus": "pending", "sha256": null}
+  ]
+}

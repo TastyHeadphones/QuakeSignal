@@ -1,5 +1,5 @@
 The Apple Watch app is a foreground-only companion embedded in the QuakeSignal
-iOS 1.1 (10) upload. It has no account, sign-in, payment, location permission,
+iOS 1.1 (11) upload. It has no account, sign-in, payment, location permission,
 notification permission, demo account, or reviewer credential.
 
 Open the Watch app to refresh a compact headline and recent-report list, then
@@ -18,7 +18,7 @@ APNs, App Attest, Time Sensitive or Critical notifications, or background
 delivery. Optional background alerts remain an iPhone feature; do not review the
 Watch companion as an independent background emergency-alert service.
 
-Build 10 reads only Wolfx feed identifiers jma_eew and jma_eqlist. CENC,
+Build 11 reads only Wolfx feed identifiers jma_eew and jma_eqlist. CENC,
 Sichuan, Fujian, and Chongqing feeds are disabled. QuakeSignal formats and
 normalizes JMA-issued factual information; it does not calculate a new
 local-intensity or ground-motion-arrival forecast.
