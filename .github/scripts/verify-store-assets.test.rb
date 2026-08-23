@@ -205,7 +205,7 @@ class StoreAssetScreenshotReleaseModeTest < Minitest::Test
       refute status.success?
       assert_equal "", output
       refute_match(/Unknown argument/, error_output)
-      assert_match(/screenshot set index.*missing/, error_output)
+      assert_match(/complete active build-9 screenshot release set/, error_output)
     end
   end
 end
