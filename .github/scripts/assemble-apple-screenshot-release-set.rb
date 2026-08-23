@@ -133,6 +133,7 @@ class AppleScreenshotReleaseSetAssembler
   FORBIDDEN_APPROVAL_SENTINELS = %w[
     approved-for-build8-upload
     approved-for-build10-upload
+    approved-for-build11-upload
     signedreleaseparityapproved
   ].freeze
 

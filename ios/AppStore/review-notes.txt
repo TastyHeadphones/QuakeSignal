@@ -1,4 +1,4 @@
-QuakeSignal is an independent, non-official earthquake-information app. Build 10
+QuakeSignal is an independent, non-official earthquake-information app. Build 11
 reads only the Wolfx jma_eew and jma_eqlist feeds; CENC, Sichuan, Fujian,
 and Chongqing feeds are disabled. It formats JMA-issued factual information and
 tells people to follow official local emergency guidance. Data can be delayed,

@@ -377,15 +377,15 @@ end
 
 if $PROGRAM_NAME == __FILE__
 require_macos_release_ready = false
-require_build10_screenshot_release_ready = false
+require_build11_screenshot_release_ready = false
 expected_source_commit = nil
 screenshot_release_evidence_root = nil
 ARGV.each do |argument|
   case argument
   when "--require-macos-release-ready"
     require_macos_release_ready = true
-  when "--require-build10-screenshot-release-ready"
-    require_build10_screenshot_release_ready = true
+  when "--require-build11-screenshot-release-ready"
+    require_build11_screenshot_release_ready = true
   when /\A--expected-source-commit=([0-9a-f]{40})\z/
     expected_source_commit = Regexp.last_match(1)
   when /\A--screenshot-release-evidence-root=(.+)\z/
@@ -396,7 +396,7 @@ ARGV.each do |argument|
     screenshot_release_evidence_root = Regexp.last_match(1)
   else
     warn "Usage: #{$PROGRAM_NAME} [--require-macos-release-ready] " \
-         "[--require-build10-screenshot-release-ready] " \
+         "[--require-build11-screenshot-release-ready] " \
          "[--expected-source-commit=<40-character-sha>] " \
          "[--screenshot-release-evidence-root=<absolute-existing-directory>]"
     warn "Unknown argument: #{argument}"
@@ -421,9 +421,9 @@ begin
     root: root,
     release_evidence_root: screenshot_release_evidence_root,
   ).validate!(
-    require_release_ready: require_build10_screenshot_release_ready,
+    require_release_ready: require_build11_screenshot_release_ready,
     expected_source_commit:
-      require_build10_screenshot_release_ready ? expected_source_commit : nil,
+      require_build11_screenshot_release_ready ? expected_source_commit : nil,
   )
   validate_watch_app_icon_contract!(root)
 

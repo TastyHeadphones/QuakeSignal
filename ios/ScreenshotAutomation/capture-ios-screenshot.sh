@@ -44,7 +44,7 @@ repo_root="$(cd "$ios_root/.." && pwd -P)"
 # shellcheck source=screenshot-process-guard.sh
 . "$script_dir/screenshot-process-guard.sh"
 debug_local_override="$repo_root/ios/QuakeSignal/Supporting/Debug.local.xcconfig"
-manifest_file="ios/AppStore/screenshot-manifest-v1.1-build10.template.json"
+manifest_file="ios/AppStore/screenshot-manifest-v1.1-build11.template.json"
 manifest_path="$repo_root/$manifest_file"
 bundle_identifier="com.quakesignal.app"
 
@@ -611,9 +611,9 @@ build_number="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$info_plist
 executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info_plist")"
 executable_path="$app_path/$executable_name"
 if [ "$actual_bundle_identifier" != "$bundle_identifier" ] || \
-   [ "$marketing_version" != "1.1" ] || [ "$build_number" != "10" ] || \
+   [ "$marketing_version" != "1.1" ] || [ "$build_number" != "11" ] || \
    [ ! -f "$executable_path" ] || [ -L "$executable_path" ]; then
-  echo "error: built app identity differs from build 10 capture contract" >&2
+  echo "error: built app identity differs from build 11 capture contract" >&2
   exit 65
 fi
 
@@ -1026,13 +1026,13 @@ export IOS_FRAME_FIRST_REJECTION_IMAGE_SHA="${first_rejection_image_sha256:-}"
       "debugLocalOverridePresent" => false,
     },
     "planManifest" => {
-      "file" => "ios/AppStore/screenshot-manifest-v1.1-build10.template.json",
+      "file" => "ios/AppStore/screenshot-manifest-v1.1-build11.template.json",
       "sha256" => ENV.fetch("IOS_FRAME_PLAN_SHA"),
     },
     "product" => {
       "bundleIdentifier" => "com.quakesignal.app",
       "marketingVersion" => "1.1",
-      "build" => 10,
+      "build" => 11,
       "scheme" => "QuakeSignal",
       "destination" => "generic/platform=iOS Simulator",
       "configuration" => "Debug",
