@@ -294,7 +294,7 @@ jobs:
               -authenticationKeyPath "$automatic_key"
               -authenticationKeyID "$PLATFORM_AUTOMATIC_SIGNING_KEY_ID"
               -authenticationKeyIssuerID "$PLATFORM_AUTOMATIC_SIGNING_ISSUER"
-              PROVISIONING_PROFILE_SPECIFIER=Automatic
+              PROVISIONING_PROFILE_SPECIFIER=
             )
           fi
           xcodebuild archive \
