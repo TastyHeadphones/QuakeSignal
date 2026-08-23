@@ -236,6 +236,7 @@ const REVIEWED_WORKFLOW_FILES = [
   ".github/workflows/terminal-dlq-fallback-monitor.yml",
   ".github/workflows/terminal-dlq-monitor.yml",
   ".github/workflows/workflow-lint.yml",
+  ".github/workflows/xcode-cloud-signing-inspect.yml",
 ];
 
 const APPROVED_WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev";
@@ -411,8 +412,8 @@ const CLOUDFLARE_DEPLOY_PRODUCTION_HEADER = {
 // credentials.
 const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:2VeW3DO8MbplMJY0o2VH9mUpAgnd1cG6mlbnLP3K0Es";
 const WORKFLOW_JOBS_FINGERPRINT = "sha256:mmzDL0fVCsXwnbsK_dXtK3dk10pKXDTe6pLeKEkEack";
-const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:4ThzZmBhoI25d4YA6g1XwouiHMmuIJlpFoF5BjBa29A";
-const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:S8-Yv0QUudRWwOg_sw64mx3Gau_jJWqSuOxGNZVA8X4";
+const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:Ox3dzi2WYEo52EgefqJgOehKdYKKnDuNY2fwG3CKPGA";
+const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:lRHeGztzO68YNoVXuHzcQFnFad4odyasAeqKnOf7qco";
 const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:7uJANY6vWpHWmx_aG3r9Vfm6FN2Kc0Jic68X4kW7AjI";
 const SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT = "sha256:nwR_WO2AVbhslCYJYO51gOpS7B9wMaROs8pMHMeXRe0";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
@@ -423,9 +424,9 @@ const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:bocI3sE5zvOVMAApOs_e8lX36IC
 const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:qhbmHNjXa5zqEro1kc74zoLq6O0HveB9dIDzFq38MKU";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:MGFrBJXA26bnqXfA030H1RdRUqOjGrmH85d7mB2636k";
-const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:O8if-MU37irsjKCxElF6J-3JIrmduRHrBEjenadzymU";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:_oiwYIYJG0pu5Uki7p4sOI23nvFEt49jCuXMBLUG8DI";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:PPc69jsoTk__gNhsr6aLKNLSoDfxo0rRG3kXanVsnbs";
+const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:wFg4joaMuv2OenktBJcQB-XPD8_FpbSs0irJMAilH4w";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:WuRzgko29bnvPX0H7FZCZvODHVSE8A2QirEn91VuoG4";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:8mgktlEXXpyeATI7g5Mdm_JWBHh-3DJNoAI-08h0FAs";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:_ZwVwcu1DLNzB8gNUjCzxf5A9mCefe483hBvgsOWtGU";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -454,21 +455,6 @@ const ARCHIVE_COMMAND = [
   "QUAKESIGNAL_WATCH_PROFILE_NAME=\"$WATCH_PROFILE_NAME\"",
   "CURRENT_PROJECT_VERSION=\"$BUILD_NUMBER\"",
   "QUAKESIGNAL_API_BASE_URL=\"$IOS_RELEASE_API_BASE_URL\"",
-].join(" ");
-const PLATFORM_ARCHIVE_COMMAND = [
-  "xcodebuild archive",
-  "-project \"$XCODE_PROJECT\"",
-  "-scheme \"$PLATFORM_SCHEME\"",
-  "-configuration Release",
-  "-destination \"$PLATFORM_DESTINATION\"",
-  "-archivePath \"$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY.xcarchive\"",
-  "DEVELOPMENT_TEAM=5TT564H883",
-  "CODE_SIGN_STYLE=Manual",
-  "CODE_SIGN_IDENTITY='Apple Distribution'",
-  "QUAKESIGNAL_TV_PROFILE_NAME=\"$PLATFORM_PROFILE_NAME\"",
-  "QUAKESIGNAL_VISION_PROFILE_NAME=\"$PLATFORM_PROFILE_NAME\"",
-  "QUAKESIGNAL_CATALYST_PROFILE_NAME=\"$PLATFORM_PROFILE_NAME\"",
-  "CURRENT_PROJECT_VERSION=\"$BUILD_NUMBER\"",
 ].join(" ");
 const IOS_SIGNED_ARTIFACT_COMMAND = [
   "set -euo pipefail",
@@ -1589,6 +1575,7 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
     contractFiles.iosWorkflow,
     contractFiles.platformWorkflow,
     contractFiles.screenshotReleaseWorkflow,
+    ".github/workflows/xcode-cloud-signing-inspect.yml",
   ]);
   const appleUploadFiles = new Set([
     ...mobileReleaseFiles,
@@ -1720,6 +1707,7 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
     ".github/workflows/ios.yml",
     ".github/workflows/terminal-dlq-fallback-monitor.yml",
     ".github/workflows/terminal-dlq-monitor.yml",
+    ".github/workflows/xcode-cloud-signing-inspect.yml",
   ];
   const observedCredentialWorkflowPaths = credentialWorkflows.map(({ path }) => path);
   if (!sameValue(observedCredentialWorkflowPaths, expectedCredentialWorkflowPaths)) {
@@ -2142,9 +2130,10 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
       PLATFORM_REQUIRES_ALERT_ENTITLEMENTS: "${{ matrix.requires_alert_entitlements }}",
       PLATFORM_PROFILE: "${{ secrets[matrix.profile_secret] }}",
       PLATFORM_PROFILE_NAME: "${{ vars[matrix.profile_variable] }}",
-      PLATFORM_INSTALLER_CERTIFICATE: "${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || '' }}",
-      PLATFORM_INSTALLER_CERTIFICATE_PASSWORD: "${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD || '' }}",
       PLATFORM_INSTALLER_IDENTITY: "${{ inputs.platform == 'maccatalyst' && vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || '' }}",
+      PLATFORM_AUTOMATIC_SIGNING_KEY: "${{ inputs.platform == 'maccatalyst' && secrets.APP_STORE_CONNECT_API_KEY || '' }}",
+      PLATFORM_AUTOMATIC_SIGNING_KEY_ID: "${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_KEY_ID || '' }}",
+      PLATFORM_AUTOMATIC_SIGNING_ISSUER: "${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_ISSUER || '' }}",
       IOS_CERTIFICATE: "${{ secrets.IOS_APP_STORE_CERTIFICATE }}",
       IOS_CERTIFICATE_PASSWORD: "${{ secrets.IOS_APP_STORE_CERTIFICATE_PASSWORD }}",
       ARCHIVE_ONLY: "${{ inputs.archive_only }}",
@@ -2152,7 +2141,7 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
     },
   }, ["run"], "native platform selected signing configuration step");
   requireText(signingConfiguration.run, [
-    "required+=(\n    PLATFORM_INSTALLER_CERTIFICATE\n    PLATFORM_INSTALLER_CERTIFICATE_PASSWORD\n    PLATFORM_INSTALLER_IDENTITY\n  )",
+    "required+=(\n    PLATFORM_INSTALLER_IDENTITY\n    PLATFORM_AUTOMATIC_SIGNING_KEY\n    PLATFORM_AUTOMATIC_SIGNING_KEY_ID\n    PLATFORM_AUTOMATIC_SIGNING_ISSUER\n  )",
     "test \"$PLATFORM_DESTINATION\" = 'generic/platform=macOS,variant=Mac Catalyst'",
     "test \"$PLATFORM_PROFILE_PLATFORM\" = OSX",
     "test \"$PLATFORM_PROFILE_EXTENSION\" = provisionprofile",
@@ -2174,20 +2163,18 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
       PLATFORM_KEY: "${{ matrix.key }}",
       PLATFORM_PROFILE_EXTENSION: "${{ matrix.profile_extension }}",
       PLATFORM_PROFILE: "${{ secrets[matrix.profile_secret] }}",
-      PLATFORM_INSTALLER_CERTIFICATE: "${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || '' }}",
-      PLATFORM_INSTALLER_CERTIFICATE_PASSWORD: "${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD || '' }}",
       IOS_CERTIFICATE: "${{ secrets.IOS_APP_STORE_CERTIFICATE }}",
       IOS_CERTIFICATE_PASSWORD: "${{ secrets.IOS_APP_STORE_CERTIFICATE_PASSWORD }}",
     },
   }, ["run"], "native platform signing import step");
   requireText(signingImport.run, [
     'profile="$profile_dir/quakesignal-$PLATFORM_KEY.$PLATFORM_PROFILE_EXTENSION"',
-    'printf \'%s\' "$PLATFORM_INSTALLER_CERTIFICATE" | base64 -D > "$installer_certificate"',
-    'security import "$installer_certificate" -k "$keychain" -P "$PLATFORM_INSTALLER_CERTIFICATE_PASSWORD" -T /usr/bin/productbuild',
+    'security import "$certificate" -k "$keychain" -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign',
+    'security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"',
   ], "native platform signing import step.run");
 
   const archive = stepByName(steps, "Archive selected signed App Store build", "native platform signed archive step");
-  exactRecord(archive, {
+  exactRecordWithAllowedKeys(archive, {
     name: "Archive selected signed App Store build",
     env: {
       BUILD_NUMBER: "${{ inputs.build_number }}",
@@ -2195,9 +2182,27 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
       PLATFORM_SCHEME: "${{ matrix.scheme }}",
       PLATFORM_DESTINATION: "${{ matrix.destination }}",
       PLATFORM_PROFILE_NAME: "${{ vars[matrix.profile_variable] }}",
+      PLATFORM_AUTOMATIC_SIGNING_KEY: "${{ inputs.platform == 'maccatalyst' && secrets.APP_STORE_CONNECT_API_KEY || '' }}",
+      PLATFORM_AUTOMATIC_SIGNING_KEY_ID: "${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_KEY_ID || '' }}",
+      PLATFORM_AUTOMATIC_SIGNING_ISSUER: "${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_ISSUER || '' }}",
     },
-    run: PLATFORM_ARCHIVE_COMMAND,
-  }, "native platform signed archive step");
+  }, ["run"], "native platform signed archive step");
+  requireText(archive.run, [
+    "set -euo pipefail",
+    "code_sign_style=Manual",
+    'if [ "$PLATFORM_KEY" = maccatalyst ]; then',
+    'automatic_key="$RUNNER_TEMP/quakesignal-maccatalyst-automatic-signing.p8"',
+    'printf \'%s\' "$PLATFORM_AUTOMATIC_SIGNING_KEY" > "$automatic_key"',
+    "code_sign_style=Automatic",
+    "-allowProvisioningUpdates",
+    '-authenticationKeyPath "$automatic_key"',
+    '-authenticationKeyID "$PLATFORM_AUTOMATIC_SIGNING_KEY_ID"',
+    '-authenticationKeyIssuerID "$PLATFORM_AUTOMATIC_SIGNING_ISSUER"',
+    "xcodebuild archive",
+    'CODE_SIGN_STYLE="$code_sign_style"',
+    "CODE_SIGN_IDENTITY='Apple Distribution'",
+    '"${signing_arguments[@]}"',
+  ], "native platform signed archive step.run");
 
   const exportedArtifact = stepByName(
     steps,
@@ -2211,12 +2216,18 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
       PLATFORM_BUNDLE_IDENTIFIER: "${{ matrix.bundle_identifier }}",
       PLATFORM_PROFILE_NAME: "${{ vars[matrix.profile_variable] }}",
       PLATFORM_INSTALLER_IDENTITY: "${{ inputs.platform == 'maccatalyst' && vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || '' }}",
+      PLATFORM_AUTOMATIC_SIGNING_KEY_ID: "${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_KEY_ID || '' }}",
+      PLATFORM_AUTOMATIC_SIGNING_ISSUER: "${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_ISSUER || '' }}",
     },
   }, ["run"], "native platform exported artifact step");
   requireText(exportedArtifact.run, [
     "Add :manageAppVersionAndBuildNumber bool false",
-    "Add :signingCertificate string Apple Distribution",
-    "Add :installerSigningCertificate string $PLATFORM_INSTALLER_IDENTITY",
+    "Set :signingStyle automatic",
+    "-allowProvisioningUpdates",
+    '-authenticationKeyPath "$automatic_key"',
+    '-authenticationKeyID "$PLATFORM_AUTOMATIC_SIGNING_KEY_ID"',
+    '-authenticationKeyIssuerID "$PLATFORM_AUTOMATIC_SIGNING_ISSUER"',
+    "Add :provisioningProfiles dict",
     'artifacts=("$export_path"/*.pkg)',
     'unexpected=("$export_path"/*.ipa)',
     'artifacts=("$export_path"/*.ipa)',
@@ -2280,7 +2291,7 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
 
   const cleanup = stepByName(steps, "Remove signing material", "native platform signing cleanup step");
   requireText(cleanup.run, [
-    'rm -f "$RUNNER_TEMP/quakesignal-$PLATFORM_KEY-installer.p12"',
+    'rm -f "$RUNNER_TEMP/quakesignal-maccatalyst-automatic-signing.p8"',
     'rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/quakesignal-$PLATFORM_KEY.$PLATFORM_PROFILE_EXTENSION"',
   ], "native platform signing cleanup step.run");
 
