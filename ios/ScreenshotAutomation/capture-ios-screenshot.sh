@@ -252,6 +252,45 @@ complete_owned_simulator_cleanup() {
   simulator_id=""
 }
 
+configure_ipados_full_screen_apps_mode() {
+  local simulator_id="$1"
+  local runtime_identifier="$2"
+  local windowing_enabled=""
+
+  # iPadOS 26 Simulator defaults to Windowed Apps. simctl captures the
+  # complete device in that mode, not just the app's floating window. This is
+  # a disposable capture device, so use the Settings-equivalent defaults and
+  # reboot it before recording a full-device App Store candidate.
+  case "$runtime_identifier" in
+    com.apple.CoreSimulator.SimRuntime.iOS-2[6-9]-*|com.apple.CoreSimulator.SimRuntime.iOS-[3-9][0-9]-*) ;;
+    *) return 0 ;;
+  esac
+
+  windowing_enabled="$(quakesignal_screenshot_run_tracked xcrun simctl spawn \
+    "$simulator_id" defaults read com.apple.springboard SBChamoisWindowingEnabled 2>/dev/null || true)"
+  if [ "$(printf '%s' "$windowing_enabled" | tr -d '[:space:]')" = "0" ]; then
+    return 0
+  fi
+
+  for key in \
+    SBChamoisWindowingEnabled \
+    SBMedusaMultitaskingEnabled \
+    SBFlexibleWindowingPreviouslyEnabledAutomaticStageCreation; do
+    quakesignal_screenshot_run_tracked xcrun simctl spawn \
+      "$simulator_id" defaults write com.apple.springboard "$key" -bool false
+  done
+  quakesignal_screenshot_run_tracked xcrun simctl shutdown "$simulator_id"
+  quakesignal_screenshot_run_tracked xcrun simctl boot "$simulator_id"
+  quakesignal_screenshot_run_tracked xcrun simctl bootstatus "$simulator_id" -b
+
+  windowing_enabled="$(quakesignal_screenshot_run_tracked xcrun simctl spawn \
+    "$simulator_id" defaults read com.apple.springboard SBChamoisWindowingEnabled)"
+  if [ "$(printf '%s' "$windowing_enabled" | tr -d '[:space:]')" != "0" ]; then
+    echo "error: disposable iPad screenshot simulator did not enter Full Screen Apps mode" >&2
+    exit 69
+  fi
+}
+
 runtime_identifier="${QUAKESIGNAL_IOS_SCREENSHOT_RUNTIME_IDENTIFIER:-}"
 simulator_id="${QUAKESIGNAL_IOS_SCREENSHOT_SIMULATOR_UDID:-}"
 selected_device_type="${QUAKESIGNAL_IOS_SCREENSHOT_DEVICE_TYPE_IDENTIFIER:-}"
@@ -336,6 +375,10 @@ else
   simulator_id="$created_simulator_id"
   quakesignal_screenshot_run_tracked xcrun simctl boot "$simulator_id"
   quakesignal_screenshot_run_tracked xcrun simctl bootstatus "$simulator_id" -b
+fi
+
+if [ "$display_class" = "ipad-13" ]; then
+  configure_ipados_full_screen_apps_mode "$simulator_id" "$runtime_identifier"
 fi
 
 simulator_devices_json="$temporary_root/simctl-devices.json"

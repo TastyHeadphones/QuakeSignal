@@ -96,6 +96,12 @@ fi
     set.scan(%r{\[ -e "\$debug_local_override" \] \|\| \[ -L "\$debug_local_override" \]}).length == 2
   abort "set capture must build once" unless set.scan(/xcodebuild build/).length == 1
   abort "set capture must create exactly two disposable devices" unless set.scan(/xcrun simctl create/).length == 2
+  abort "iPadOS 26 captures must switch the disposable simulator to Full Screen Apps mode" unless
+    [single, set].all? do |source|
+      source.include?("SBChamoisWindowingEnabled") &&
+        source.include?("SBFlexibleWindowingPreviouslyEnabledAutomaticStageCreation") &&
+        source.include?("did not enter Full Screen Apps mode")
+    end
   abort "set capture lost exact ten-frame guard" unless set.scan(/!= "10"/).length == 1
   abort "plan lost exact display sizes" unless plan.include?("[1242, 2688]") && plan.include?("[2064, 2752]")
   abort "validator lost permission-dialog rejection" unless validator.include?("forbiddenSystemPromptGroups")
