@@ -840,7 +840,7 @@ jobs:
               captureEvidenceSha256: Digest::SHA256.hexdigest(evidence_source),
               xcodeVersion: ENV.fetch("XCODE_VERSION"),
               workflowRun: ENV.fetch("WORKFLOW_RUN"),
-              approvalRequired: "Named visual review and signed Release build 12 parity comparison"
+              approvalRequired: "Named visual review and signed Release build 13 parity comparison"
             }
             directory.join("candidate-metadata.json").write(
               JSON.pretty_generate(metadata) + "\n",

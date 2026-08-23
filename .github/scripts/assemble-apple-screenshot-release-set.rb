@@ -134,7 +134,7 @@ class AppleScreenshotReleaseSetAssembler
     approved-for-build8-upload
     approved-for-build10-upload
     approved-for-build11-upload
-    approved-for-build12-upload
+    approved-for-build13-upload
     signedreleaseparityapproved
   ].freeze
 
@@ -2011,7 +2011,7 @@ class AppleScreenshotReleaseSetAssembler
       type,
       "rollback child",
     )
-    recovery = ".quakesignal-recovery.#{Process.pid}.#{SecureRandom.hex(12)}.#{name}"
+    recovery = ".quakesignal-recovery.#{Process.pid}.#{SecureRandom.hex(13)}.#{name}"
     QuakeSignalAppleScreenshotReleaseSetNativeFilesystem.renameatx_np(
       parent_io.fileno,
       name,

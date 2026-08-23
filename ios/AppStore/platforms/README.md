@@ -1,8 +1,8 @@
-# Native platform App Store metadata — 1.1 (12)
+# Native platform App Store metadata — 1.1 (13)
 
 This directory contains offline, English (U.S.) review drafts for the native
 Apple TV, Apple Vision Pro, Apple Watch, and Mac Catalyst experiences in
-QuakeSignal 1.1, build 12. Nothing here changes App Store Connect, uploads a
+QuakeSignal 1.1, build 13. Nothing here changes App Store Connect, uploads a
 build, certifies a questionnaire, or authorizes release.
 
 The canonical App Store Connect record for these targets is **QuakeSignal**,
@@ -10,11 +10,11 @@ Apple ID `6800642443`:
 
 | Experience | Store placement | Version / build | Metadata source |
 | --- | --- | --- | --- |
-| iPhone and iPad | iOS platform version | `1.1 (12)` | `../../en-US/` and the root iOS review files |
-| Apple Watch companion | Apple Watch section of the iOS version; embedded in the iOS upload | `1.1 (12)` | `watchos/` plus the shared iOS description/review notes |
-| Apple TV | tvOS platform version | `1.1 (12)` | `tvos/` |
-| Apple Vision Pro | visionOS platform version | `1.1 (12)` | `visionos/` |
-| Mac Catalyst | macOS platform version in the shared native record | `1.1 (12)` | `maccatalyst/`; source-current copy is present, screenshots and signed approval remain pending |
+| iPhone and iPad | iOS platform version | `1.1 (13)` | `../../en-US/` and the root iOS review files |
+| Apple Watch companion | Apple Watch section of the iOS version; embedded in the iOS upload | `1.1 (13)` | `watchos/` plus the shared iOS description/review notes |
+| Apple TV | tvOS platform version | `1.1 (13)` | `tvos/` |
+| Apple Vision Pro | visionOS platform version | `1.1 (13)` | `visionos/` |
+| Mac Catalyst | macOS platform version in the shared native record | `1.1 (13)` | `maccatalyst/`; source-current copy is present, screenshots and signed approval remain pending |
 
 Apple documents that tvOS and visionOS platform versions in a multi-platform
 record use the record's existing Apple ID, SKU, and bundle ID, while an Apple
@@ -75,16 +75,16 @@ and archive digests; the checked-in validator proves the full local hash chain.
 These files are durable historical evidence, not permission to upload them.
 They are also historical relative to the current JMA-only and Mac Catalyst
 source changes made after `b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2`.
-The final build-12 commit must be recaptured as a complete iPhone, iPad, Apple
+The final build-13 commit must be recaptured as a complete iPhone, iPad, Apple
 TV, Apple Watch, Apple Vision Pro, and Mac Catalyst set; do not weaken or
 rewrite the source guard to make these older packages pass.
 
 The cross-platform catalog is
-[`../screenshot-set-index-v1.1-build12.json`](../screenshot-set-index-v1.1-build12.json).
+[`../screenshot-set-index-v1.1-build13.json`](../screenshot-set-index-v1.1-build13.json).
 Normal listing CI verifies its immutable historical locks and allows
 `activeReleaseSet: null`. Once the final commit is frozen, integrate exactly
 one complete package below
-`../screenshot-release-sets-v1.1-build12/<40-character-source-commit>/` and
+`../screenshot-release-sets-v1.1-build13/<40-character-source-commit>/` and
 point the index at its hashed `release-set.json`. The set is indivisible: 10
 iPhone/iPad, 3 Apple TV, 3 Apple Watch, 5 Apple Vision Pro, and 5 Mac Catalyst
 frames. Partial, mixed-commit, or historically copied sets are rejected.
@@ -97,7 +97,7 @@ gate with the following job-internal command; do not run it locally:
 
 ```sh
 ruby .github/scripts/verify-store-assets.rb \
-  --require-build12-screenshot-release-ready \
+  --require-build13-screenshot-release-ready \
   --expected-source-commit=<40-character-source-commit> \
   --screenshot-release-evidence-root="$EVIDENCE_ROOT"
 ```
@@ -113,12 +113,12 @@ owner approves each exact display name, availability, and trademark review.
 
 ## Required human gates
 
-- [ ] Freeze the exact source commit and build 12 archives.
+- [ ] Freeze the exact source commit and build 13 archives.
 - [ ] Use the currently defined protected GitHub signing workflows at the
   frozen source commit, then validate every signed archive/profile/entitlement,
   the embedded Watch signature, and each machine-readable signed-run
   attestation. Xcode Cloud remains unconfigured as of 2026-08-22.
-- [ ] Recapture the complete screenshot set at the exact final build-12 commit,
+- [ ] Recapture the complete screenshot set at the exact final build-13 commit,
   then compare those source-matching Debug candidates with the matching signed
   Release uploads, preserve the four exact upload-run IDs, and obtain named
   visual approval before screenshot upload, version attachment, or submission.
