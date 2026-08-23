@@ -8,40 +8,46 @@ value.
 
 ## Public-build and service gate
 
-- [ ] Identify the exact signed public `Release` 1.1 archive/IPA, source
-  commit, SHA-256, and `CFBundleVersion` `8`, including the embedded Watch app.
-- [ ] Confirm that this is not the legacy TestFlight `1.0 (2)` InternalQA-only
-  evidence build and that it contains no delayed background-training control.
-- [ ] Confirm the App Attest version policy admits exactly that public build and
-  record the live production service-metadata policy-fingerprint proof from the
-  protected archive workflow.
+- [x] Identify the exact signed public `Release` 1.1 archive/IPA, source
+  commit, SHA-256, and `CFBundleVersion` `12`, including the embedded Watch app.
+  The signed source-addressed attestations and all four native upload run IDs
+  are recorded in `app-store-connect-portal-audit-2026-08-24.md`.
+- [x] Confirm that build `1.1 (12)` is not the legacy TestFlight `1.0 (2)`
+  InternalQA-only evidence build and that it contains no delayed
+  background-training control; retain the build-12 release-contract result.
+- [x] Confirm the App Attest version policy admits build `12` and record the
+  live production service-metadata policy-fingerprint proof from the protected
+  deployment and archive workflows. The immutable values are in the 2026-08-24
+  audit; do not substitute a later live check for those source-bound proofs.
 - [ ] Complete the required physical-device/TestFlight evidence, including the
   production App Attest and APNs checks, then obtain the required protected
   production health/readiness proof before public launch promotion. Terminal-DLQ
   monitoring is an optional operational control, not a deployment attestation.
-- [ ] Confirm the approved production endpoint, `/privacy`, `/support`, and
-  any intended `/terms` URL respond over public Cloudflare Web-PKI TLS. Do not
-  use a private CA, origin certificate, or client certificate.
+- [x] Confirm the approved production endpoint, `/privacy`, `/support`, and
+  intended `/terms` URL respond over public Cloudflare Web-PKI TLS. The
+  source-bound deployment smoke proof is in the 2026-08-24 audit. Do not use a
+  private CA, origin certificate, or client certificate.
 
 ## Product page and review information
 
-- [ ] Open the existing iOS record (Apple ID `6800642443`) and verify its
+- [x] Open the existing iOS record (Apple ID `6800642443`) and verify its
   current portal state; do not create a duplicate record or a Universal Purchase
-  claim for the distinct macOS bundle ID.
+  claim for the distinct macOS bundle ID. See the 2026-08-24 audit.
 - [x] Record the release owner's Mac route: SwiftUI Mac Catalyst in shared
   Apple ID `6800642443`, with Designed for iPad on Mac disabled and the Tauri
   record left unused. See `release-owner-decisions-2026-08-20.md`.
 - [x] Save the shared Mac draft as `1.1` with exact Catalyst metadata, manual
   release, and Designed for iPad on Mac disabled (2026-08-22 portal audit).
-- [ ] Complete protected GitHub Mac Catalyst signing, Mac QA, exact
-  screenshots, signed-Release parity, availability, and named approval.
+- [ ] Complete Mac Catalyst QA, exact approved screenshots, signed-Release
+  parity, availability, and named independent approval. Protected signing and
+  TestFlight processing of build `12` are complete, but do not treat them as
+  those remaining gates.
 - [ ] Verify the English name, category, bundle ID, SKU, version, copyright,
   exact `en-US/subtitle.txt`, and current build against
   `submission-answers.md` and the signed archive.
-- [x] Save App Review and TestFlight contacts from the authenticated Apple
-  Developer Account Holder membership record without copying personal values
-  into source.
-- [ ] Visually confirm the complete contact block during the final portal pass.
+- [ ] Enter and visually confirm the complete App Review contact block during
+  the final portal pass. The 2026-08-24 portal inspection found the email and
+  phone fields blank; never copy personal values into source.
 - [ ] Copy the exact current `review-notes.txt` content only after checking it
   against the selected public archive.
 - [ ] During the final authenticated portal pass, copy and save the exact
@@ -54,20 +60,21 @@ value.
   option only after release-owner approval.
 - [ ] Keep Japanese and Simplified Chinese localizations unpublished until the
   exact display names, availability, and trademark review are approved.
-- [ ] Freeze `screenshot-provenance-v1.1.json`, verify all 30 hashes, and
-  preserve it as historical build-7 evidence. Do not relabel those 30 images as
-  build 8. Validate the separate ten-file English build-8 Debug Simulator
-  candidate manifest, build-input evidence, and hashes as historical capture
-  evidence only. It predates the current source. Recapture the exact final
-  build-8 commit, then separately obtain named visual approval and signed
-  public-Release parity before any upload.
+- [x] Preserve the historical build-7/build-8 image sets without relabeling
+  them. A complete five-platform Debug Simulator candidate was recaptured for
+  source `93a5055e95551a39f89b771fa01cf44eea0fb62d` by run `32647878229`.
+  It remains explicitly unapproved and non-uploadable until the protected
+  finalizer records named independent visual, privacy, and signed-Release
+  parity review.
 - [x] Save the exact tvOS and Mac Catalyst `1.1` copy recorded in the 2026-08-22
   portal audit.
 - [ ] Resave the corrected visionOS description and review notes that distinguish
   platform support for App Attest from the unavailable APNs capability; the
   audit saved the superseded wording and is not evidence of this correction.
-- [ ] Complete Apple Watch/tvOS/visionOS/Mac screenshots, icons, signing,
-  remaining privacy/App Motion answers, and platform QA before submission.
+- [ ] Complete Apple Watch/tvOS/visionOS/Mac screenshot approval, remaining
+  privacy/App Motion answers, and platform QA before submission. The four
+  signed build-12 uploads are processed, but no platform screenshot is approved
+  or attached.
   All four remain foreground-only in every independent-notification claim.
 - [ ] Download only the exact source-addressed approved screenshot artifact from
   the successful finalizer run, upload the six source directories in the order
@@ -93,7 +100,7 @@ value.
 - [x] Record the release owner's published-terms Content Rights basis and
   decision not to send the Wolfx request in `content-rights-evidence.md` and
   `release-owner-decisions-2026-08-20.md`.
-- [x] Record build 8's exact source inventory as `jma_eew` and `jma_eqlist`,
+- [x] Record build 12's exact source inventory as `jma_eew` and `jma_eqlist`,
   with CENC, Sichuan, Fujian, and Chongqing feeds disabled in submitted Apple
   clients and relay policy. Record the official-source review supporting that
   narrowing and the implemented 89-day relay event/revision cleanup cutoff.
