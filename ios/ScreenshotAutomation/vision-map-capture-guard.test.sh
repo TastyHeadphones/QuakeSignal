@@ -77,11 +77,12 @@ capture_vision() {
   local validator="$2"
   local settle_seconds="${3:-0}"
   local frame_selector="${4:-visionos-home}"
+  local capture_timeout_seconds="${5:-5}"
   export QUAKESIGNAL_TEST_EXPECTED_FRAME="$frame_selector"
   quakesignal_capture_validated_vision_screenshot \
     fake-vision fake.bundle "$directory/candidate.png" en en_US \
     "$frame_selector" "$directory" 3840 2160 "$validator" "$settle_seconds" \
-    "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+    "$capture_timeout_seconds" "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
 }
 
 reviewed_frames=(
@@ -98,14 +99,23 @@ mkdir "$test_root/invalid-selector"
 expect_status 64 quakesignal_capture_validated_vision_screenshot \
   fake-vision fake.bundle "$test_root/invalid-selector/candidate.png" en en_US \
   visionos-emergency-history "$test_root/invalid-selector" 3840 2160 \
-  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 1 "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
 
 mkdir "$test_root/invalid-settle"
 for invalid_settle in "" 00 01 -1 1x; do
   expect_status 64 quakesignal_capture_validated_vision_screenshot \
     fake-vision fake.bundle "$test_root/invalid-settle/candidate.png" en en_US \
     visionos-map "$test_root/invalid-settle" 3840 2160 \
-    "$QUAKESIGNAL_XCRUN_EXECUTABLE" "$invalid_settle" \
+    "$QUAKESIGNAL_XCRUN_EXECUTABLE" "$invalid_settle" 1 \
+    "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+done
+
+mkdir "$test_root/invalid-timeout"
+for invalid_timeout in "" 00 01 -1 1x; do
+  expect_status 64 quakesignal_capture_validated_vision_screenshot \
+    fake-vision fake.bundle "$test_root/invalid-timeout/candidate.png" en en_US \
+    visionos-map "$test_root/invalid-timeout" 3840 2160 \
+    "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 "$invalid_timeout" \
     "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
 done
 
@@ -114,19 +124,19 @@ ln -s "$test_root/real-root" "$test_root/root-symlink"
 expect_status 64 quakesignal_capture_validated_vision_screenshot \
   fake-vision fake.bundle "$test_root/root-symlink/candidate.png" en en_US \
   visionos-map "$test_root/root-symlink" 3840 2160 \
-  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 1 "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
 
 mkdir "$test_root/outside-root"
 expect_status 64 quakesignal_capture_validated_vision_screenshot \
   fake-vision fake.bundle "$test_root/outside-root/candidate.png" en en_US \
   visionos-map "$test_root/real-root" 3840 2160 \
-  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 1 "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
 
 ln -s "$QUAKESIGNAL_XCRUN_EXECUTABLE" "$test_root/validator-symlink.rb"
 expect_status 64 quakesignal_capture_validated_vision_screenshot \
   fake-vision fake.bundle "$test_root/real-root/candidate.png" en en_US \
   visionos-map "$test_root/real-root" 3840 2160 \
-  "$test_root/validator-symlink.rb" 0 "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
+  "$test_root/validator-symlink.rb" 0 1 "$QUAKESIGNAL_XCRUN_EXECUTABLE" /usr/bin/ruby
 
 existing_candidate_directory="$test_root/existing-candidate"
 mkdir "$existing_candidate_directory"
@@ -252,7 +262,7 @@ export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$conversion_directory/reactivated"
 expect_status 70 quakesignal_capture_validated_vision_screenshot \
   fake-vision fake.bundle "$conversion_directory/candidate.png" en en_US \
   visionos-home "$conversion_directory" 3840 2160 \
-  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 /usr/bin/false /usr/bin/ruby
+  "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 5 /usr/bin/false /usr/bin/ruby
 if [ -e "$QUAKESIGNAL_TEST_REACTIVATION_MARKER" ]; then
   echo "error: conversion failure must not relaunch the Vision fixture" >&2
   exit 1
@@ -308,6 +318,20 @@ export QUAKESIGNAL_TEST_CAPTURE_STATUS=23
 expect_status 70 capture_vision "$capture_failure_directory" "$QUAKESIGNAL_XCRUN_EXECUTABLE"
 export QUAKESIGNAL_TEST_CAPTURE_STATUS=0
 
+capture_timeout_directory="$test_root/capture-timeout"
+mkdir "$capture_timeout_directory"
+export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="valid"
+export QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE="$capture_timeout_directory/capture-count"
+export QUAKESIGNAL_TEST_REACTIVATION_MARKER="$capture_timeout_directory/reactivated"
+export QUAKESIGNAL_TEST_CAPTURE_DELAY=2
+expect_status 124 capture_vision "$capture_timeout_directory" "$QUAKESIGNAL_XCRUN_EXECUTABLE" 0 visionos-home 1
+export QUAKESIGNAL_TEST_CAPTURE_DELAY=0
+assert_recorded_process_stopped "$QUAKESIGNAL_TEST_CAPTURE_PID_FILE" "Vision capture timeout"
+if [ -e "$capture_timeout_directory/candidate.png" ]; then
+  echo "error: Vision capture timeout left a publishable candidate" >&2
+  exit 1
+fi
+
 sleep_failure_directory="$test_root/sleep-failure"
 mkdir "$sleep_failure_directory"
 export QUAKESIGNAL_TEST_CAPTURE_PAYLOADS="invalid|valid"
@@ -322,7 +346,7 @@ expect_status 70 bash -c '
   sleep() { return 23; }
   quakesignal_capture_validated_vision_screenshot \
     fake-vision fake.bundle "$2/candidate.png" en en_US visionos-home \
-    "$2" 3840 2160 "$3" 5 "$3" /usr/bin/ruby
+    "$2" 3840 2160 "$3" 5 1 "$3" /usr/bin/ruby
 ' bash "$script_dir" "$sleep_failure_directory" "$QUAKESIGNAL_XCRUN_EXECUTABLE"
 assert_file_content "$QUAKESIGNAL_TEST_CAPTURE_COUNT_FILE" 1 \
   "sleep-failure capture count"

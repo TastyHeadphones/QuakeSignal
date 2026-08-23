@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "status": "planned-unapproved",
+  "product": {
+    "appleId": "6800642443",
+    "platform": "macOS-maccatalyst",
+    "marketingVersion": "1.1",
+    "build": 15,
+    "bundleIdentifier": "com.quakesignal.app",
+    "scheme": "QuakeSignal",
+    "destination": "platform=macOS,variant=Mac Catalyst",
+    "designedForIPadOnMac": false
+  },
+  "specification": {"officialUrl": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/", "minimumCount": 1, "maximumCount": 10, "acceptedLandscapePixels": [[1280, 800], [1440, 900], [2560, 1600], [2880, 1800]], "selectedPixels": [2560, 1600], "acceptedFormats": ["jpeg", "jpg", "png"], "alphaAllowed": false},
+  "captureEvidence": {"sourceBaselineCommit": null, "debugArtifactSha256": null, "signedReleaseArtifactSha256": null, "macOSVersion": null, "xcodeVersion": null, "device": null, "capturedAtUtc": null, "reviewer": null, "signedReleaseParityApproved": false, "uploadApproved": false},
+  "locales": [{"directory": "en-US", "publicationStatus": "source-only-unapproved"}],
+  "frames": [
+    {"file": "en-US/01-home.png", "captureSelector": "maccatalyst-home", "screen": "Home", "purpose": "Native Mac window with the current nearby report and foreground-only service state", "setup": "Listed city; no precise current location; benign finalized historical report.", "pixels": [2560, 1600], "captureStatus": "pending", "sha256": null},
+    {"file": "en-US/02-reports.png", "captureSelector": "maccatalyst-reports", "screen": "Reports", "purpose": "Filterable current and historical report list in the native Mac interface", "setup": "Ordinary fixture reports; no simulated warning or private information.", "pixels": [2560, 1600], "captureStatus": "pending", "sha256": null},
+    {"file": "en-US/03-map.png", "captureSelector": "maccatalyst-map", "screen": "Map", "purpose": "Epicenter context, filters, and current-location control", "setup": "Ordinary fixture markers; current-location permission not granted and no private coordinate displayed.", "pixels": [2560, 1600], "captureStatus": "pending", "sha256": null},
+    {"file": "en-US/04-guide.png", "captureSelector": "maccatalyst-guide", "screen": "Preparedness Guide", "purpose": "Offline safety guidance and emergency-kit preparation", "setup": "No user-entered family contact or preparedness-kit details.", "pixels": [2560, 1600], "captureStatus": "pending", "sha256": null},
+    {"file": "en-US/05-alert-preferences.png", "captureSelector": "maccatalyst-alert-preferences", "screen": "Alert Sound", "purpose": "Selectable local foreground warning sounds and Japanese voice attribution", "setup": "Japanese safety voice selected; visible non-official and CC BY 3.0 disclosure; no notification permission prompt.", "pixels": [2560, 1600], "captureStatus": "pending", "sha256": null}
+  ]
+}

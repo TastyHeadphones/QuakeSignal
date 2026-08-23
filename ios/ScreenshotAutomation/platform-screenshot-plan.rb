@@ -18,7 +18,7 @@ module QuakeSignalPlatformScreenshotPlan
 
   EXPECTED = {
     "tvos" => {
-      manifest: "ios/AppStore/platforms/tvos/screenshot-manifest-v1.1-build15.json",
+      manifest: "ios/AppStore/platforms/tvos/screenshot-manifest-v1.1-build16.json",
       product: {
         "platform" => "tvOS",
         "marketingVersion" => "1.1",
@@ -42,7 +42,7 @@ module QuakeSignalPlatformScreenshotPlan
       ],
     },
     "visionos" => {
-      manifest: "ios/AppStore/platforms/visionos/screenshot-manifest-v1.1-build15.json",
+      manifest: "ios/AppStore/platforms/visionos/screenshot-manifest-v1.1-build16.json",
       product: {
         "platform" => "visionOS",
         "marketingVersion" => "1.1",
@@ -69,7 +69,7 @@ module QuakeSignalPlatformScreenshotPlan
       ],
     },
     "watchos" => {
-      manifest: "ios/AppStore/platforms/watchos/screenshot-manifest-v1.1-build15.json",
+      manifest: "ios/AppStore/platforms/watchos/screenshot-manifest-v1.1-build16.json",
       product: {
         "platform" => "watchOS-companion",
         "marketingVersion" => "1.1",
@@ -99,10 +99,10 @@ module QuakeSignalPlatformScreenshotPlan
 
   # Build 8 captures are retained as immutable historical evidence.  They must
   # continue to be interpreted against their own plan instead of the active
-  # build 15 release plan.
+  # build 16 release plan.
   HISTORICAL_BUILD8_EXPECTED = EXPECTED.each_with_object({}) do |(platform, expected), historical|
     historical[platform] = expected.merge(
-      manifest: expected.fetch(:manifest).sub("build15", "build8"),
+      manifest: expected.fetch(:manifest).sub("build16", "build8"),
       product: expected.fetch(:product).merge("build" => 8),
     ).freeze
   end.freeze

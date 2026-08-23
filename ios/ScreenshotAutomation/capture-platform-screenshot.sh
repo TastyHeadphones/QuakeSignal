@@ -371,13 +371,18 @@ else
   launch_fixture_app "$frame_selector" --terminate-running-process
 fi
 
-# SwiftUI needs a short, bounded settling period after the process becomes
-# launchable. visionOS can keep its gray launch card visible beyond that short
-# bound on any route, so every reviewed Vision frame receives the calibrated
+# SwiftUI needs a bounded settling period after the process becomes launchable.
+# A fresh paired Watch Simulator may report a successful launch before its
+# foreground route has committed, so its screenshot fixture gets a calibrated
+# 20-second settle. visionOS can keep its gray launch card visible beyond that
+# bound on any route, so every reviewed Vision frame receives its own longer
 # settle before semantic validation.
 initial_settle_seconds=5
+watch_settle_seconds=20
 vision_settle_seconds=25
-if [ "$platform" = "visionos" ]; then
+if [ "$platform" = "watchos" ]; then
+  initial_settle_seconds="$watch_settle_seconds"
+elif [ "$platform" = "visionos" ]; then
   initial_settle_seconds="$vision_settle_seconds"
 fi
 sleep "$initial_settle_seconds"
@@ -394,7 +399,7 @@ if [ "$platform" = "watchos" ]; then
     "$simulator_id" "$bundle_id" "$candidate" "$locale" "$apple_locale" \
     "$frame_selector" 300 45 "$temporary_root" \
     "$expected_width" "$expected_height" \
-    "$script_dir/validate-watch-foreground-badge.rb" 5 sips /usr/bin/ruby || \
+    "$script_dir/validate-watch-foreground-badge.rb" "$watch_settle_seconds" sips /usr/bin/ruby || \
     watch_capture_status=$?
   if [ "$watch_capture_status" -ne 0 ]; then
     echo "error: Watch screenshot capture/validation failed with status $watch_capture_status" >&2
@@ -406,7 +411,7 @@ elif [ "$platform" = "visionos" ]; then
     "$simulator_id" "$bundle_id" "$candidate" "$locale" "$apple_locale" \
     "$frame_selector" "$temporary_root" "$expected_width" "$expected_height" \
     "$script_dir/validate-vision-map-content.rb" \
-    "$vision_settle_seconds" sips /usr/bin/ruby || \
+    "$vision_settle_seconds" 120 sips /usr/bin/ruby || \
     vision_capture_status=$?
   if [ "$vision_capture_status" -ne 0 ]; then
     echo "error: Vision screenshot capture/validation failed with status $vision_capture_status" >&2

@@ -16,7 +16,7 @@ module QuakeSignalIOSScreenshotPlan
     end
   end
 
-  MANIFEST = "ios/AppStore/screenshot-manifest-v1.1-build15.template.json"
+  MANIFEST = "ios/AppStore/screenshot-manifest-v1.1-build16.template.json"
   PRODUCT = {
     "appleId" => "6800642443",
     "platform" => "iOS/iPadOS",
@@ -108,7 +108,7 @@ module QuakeSignalIOSScreenshotPlan
     require_equal(manifest.fetch("status"), "planned-not-captured", "status")
     require_nonempty_string(manifest.fetch("purpose"), "purpose")
     require_equal(manifest.fetch("product"), PRODUCT, "product")
-    require_equal(manifest.fetch("rootDirectory"), "screenshots-v1.1-build15", "rootDirectory")
+    require_equal(manifest.fetch("rootDirectory"), "screenshots-v1.1-build16", "rootDirectory")
     require_equal(manifest.fetch("captureEvidence"), CAPTURE_EVIDENCE, "captureEvidence")
     require_equal(manifest.fetch("locales"), LOCALES, "locales")
     validate_display_classes!(manifest.fetch("displayClasses"))

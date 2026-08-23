@@ -16,7 +16,7 @@ module QuakeSignalMacCatalystScreenshotPlan
     end
   end
 
-  MANIFEST = "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build15.json"
+  MANIFEST = "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build16.json"
   PIXELS = [2_560, 1_600].freeze
   PRODUCT = {
     "appleId" => "6800642443",

@@ -134,7 +134,7 @@ class AppleScreenshotReleaseSetAssembler
     approved-for-build8-upload
     approved-for-build10-upload
     approved-for-build11-upload
-    approved-for-build15-upload
+    approved-for-build16-upload
     signedreleaseparityapproved
   ].freeze
 

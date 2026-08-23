@@ -700,7 +700,7 @@ class IOSScreenshotProvenanceTest < Minitest::Test
       _archive_output, archive_error, archive_status = Open3.capture3(
         "git", "-C", ROOT.to_s, "archive", "--format=tar", "-o", source_archive.to_s,
         "HEAD", *QuakeSignalIOSScreenshotBuildSource::COPIED_INPUTS,
-        "ios/AppStore/screenshot-manifest-v1.1-build15.template.json",
+        "ios/AppStore/screenshot-manifest-v1.1-build16.template.json",
       )
       raise "could not archive tracked provenance source fixture: #{archive_error}" unless archive_status.success?
       _tar_output, tar_error, tar_status = Open3.capture3(

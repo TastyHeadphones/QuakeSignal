@@ -477,7 +477,7 @@ unless source.include?('source "$script_dir/vision-map-capture-guard.sh"') &&
        source.include?('vision_settle_seconds=25') &&
        source.match?(/if \[ "\$platform" = "visionos" \]; then\s*initial_settle_seconds="\$vision_settle_seconds"/m) &&
        source.match?(/elif \[ "\$platform" = "visionos" \]; then\s*vision_capture_status=0\s*quakesignal_capture_validated_vision_screenshot/m) &&
-       source.match?(/quakesignal_capture_validated_vision_screenshot.*?"\$script_dir\/validate-vision-map-content\.rb".*?"\$vision_settle_seconds" sips \/usr\/bin\/ruby \|\|/m) &&
+       source.match?(/quakesignal_capture_validated_vision_screenshot.*?"\$script_dir\/validate-vision-map-content\.rb".*?"\$vision_settle_seconds" 120 sips \/usr\/bin\/ruby \|\|/m) &&
        source.include?('exit "$vision_capture_status"')
   abort "error: every exact Vision capture must use the 25-second bounded semantic validator/retry before publication"
 end

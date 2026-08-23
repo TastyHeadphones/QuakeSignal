@@ -231,7 +231,7 @@ module QuakeSignalIOSScreenshotProvenance
         "completedAt" => capture_windows.map { |window| window.fetch("completedAt") }.max,
       },
       "frames" => frames,
-        "approvalRequired" => "Named visual review and signed Release build 15 parity comparison",
+        "approvalRequired" => "Named visual review and signed Release build 16 parity comparison",
     }
     output_path.write(JSON.pretty_generate(aggregate) + "\n", mode: "wx")
     aggregate
