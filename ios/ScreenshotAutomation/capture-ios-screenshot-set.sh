@@ -224,6 +224,45 @@ complete_set_simulator_cleanup() {
   ipad_simulator_id=""
 }
 
+configure_ipados_full_screen_apps_mode() {
+  local simulator_id="$1"
+  local runtime_identifier="$2"
+  local windowing_enabled=""
+
+  # iPadOS 26 Simulator defaults to Windowed Apps. simctl captures the
+  # complete device in that mode, not just the app's floating window. This is
+  # a disposable capture device, so use the Settings-equivalent defaults and
+  # reboot it before recording a full-device App Store candidate.
+  case "$runtime_identifier" in
+    com.apple.CoreSimulator.SimRuntime.iOS-2[6-9]-*|com.apple.CoreSimulator.SimRuntime.iOS-[3-9][0-9]-*) ;;
+    *) return 0 ;;
+  esac
+
+  windowing_enabled="$(quakesignal_screenshot_run_tracked xcrun simctl spawn \
+    "$simulator_id" defaults read com.apple.springboard SBChamoisWindowingEnabled 2>/dev/null || true)"
+  if [ "$(printf '%s' "$windowing_enabled" | tr -d '[:space:]')" = "0" ]; then
+    return 0
+  fi
+
+  for key in \
+    SBChamoisWindowingEnabled \
+    SBMedusaMultitaskingEnabled \
+    SBFlexibleWindowingPreviouslyEnabledAutomaticStageCreation; do
+    quakesignal_screenshot_run_tracked xcrun simctl spawn \
+      "$simulator_id" defaults write com.apple.springboard "$key" -bool false
+  done
+  quakesignal_screenshot_run_tracked xcrun simctl shutdown "$simulator_id"
+  quakesignal_screenshot_run_tracked xcrun simctl boot "$simulator_id"
+  quakesignal_screenshot_run_tracked xcrun simctl bootstatus "$simulator_id" -b
+
+  windowing_enabled="$(quakesignal_screenshot_run_tracked xcrun simctl spawn \
+    "$simulator_id" defaults read com.apple.springboard SBChamoisWindowingEnabled)"
+  if [ "$(printf '%s' "$windowing_enabled" | tr -d '[:space:]')" != "0" ]; then
+    echo "error: disposable iPad screenshot simulator did not enter Full Screen Apps mode" >&2
+    exit 69
+  fi
+}
+
 /usr/bin/ruby "$script_dir/ios-screenshot-plan.rb" --tsv >"$plan_tsv"
 if [ "$(wc -l <"$plan_tsv" | tr -d ' ')" != "10" ]; then
   echo "error: reviewed iOS/iPadOS plan must contain exactly ten frames" >&2
@@ -303,6 +342,7 @@ quakesignal_screenshot_run_tracked xcrun simctl boot "$iphone_simulator_id"
 quakesignal_screenshot_run_tracked xcrun simctl boot "$ipad_simulator_id"
 quakesignal_screenshot_run_tracked xcrun simctl bootstatus "$iphone_simulator_id" -b
 quakesignal_screenshot_run_tracked xcrun simctl bootstatus "$ipad_simulator_id" -b
+configure_ipados_full_screen_apps_mode "$ipad_simulator_id" "$runtime_identifier"
 
 derived_data="$temporary_root/DerivedData"
 if [ -e "$derived_data" ] || [ -L "$derived_data" ]; then

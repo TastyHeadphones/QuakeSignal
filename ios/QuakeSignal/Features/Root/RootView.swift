@@ -40,7 +40,7 @@ struct RootView: View {
     var body: some View {
         @Bindable var store = store
 
-        GeometryReader { _ in
+        GeometryReader { geometry in
             Group {
                 if hasCompletedOnboarding || ScreenshotAutomation.isEnabled {
                     TabView(selection: $selectedTab) {
@@ -61,16 +61,17 @@ struct RootView: View {
                             .tag(RootTab.settings)
                     }
                     .tint(Color("BrandColor"))
+                    .frame(width: geometry.size.width, height: geometry.size.height)
                 } else {
                     OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)
                 }
             }
-            // A WindowGroup can pass an unconstrained vertical proposal to a
-            // regular-width tab scene. GeometryReader accepts the scene's
-            // concrete size first, then this frame makes the selected tab
-            // occupy that entire canvas rather than its intrinsic height.
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // iPadOS can resize a WindowGroup dynamically. Make the root
+            // relative to that window rather than a selected tab's intrinsic
+            // content height, then give each tab the measured canvas.
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
+        .containerRelativeFrame([.horizontal, .vertical])
         .background {
 #if DEBUG && targetEnvironment(macCatalyst)
             CatalystScreenshotGeometryProbe()

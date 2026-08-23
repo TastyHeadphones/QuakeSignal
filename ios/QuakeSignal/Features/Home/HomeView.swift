@@ -2,6 +2,7 @@ import SwiftUI
 import CoreLocation
 
 struct HomeView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var store = QuakeStore.shared
     @State private var settings = AppSettings.shared
     @State private var locationManager = LocationManager.shared
@@ -9,50 +10,61 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    if let loadError = store.loadError {
-                        InlineBanner(symbol: "wifi.slash", titleKey: "home.banner.offline", detail: loadError, actionKey: "home.banner.retry") {
-                            Task { await store.refresh() }
+            GeometryReader { geometry in
+                ScrollView {
+                    VStack(spacing: 16) {
+                        if let loadError = store.loadError {
+                            InlineBanner(symbol: "wifi.slash", titleKey: "home.banner.offline", detail: loadError, actionKey: "home.banner.retry") {
+                                Task { await store.refresh() }
+                            }
                         }
-                    }
 
-                    if settings.useCurrentLocation && locationManager.selectionStatus == .denied {
-                        InlineBanner(symbol: "location.slash", titleKey: "home.banner.locationOff", detail: locationManager.selectionStatus.localizedDetail(fallbackCityName: settings.selectedCity?.localizedName), actionKey: "settings.openSystemSettings") {
-                            showingCityPicker = true
+                        if settings.useCurrentLocation && locationManager.selectionStatus == .denied {
+                            InlineBanner(symbol: "location.slash", titleKey: "home.banner.locationOff", detail: locationManager.selectionStatus.localizedDetail(fallbackCityName: settings.selectedCity?.localizedName), actionKey: "settings.openSystemSettings") {
+                                showingCityPicker = true
+                            }
                         }
-                    }
 
-                    if let statusEvent = store.activeWarning ?? store.recentNearbyReport {
-                        NavigationLink(value: statusEvent) {
+                        if let statusEvent = store.activeWarning ?? store.recentNearbyReport {
+                            NavigationLink(value: statusEvent) {
+                                statusCard
+                            }
+                            .buttonStyle(.plain)
+                        } else {
                             statusCard
                         }
-                        .buttonStyle(.plain)
-                    } else {
-                        statusCard
+
+                        if let highlighted = store.activeWarning ?? store.recentNearbyReport ?? store.latestNearbyReport {
+                            LatestQuakeCardView(
+                                event: highlighted,
+                                coordinate: store.effectiveCoordinate,
+                                isNearby: store.effectiveCoordinate != nil
+                            )
+                        } else if !store.isLoading {
+                            ContentUnavailableView("home.empty.title", systemImage: "checkmark.seal", description: Text("home.empty.body"))
+                                .padding(.top, 40)
+                        }
+
+                        if horizontalSizeClass == .regular {
+                            Spacer(minLength: 16)
+                        }
+
+                        QuickActionsRow(showingCityPicker: $showingCityPicker)
+
+                        Text("shared.disclaimer")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                            .padding(.top, 4)
                     }
-
-                    if let highlighted = store.activeWarning ?? store.recentNearbyReport ?? store.latestNearbyReport {
-                        LatestQuakeCardView(
-                            event: highlighted,
-                            coordinate: store.effectiveCoordinate,
-                            isNearby: store.effectiveCoordinate != nil
-                        )
-                    } else if !store.isLoading {
-                        ContentUnavailableView("home.empty.title", systemImage: "checkmark.seal", description: Text("home.empty.body"))
-                            .padding(.top, 40)
-                    }
-
-                    QuickActionsRow(showingCityPicker: $showingCityPicker)
-
-                    Text("shared.disclaimer")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                        .padding(.top, 4)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: horizontalSizeClass == .regular ? geometry.size.height : nil,
+                        alignment: .top
+                    )
+                    .padding(.vertical, 12)
                 }
-                .padding(.vertical, 12)
             }
             .background(Color("GroupedBGColor"))
             .navigationTitle(cityTitle)
