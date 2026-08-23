@@ -132,7 +132,7 @@ class AppleScreenshotReleaseSetAssembler
   RENAME_EXCL = 0x0000_0004
   FORBIDDEN_APPROVAL_SENTINELS = %w[
     approved-for-build8-upload
-    approved-for-build9-upload
+    approved-for-build10-upload
     signedreleaseparityapproved
   ].freeze
 
@@ -675,7 +675,7 @@ class AppleScreenshotReleaseSetAssembler
         reject_hidden_approval_value!(nested, "#{label}[#{index}]")
       end
     when String
-      if value.match?(/approved-for-build(?:8|9)-upload|signed.?release.?parity.?approved/i)
+      if value.match?(/approved-for-build(?:8|9|10)-upload|signed.?release.?parity.?approved/i)
         raise AppleScreenshotReleaseSetAssemblyError,
               "#{label} contains an approval or signed-parity claim"
       end
@@ -1774,7 +1774,7 @@ class AppleScreenshotReleaseSetAssembler
     require_equal!(active.fetch("approvalFile"), nil, "index candidate approvalFile")
     require_equal!(active.fetch("approvalSha256"), nil, "index candidate approvalSha256")
     serialized = JSON.generate(candidate)
-    if serialized.match?(/approved-for-build(?:8|9)-upload/) || serialized.include?("signedReleaseParityApproved")
+    if serialized.match?(/approved-for-build(?:8|9|10)-upload/) || serialized.include?("signedReleaseParityApproved")
       raise AppleScreenshotReleaseSetAssemblyError,
             "assembler output must not contain reviewer or signed-parity approval"
     end

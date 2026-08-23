@@ -5,7 +5,7 @@
     "appleId": "6800642443",
     "platform": "tvOS",
     "marketingVersion": "1.1",
-    "build": 9,
+    "build": 10,
     "bundleIdentifier": "com.quakesignal.app",
     "scheme": "QuakeSignalTV"
   },

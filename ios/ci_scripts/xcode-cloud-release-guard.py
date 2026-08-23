@@ -21,19 +21,19 @@ from urllib.parse import urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
-BUILD_NUMBER = "9"
+BUILD_NUMBER = "10"
 MARKETING_VERSION = "1.1"
 TEAM_ID = "5TT564H883"
 RELEASE_REF = "refs/heads/main"
-RELEASE_WORKFLOW = "QuakeSignal 1.1 (9) Native Release"
+RELEASE_WORKFLOW = "QuakeSignal 1.1 (10) Native Release"
 PRODUCT_NAME = "QuakeSignal"
 WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev"
 VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open."
 MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
-APP_ATTEST_FINGERPRINT = "sha256:i2_gfqBctR9C6xgTOq_nlQWrhvMlW-W04Nc6drZmOeU"
-XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:zsRE4lkbP6wjVNqFQxPCSXtrQHLBPUVJU3qvsPo_FgA"
+APP_ATTEST_FINGERPRINT = "sha256:mI8J143835lDZjM-HsTvoDNHqnasuWTgi2Ydv3t63Go"
+XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:RkrB_LsW6yezg3cgY3NAQ8MyVnO4jCBo5MBSD1oTH44"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
-PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:0GHsAUSbkimkaPPF-zqTXifcNeZSQ6rjzGY3FlywcBE"
+PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:OwLPVF98trIx-g06AQUONOm0RsfyqRLNQWUtepj4FRs"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
 MAX_RESPONSE_BYTES = 1024 * 1024
 READINESS_TIMEOUT_SECONDS = 180.0
@@ -171,7 +171,7 @@ LEGAL_PAGE_CONTRACTS = (
             "encrypted WebSocket and HTTPS connections while open",
             "selected alert presentation mode locally",
             "Apple Vision Pro and Mac Catalyst",
-            "separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 9), and Chrome extension",
+            "separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 10), and Chrome extension",
             "optional family contact name and telephone number stay in local app storage",
             "erase both Family Check-In fields and uncheck each selected preparedness-kit item",
             "Apple Maps and system Location Services",
@@ -202,7 +202,7 @@ LEGAL_PAGE_CONTRACTS = (
             "System is visual-only on Apple TV",
             "custom Apple TV audio requires an explicit Siri Remote action",
             "Apple Vision Pro and Mac Catalyst",
-            "separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 9), and Chrome extension",
+            "separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 10), and Chrome extension",
             "do not independently use the QuakeSignal notification relay",
             "Registration removal after a reset",
             "support cannot identify the old registration from a public issue",
@@ -573,8 +573,8 @@ def calculate_app_attest_fingerprint(repository_root: Path) -> str:
     if not isinstance(allowed_source, str) or not isinstance(routes_source, str):
         fail("checked-in Worker App Attest allow-list and routes must be JSON strings.")
     allowed = sorted(part.strip() for part in allowed_source.split(","))
-    if allowed != [str(value) for value in range(1, 10)]:
-        fail("APP_ATTEST_ALLOWED_BUNDLE_VERSIONS must be exactly 1 through 9.")
+    if allowed != sorted(str(value) for value in range(1, 11)):
+        fail("APP_ATTEST_ALLOWED_BUNDLE_VERSIONS must be exactly 1 through 10.")
     try:
         routes = strict_json_loads(routes_source)
     except (TypeError, ValueError) as error:
@@ -1468,8 +1468,8 @@ def verify_bounded_source_contract(repository_root: Path) -> None:
         relative_path: (repository_root / relative_path).read_text(encoding="utf-8")
         for relative_path in XCODE_SCHEME_PATHS
     })
-    if len(re.findall(r"CURRENT_PROJECT_VERSION = 9;", generated)) != 3:
-        fail("generated Xcode project must contain exactly three build-9 settings.")
+    if len(re.findall(r"CURRENT_PROJECT_VERSION = 10;", generated)) != 3:
+        fail("generated Xcode project must contain exactly three build-10 settings.")
     generated_origins = re.findall(r"^\s*QUAKESIGNAL_API_BASE_URL = ([^;]+);\s*$", generated, re.MULTILINE)
     if generated_origins != [f'"{WORKER_ORIGIN}"'] * 2:
         fail("generated Xcode project must contain exactly two reviewed iOS Worker origin settings.")
@@ -1619,7 +1619,7 @@ def verify_live_worker_release(
         or policy.get("fingerprint") != APP_ATTEST_FINGERPRINT
         or versions != [str(value) for value in range(1, 10)]
     ):
-        fail("live App Attest fingerprint/allow-list does not match release build 9.")
+        fail("live App Attest fingerprint/allow-list does not match release build 10.")
 
     status, root_headers, root_bytes = _fetch("/", fetcher=fetcher)
     try:

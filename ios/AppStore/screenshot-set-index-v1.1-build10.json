@@ -3,7 +3,7 @@
   "product": {
     "appleId": "6800642443",
     "marketingVersion": "1.1",
-    "build": 9
+    "build": 10
   },
   "historicalContentManifestAlgorithm": "sha256 of sorted UTF-8 records: <file-sha256><two spaces><repository-relative-path><newline>",
   "requiredPlatforms": [

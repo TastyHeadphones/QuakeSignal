@@ -35,7 +35,7 @@ repo_root="$(cd "$ios_root/.." && pwd -P)"
 . "$script_dir/maccatalyst-capture-retry-policy.sh"
 # shellcheck source=maccatalyst-process-guard.sh
 . "$script_dir/maccatalyst-process-guard.sh"
-manifest_file="ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build9.json"
+manifest_file="ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build10.json"
 manifest_path="$repo_root/$manifest_file"
 debug_local_override="$repo_root/ios/QuakeSignal/Supporting/Debug.local.xcconfig"
 
@@ -209,9 +209,9 @@ build_number="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$info_plist
 executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info_plist")"
 if [ "$bundle_identifier" != "com.quakesignal.app" ] || \
    [ "$marketing_version" != "1.1" ] || \
-   [ "$build_number" != "9" ] || \
+   [ "$build_number" != "10" ] || \
    [ "$executable_name" != "QuakeSignal" ]; then
-  echo "error: built app identity/version differs from the build-9 Catalyst contract" >&2
+  echo "error: built app identity/version differs from the build-10 Catalyst contract" >&2
   exit 65
 fi
 main_executable="$app_path/Contents/MacOS/$executable_name"
@@ -728,7 +728,7 @@ frame_evidence="$payload/frame-capture-evidence/$frame_selector.json"
     "product" => {
       "bundleIdentifier" => "com.quakesignal.app",
       "marketingVersion" => "1.1",
-      "build" => 9,
+      "build" => 10,
       "scheme" => "QuakeSignal",
       "destination" => "platform=macOS,variant=Mac Catalyst",
       "configuration" => "Debug",
