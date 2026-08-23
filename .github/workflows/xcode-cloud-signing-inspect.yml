@@ -30,6 +30,8 @@ jobs:
           node <<'NODE'
           const crypto = require('crypto');
 
+          (async () => {
+
           const required = [
             'APP_STORE_CONNECT_API_KEY',
             'APP_STORE_CONNECT_API_KEY_ID',
@@ -109,4 +111,8 @@ jobs:
             macOSVersions: macOSVersions.data.map(resourceSummary),
           };
           console.log(JSON.stringify(report, null, 2));
+          })().catch((error) => {
+            console.error(error.message);
+            process.exitCode = 1;
+          });
           NODE
