@@ -11,10 +11,10 @@ value.
 - [ ] Identify the exact signed public `Release` 1.1 archive/IPA, source
   commit, SHA-256, and `CFBundleVersion` `13`, including the embedded Watch app.
   Build-12 signed attestations and upload run IDs are historical evidence in
-  `app-store-connect-portal-audit-2026-08-24.md`; they do not prove build 14.
-- [ ] Confirm that build `1.1 (14)` is not the legacy TestFlight `1.0 (2)`
+  `app-store-connect-portal-audit-2026-08-24.md`; they do not prove build 15.
+- [ ] Confirm that build `1.1 (15)` is not the legacy TestFlight `1.0 (2)`
   InternalQA-only evidence build and that it contains no delayed
-  background-training control; retain the build-14 release-contract result.
+  background-training control; retain the build-15 release-contract result.
 - [ ] Confirm the App Attest version policy admits build `13` and record the
   live production service-metadata policy-fingerprint proof from the protected
   deployment and archive workflows. Do not substitute a build-12 or later
@@ -40,7 +40,7 @@ value.
   release, and Designed for iPad on Mac disabled (2026-08-22 portal audit).
 - [ ] Complete Mac Catalyst QA, exact approved screenshots, signed-Release
   parity, availability, and named independent approval. Build-12 signing and
-  TestFlight processing are historical only; build 14 must complete its own
+  TestFlight processing are historical only; build 15 must complete its own
   protected signing and processing gates.
 - [ ] Verify the English name, category, bundle ID, SKU, version, copyright,
   exact `en-US/subtitle.txt`, and current build against
@@ -65,7 +65,7 @@ value.
   source `93a5055e95551a39f89b771fa01cf44eea0fb62d` by run `32647878229`.
   It remains historical, explicitly unapproved, and non-uploadable.
 - [ ] Capture a complete five-platform Debug Simulator candidate for the
-  build-14 source, then retain it as unapproved until the protected finalizer
+  build-15 source, then retain it as unapproved until the protected finalizer
   records named independent visual, privacy, and signed-Release parity review.
 - [x] Save the exact tvOS and Mac Catalyst `1.1` copy recorded in the 2026-08-22
   portal audit.
@@ -73,7 +73,7 @@ value.
   platform support for App Attest from the unavailable APNs capability; the
   audit saved the superseded wording and is not evidence of this correction.
 - [ ] Complete Apple Watch/tvOS/visionOS/Mac screenshot approval, remaining
-  privacy/App Motion answers, and platform QA before submission. Build 14
+  privacy/App Motion answers, and platform QA before submission. Build 15
   signing, processing, and all platform screenshots remain pending; no platform
   screenshot is approved or attached.
   All four remain foreground-only in every independent-notification claim.
@@ -101,7 +101,7 @@ value.
 - [x] Record the release owner's published-terms Content Rights basis and
   decision not to send the Wolfx request in `content-rights-evidence.md` and
   `release-owner-decisions-2026-08-20.md`.
-- [ ] Record build 14's exact signed/deployed source inventory as `jma_eew` and `jma_eqlist`,
+- [ ] Record build 15's exact signed/deployed source inventory as `jma_eew` and `jma_eqlist`,
   with CENC, Sichuan, Fujian, and Chongqing feeds disabled in submitted Apple
   clients and relay policy. Record the official-source review supporting that
   narrowing and the implemented 89-day relay event/revision cleanup cutoff.

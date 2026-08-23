@@ -35,7 +35,7 @@ class IOSScreenshotBuildBindingTest < Minitest::Test
       <plist version="1.0"><dict>
       <key>CFBundleIdentifier</key><string>com.quakesignal.app</string>
       <key>CFBundleShortVersionString</key><string>1.1</string>
-      <key>CFBundleVersion</key><string>14</string>
+      <key>CFBundleVersion</key><string>15</string>
       <key>CFBundleExecutable</key><string>QuakeSignal</string>
       </dict></plist>
     PLIST

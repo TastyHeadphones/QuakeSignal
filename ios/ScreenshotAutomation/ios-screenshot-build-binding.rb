@@ -151,8 +151,8 @@ module QuakeSignalIOSScreenshotBuildBinding
       raise Error, "detached screenshot app must not contain a Watch payload"
     end
     executable = canonical_plain_file(app_path.join(executable_name), "built app executable")
-    unless bundle_identifier == "com.quakesignal.app" && marketing_version == "1.1" && build_number == "14"
-      raise Error, "built app identity differs from com.quakesignal.app 1.1 (14)"
+    unless bundle_identifier == "com.quakesignal.app" && marketing_version == "1.1" && build_number == "15"
+      raise Error, "built app identity differs from com.quakesignal.app 1.1 (15)"
     end
 
     {

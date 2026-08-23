@@ -16,13 +16,13 @@ module QuakeSignalMacCatalystScreenshotPlan
     end
   end
 
-  MANIFEST = "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build14.json"
+  MANIFEST = "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build15.json"
   PIXELS = [2_560, 1_600].freeze
   PRODUCT = {
     "appleId" => "6800642443",
     "platform" => "macOS-maccatalyst",
     "marketingVersion" => "1.1",
-    "build" => 14,
+    "build" => 15,
     "bundleIdentifier" => "com.quakesignal.app",
     "scheme" => "QuakeSignal",
     "destination" => "platform=macOS,variant=Mac Catalyst",
