@@ -409,7 +409,7 @@ const CLOUDFLARE_DEPLOY_PRODUCTION_HEADER = {
 // alongside its tests; an unreviewed sibling job, extra post-smoke step, or
 // edited signing/upload action fails before release automation can use
 // credentials.
-const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:7azTL9yLaCoXfTYgdmzDYpR2OMemDeSRbbzZNF58TCk";
+const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:yDNUDLGPiw2IU-zhfEQucNoIWXK4TN7OuzyGI96Oefs";
 const WORKFLOW_JOBS_FINGERPRINT = "sha256:6AhmhXkDTWp-hwGgD68swWatAb8O41fxuzcUqNflYFg";
 const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:CeXc25NPAuv5OR6lIuUtXE4vQiR1aiaMrbZobtaEf5g";
 const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:Qqnne2ErWXoSS3OQDsL0PuonhgfngS5ktqlpH8XqoGU";
