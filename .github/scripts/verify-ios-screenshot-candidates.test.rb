@@ -73,11 +73,11 @@ class IOSBuild8ScreenshotCandidateValidatorTest < Minitest::Test
         "appleId" => "6800642443",
         "platform" => "iOS/iPadOS",
         "marketingVersion" => "1.1",
-        "build" => 8,
+        "build" => 9,
         "bundleIdentifier" => "com.quakesignal.app",
         "configuration" => "Debug",
       },
-      "rootDirectory" => "screenshots-v1.1-build8",
+      "rootDirectory" => "screenshots-v1.1-build9",
       "captureEvidence" => {
         "sourceBaselineCommit" => SOURCE_COMMIT,
         "artifactSha256" => "c" * 64,
@@ -103,7 +103,7 @@ class IOSBuild8ScreenshotCandidateValidatorTest < Minitest::Test
 
   def candidate_provenance
     files = IOSBuild8ScreenshotCandidateValidator::EXPECTED_RELATIVE_PATHS.map do |relative_path|
-      screenshot = @store.join("screenshots-v1.1-build8", relative_path)
+      screenshot = @store.join("screenshots-v1.1-build9", relative_path)
       display_class = relative_path.split(File::SEPARATOR).fetch(1)
       {
         "file" => relative_path,
@@ -123,7 +123,7 @@ class IOSBuild8ScreenshotCandidateValidatorTest < Minitest::Test
         "appleId" => "6800642443",
         "platform" => "iOS/iPadOS",
         "marketingVersion" => "1.1",
-        "build" => 8,
+        "build" => 9,
         "bundleIdentifier" => "com.quakesignal.app",
         "configuration" => "Debug",
         "sdk" => "iphonesimulator26.5",
@@ -207,7 +207,7 @@ class IOSBuild8ScreenshotCandidateValidatorTest < Minitest::Test
 
   def build_screenshot_tree
     IOSBuild8ScreenshotCandidateValidator::EXPECTED_RELATIVE_PATHS.each do |relative_path|
-      screenshot = @store.join("screenshots-v1.1-build8", relative_path)
+      screenshot = @store.join("screenshots-v1.1-build9", relative_path)
       FileUtils.mkdir_p(screenshot.dirname)
       screenshot.write("fixture:#{relative_path}\n")
     end
@@ -313,23 +313,23 @@ class IOSBuild8ScreenshotCandidateValidatorTest < Minitest::Test
   def test_symlinked_screenshot_root_locale_class_and_file_are_rejected
     cases = {
       "root" => lambda do |target|
-        source = @store.join("screenshots-v1.1-build8")
+        source = @store.join("screenshots-v1.1-build9")
         FileUtils.mv(source, target)
         File.symlink(target, source)
       end,
       "locale" => lambda do |target|
-        source = @store.join("screenshots-v1.1-build8", "en-US")
+        source = @store.join("screenshots-v1.1-build9", "en-US")
         FileUtils.mv(source, target)
         File.symlink(target, source)
       end,
       "class" => lambda do |target|
-        source = @store.join("screenshots-v1.1-build8", "en-US", "iphone-6.5")
+        source = @store.join("screenshots-v1.1-build9", "en-US", "iphone-6.5")
         FileUtils.mv(source, target)
         File.symlink(target, source)
       end,
       "file" => lambda do |target|
         source = @store.join(
-          "screenshots-v1.1-build8", "en-US", "iphone-6.5", "01-home.jpg"
+          "screenshots-v1.1-build9", "en-US", "iphone-6.5", "01-home.jpg"
         )
         FileUtils.mv(source, target)
         File.symlink(target, source)
@@ -337,7 +337,7 @@ class IOSBuild8ScreenshotCandidateValidatorTest < Minitest::Test
     }
 
     cases.each do |name, mutate|
-      FileUtils.rm_rf(@store.join("screenshots-v1.1-build8"))
+      FileUtils.rm_rf(@store.join("screenshots-v1.1-build9"))
       remove_candidate_metadata
       build_screenshot_tree
       write_candidate
@@ -916,14 +916,14 @@ class IOSBuild8ScreenshotCandidateValidatorTest < Minitest::Test
 
   def test_rejects_extra_or_missing_actual_files
     build_screenshot_tree
-    extra = @store.join("screenshots-v1.1-build8", "en-US", "iphone-6.5", "extra.jpg")
+    extra = @store.join("screenshots-v1.1-build9", "en-US", "iphone-6.5", "extra.jpg")
     extra.write("extra")
     assert_rejected
     remove_candidate_metadata
 
     extra.delete
     relative_path = IOSBuild8ScreenshotCandidateValidator::EXPECTED_RELATIVE_PATHS.first
-    missing = @store.join("screenshots-v1.1-build8", relative_path)
+    missing = @store.join("screenshots-v1.1-build9", relative_path)
     provenance = candidate_provenance
     missing.delete
     assert_rejected(provenance: provenance)

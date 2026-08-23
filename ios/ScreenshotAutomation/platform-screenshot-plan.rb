@@ -18,11 +18,11 @@ module QuakeSignalPlatformScreenshotPlan
 
   EXPECTED = {
     "tvos" => {
-      manifest: "ios/AppStore/platforms/tvos/screenshot-manifest-v1.1-build8.json",
+      manifest: "ios/AppStore/platforms/tvos/screenshot-manifest-v1.1-build9.json",
       product: {
         "platform" => "tvOS",
         "marketingVersion" => "1.1",
-        "build" => 8,
+        "build" => 9,
         "bundleIdentifier" => "com.quakesignal.app",
         "scheme" => "QuakeSignalTV",
       },
@@ -42,11 +42,11 @@ module QuakeSignalPlatformScreenshotPlan
       ],
     },
     "visionos" => {
-      manifest: "ios/AppStore/platforms/visionos/screenshot-manifest-v1.1-build8.json",
+      manifest: "ios/AppStore/platforms/visionos/screenshot-manifest-v1.1-build9.json",
       product: {
         "platform" => "visionOS",
         "marketingVersion" => "1.1",
-        "build" => 8,
+        "build" => 9,
         "bundleIdentifier" => "com.quakesignal.app",
         "scheme" => "QuakeSignalVision",
       },
@@ -69,11 +69,11 @@ module QuakeSignalPlatformScreenshotPlan
       ],
     },
     "watchos" => {
-      manifest: "ios/AppStore/platforms/watchos/screenshot-manifest-v1.1-build8.json",
+      manifest: "ios/AppStore/platforms/watchos/screenshot-manifest-v1.1-build9.json",
       product: {
         "platform" => "watchOS-companion",
         "marketingVersion" => "1.1",
-        "build" => 8,
+        "build" => 9,
         "hostBundleIdentifier" => "com.quakesignal.app",
         "bundleIdentifier" => "com.quakesignal.app.watchkitapp",
         "scheme" => "QuakeSignalWatch",

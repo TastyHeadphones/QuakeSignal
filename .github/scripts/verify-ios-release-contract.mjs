@@ -83,7 +83,7 @@ const contractFiles = {
   platformWorkflow: ".github/workflows/apple-platforms.yml",
   screenshotWorkflow: ".github/workflows/apple-platform-screenshots.yml",
   screenshotReleaseWorkflow: ".github/workflows/apple-screenshot-release-ready.yml",
-  macCatalystScreenshotPlan: "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build8.json",
+  macCatalystScreenshotPlan: "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build9.json",
   cloudflareWorkflow: ".github/workflows/cloudflare.yml",
   signedArtifactVerifier: "ios/ci_scripts/verify-signed-apple-artifacts.sh",
   xcodeCloudHooks: [
@@ -108,7 +108,7 @@ const contractFiles = {
     "backend/cloudflare/scripts/wait-for-worker-readiness.mjs",
     "backend/cloudflare/staging/wrangler.staging.template.json",
     "ios/AppStore/README.md",
-    "ios/AppStore/screenshot-manifest-v1.1-build8.template.json",
+    "ios/AppStore/screenshot-manifest-v1.1-build9.template.json",
   ],
   screenshotAutomationHelpers: [
     "ios/ScreenshotAutomation/README.md",
@@ -2691,8 +2691,8 @@ function verifyScreenshotReleaseWorkflow(workflowSource) {
     name: "Upload one short-lived approved screenshot artifact",
     uses: UPLOAD_ARTIFACT_ACTION,
     with: {
-      name: "APPROVED-build8-apple-screenshots-${{ inputs.source_commit }}",
-      path: "${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-set-index-v1.1-build8.json\n${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-release-sets-v1.1-build8/${{ inputs.source_commit }}\n",
+      name: "APPROVED-build9-apple-screenshots-${{ inputs.source_commit }}",
+      path: "${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-set-index-v1.1-build9.json\n${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-release-sets-v1.1-build9/${{ inputs.source_commit }}\n",
       "if-no-files-found": "error",
       "include-hidden-files": false,
       "compression-level": 0,
@@ -2712,7 +2712,7 @@ function verifyScreenshotReleaseWorkflow(workflowSource) {
     "UNAPPROVED-debug-simulator-visionos-#{source}",
     "UNAPPROVED-debug-maccatalyst-direct-uikit-#{source}",
     "--release-evidence-root=$EVIDENCE_ROOT",
-    "--require-build8-screenshot-release-ready",
+    "--require-build9-screenshot-release-ready",
     "--expected-source-commit=\"$SOURCE_COMMIT\"",
     "--screenshot-release-evidence-root=\"$EVIDENCE_ROOT\"",
     "release-approval.json",

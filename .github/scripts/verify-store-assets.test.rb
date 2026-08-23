@@ -178,7 +178,7 @@ class StoreAssetScreenshotReleaseModeTest < Minitest::Test
     output, error_output, status = Open3.capture3(
       RbConfig.ruby,
       SCRIPT.to_s,
-      "--require-build8-screenshot-release-ready",
+      "--require-build9-screenshot-release-ready",
       "--expected-source-commit=#{'0' * 40}",
       chdir: ROOT.to_s,
     )
@@ -196,7 +196,7 @@ class StoreAssetScreenshotReleaseModeTest < Minitest::Test
       output, error_output, status = Open3.capture3(
         RbConfig.ruby,
         SCRIPT.to_s,
-        "--require-build8-screenshot-release-ready",
+        "--require-build9-screenshot-release-ready",
         "--expected-source-commit=#{'0' * 40}",
         "--screenshot-release-evidence-root=#{directory}",
         chdir: ROOT.to_s,

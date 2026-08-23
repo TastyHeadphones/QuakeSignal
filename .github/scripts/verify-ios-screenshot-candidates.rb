@@ -261,10 +261,10 @@ class ListingAssetsWorkflowContract
 end
 
 class IOSBuild8ScreenshotCandidateValidator
-  MANIFEST_NAME = "screenshot-manifest-v1.1-build8.json"
-  PROVENANCE_NAME = "screenshot-provenance-v1.1-build8.json"
-  SCREENSHOT_ROOT = "screenshots-v1.1-build8"
-  BUILD_EVIDENCE_ROOT = "screenshot-evidence-v1.1-build8"
+  MANIFEST_NAME = "screenshot-manifest-v1.1-build9.json"
+  PROVENANCE_NAME = "screenshot-provenance-v1.1-build9.json"
+  SCREENSHOT_ROOT = "screenshots-v1.1-build9"
+  BUILD_EVIDENCE_ROOT = "screenshot-evidence-v1.1-build9"
   BUILD_EVIDENCE_FILES = {
     "buildInvocation" => File.join(BUILD_EVIDENCE_ROOT, "build-invocation.txt"),
     "normalizedBuildSettings" => File.join(BUILD_EVIDENCE_ROOT, "normalized-build-settings.txt"),
@@ -306,7 +306,7 @@ class IOSBuild8ScreenshotCandidateValidator
     "SDK_VERSION" => "26.5",
     "PRODUCT_BUNDLE_IDENTIFIER" => "com.quakesignal.app",
     "MARKETING_VERSION" => "1.1",
-    "CURRENT_PROJECT_VERSION" => "8",
+    "CURRENT_PROJECT_VERSION" => "9",
     "CODE_SIGNING_ALLOWED" => "NO",
     "QUAKESIGNAL_API_BASE_URL" => "https://quakesignal-staging.invalid",
     "TARGETED_DEVICE_FAMILY" => "1,2",

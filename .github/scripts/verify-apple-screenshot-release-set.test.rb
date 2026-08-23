@@ -246,7 +246,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     error = assert_raises(AppleScreenshotReleaseSetValidationError) do
       validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
     end
-    assert_match(/complete active build-8 screenshot release set/, error.message)
+    assert_match(/complete active build-9 screenshot release set/, error.message)
     assert_empty @source_guard.validations
   end
 
@@ -1143,7 +1143,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     manifest_path = release_root.join("release-set.json")
     approval = {
       "schemaVersion" => 3,
-      "status" => "approved-for-build8-upload",
+      "status" => "approved-for-build9-upload",
       "uploadApproved" => true,
       "sourceCommit" => SOURCE_COMMIT,
       "releaseSetManifestSha256" => Digest::SHA256.file(manifest_path).hexdigest,

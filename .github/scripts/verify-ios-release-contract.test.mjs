@@ -132,10 +132,10 @@ const executableScreenshotAutomationFiles = new Set([
 ]);
 
 function fixtureFiles({
-  buildNumber = "8",
+  buildNumber = "9",
   projectFileVersions = [buildNumber, buildNumber, buildNumber],
   infoBundleVersion = "$(CURRENT_PROJECT_VERSION)",
-  allowedVersions = "1,2,3,4,5,6,7,8",
+  allowedVersions = "1,2,3,4,5,6,7,8,9",
   workflowDefault = buildNumber,
   archiveConfiguration = "Release",
   remoteOrigin = "${{ vars.CLOUDFLARE_WORKER_URL }}",
@@ -279,7 +279,7 @@ env:
 }
 
 async function fixtureWorkflow({
-  workflowDefault = "8",
+  workflowDefault = "9",
   remoteOrigin = "${{ vars.CLOUDFLARE_WORKER_URL }}",
   remoteRunPrefix = "",
   archiveConfiguration = "Release",
@@ -290,9 +290,9 @@ async function fixtureWorkflow({
     workflow = workflow.replace(from, to);
   };
 
-  if (workflowDefault !== "8") {
+  if (workflowDefault !== "9") {
     replaceOnce(
-      '        default: "8"\n        type: string\n',
+      '        default: "9"\n        type: string\n',
       `        default: "${workflowDefault}"\n        type: string\n`,
       "build_number default",
     );
@@ -328,10 +328,10 @@ async function fixtureWorkflow({
   return workflow;
 }
 
-async function fixturePlatformWorkflow({ workflowDefault = "8" } = {}) {
+async function fixturePlatformWorkflow({ workflowDefault = "9" } = {}) {
   let workflow = await readFile(join(repositoryRoot, ".github/workflows/apple-platforms.yml"), "utf8");
-  if (workflowDefault !== "8") {
-    const from = '        default: "8"\n        type: string\n';
+  if (workflowDefault !== "9") {
+    const from = '        default: "9"\n        type: string\n';
     if (!workflow.includes(from)) throw new Error("fixture could not locate native platform build_number default");
     workflow = workflow.replace(from, `        default: "${workflowDefault}"\n        type: string\n`);
   }
@@ -342,27 +342,27 @@ async function writeFixture(options = {}) {
   const tempRoot = process.env.QUAKESIGNAL_TEST_TEMP_ROOT || tmpdir();
   const root = await mkdtemp(join(tempRoot, "quakesignal-ios-release-contract-"));
   const files = fixtureFiles(options);
-  const buildNumber = options.buildNumber ?? "8";
+  const buildNumber = options.buildNumber ?? "9";
   let project = await readFile(join(repositoryRoot, "ios/project.yml"), "utf8");
-  if (buildNumber !== "8") {
+  if (buildNumber !== "9") {
     project = project.replace(
-      '    CURRENT_PROJECT_VERSION: "8"\n',
+      '    CURRENT_PROJECT_VERSION: "9"\n',
       `    CURRENT_PROJECT_VERSION: "${buildNumber}"\n`,
     );
   }
   files["ios/project.yml"] = project;
-  const allowedVersions = options.allowedVersions ?? "1,2,3,4,5,6,7,8";
+  const allowedVersions = options.allowedVersions ?? "1,2,3,4,5,6,7,8,9";
   const workerConfigSuffix = options.workerConfigSuffix ?? "";
   const workerConfig = await readFile(join(repositoryRoot, "backend/cloudflare/wrangler.jsonc"), "utf8");
   files["backend/cloudflare/wrangler.jsonc"] = workerConfig.replace(
-    '"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8"',
+    '"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8,9"',
     `"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "${allowedVersions}"`,
   ) + workerConfigSuffix;
   const projectFileVersions = options.projectFileVersions ?? [buildNumber, buildNumber, buildNumber];
   let projectFileIndex = 0;
   files["ios/QuakeSignal.xcodeproj/project.pbxproj"] = (
     await readFile(join(repositoryRoot, "ios/QuakeSignal.xcodeproj/project.pbxproj"), "utf8")
-  ).replace(/CURRENT_PROJECT_VERSION = 8;/g, () => {
+  ).replace(/CURRENT_PROJECT_VERSION = 9;/g, () => {
     const version = projectFileVersions[projectFileIndex++];
     if (version === undefined) throw new Error("fixture projectFileVersions must contain three entries");
     return `CURRENT_PROJECT_VERSION = ${version};`;
@@ -389,8 +389,8 @@ async function writeFixture(options = {}) {
     join(repositoryRoot, "ios/AppStore/ExportOptions.plist"),
     "utf8",
   );
-  files["ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build8.json"] = await readFile(
-    join(repositoryRoot, "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build8.json"),
+  files["ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build9.json"] = await readFile(
+    join(repositoryRoot, "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build9.json"),
     "utf8",
   );
   for (const relativePath of [
@@ -468,7 +468,7 @@ async function writeFixture(options = {}) {
     ".github/scripts/verify-store-assets.rb",
     ".github/scripts/verify-store-assets.test.rb",
     "ios/AppStore/README.md",
-    "ios/AppStore/screenshot-manifest-v1.1-build8.template.json",
+    "ios/AppStore/screenshot-manifest-v1.1-build9.template.json",
   ]) {
     files[relativePath] = await readFile(join(repositoryRoot, relativePath), "utf8");
   }
@@ -502,8 +502,8 @@ async function expectFailure(t, options, expression) {
 
 test("the checked-in public Release contract is coherent", async () => {
   const verified = await verifyIOSReleaseContract({ root: repositoryRoot });
-  assert.equal(verified.buildNumber, "8");
-  assert.deepEqual(verified.allowedBundleVersions, ["1", "2", "3", "4", "5", "6", "7", "8"]);
+  assert.equal(verified.buildNumber, "9");
+  assert.deepEqual(verified.allowedBundleVersions, ["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
   assert.deepEqual(verified.appIdentityRoutes, reviewedAppIdentityRoutes);
   assert.equal(
     verified.appAttestPolicyFingerprint,
@@ -704,7 +704,7 @@ test("keeps the Mac Catalyst screenshot plan source-only and exact", async (t) =
     ['"selectedPixels": [2560, 1600]', '"selectedPixels": [2500, 1600]'],
   ]) {
     await withFixture(t, {}, async (root) => {
-      const path = join(root, "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build8.json");
+      const path = join(root, "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build9.json");
       const source = await readFile(path, "utf8");
       const mutated = source.replace(from, to);
       assert.notEqual(mutated, source);
@@ -1344,10 +1344,10 @@ test("fails closed on source/version drift", async (t) => {
     );
   });
   await expectFailure(t, {
-    buildNumber: "8",
-    allowedVersions: "1,2,3,4,5,6,7,8",
+    buildNumber: "9",
+    allowedVersions: "1,2,3,4,5,6,7,8,9",
     workflowDefault: "7",
-  }, /build_number default 7 does not match ios\/project\.yml 8/i);
+  }, /build_number default 7 does not match ios\/project\.yml 9/i);
 });
 
 test("fails closed when the remote smoke changes origin or executable command", async (t) => {
@@ -2398,8 +2398,8 @@ test("fails closed when hosted screenshot approval, run binding, or retention dr
       '              true # skipped capture workflow path binding\n',
     ],
     [
-      "            --require-build8-screenshot-release-ready \\\n",
-      "            --require-build8-screenshot-release-ready=false \\\n",
+      "            --require-build9-screenshot-release-ready \\\n",
+      "            --require-build9-screenshot-release-ready=false \\\n",
     ],
     [
       "          retention-days: 3\n",
