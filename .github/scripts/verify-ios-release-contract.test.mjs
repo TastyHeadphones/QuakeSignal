@@ -1994,6 +1994,10 @@ test("fails closed when the Mac Catalyst signed-package route drifts", async (t)
       "-skipProvisioningUpdates",
     ],
     [
+      "PROVISIONING_PROFILE_SPECIFIER=Automatic",
+      "PROVISIONING_PROFILE_SPECIFIER=QuakeSignal Mac Catalyst App Store Release",
+    ],
+    [
       "verifier_arguments+=(--installer-identity",
       "verifier_arguments+=(--host-profile-name",
     ],
