@@ -412,8 +412,8 @@ const CLOUDFLARE_DEPLOY_PRODUCTION_HEADER = {
 // credentials.
 const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:2VeW3DO8MbplMJY0o2VH9mUpAgnd1cG6mlbnLP3K0Es";
 const WORKFLOW_JOBS_FINGERPRINT = "sha256:mmzDL0fVCsXwnbsK_dXtK3dk10pKXDTe6pLeKEkEack";
-const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:t04HndXYLXgik4100K3yBsfGbPtQVy5zn6dogUwq4N8";
-const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:2P3h47Cp8gfn3ehSqQnOObAmm0yOfdAsWiWqfGP9gDI";
+const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:th17lIOL5NHRWdKD8FaP5OcE2p6w8Lj83PC9E4E6eX4";
+const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:BbU7TUPRS9xnV-NUa9Gwe7iBhKgsCB9ZCiOnemInp28";
 const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:7uJANY6vWpHWmx_aG3r9Vfm6FN2Kc0Jic68X4kW7AjI";
 const SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT = "sha256:nwR_WO2AVbhslCYJYO51gOpS7B9wMaROs8pMHMeXRe0";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
@@ -424,9 +424,9 @@ const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:bocI3sE5zvOVMAApOs_e8lX36IC
 const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:qhbmHNjXa5zqEro1kc74zoLq6O0HveB9dIDzFq38MKU";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:MGFrBJXA26bnqXfA030H1RdRUqOjGrmH85d7mB2636k";
-const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:IFaeA29pNEBjevpDjoRb22AZ2iPt_XC5v93PC7-k424";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:buptEZME5XAxxQ7_2b3qDTJWcQJoYmZJmAOyzJ9unJU";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:lIwWG6dxRVZ0u1Ntir1Or8RyReNBwGJSlHYyP6OpXlU";
+const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:aA12379wATwYTuTRIcAPvkiZGZKwAOIan_I9Q3O5Vqk";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:SWSs7IQbECWGHEq1aE4KsKKDe40lsAA1Uux17LxMRxU";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:CgW_kgHCPV20LSiidFot80I3TfzP0L7khdbcnJkORxw";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:_ZwVwcu1DLNzB8gNUjCzxf5A9mCefe483hBvgsOWtGU";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -2134,6 +2134,8 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
       PLATFORM_AUTOMATIC_SIGNING_KEY: "${{ inputs.platform == 'maccatalyst' && secrets.APP_STORE_CONNECT_API_KEY || '' }}",
       PLATFORM_AUTOMATIC_SIGNING_KEY_ID: "${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_KEY_ID || '' }}",
       PLATFORM_AUTOMATIC_SIGNING_ISSUER: "${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_ISSUER || '' }}",
+      PLATFORM_INSTALLER_CERTIFICATE: "${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || '' }}",
+      PLATFORM_INSTALLER_CERTIFICATE_PASSWORD: "${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD || '' }}",
       IOS_CERTIFICATE: "${{ secrets.IOS_APP_STORE_CERTIFICATE }}",
       IOS_CERTIFICATE_PASSWORD: "${{ secrets.IOS_APP_STORE_CERTIFICATE_PASSWORD }}",
       ARCHIVE_ONLY: "${{ inputs.archive_only }}",
@@ -2141,7 +2143,7 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
     },
   }, ["run"], "native platform selected signing configuration step");
   requireText(signingConfiguration.run, [
-    "required+=(\n    PLATFORM_INSTALLER_IDENTITY\n    PLATFORM_AUTOMATIC_SIGNING_KEY\n    PLATFORM_AUTOMATIC_SIGNING_KEY_ID\n    PLATFORM_AUTOMATIC_SIGNING_ISSUER\n  )",
+    "required+=(\n    PLATFORM_INSTALLER_IDENTITY\n    PLATFORM_AUTOMATIC_SIGNING_KEY\n    PLATFORM_AUTOMATIC_SIGNING_KEY_ID\n    PLATFORM_AUTOMATIC_SIGNING_ISSUER\n    PLATFORM_INSTALLER_CERTIFICATE\n    PLATFORM_INSTALLER_CERTIFICATE_PASSWORD\n  )",
     "test \"$PLATFORM_DESTINATION\" = 'generic/platform=macOS,variant=Mac Catalyst'",
     "test \"$PLATFORM_PROFILE_PLATFORM\" = OSX",
     "test \"$PLATFORM_PROFILE_EXTENSION\" = provisionprofile",
@@ -2163,6 +2165,9 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
       PLATFORM_KEY: "${{ matrix.key }}",
       PLATFORM_PROFILE_EXTENSION: "${{ matrix.profile_extension }}",
       PLATFORM_PROFILE: "${{ secrets[matrix.profile_secret] }}",
+      PLATFORM_INSTALLER_IDENTITY: "${{ inputs.platform == 'maccatalyst' && vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || '' }}",
+      PLATFORM_INSTALLER_CERTIFICATE: "${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || '' }}",
+      PLATFORM_INSTALLER_CERTIFICATE_PASSWORD: "${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD || '' }}",
       IOS_CERTIFICATE: "${{ secrets.IOS_APP_STORE_CERTIFICATE }}",
       IOS_CERTIFICATE_PASSWORD: "${{ secrets.IOS_APP_STORE_CERTIFICATE_PASSWORD }}",
     },
@@ -2170,7 +2175,9 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
   requireText(signingImport.run, [
     'profile="$profile_dir/quakesignal-$PLATFORM_KEY.$PLATFORM_PROFILE_EXTENSION"',
     'security import "$certificate" -k "$keychain" -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign',
+    'security import "$installer_certificate" -k "$keychain" -P "$PLATFORM_INSTALLER_CERTIFICATE_PASSWORD" -T /usr/bin/productbuild',
     'security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"',
+    'security find-identity -v -p basic "$keychain" | grep -F -- "$PLATFORM_INSTALLER_IDENTITY"',
   ], "native platform signing import step.run");
 
   const archive = stepByName(steps, "Archive selected signed App Store build", "native platform signed archive step");
@@ -2218,18 +2225,12 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
       PLATFORM_BUNDLE_IDENTIFIER: "${{ matrix.bundle_identifier }}",
       PLATFORM_PROFILE_NAME: "${{ vars[matrix.profile_variable] }}",
       PLATFORM_INSTALLER_IDENTITY: "${{ inputs.platform == 'maccatalyst' && vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || '' }}",
-      PLATFORM_AUTOMATIC_SIGNING_KEY_ID: "${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_KEY_ID || '' }}",
-      PLATFORM_AUTOMATIC_SIGNING_ISSUER: "${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_ISSUER || '' }}",
     },
   }, ["run"], "native platform exported artifact step");
   requireText(exportedArtifact.run, [
     "Add :manageAppVersionAndBuildNumber bool false",
-    "Set :signingStyle automatic",
-    "-allowProvisioningUpdates",
-    '-authenticationKeyPath "$automatic_key"',
-    '-authenticationKeyID "$PLATFORM_AUTOMATIC_SIGNING_KEY_ID"',
-    '-authenticationKeyIssuerID "$PLATFORM_AUTOMATIC_SIGNING_ISSUER"',
     "Add :provisioningProfiles dict",
+    'Add :installerSigningCertificate string $PLATFORM_INSTALLER_IDENTITY',
     'artifacts=("$export_path"/*.pkg)',
     'unexpected=("$export_path"/*.ipa)',
     'artifacts=("$export_path"/*.ipa)',

@@ -143,6 +143,8 @@ jobs:
           PLATFORM_AUTOMATIC_SIGNING_KEY: ${{ inputs.platform == 'maccatalyst' && secrets.APP_STORE_CONNECT_API_KEY || '' }}
           PLATFORM_AUTOMATIC_SIGNING_KEY_ID: ${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_KEY_ID || '' }}
           PLATFORM_AUTOMATIC_SIGNING_ISSUER: ${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_ISSUER || '' }}
+          PLATFORM_INSTALLER_CERTIFICATE: ${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || '' }}
+          PLATFORM_INSTALLER_CERTIFICATE_PASSWORD: ${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD || '' }}
           IOS_CERTIFICATE: ${{ secrets.IOS_APP_STORE_CERTIFICATE }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_APP_STORE_CERTIFICATE_PASSWORD }}
           ARCHIVE_ONLY: ${{ inputs.archive_only }}
@@ -177,6 +179,8 @@ jobs:
               PLATFORM_AUTOMATIC_SIGNING_KEY
               PLATFORM_AUTOMATIC_SIGNING_KEY_ID
               PLATFORM_AUTOMATIC_SIGNING_ISSUER
+              PLATFORM_INSTALLER_CERTIFICATE
+              PLATFORM_INSTALLER_CERTIFICATE_PASSWORD
             )
           fi
           missing=()
@@ -246,12 +250,16 @@ jobs:
           PLATFORM_KEY: ${{ matrix.key }}
           PLATFORM_PROFILE_EXTENSION: ${{ matrix.profile_extension }}
           PLATFORM_PROFILE: ${{ secrets[matrix.profile_secret] }}
+          PLATFORM_INSTALLER_IDENTITY: ${{ inputs.platform == 'maccatalyst' && vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || '' }}
+          PLATFORM_INSTALLER_CERTIFICATE: ${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || '' }}
+          PLATFORM_INSTALLER_CERTIFICATE_PASSWORD: ${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD || '' }}
           IOS_CERTIFICATE: ${{ secrets.IOS_APP_STORE_CERTIFICATE }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_APP_STORE_CERTIFICATE_PASSWORD }}
         run: |
           set -euo pipefail
           keychain="$RUNNER_TEMP/quakesignal-$PLATFORM_KEY.keychain-db"
           certificate="$RUNNER_TEMP/quakesignal-$PLATFORM_KEY-distribution.p12"
+          installer_certificate="$RUNNER_TEMP/quakesignal-$PLATFORM_KEY-installer.p12"
           profile_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
           profile="$profile_dir/quakesignal-$PLATFORM_KEY.$PLATFORM_PROFILE_EXTENSION"
           keychain_password="$(uuidgen)"
@@ -267,8 +275,16 @@ jobs:
           security list-keychains -d user -s "$keychain"
           security default-keychain -d user -s "$keychain"
           security import "$certificate" -k "$keychain" -P "$IOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          if [ "$PLATFORM_KEY" = maccatalyst ]; then
+            printf '%s' "$PLATFORM_INSTALLER_CERTIFICATE" | base64 -D > "$installer_certificate"
+            chmod 600 "$installer_certificate"
+            security import "$installer_certificate" -k "$keychain" -P "$PLATFORM_INSTALLER_CERTIFICATE_PASSWORD" -T /usr/bin/productbuild
+          fi
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
           security find-identity -v -p codesigning "$keychain"
+          if [ "$PLATFORM_KEY" = maccatalyst ]; then
+            security find-identity -v -p basic "$keychain" | grep -F -- "$PLATFORM_INSTALLER_IDENTITY"
+          fi
 
       - name: Archive selected signed App Store build
         env:
@@ -319,34 +335,21 @@ jobs:
           PLATFORM_BUNDLE_IDENTIFIER: ${{ matrix.bundle_identifier }}
           PLATFORM_PROFILE_NAME: ${{ vars[matrix.profile_variable] }}
           PLATFORM_INSTALLER_IDENTITY: ${{ inputs.platform == 'maccatalyst' && vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || '' }}
-          PLATFORM_AUTOMATIC_SIGNING_KEY_ID: ${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_KEY_ID || '' }}
-          PLATFORM_AUTOMATIC_SIGNING_ISSUER: ${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_ISSUER || '' }}
         run: |
           set -euo pipefail
           export_options="$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY-ExportOptions.plist"
           export_path="$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY-export"
           cp ios/AppStore/ExportOptions.plist "$export_options"
           /usr/libexec/PlistBuddy -c 'Add :manageAppVersionAndBuildNumber bool false' "$export_options"
-          export_signing_arguments=()
+          /usr/libexec/PlistBuddy -c 'Add :provisioningProfiles dict' "$export_options"
+          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$PLATFORM_BUNDLE_IDENTIFIER string $PLATFORM_PROFILE_NAME" "$export_options"
           if [ "$PLATFORM_KEY" = maccatalyst ]; then
-            automatic_key="$RUNNER_TEMP/quakesignal-maccatalyst-automatic-signing.p8"
-            test -f "$automatic_key" && [ ! -L "$automatic_key" ]
-            /usr/libexec/PlistBuddy -c 'Set :signingStyle automatic' "$export_options"
-            export_signing_arguments=(
-              -allowProvisioningUpdates
-              -authenticationKeyPath "$automatic_key"
-              -authenticationKeyID "$PLATFORM_AUTOMATIC_SIGNING_KEY_ID"
-              -authenticationKeyIssuerID "$PLATFORM_AUTOMATIC_SIGNING_ISSUER"
-            )
-          else
-            /usr/libexec/PlistBuddy -c 'Add :provisioningProfiles dict' "$export_options"
-            /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:$PLATFORM_BUNDLE_IDENTIFIER string $PLATFORM_PROFILE_NAME" "$export_options"
+            /usr/libexec/PlistBuddy -c "Add :installerSigningCertificate string $PLATFORM_INSTALLER_IDENTITY" "$export_options"
           fi
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY.xcarchive" \
             -exportOptionsPlist "$export_options" \
-            -exportPath "$export_path" \
-            "${export_signing_arguments[@]}"
+            -exportPath "$export_path"
           shopt -s nullglob
           if [ "$PLATFORM_KEY" = maccatalyst ]; then
             artifacts=("$export_path"/*.pkg)
@@ -451,6 +454,7 @@ jobs:
           PLATFORM_PROFILE_EXTENSION: ${{ matrix.profile_extension }}
         run: |
           rm -f "$RUNNER_TEMP/quakesignal-$PLATFORM_KEY-distribution.p12"
+          rm -f "$RUNNER_TEMP/quakesignal-$PLATFORM_KEY-installer.p12"
           rm -f "$RUNNER_TEMP/quakesignal-maccatalyst-automatic-signing.p8"
           rm -f "$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY-ExportOptions.plist"
           rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/quakesignal-$PLATFORM_KEY.$PLATFORM_PROFILE_EXTENSION"

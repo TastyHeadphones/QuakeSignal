@@ -209,8 +209,10 @@ identifiers.
 
 The existing protected GitHub environment `ios-app-store-release` signs
 iOS/Watch, tvOS, and visionOS with their reviewed profiles. Its Mac Catalyst
-route uses Xcode's API-key-backed automatic signing to create or update the
-Apple-managed installer material instead of importing an installer `.p12`.
+route uses Xcode's API-key-backed automatic signing for the archive and imports
+a dedicated Mac Installer Distribution `.p12` only to sign the exported App
+Store package. This avoids requiring cloud-signing permission to create or
+retrieve the installer certificate while preserving automatic app signing.
 Ordinary `.github/workflows/ios.yml` CI still gives Catalyst a credential-free
 Release compilation gate; only an explicitly approved `apple-platforms.yml`
 dispatch may materialize signing credentials.
@@ -219,8 +221,11 @@ Shared certificate and upload configuration:
 
 - Secret `IOS_APP_STORE_CERTIFICATE`
 - Secret `IOS_APP_STORE_CERTIFICATE_PASSWORD`
+- Secret `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE` (required only for the
+  protected Catalyst package export)
+- Secret `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD`
 - Secret `APP_STORE_CONNECT_API_KEY` (required for upload and the protected
-  Mac Catalyst automatic-signing archive/export)
+  Mac Catalyst automatic-signing archive)
 - Variable `APP_STORE_CONNECT_API_KEY_ID` (required for upload and Mac
   Catalyst automatic signing)
 - Variable `APP_STORE_CONNECT_API_ISSUER` (required for upload and Mac
@@ -244,8 +249,8 @@ Target profiles:
   `Mac Installer Distribution: … (5TT564H883)` or legacy
   `3rd Party Mac Developer Installer: … (5TT564H883)` package identity.
   The protected Catalyst lane uses `xcodebuild -allowProvisioningUpdates` with
-  the App Store Connect key to create or update Apple-managed signing material;
-  it does not import a separately stored installer `.p12`.
+  the App Store Connect key for its archive, then imports the separate
+  password-protected installer `.p12` for the manual exported-package signature.
 
 Apple Developer portal state recorded on 2026-08-22:
 
