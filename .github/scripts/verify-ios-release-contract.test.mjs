@@ -1994,6 +1994,10 @@ test("fails closed when the Mac Catalyst signed-package route drifts", async (t)
       "code_sign_style=Automatic",
     ],
     [
+      "code_sign_style=Manual",
+      "signing_arguments=()\n          code_sign_style=Manual",
+    ],
+    [
       'QUAKESIGNAL_CATALYST_PROFILE_NAME="$PLATFORM_PROFILE_NAME"',
       'QUAKESIGNAL_CATALYST_PROFILE_NAME="Unreviewed Catalyst Profile"',
     ],
