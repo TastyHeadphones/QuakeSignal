@@ -178,7 +178,7 @@ class StoreAssetScreenshotReleaseModeTest < Minitest::Test
     output, error_output, status = Open3.capture3(
       RbConfig.ruby,
       SCRIPT.to_s,
-      "--require-build14-screenshot-release-ready",
+      "--require-build15-screenshot-release-ready",
       "--expected-source-commit=#{'0' * 40}",
       chdir: ROOT.to_s,
     )
@@ -186,7 +186,7 @@ class StoreAssetScreenshotReleaseModeTest < Minitest::Test
     refute status.success?
     assert_equal "", output
     assert_match(
-      /complete active build-14 screenshot release set|active\/expected screenshot source commit/,
+      /complete active build-15 screenshot release set|active\/expected screenshot source commit/,
       error_output,
     )
   end
@@ -196,7 +196,7 @@ class StoreAssetScreenshotReleaseModeTest < Minitest::Test
       output, error_output, status = Open3.capture3(
         RbConfig.ruby,
         SCRIPT.to_s,
-        "--require-build14-screenshot-release-ready",
+        "--require-build15-screenshot-release-ready",
         "--expected-source-commit=#{'0' * 40}",
         "--screenshot-release-evidence-root=#{directory}",
         chdir: ROOT.to_s,
@@ -205,7 +205,7 @@ class StoreAssetScreenshotReleaseModeTest < Minitest::Test
       refute status.success?
       assert_equal "", output
       refute_match(/Unknown argument/, error_output)
-      assert_match(/complete active build-14 screenshot release set/, error_output)
+      assert_match(/complete active build-15 screenshot release set/, error_output)
     end
   end
 end

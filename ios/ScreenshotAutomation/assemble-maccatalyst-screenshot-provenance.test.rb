@@ -424,7 +424,7 @@ class MacCatalystScreenshotProvenanceTest < Minitest::Test
           "product" => {
             "bundleIdentifier" => "com.quakesignal.app",
             "marketingVersion" => "1.1",
-            "build" => 14,
+            "build" => 15,
             "scheme" => "QuakeSignal",
             "destination" => "platform=macOS,variant=Mac Catalyst",
             "configuration" => "Debug",

@@ -700,7 +700,7 @@ class IOSScreenshotProvenanceTest < Minitest::Test
       _archive_output, archive_error, archive_status = Open3.capture3(
         "git", "-C", ROOT.to_s, "archive", "--format=tar", "-o", source_archive.to_s,
         "HEAD", *QuakeSignalIOSScreenshotBuildSource::COPIED_INPUTS,
-        "ios/AppStore/screenshot-manifest-v1.1-build14.template.json",
+        "ios/AppStore/screenshot-manifest-v1.1-build15.template.json",
       )
       raise "could not archive tracked provenance source fixture: #{archive_error}" unless archive_status.success?
       _tar_output, tar_error, tar_status = Open3.capture3(
@@ -915,7 +915,7 @@ class IOSScreenshotProvenanceTest < Minitest::Test
       "product" => {
         "bundleIdentifier" => "com.quakesignal.app",
         "marketingVersion" => "1.1",
-        "build" => 14,
+        "build" => 15,
         "scheme" => "QuakeSignal",
         "destination" => "generic/platform=iOS Simulator",
         "configuration" => "Debug",
@@ -1332,7 +1332,7 @@ class IOSScreenshotProvenanceTest < Minitest::Test
         "bundleName" => "QuakeSignal.app",
         "bundleIdentifier" => "com.quakesignal.app",
         "marketingVersion" => "1.1",
-        "build" => 14,
+        "build" => 15,
         "bundleTree" => app_tree,
         "watchPayloadPresent" => false,
         "infoPlistSha256" => tree_file_sha(app_tree, "Info.plist"),
