@@ -1250,7 +1250,7 @@ class LiveWorkerContractTests(unittest.TestCase):
                     guard.verify_live_worker_release(fetcher=mutated_fetcher)
 
     def test_live_release_contract_rejects_non_exact_bundle_version_list(self):
-        for versions in (["9"], [str(value) for value in range(1, 11)], [1, 2, 3, 4, 5, 6, 7, 8, 9]):
+        for versions in (["10"], [str(value) for value in range(1, 12)], [1, 2, 3, 4, 5, 6, 7, 8, 9]):
             with self.subTest(versions=versions):
                 metadata = ready_metadata()
                 metadata["appAttestPolicy"]["allowedBundleVersions"] = versions

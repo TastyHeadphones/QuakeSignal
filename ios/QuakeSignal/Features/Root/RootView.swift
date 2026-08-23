@@ -40,33 +40,36 @@ struct RootView: View {
     var body: some View {
         @Bindable var store = store
 
-        Group {
-            if hasCompletedOnboarding || ScreenshotAutomation.isEnabled {
-                TabView(selection: $selectedTab) {
-                    HomeView()
-                        .tabItem { Label("tab.home", systemImage: "waveform.path.ecg") }
-                        .tag(RootTab.home)
-                    QuakeListView()
-                        .tabItem { Label("tab.list", systemImage: "list.bullet") }
-                        .tag(RootTab.reports)
-                    EpicenterMapView()
-                        .tabItem { Label("tab.map", systemImage: "map") }
-                        .tag(RootTab.map)
-                    DisasterGuideView()
-                        .tabItem { Label("tab.guide", systemImage: "cross.case") }
-                        .tag(RootTab.guide)
-                    SettingsView()
-                        .tabItem { Label("tab.settings", systemImage: "gearshape") }
-                        .tag(RootTab.settings)
+        GeometryReader { _ in
+            Group {
+                if hasCompletedOnboarding || ScreenshotAutomation.isEnabled {
+                    TabView(selection: $selectedTab) {
+                        HomeView()
+                            .tabItem { Label("tab.home", systemImage: "waveform.path.ecg") }
+                            .tag(RootTab.home)
+                        QuakeListView()
+                            .tabItem { Label("tab.list", systemImage: "list.bullet") }
+                            .tag(RootTab.reports)
+                        EpicenterMapView()
+                            .tabItem { Label("tab.map", systemImage: "map") }
+                            .tag(RootTab.map)
+                        DisasterGuideView()
+                            .tabItem { Label("tab.guide", systemImage: "cross.case") }
+                            .tag(RootTab.guide)
+                        SettingsView()
+                            .tabItem { Label("tab.settings", systemImage: "gearshape") }
+                            .tag(RootTab.settings)
+                    }
+                    .tint(Color("BrandColor"))
+                } else {
+                    OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)
                 }
-                .tint(Color("BrandColor"))
-                // On regular-width iPad scenes, TabView may otherwise adopt
-                // its child content's intrinsic height instead of the scene.
-                // Keep every tab's background and hit-testing surface full size.
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)
             }
+            // A WindowGroup can pass an unconstrained vertical proposal to a
+            // regular-width tab scene. GeometryReader accepts the scene's
+            // concrete size first, then this frame makes the selected tab
+            // occupy that entire canvas rather than its intrinsic height.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background {
 #if DEBUG && targetEnvironment(macCatalyst)

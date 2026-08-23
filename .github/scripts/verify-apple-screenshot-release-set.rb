@@ -223,8 +223,8 @@ class AppleScreenshotEmbeddedCapturePackageValidator
 end
 
 class AppleScreenshotReleaseSetValidator
-  INDEX_PATH = "ios/AppStore/screenshot-set-index-v1.1-build9.json"
-  RELEASE_ROOT = "ios/AppStore/screenshot-release-sets-v1.1-build9"
+  INDEX_PATH = "ios/AppStore/screenshot-set-index-v1.1-build10.json"
+  RELEASE_ROOT = "ios/AppStore/screenshot-release-sets-v1.1-build10"
   CAPTURE_WORKFLOW_FILE = ".github/workflows/apple-platform-screenshots.yml"
   CANONICAL_REPOSITORY = "TastyHeadphones/QuakeSignal"
   HISTORICAL_ALGORITHM =
@@ -234,7 +234,7 @@ class AppleScreenshotReleaseSetValidator
   PRODUCT = {
     "appleId" => "6800642443",
     "marketingVersion" => "1.1",
-    "build" => 9,
+    "build" => 10,
   }.freeze
   REQUIRED_PLATFORMS = {
     "ios-ipados" => 10,
@@ -258,11 +258,11 @@ class AppleScreenshotReleaseSetValidator
     "maccatalyst" => "pkg",
   }.freeze
   PLAN_PATHS = {
-    "ios-ipados" => "ios/AppStore/screenshot-manifest-v1.1-build9.template.json",
-    "tvos" => "ios/AppStore/platforms/tvos/screenshot-manifest-v1.1-build9.json",
-    "watchos" => "ios/AppStore/platforms/watchos/screenshot-manifest-v1.1-build9.json",
-    "visionos" => "ios/AppStore/platforms/visionos/screenshot-manifest-v1.1-build9.json",
-    "maccatalyst" => "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build9.json",
+    "ios-ipados" => "ios/AppStore/screenshot-manifest-v1.1-build10.template.json",
+    "tvos" => "ios/AppStore/platforms/tvos/screenshot-manifest-v1.1-build10.json",
+    "watchos" => "ios/AppStore/platforms/watchos/screenshot-manifest-v1.1-build10.json",
+    "visionos" => "ios/AppStore/platforms/visionos/screenshot-manifest-v1.1-build10.json",
+    "maccatalyst" => "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build10.json",
   }.freeze
   HISTORICAL_EVIDENCE = [
     {
@@ -430,7 +430,7 @@ class AppleScreenshotReleaseSetValidator
     unless index_path.exist? || index_path.symlink?
       if require_release_ready
         raise AppleScreenshotReleaseSetValidationError,
-              "a complete active build-9 screenshot release set is required"
+              "a complete active build-10 screenshot release set is required"
       end
       return :pending
     end
@@ -444,7 +444,7 @@ class AppleScreenshotReleaseSetValidator
     if active.nil?
       if require_release_ready
         raise AppleScreenshotReleaseSetValidationError,
-              "a complete active build-9 screenshot release set is required"
+              "a complete active build-10 screenshot release set is required"
       end
       return :pending
     end
@@ -1100,7 +1100,7 @@ class AppleScreenshotReleaseSetValidator
       "release approval",
     )
     require_equal!(approval.fetch("schemaVersion"), 3, "release approval schemaVersion")
-    require_equal!(approval.fetch("status"), "approved-for-build9-upload", "release approval status")
+    require_equal!(approval.fetch("status"), "approved-for-build10-upload", "release approval status")
     require_equal!(approval.fetch("uploadApproved"), true, "release approval uploadApproved")
     require_equal!(approval.fetch("sourceCommit"), source_commit, "release approval sourceCommit")
     require_equal!(approval.fetch("releaseSetManifestSha256"), manifest_sha256, "release approval manifest SHA-256")
@@ -1587,7 +1587,7 @@ if $PROGRAM_NAME == __FILE__
       expected_source_commit: expected_source_commit,
     )
     if result == :pending
-      puts "Historical Apple screenshot evidence is locked; final 26-frame build-9 release set is pending."
+      puts "Historical Apple screenshot evidence is locked; final 26-frame build-10 release set is pending."
     elsif result == :active_unapproved
       puts "Complete source-addressed 26-frame Apple screenshot set validated; named signed approval is pending."
     else

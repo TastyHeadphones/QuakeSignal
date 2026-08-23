@@ -6,11 +6,11 @@
     "appleId": "6800642443",
     "platform": "iOS/iPadOS",
     "marketingVersion": "1.1",
-    "build": 9,
+    "build": 10,
     "bundleIdentifier": "com.quakesignal.app",
     "configuration": "Debug"
   },
-  "rootDirectory": "screenshots-v1.1-build9",
+  "rootDirectory": "screenshots-v1.1-build10",
   "captureEvidence": {
     "sourceBaselineCommit": null,
     "artifactSha256": null,
@@ -44,7 +44,7 @@
   "requiredBeforeApproval": [
     "Generate an explicit file entry and SHA-256 for every captured file.",
     "Validate exact dimensions, opaque JPEG encoding, locale, and visual quality.",
-    "Bind the capture to the frozen build-9 source commit and record named reviewer approval.",
+    "Bind the capture to the frozen build-10 source commit and record named reviewer approval.",
     "Do not copy hashes or approval status from screenshot-provenance-v1.1-build8.json, which records build 8."
   ]
 }

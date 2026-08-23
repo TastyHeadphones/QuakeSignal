@@ -261,10 +261,10 @@ class ListingAssetsWorkflowContract
 end
 
 class IOSBuild8ScreenshotCandidateValidator
-  MANIFEST_NAME = "screenshot-manifest-v1.1-build9.json"
-  PROVENANCE_NAME = "screenshot-provenance-v1.1-build9.json"
-  SCREENSHOT_ROOT = "screenshots-v1.1-build9"
-  BUILD_EVIDENCE_ROOT = "screenshot-evidence-v1.1-build9"
+  MANIFEST_NAME = "screenshot-manifest-v1.1-build10.json"
+  PROVENANCE_NAME = "screenshot-provenance-v1.1-build10.json"
+  SCREENSHOT_ROOT = "screenshots-v1.1-build10"
+  BUILD_EVIDENCE_ROOT = "screenshot-evidence-v1.1-build10"
   BUILD_EVIDENCE_FILES = {
     "buildInvocation" => File.join(BUILD_EVIDENCE_ROOT, "build-invocation.txt"),
     "normalizedBuildSettings" => File.join(BUILD_EVIDENCE_ROOT, "normalized-build-settings.txt"),
@@ -306,7 +306,7 @@ class IOSBuild8ScreenshotCandidateValidator
     "SDK_VERSION" => "26.5",
     "PRODUCT_BUNDLE_IDENTIFIER" => "com.quakesignal.app",
     "MARKETING_VERSION" => "1.1",
-    "CURRENT_PROJECT_VERSION" => "9",
+    "CURRENT_PROJECT_VERSION" => "10",
     "CODE_SIGNING_ALLOWED" => "NO",
     "QUAKESIGNAL_API_BASE_URL" => "https://quakesignal-staging.invalid",
     "TARGETED_DEVICE_FAMILY" => "1,2",
@@ -597,7 +597,7 @@ class IOSBuild8ScreenshotCandidateValidator
     require_equal!(product.fetch("appleId"), "6800642443", "#{label} appleId")
     require_equal!(product.fetch("platform"), "iOS/iPadOS", "#{label} platform")
     require_equal!(product.fetch("marketingVersion"), "1.1", "#{label} marketingVersion")
-    require_equal!(product.fetch("build"), 9, "#{label} build")
+    require_equal!(product.fetch("build"), 10, "#{label} build")
     require_equal!(product.fetch("bundleIdentifier"), "com.quakesignal.app", "#{label} bundleIdentifier")
     require_equal!(product.fetch("configuration"), "Debug", "#{label} configuration")
     return unless require_simulator_fields
