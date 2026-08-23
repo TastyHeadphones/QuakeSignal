@@ -3,8 +3,8 @@
 This directory is the source of truth for QuakeSignal's localized App Store
 metadata and screenshot plan. A reproducible Debug Simulator capture is only
 an unapproved visual candidate, even when its exact source, runtime, build
-settings, and hashes are recorded. Upload only after a named marketing/release
-owner approves the images and the required signed public-`Release` parity has
+settings, and hashes are recorded. Upload only after a named independent
+reviewer approves the images and the required signed public-`Release` parity has
 been recorded separately. Never use a system permission prompt, a real device
 token, an exact current location, or a test-push result in product-page imagery.
 
@@ -19,12 +19,12 @@ token, an exact current location, or a test-push result in product-page imagery.
 | Historical, superseded build-8 candidate manifest/provenance | `screenshot-manifest-v1.1-build8.json`, `screenshot-provenance-v1.1-build8.json` |
 | Historical, superseded build-8 English candidate images | `screenshots-v1.1-build8/en-US/` |
 | Immutable historical screenshot catalog and final-set pointer | `screenshot-set-index-v1.1-build8.json` |
-| Future complete final-commit Apple release sets | `screenshot-release-sets-v1.1-build8/<source-commit>/` |
+| Build-12 final-commit Apple release-set pointer | `screenshot-set-index-v1.1-build12.json` and `screenshot-release-sets-v1.1-build12/<source-commit>/` |
 | Coordinated native-platform release runbook | `apple-platform-release.md` |
 | tvOS / visionOS / Watch / Mac Catalyst metadata and screenshot plans | `platforms/` |
 | Historical, superseded tvOS / visionOS / Watch candidate packages | `platforms/screenshot-candidates-v1.1-build8/` |
 | Historical release-owner Mac and content-rights decisions | `release-owner-decisions-2026-08-20.md` |
-| Current saved App Store Connect state and safe portal sequence | `app-store-connect-portal-audit-2026-08-22.md` (retain the 2026-08-19/20 audits as history) |
+| Current portal/build handoff and safe submission sequence | `app-store-connect-portal-audit-2026-08-24.md` (retain the 2026-08-19/20/22 audits as history) |
 
 ## App record
 
@@ -38,13 +38,14 @@ iPad on Mac; that availability checkbox was cleared and saved on 2026-08-22.
 Do not attach or submit the separate Tauri package from Apple ID `6800642853`
 for this release.
 
-The latest saved portal state is in
-[`app-store-connect-portal-audit-2026-08-22.md`](./app-store-connect-portal-audit-2026-08-22.md).
+The latest portal/build handoff is in
+[`app-store-connect-portal-audit-2026-08-24.md`](./app-store-connect-portal-audit-2026-08-24.md).
 The historical release-owner decisions are recorded in
 [`release-owner-decisions-2026-08-20.md`](./release-owner-decisions-2026-08-20.md).
 Mac Catalyst metadata is saved in the shared `1.1` draft with manual release;
-signed build-8 evidence, QA, screenshots, parity, and named approval remain
-required before attachment or submission.
+the four signed build-12 uploads are processed, but final screenshot approval,
+QA, required portal answers, contact verification, and named independent review
+remain required before attachment or submission.
 
 - Name: `QuakeSignal`
 - English (U.S.) subtitle: `Earthquake Reports & Safety`
@@ -70,12 +71,13 @@ Version `1.0` build `6` is already Ready for Distribution. Builds `2` through
 
 App Store Connect rejects a repeat upload with the same build number. The
 checked-in release candidate is coordinated as version `1.1`,
-`CFBundleVersion` `8`: `CURRENT_PROJECT_VERSION` is `8`, the Worker App Attest
-allow-list is `1,2,3,4,5,6,7,8`, and the protected archive workflows default
-to `8`. Older allowlisted versions remain deliberately available to installed
-clients. Deploy all migrations through `0013` and the matching Worker policy
-before uploading build `8`; each protected archive lane then proves the live
-the service-metadata fingerprint admits that build before certificate import.
+`CFBundleVersion` `12`: `CURRENT_PROJECT_VERSION` is `12`, the Worker App
+Attest allow-list retains versions `1` through `12`, and the protected archive
+workflows are bound to `12`. Older allowlisted versions remain deliberately
+available to installed clients. The exact `93a5055e95551a39f89b771fa01cf44eea0fb62d`
+source produced one signed upload for each required native platform; the
+action-time portal status and signed-run IDs are recorded in the 2026-08-24
+audit. Do not attach or submit a superseded build.
 
 Upload, processing, and internal group assignment do not by themselves
 establish physical-device evidence, Content Rights, protected launch
@@ -174,26 +176,29 @@ pending field.
 
 ## Required release assets
 
-> **Build-8 screenshot block:** the existing 30-file
+> **Historical and build-12 screenshot block:** the existing 30-file
 > `screenshot-manifest-v1.1.json` / `screenshot-provenance-v1.1.json` set
 > truthfully records a build-7 simulator capture. Preserve it as historical
-> evidence. Do not relabel or upload it for build 8. The separate build-8
+> evidence. Do not relabel or upload it for build 12. The separate build-8
 > manifest, provenance, and ten English iPhone/iPad files are source-frozen
 > Debug Simulator candidates only: their status is
 > `unapproved-debug-simulator-candidate`, `uploadApproved` and
 > `signedReleaseEvidence` are `false`, and `reviewer` is `null`. Those bytes
 > predate the current JMA-only and Mac Catalyst source changes, so they are now
 > historical evidence and intentionally fail the current-source guard.
-> Recapture the complete final build-8 commit; never rewrite their provenance.
+> Never rewrite their provenance. The complete build-12 candidate must remain
+> explicitly unapproved until the protected finalizer validates independent
+> review and signed-Release parity.
 
 [`screenshot-set-index-v1.1-build8.json`](./screenshot-set-index-v1.1-build8.json)
 locks all four historical byte trees independently of current-source
-eligibility. Its `activeReleaseSet` is deliberately `null` until one exact
-final source commit has a complete 26-frame set: 10 iPhone/iPad, 3 Apple TV,
-3 Apple Watch, 5 Apple Vision Pro, and 5 Mac Catalyst images. A future set
-belongs only under
-`screenshot-release-sets-v1.1-build8/<40-character-source-commit>/`; do not
-reuse any occupied historical directory.
+eligibility. The build-12
+[`screenshot-set-index-v1.1-build12.json`](./screenshot-set-index-v1.1-build12.json)
+has `activeReleaseSet: null` until the protected finalizer accepts one exact
+source commit with all 26 frames: 10 iPhone/iPad, 3 Apple TV, 3 Apple Watch, 5
+Apple Vision Pro, and 5 Mac Catalyst images. A build-12 release set belongs
+only under `screenshot-release-sets-v1.1-build12/<40-character-source-commit>/`;
+do not reuse any occupied historical directory.
 
 - 1024 × 1024 App Store icon: already in `Assets.xcassets`
 - Historical build-7 screenshot inventory: exactly the 30 files declared by
@@ -210,7 +215,7 @@ reuse any occupied historical directory.
   Pro PNGs at `3840 × 2160`, with full unapproved provenance under
   [`platforms/screenshot-candidates-v1.1-build8/`](./platforms/screenshot-candidates-v1.1-build8/).
   These packages are bound to b461 and do not satisfy the current-source gate.
-- No build-8 Japanese or Simplified Chinese screenshot set is captured or
+- No build-12 Japanese or Simplified Chinese screenshot set is captured or
   publishable until its localized name, trademark, and availability approvals
   are recorded.
 - JPEG or PNG only, with no alpha channel or transparency. The capture helper
@@ -222,7 +227,7 @@ iPad-capable target and the final map/alert-preference UI.
 
 ### Capture workflow
 
-For build 8, release operators use only the two canonical hosted workflows in
+For build 12, release operators use only the two canonical hosted workflows in
 steps 6 and 7. Every repository Ruby, shell, Simulator, and Xcode command shown
 in steps 1–5 or the validation examples below is job-internal reference, not a
 supported local release path. Do not execute those commands on a workstation.
@@ -320,12 +325,12 @@ approvals are present:
 
 ```sh
 ruby .github/scripts/verify-store-assets.rb \
-  --require-build8-screenshot-release-ready \
+  --require-build12-screenshot-release-ready \
   --expected-source-commit="$SOURCE_COMMIT" \
   --screenshot-release-evidence-root="$EVIDENCE_ROOT"
 ```
 
-`screenshot-set-index-v1.1-build8.json` remains pending in Git. Only the
+`screenshot-set-index-v1.1-build12.json` remains pending in Git. Only the
 short-lived hosted artifact contains the generated active index, release set,
 and hash-bound `release-approval.json`.
 
@@ -369,7 +374,7 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    create a duplicate. After the Cloudflare bootstrap has made the final URLs
    live, set its Privacy Policy and Support URLs to the values above and
    verify the already-saved `1.1` iOS/tvOS/visionOS/Mac copy against source.
-6. Build and upload `1.1 (8)` through the protected GitHub workflows described in
+6. Build and upload `1.1 (12)` through the protected GitHub workflows described in
    [`apple-platform-release.md`](./apple-platform-release.md). Historical 1.0
    builds are not evidence for this release and must not be attached to the 1.1
    App Store version.
@@ -383,7 +388,7 @@ allow one to ten screenshots and list the accepted display-size resolutions.
    terms for every enabled non-JMA feed or disable it; do not represent a
    private license or assume that open-source licensing alone grants
    third-party rights.
-8. After protected upload and processing, test release candidate `1.1 (8)` on
+8. After protected upload and processing, test release candidate `1.1 (12)` on
    physical hardware
    for the normal production registration, refresh, unsubscribe, re-enrollment,
    and controlled training-push evidence. Follow the exact, privacy-safe
@@ -407,7 +412,7 @@ allow one to ten screenshots and list the accepted display-size resolutions.
 9. Have a release reviewer promote
     `APP_ATTEST_PRODUCTION_ENFORCED=true` and run the protected Cloudflare
     launch deployment with `bootstrap_testflight` disabled.
-10. Only after build `1.1 (8)` is uploaded, processed, physically verified,
+10. Only after build `1.1 (12)` is uploaded, processed, physically verified,
     launch promotion and every other public-release gate are complete, attach
     it to the App Store version if it remains the accurate reviewed candidate.
     If the iOS
