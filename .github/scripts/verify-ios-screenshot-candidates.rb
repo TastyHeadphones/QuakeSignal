@@ -261,10 +261,10 @@ class ListingAssetsWorkflowContract
 end
 
 class IOSBuild8ScreenshotCandidateValidator
-  MANIFEST_NAME = "screenshot-manifest-v1.1-build15.json"
-  PROVENANCE_NAME = "screenshot-provenance-v1.1-build15.json"
-  SCREENSHOT_ROOT = "screenshots-v1.1-build15"
-  BUILD_EVIDENCE_ROOT = "screenshot-evidence-v1.1-build15"
+  MANIFEST_NAME = "screenshot-manifest-v1.1-build16.json"
+  PROVENANCE_NAME = "screenshot-provenance-v1.1-build16.json"
+  SCREENSHOT_ROOT = "screenshots-v1.1-build16"
+  BUILD_EVIDENCE_ROOT = "screenshot-evidence-v1.1-build16"
   BUILD_EVIDENCE_FILES = {
     "buildInvocation" => File.join(BUILD_EVIDENCE_ROOT, "build-invocation.txt"),
     "normalizedBuildSettings" => File.join(BUILD_EVIDENCE_ROOT, "normalized-build-settings.txt"),
