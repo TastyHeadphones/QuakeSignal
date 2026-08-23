@@ -88,8 +88,8 @@ fi
     single.include?(status_time_argument) &&
     single.scan(%q["statusBarTime" => "9:41"]).length == 1 &&
     !single.match?(%r{--time[^\n]*\d{4}-\d{2}-\d{2}T})
-  abort "single capture identity guard must match the build 16 release contract" unless
-    single.include?(%q[[ "$marketing_version" != "1.1" ] || [ "$build_number" != "16" ]])
+  abort "single capture identity guard must match the build 17 release contract" unless
+    single.include?(%q[[ "$marketing_version" != "1.1" ] || [ "$build_number" != "17" ]])
   abort "single capture lost source/Debug.local pre/post checks" unless
     single.scan(%r{git -C "\$repo_root" status --porcelain=v1 --untracked-files=all}).length == 2 &&
     single.scan(%r{\[ -e "\$debug_local_override" \] \|\| \[ -L "\$debug_local_override" \]}).length == 2

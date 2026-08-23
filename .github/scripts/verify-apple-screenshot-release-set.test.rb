@@ -1147,7 +1147,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     manifest_path = release_root.join("release-set.json")
     approval = {
       "schemaVersion" => 3,
-      "status" => "approved-for-build16-upload",
+      "status" => "approved-for-build17-upload",
       "uploadApproved" => true,
       "sourceCommit" => SOURCE_COMMIT,
       "releaseSetManifestSha256" => Digest::SHA256.file(manifest_path).hexdigest,

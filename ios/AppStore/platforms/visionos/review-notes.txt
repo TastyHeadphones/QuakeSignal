@@ -16,7 +16,7 @@ be presented in the app and play the selected local alert sound. Closing or
 backgrounding the app stops that foreground monitoring. Simulator screenshots
 do not prove this runtime behavior.
 
-Build 16 reads only Wolfx feed identifiers jma_eew and jma_eqlist. CENC,
+Build 17 reads only Wolfx feed identifiers jma_eew and jma_eqlist. CENC,
 Sichuan, Fujian, and Chongqing feeds are disabled. QuakeSignal may format,
 localize, filter, and normalize JMA-issued facts, but does not calculate a new
 local-intensity or ground-motion-arrival forecast and does not issue an

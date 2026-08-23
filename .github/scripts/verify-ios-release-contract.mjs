@@ -83,7 +83,7 @@ const contractFiles = {
   platformWorkflow: ".github/workflows/apple-platforms.yml",
   screenshotWorkflow: ".github/workflows/apple-platform-screenshots.yml",
   screenshotReleaseWorkflow: ".github/workflows/apple-screenshot-release-ready.yml",
-  macCatalystScreenshotPlan: "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build16.json",
+  macCatalystScreenshotPlan: "ios/AppStore/platforms/maccatalyst/screenshot-manifest-v1.1-build17.json",
   cloudflareWorkflow: ".github/workflows/cloudflare.yml",
   signedArtifactVerifier: "ios/ci_scripts/verify-signed-apple-artifacts.sh",
   xcodeCloudHooks: [
@@ -108,7 +108,7 @@ const contractFiles = {
     "backend/cloudflare/scripts/wait-for-worker-readiness.mjs",
     "backend/cloudflare/staging/wrangler.staging.template.json",
     "ios/AppStore/README.md",
-    "ios/AppStore/screenshot-manifest-v1.1-build16.template.json",
+    "ios/AppStore/screenshot-manifest-v1.1-build17.template.json",
   ],
   screenshotAutomationHelpers: [
     "ios/ScreenshotAutomation/README.md",
@@ -410,24 +410,24 @@ const CLOUDFLARE_DEPLOY_PRODUCTION_HEADER = {
 // alongside its tests; an unreviewed sibling job, extra post-smoke step, or
 // edited signing/upload action fails before release automation can use
 // credentials.
-const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:s9wjY0JgW-g7AMzRnoM2ABVM3FKckWB2U-PHMc41yPU";
-const WORKFLOW_JOBS_FINGERPRINT = "sha256:GK6nciTL_pY-l9zuT3lNM7VomCDCLmeSLJMnTBZCxkQ";
-const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:sqNUxyJwlX4M9JGiuwEh-eNs86kYfri_8-4tk26Un6I";
-const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:yw_dh92wI7l8hjpb-PbZNiQ78MAd1X7oTnjhmvLPQcM";
-const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:NpLf_bqXOvTYqhCY8oPX8ZKI-gI9Z6Fg4U4ds5u-1dA";
-const SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT = "sha256:hMPN14gFeoYCtTzyWMX--hTIdDFRGAjH_dFH7lLxhGs";
+const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:yMCQIrtz3BpKGzmgs3tDJzyygXk_JZlZ0Re6IPvXN_k";
+const WORKFLOW_JOBS_FINGERPRINT = "sha256:3G5xi-8OFA3D7i6WvwTFzkWSfs7pdOdMH8W2iKpztAU";
+const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:3_9pWQU_Ww_2_5asNd5p9S2Xh0lZ7Efug4k6-Yji9PI";
+const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:1r5qrURSgdP13HqsXgLFo5eg3Pv345sip96QVUCE4HI";
+const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:eZXAGoApcqbQaWSpzr4Mt6WBRlPNDwEf6SwYXXYlTME";
+const SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT = "sha256:dEPzJS5uvYmQZI9d6CpECUvzkOhjfj_ydwiWqrj3ZQM";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
-const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:uSQqFYDqV-0v6I6bVZ3UgLKpqgD6KkV5KlSVkiDTKUE";
+const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:pp5kYSI7Z9xYRLE2wsNjHurdGZBbuMC5vmD092T98Ec";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
 const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:UApNMP0jmCo5R9enmbbGZxDwszTJTIK96q2nS8o4Nfg";
-const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:k_b-cQUa3g9igUKSbgAjA6G7yPFH-oCq79cwW8RNdBM";
-const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:MLDHGW1W_bezcEQl6UD52tFsUC4Jxm611rbAm43GLSw";
+const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:G64w6svTr57E7--ptkTRuZVzqpt2Gwmr10eg8CWIG0M";
+const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:jW4JzW6f1y2Ku66tQU-j36SF3beYFVGEzxbwEdUoq18";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
-const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:0XgSM9rtgoIMt2dr-U4jO6LwLG8dRJyxFnvWjWFuAIE";
-const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:25BEzcg1oE_krdTTInakWWXaigzrSL13YnlsPot-pzQ";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:lPiHLGY-UFYoH-T8wQ9uWG1QDK1Gn1lC-90rTKyctn0";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:ieBQKNE5G41riJ6VQw6hYWw7GOvPZZpPhUvCIJXfMSY";
-const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:2NF6p9UkV1HF-IGt0_tNEgMsQK7rCrioARTdeF4uyao";
+const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:z8z7Z5IyS_v7A_5HCnl4hvk--W9QTRS0jLXV8B-8Nmw";
+const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:zisYrCyM8IuKaAa949DVdbO_P0zlsJbgKjEbyzOPlvs";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:6oSJ3IUy_YKDphx_K-FQ9L6A2Cc1bwEJQXTwEZYmbh4";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:g8qKnNpUIt3aFPEAbmmuRRlI8FtmcvqEShNsTXZ0JCY";
+const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:RnWenLvputtku5X6DOfdXrJflYePVPa0uaTthrBGxwI";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
 const REMOTE_SMOKE_COMMAND = [
@@ -952,7 +952,7 @@ function verifyMacCatalystScreenshotPlan(source) {
     appleId: "6800642443",
     platform: "macOS-maccatalyst",
     marketingVersion: "1.1",
-    build: 15,
+    build: 17,
     bundleIdentifier: "com.quakesignal.app",
     scheme: "QuakeSignal",
     destination: "platform=macOS,variant=Mac Catalyst",
@@ -2693,8 +2693,8 @@ function verifyScreenshotReleaseWorkflow(workflowSource) {
     name: "Upload one short-lived approved screenshot artifact",
     uses: UPLOAD_ARTIFACT_ACTION,
     with: {
-      name: "APPROVED-build16-apple-screenshots-${{ inputs.source_commit }}",
-      path: "${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-set-index-v1.1-build16.json\n${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-release-sets-v1.1-build16/${{ inputs.source_commit }}\n",
+      name: "APPROVED-build17-apple-screenshots-${{ inputs.source_commit }}",
+      path: "${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-set-index-v1.1-build17.json\n${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-release-sets-v1.1-build17/${{ inputs.source_commit }}\n",
       "if-no-files-found": "error",
       "include-hidden-files": false,
       "compression-level": 0,
@@ -2714,7 +2714,7 @@ function verifyScreenshotReleaseWorkflow(workflowSource) {
     "UNAPPROVED-debug-simulator-visionos-#{source}",
     "UNAPPROVED-debug-maccatalyst-direct-uikit-#{source}",
     "--release-evidence-root=$EVIDENCE_ROOT",
-    "--require-build16-screenshot-release-ready",
+    "--require-build17-screenshot-release-ready",
     "--expected-source-commit=\"$SOURCE_COMMIT\"",
     "--screenshot-release-evidence-root=\"$EVIDENCE_ROOT\"",
     "release-approval.json",

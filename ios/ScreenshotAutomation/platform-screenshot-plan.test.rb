@@ -131,6 +131,6 @@ class PlatformScreenshotPlanTest < Minitest::Test
   end
 
   def manifest_path(root, platform)
-    root.join("ios/AppStore/platforms", platform, "screenshot-manifest-v1.1-build16.json")
+    root.join("ios/AppStore/platforms", platform, "screenshot-manifest-v1.1-build17.json")
   end
 end
