@@ -819,7 +819,6 @@ resolve_installer_package_app() {
     return 1
   fi
   printf '%s\n' "$signature" > "$signature_listing"
-  printf 'Mac Catalyst installer package signature:\n%s\n' "$signature" >&2
   if ! /usr/bin/python3 -I - "$installer_identity" "$signature_listing" <<'PY'
 import re
 import sys
@@ -830,16 +829,27 @@ trusted_statuses = {
     "Status: signed by a certificate trusted by macOS",
     "Status: signed by a certificate trusted by Mac OS X",
 }
+developer_certificate_status = "Status: signed by a developer certificate issued by Apple (Development)"
 statuses = [line.strip() for line in lines if line.strip().startswith("Status:")]
-if len(statuses) != 1 or statuses[0] not in trusted_statuses:
+if len(statuses) != 1:
     raise SystemExit("package signature status is missing, ambiguous, or untrusted")
-leaf_identities = []
+certificate_chain = []
 for line in lines:
-    match = re.fullmatch(r"\s*1\.\s+(.+?)\s*", line)
+    match = re.fullmatch(r"\s*\d+\.\s+(.+?)\s*", line)
     if match:
-        leaf_identities.append(match.group(1))
-if leaf_identities != [expected_identity]:
+        certificate_chain.append(match.group(1))
+if not certificate_chain or certificate_chain[0] != expected_identity:
     raise SystemExit("package leaf installer identity does not match")
+if statuses[0] == developer_certificate_status:
+    expected_chain = [
+        expected_identity,
+        "Apple Worldwide Developer Relations Certification Authority",
+        "Apple Root CA",
+    ]
+    if certificate_chain != expected_chain:
+        raise SystemExit("developer-certificate package signature does not expose the expected Apple chain")
+elif statuses[0] not in trusted_statuses:
+    raise SystemExit("package signature status is missing, ambiguous, or untrusted")
 PY
   then
     error "Exported Mac Catalyst installer package does not have the expected trusted installer signature"

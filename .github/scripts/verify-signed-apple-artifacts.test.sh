@@ -519,6 +519,24 @@ run_catalyst_export_directory_verifier "$catalyst_fixture"
 create_mac_catalyst_package_fixture "$catalyst_fixture"
 run_catalyst_package_verifier "$catalyst_fixture"
 
+printf '%s\n' \
+  'Package "QuakeSignal.pkg":' \
+  '   Status: signed by a developer certificate issued by Apple (Development)' \
+  '   Certificate Chain:' \
+  "    1. $installer_identity" \
+  '    2. Apple Worldwide Developer Relations Certification Authority' \
+  '    3. Apple Root CA' > "$catalyst_fixture/QuakeSignal.pkg.signature"
+run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+
+printf '%s\n' \
+  'Package "QuakeSignal.pkg":' \
+  '   Status: signed by a developer certificate issued by Apple (Development)' \
+  '   Certificate Chain:' \
+  "    1. $installer_identity" > "$catalyst_fixture/QuakeSignal.pkg.signature"
+expect_failure catalyst-package-developer-status-incomplete-chain 'expected Apple chain' run_catalyst_package_verifier "$catalyst_fixture"
+create_mac_catalyst_package_fixture "$catalyst_fixture"
+
 expect_failure catalyst-package-missing-installer-identity 'requires an exact Mac Installer Distribution identity' run_catalyst_package_verifier_without_identity "$catalyst_fixture"
 
 rm "$catalyst_fixture/QuakeSignal.pkg.signature"
