@@ -261,10 +261,10 @@ class ListingAssetsWorkflowContract
 end
 
 class IOSBuild8ScreenshotCandidateValidator
-  MANIFEST_NAME = "screenshot-manifest-v1.1-build13.json"
-  PROVENANCE_NAME = "screenshot-provenance-v1.1-build13.json"
-  SCREENSHOT_ROOT = "screenshots-v1.1-build13"
-  BUILD_EVIDENCE_ROOT = "screenshot-evidence-v1.1-build13"
+  MANIFEST_NAME = "screenshot-manifest-v1.1-build14.json"
+  PROVENANCE_NAME = "screenshot-provenance-v1.1-build14.json"
+  SCREENSHOT_ROOT = "screenshots-v1.1-build14"
+  BUILD_EVIDENCE_ROOT = "screenshot-evidence-v1.1-build14"
   BUILD_EVIDENCE_FILES = {
     "buildInvocation" => File.join(BUILD_EVIDENCE_ROOT, "build-invocation.txt"),
     "normalizedBuildSettings" => File.join(BUILD_EVIDENCE_ROOT, "normalized-build-settings.txt"),
@@ -597,7 +597,7 @@ class IOSBuild8ScreenshotCandidateValidator
     require_equal!(product.fetch("appleId"), "6800642443", "#{label} appleId")
     require_equal!(product.fetch("platform"), "iOS/iPadOS", "#{label} platform")
     require_equal!(product.fetch("marketingVersion"), "1.1", "#{label} marketingVersion")
-    require_equal!(product.fetch("build"), 13, "#{label} build")
+    require_equal!(product.fetch("build"), 14, "#{label} build")
     require_equal!(product.fetch("bundleIdentifier"), "com.quakesignal.app", "#{label} bundleIdentifier")
     require_equal!(product.fetch("configuration"), "Debug", "#{label} configuration")
     return unless require_simulator_fields

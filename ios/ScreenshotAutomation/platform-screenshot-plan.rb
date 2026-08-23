@@ -18,11 +18,11 @@ module QuakeSignalPlatformScreenshotPlan
 
   EXPECTED = {
     "tvos" => {
-      manifest: "ios/AppStore/platforms/tvos/screenshot-manifest-v1.1-build13.json",
+      manifest: "ios/AppStore/platforms/tvos/screenshot-manifest-v1.1-build14.json",
       product: {
         "platform" => "tvOS",
         "marketingVersion" => "1.1",
-        "build" => 13,
+        "build" => 14,
         "bundleIdentifier" => "com.quakesignal.app",
         "scheme" => "QuakeSignalTV",
       },
@@ -42,11 +42,11 @@ module QuakeSignalPlatformScreenshotPlan
       ],
     },
     "visionos" => {
-      manifest: "ios/AppStore/platforms/visionos/screenshot-manifest-v1.1-build13.json",
+      manifest: "ios/AppStore/platforms/visionos/screenshot-manifest-v1.1-build14.json",
       product: {
         "platform" => "visionOS",
         "marketingVersion" => "1.1",
-        "build" => 13,
+        "build" => 14,
         "bundleIdentifier" => "com.quakesignal.app",
         "scheme" => "QuakeSignalVision",
       },
@@ -69,11 +69,11 @@ module QuakeSignalPlatformScreenshotPlan
       ],
     },
     "watchos" => {
-      manifest: "ios/AppStore/platforms/watchos/screenshot-manifest-v1.1-build13.json",
+      manifest: "ios/AppStore/platforms/watchos/screenshot-manifest-v1.1-build14.json",
       product: {
         "platform" => "watchOS-companion",
         "marketingVersion" => "1.1",
-        "build" => 13,
+        "build" => 14,
         "hostBundleIdentifier" => "com.quakesignal.app",
         "bundleIdentifier" => "com.quakesignal.app.watchkitapp",
         "scheme" => "QuakeSignalWatch",
@@ -99,10 +99,10 @@ module QuakeSignalPlatformScreenshotPlan
 
   # Build 8 captures are retained as immutable historical evidence.  They must
   # continue to be interpreted against their own plan instead of the active
-  # build 13 release plan.
+  # build 14 release plan.
   HISTORICAL_BUILD8_EXPECTED = EXPECTED.each_with_object({}) do |(platform, expected), historical|
     historical[platform] = expected.merge(
-      manifest: expected.fetch(:manifest).sub("build13", "build8"),
+      manifest: expected.fetch(:manifest).sub("build14", "build8"),
       product: expected.fetch(:product).merge("build" => 8),
     ).freeze
   end.freeze
