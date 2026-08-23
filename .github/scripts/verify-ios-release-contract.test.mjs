@@ -1276,13 +1276,13 @@ test("fails closed on Worker dependency graph deletion, drift, or substitution",
 
 test("a future build is rejected until the Xcode Cloud guard is coordinated", async (t) => {
   await withFixture(t, {
-    buildNumber: "9",
-    allowedVersions: "1,2,3,4,5,6,7,8,9",
-    workflowDefault: "9",
+    buildNumber: "10",
+    allowedVersions: "1,2,3,4,5,6,7,8,9,10",
+    workflowDefault: "10",
   }, async (root) => {
     await assert.rejects(
       verifyIOSReleaseContract({ root }),
-      /Xcode Cloud guard BUILD_NUMBER must match 9 \(received 8\)/i,
+      /Xcode Cloud guard BUILD_NUMBER must match 10 \(received 9\)/i,
     );
   });
 });
@@ -1837,10 +1837,10 @@ test("fails closed when Worker validation omits the historical APNs incident gua
 });
 
 test("fails closed when a JSONC comment impersonates the Worker allow-list", async (t) => {
-  await withFixture(t, { workerConfigSuffix: "\n// \"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS\": \"1,2,3,4,5,6,7,8\"" }, async (root) => {
+  await withFixture(t, { workerConfigSuffix: "\n// \"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS\": \"1,2,3,4,5,6,7,8,9\"" }, async (root) => {
     const path = join(root, "backend/cloudflare/wrangler.jsonc");
     const contents = await readFile(path, "utf8");
-    await writeFile(path, contents.replace('    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8",\n', ""), "utf8");
+    await writeFile(path, contents.replace('    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8,9",\n', ""), "utf8");
     await assert.rejects(verifyIOSReleaseContract({ root }), /must be defined exactly once outside comments/i);
   });
 });
@@ -2053,8 +2053,8 @@ test("fails closed when iOS loses its embedded Watch profile contract", async (t
 test("fails closed when the native target, bundle, or embedding matrix drifts", async (t) => {
   const mutations = [
     (contents) => contents.replace(
-      "    CURRENT_PROJECT_VERSION: \"8\"\n",
-      "    CURRENT_PROJECT_VERSION: \"8\"\n    TARGETED_DEVICE_FAMILY: \"1,2\"\n",
+      "    CURRENT_PROJECT_VERSION: \"9\"\n",
+      "    CURRENT_PROJECT_VERSION: \"9\"\n    TARGETED_DEVICE_FAMILY: \"1,2\"\n",
     ),
     (contents) => contents.replace(
       "        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app.watchkitapp\n",
