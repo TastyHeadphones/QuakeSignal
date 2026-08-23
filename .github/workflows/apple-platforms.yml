@@ -295,6 +295,7 @@ jobs:
               -authenticationKeyID "$PLATFORM_AUTOMATIC_SIGNING_KEY_ID"
               -authenticationKeyIssuerID "$PLATFORM_AUTOMATIC_SIGNING_ISSUER"
               PROVISIONING_PROFILE_SPECIFIER=
+              CODE_SIGN_IDENTITY=
             )
           fi
           xcodebuild archive \

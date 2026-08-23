@@ -1998,6 +1998,10 @@ test("fails closed when the Mac Catalyst signed-package route drifts", async (t)
       "PROVISIONING_PROFILE_SPECIFIER=Automatic",
     ],
     [
+      "CODE_SIGN_IDENTITY=",
+      "CODE_SIGN_IDENTITY=Apple Development",
+    ],
+    [
       "verifier_arguments+=(--installer-identity",
       "verifier_arguments+=(--host-profile-name",
     ],
