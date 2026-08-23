@@ -199,28 +199,32 @@ races; they are not a substitute for that protected deployment freeze.
 
 ## Protected environment configuration
 
-Xcode Cloud uses Apple-managed automatic signing for all four Archive actions.
-Do not add `QUAKESIGNAL_IOS_PROFILE_NAME`,
+When an Xcode Cloud product is onboarded, it must use Apple-managed automatic
+signing for all four Archive actions. Do not add `QUAKESIGNAL_IOS_PROFILE_NAME`,
 `QUAKESIGNAL_WATCH_PROFILE_NAME`, `QUAKESIGNAL_TV_PROFILE_NAME`,
 `QUAKESIGNAL_VISION_PROFILE_NAME`, or `QUAKESIGNAL_CATALYST_PROFILE_NAME` to
 the Cloud workflow; absent values intentionally leave each conditional
 `PROVISIONING_PROFILE_SPECIFIER` empty so Xcode Cloud can resolve the registered
 identifiers.
 
-The existing protected GitHub environment `ios-app-store-release` is a
-separate manual-signing fallback for iOS/Watch, tvOS, visionOS, and Mac
-Catalyst. It must contain all selected inputs before those workflows are
-dispatched. Ordinary `.github/workflows/ios.yml` CI still gives Catalyst a
-credential-free Release compilation gate; only an explicitly approved
-`apple-platforms.yml` dispatch may materialize its signing credentials.
+The existing protected GitHub environment `ios-app-store-release` signs
+iOS/Watch, tvOS, and visionOS with their reviewed profiles. Its Mac Catalyst
+route uses Xcode's API-key-backed automatic signing to create or update the
+Apple-managed installer material instead of importing an installer `.p12`.
+Ordinary `.github/workflows/ios.yml` CI still gives Catalyst a credential-free
+Release compilation gate; only an explicitly approved `apple-platforms.yml`
+dispatch may materialize signing credentials.
 
 Shared certificate and upload configuration:
 
 - Secret `IOS_APP_STORE_CERTIFICATE`
 - Secret `IOS_APP_STORE_CERTIFICATE_PASSWORD`
-- Secret `APP_STORE_CONNECT_API_KEY` (required only for upload)
-- Variable `APP_STORE_CONNECT_API_KEY_ID` (required only for upload)
-- Variable `APP_STORE_CONNECT_API_ISSUER` (required only for upload)
+- Secret `APP_STORE_CONNECT_API_KEY` (required for upload and the protected
+  Mac Catalyst automatic-signing archive/export)
+- Variable `APP_STORE_CONNECT_API_KEY_ID` (required for upload and Mac
+  Catalyst automatic signing)
+- Variable `APP_STORE_CONNECT_API_ISSUER` (required for upload and Mac
+  Catalyst automatic signing)
 - Variable `CLOUDFLARE_WORKER_URL`, exactly
   `https://quakesignal-api.hopeso.workers.dev` (used by the iOS lane only)
 
@@ -236,12 +240,12 @@ Target profiles:
   `VISIONOS_APP_STORE_PROFILE_NAME`
 - Secret `MACCATALYST_APP_STORE_PROVISIONING_PROFILE` and variable
   `MACCATALYST_APP_STORE_PROFILE_NAME`
-- Secrets `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE` and
-  `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD` for the base64-encoded
-  Mac Installer Distribution `.p12`
-- Variable `MACCATALYST_APP_STORE_INSTALLER_IDENTITY`, the exact imported
+- Variable `MACCATALYST_APP_STORE_INSTALLER_IDENTITY`, the expected
   `Mac Installer Distribution: … (5TT564H883)` or legacy
-  `3rd Party Mac Developer Installer: … (5TT564H883)` identity
+  `3rd Party Mac Developer Installer: … (5TT564H883)` package identity.
+  The protected Catalyst lane uses `xcodebuild -allowProvisioningUpdates` with
+  the App Store Connect key to create or update Apple-managed signing material;
+  it does not import a separately stored installer `.p12`.
 
 Apple Developer portal state recorded on 2026-08-22:
 

@@ -39,12 +39,10 @@ environment review history and fails closed when this machine binding is absent.
 | `VISIONOS_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal visionOS App Store Release` |
 | `MACCATALYST_APP_STORE_PROVISIONING_PROFILE` | Secret | Base64-encoded Mac App Store provisioning profile for the Catalyst `com.quakesignal.app` |
 | `MACCATALYST_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal Mac Catalyst App Store Release` |
-| `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE` | Secret | Base64-encoded Mac Installer Distribution `.p12` used only for the Catalyst `.pkg` |
-| `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD` | Secret | Password used when exporting that installer `.p12` |
-| `MACCATALYST_APP_STORE_INSTALLER_IDENTITY` | Environment variable | `Mac Installer Distribution: UniSphereco LLC (5TT564H883)` |
-| `APP_STORE_CONNECT_API_KEY` | Secret | Team App Store Connect API private `.p8` key contents |
-| `APP_STORE_CONNECT_API_KEY_ID` | Environment variable | App Store Connect API key ID |
-| `APP_STORE_CONNECT_API_ISSUER` | Environment variable | App Store Connect API issuer UUID |
+| `MACCATALYST_APP_STORE_INSTALLER_IDENTITY` | Environment variable | Expected `Mac Installer Distribution: … (5TT564H883)` or legacy `3rd Party Mac Developer Installer: … (5TT564H883)` package identity |
+| `APP_STORE_CONNECT_API_KEY` | Secret | Team App Store Connect API private `.p8`; uploads builds and lets the protected Catalyst lane create/update Apple-managed signing material |
+| `APP_STORE_CONNECT_API_KEY_ID` | Environment variable | App Store Connect API key ID for upload and Catalyst automatic signing |
+| `APP_STORE_CONNECT_API_ISSUER` | Environment variable | App Store Connect API issuer UUID for upload and Catalyst automatic signing |
 | `CLOUDFLARE_WORKER_URL` | Environment variable | Exactly `https://quakesignal-api.hopeso.workers.dev`; the Release archive verifies this user-approved public Workers.dev production origin |
 
 The Account Holder must first enable App Store Connect API access. Use a
