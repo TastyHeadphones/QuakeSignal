@@ -289,7 +289,6 @@ jobs:
           PLATFORM_PROFILE_NAME: ${{ vars[matrix.profile_variable] }}
         run: |
           set -euo pipefail
-          signing_arguments=()
           code_sign_style=Manual
           xcodebuild archive \
             -project "$XCODE_PROJECT" \
@@ -303,8 +302,7 @@ jobs:
             QUAKESIGNAL_TV_PROFILE_NAME="$PLATFORM_PROFILE_NAME" \
             QUAKESIGNAL_VISION_PROFILE_NAME="$PLATFORM_PROFILE_NAME" \
             QUAKESIGNAL_CATALYST_PROFILE_NAME="$PLATFORM_PROFILE_NAME" \
-            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-            "${signing_arguments[@]}"
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
 
       - name: Export selected App Store Connect artifact
         env:

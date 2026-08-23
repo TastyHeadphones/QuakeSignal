@@ -412,8 +412,8 @@ const CLOUDFLARE_DEPLOY_PRODUCTION_HEADER = {
 // credentials.
 const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:2VeW3DO8MbplMJY0o2VH9mUpAgnd1cG6mlbnLP3K0Es";
 const WORKFLOW_JOBS_FINGERPRINT = "sha256:mmzDL0fVCsXwnbsK_dXtK3dk10pKXDTe6pLeKEkEack";
-const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:1L-Q8OoSg29kweOCr_8GirEV4ZYb9QTBnWul5wJkHlo";
-const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:USW55cTwgbQ46rfxEJ3j5ENZp8CNOUnn8AygPt_X1TM";
+const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:wslIJTWtGB5EvHIHsF6kVVqJCLht4csKs3ein5JDlg0";
+const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:_Wp7x3yYo0VMeXFhoUCin_YvNasmBbG2VLZlwa50ohw";
 const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:7uJANY6vWpHWmx_aG3r9Vfm6FN2Kc0Jic68X4kW7AjI";
 const SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT = "sha256:nwR_WO2AVbhslCYJYO51gOpS7B9wMaROs8pMHMeXRe0";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
@@ -424,9 +424,9 @@ const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:bocI3sE5zvOVMAApOs_e8lX36IC
 const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:qhbmHNjXa5zqEro1kc74zoLq6O0HveB9dIDzFq38MKU";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:MGFrBJXA26bnqXfA030H1RdRUqOjGrmH85d7mB2636k";
-const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:yUa8dkF7db_2Fa_5MaocmlQC4W4JCbU7HbVXk5I_R8c";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:f3SWwiqv4EkXMz5-sY0oRwqbZu78O7678BeHXvU-dHI";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:UG3ur_stbrUYRvafgfvixrDmxlc2iyer9JJQKVj65kE";
+const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:KSuJUT4XoY4reRidLqwCtDKAW1heF0gvLmzLceSo-jw";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:wUMww4r6gX6uQ2nTXZATVtUNe1puoNNQTTeCLRPL130";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:lgshCT0145MrWU32Ew_Igwczxm3029KdgeiTgzgTJZM";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:_ZwVwcu1DLNzB8gNUjCzxf5A9mCefe483hBvgsOWtGU";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -2195,9 +2195,8 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
     'CODE_SIGN_STYLE="$code_sign_style"',
     "CODE_SIGN_IDENTITY='Apple Distribution'",
     'QUAKESIGNAL_CATALYST_PROFILE_NAME="$PLATFORM_PROFILE_NAME"',
-    '"${signing_arguments[@]}"',
   ], "native platform signed archive step.run");
-  if (/allowProvisioningUpdates|authenticationKey(?:Path|ID|IssuerID)|code_sign_style=Automatic|PROVISIONING_PROFILE_SPECIFIER=/.test(archive.run)) {
+  if (/allowProvisioningUpdates|authenticationKey(?:Path|ID|IssuerID)|code_sign_style=Automatic|PROVISIONING_PROFILE_SPECIFIER=|\bsigning_arguments\b/.test(archive.run)) {
     fail("native platform signed archive step must use the reviewed explicit manual profile route.");
   }
 
