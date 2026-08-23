@@ -21,19 +21,19 @@ from urllib.parse import urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
-BUILD_NUMBER = "8"
+BUILD_NUMBER = "9"
 MARKETING_VERSION = "1.1"
 TEAM_ID = "5TT564H883"
 RELEASE_REF = "refs/heads/main"
-RELEASE_WORKFLOW = "QuakeSignal 1.1 (8) Native Release"
+RELEASE_WORKFLOW = "QuakeSignal 1.1 (9) Native Release"
 PRODUCT_NAME = "QuakeSignal"
 WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev"
 VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open."
 MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
-APP_ATTEST_FINGERPRINT = "sha256:wQ7bfMyEJST5ySIwLM1Q6HwT4DtbRPR3vanIG-kXCkQ"
-XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:FPPp_gIATLoIgEwcBZj9tufNpZtlB8qw9dm3ZhacE0k"
+APP_ATTEST_FINGERPRINT = "sha256:i2_gfqBctR9C6xgTOq_nlQWrhvMlW-W04Nc6drZmOeU"
+XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:zsRE4lkbP6wjVNqFQxPCSXtrQHLBPUVJU3qvsPo_FgA"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
-PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:tgUn_P9cIlQGKy5FZCUI1VyLZjYOJEyMMrLTXFJchC0"
+PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:0GHsAUSbkimkaPPF-zqTXifcNeZSQ6rjzGY3FlywcBE"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
 MAX_RESPONSE_BYTES = 1024 * 1024
 READINESS_TIMEOUT_SECONDS = 180.0
@@ -171,7 +171,7 @@ LEGAL_PAGE_CONTRACTS = (
             "encrypted WebSocket and HTTPS connections while open",
             "selected alert presentation mode locally",
             "Apple Vision Pro and Mac Catalyst",
-            "separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 8), and Chrome extension",
+            "separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 9), and Chrome extension",
             "optional family contact name and telephone number stay in local app storage",
             "erase both Family Check-In fields and uncheck each selected preparedness-kit item",
             "Apple Maps and system Location Services",
@@ -202,7 +202,7 @@ LEGAL_PAGE_CONTRACTS = (
             "System is visual-only on Apple TV",
             "custom Apple TV audio requires an explicit Siri Remote action",
             "Apple Vision Pro and Mac Catalyst",
-            "separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 8), and Chrome extension",
+            "separate Windows desktop app, legacy Tauri macOS builds (dormant for Apple release 1.1 build 9), and Chrome extension",
             "do not independently use the QuakeSignal notification relay",
             "Registration removal after a reset",
             "support cannot identify the old registration from a public issue",
@@ -573,8 +573,8 @@ def calculate_app_attest_fingerprint(repository_root: Path) -> str:
     if not isinstance(allowed_source, str) or not isinstance(routes_source, str):
         fail("checked-in Worker App Attest allow-list and routes must be JSON strings.")
     allowed = sorted(part.strip() for part in allowed_source.split(","))
-    if allowed != [str(value) for value in range(1, 9)]:
-        fail("APP_ATTEST_ALLOWED_BUNDLE_VERSIONS must be exactly 1 through 8.")
+    if allowed != [str(value) for value in range(1, 10)]:
+        fail("APP_ATTEST_ALLOWED_BUNDLE_VERSIONS must be exactly 1 through 9.")
     try:
         routes = strict_json_loads(routes_source)
     except (TypeError, ValueError) as error:
@@ -1433,8 +1433,8 @@ def verify_bounded_source_contract(repository_root: Path) -> None:
     project = (repository_root / "ios/project.yml").read_text(encoding="utf-8")
     if len(re.findall(r'^\s*MARKETING_VERSION:\s*["\']1\.1["\']\s*$', project, re.MULTILINE)) != 1:
         fail("ios/project.yml must contain exactly one MARKETING_VERSION 1.1.")
-    if len(re.findall(r'^\s*CURRENT_PROJECT_VERSION:\s*["\']8["\']\s*$', project, re.MULTILINE)) != 1:
-        fail("ios/project.yml must contain exactly one CURRENT_PROJECT_VERSION 8.")
+    if len(re.findall(rf'^\s*CURRENT_PROJECT_VERSION:\s*["\']{re.escape(BUILD_NUMBER)}["\']\s*$', project, re.MULTILINE)) != 1:
+        fail(f"ios/project.yml must contain exactly one CURRENT_PROJECT_VERSION {BUILD_NUMBER}.")
     for required in (
         "QuakeSignal:",
         "platform: iOS",
@@ -1468,8 +1468,8 @@ def verify_bounded_source_contract(repository_root: Path) -> None:
         relative_path: (repository_root / relative_path).read_text(encoding="utf-8")
         for relative_path in XCODE_SCHEME_PATHS
     })
-    if len(re.findall(r"CURRENT_PROJECT_VERSION = 8;", generated)) != 3:
-        fail("generated Xcode project must contain exactly three build-8 settings.")
+    if len(re.findall(r"CURRENT_PROJECT_VERSION = 9;", generated)) != 3:
+        fail("generated Xcode project must contain exactly three build-9 settings.")
     generated_origins = re.findall(r"^\s*QUAKESIGNAL_API_BASE_URL = ([^;]+);\s*$", generated, re.MULTILINE)
     if generated_origins != [f'"{WORKER_ORIGIN}"'] * 2:
         fail("generated Xcode project must contain exactly two reviewed iOS Worker origin settings.")
@@ -1617,9 +1617,9 @@ def verify_live_worker_release(
     if (
         policy.get("format") != POLICY_FORMAT
         or policy.get("fingerprint") != APP_ATTEST_FINGERPRINT
-        or versions != [str(value) for value in range(1, 9)]
+        or versions != [str(value) for value in range(1, 10)]
     ):
-        fail("live App Attest fingerprint/allow-list does not match release build 8.")
+        fail("live App Attest fingerprint/allow-list does not match release build 9.")
 
     status, root_headers, root_bytes = _fetch("/", fetcher=fetcher)
     try:

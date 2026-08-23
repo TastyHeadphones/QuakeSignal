@@ -23,7 +23,7 @@ class FakeNativeAppleScreenshotInspector
     match = path.to_s.match(/UNAPPROVED-debug-simulator-(tvos|watchos|visionos)-/)
     raise "could not infer fixture platform from #{path}" unless match
 
-    pixels = QuakeSignalPlatformScreenshotPlan::EXPECTED.fetch(match[1]).fetch(:pixels)
+    pixels = NativeAppleScreenshotCandidateValidator::HISTORICAL_PLAN_EXPECTED.fetch(match[1]).fetch(:pixels)
     {
       width: pixels.fetch(0),
       height: pixels.fetch(1),
@@ -452,7 +452,7 @@ class NativeAppleScreenshotCandidateValidatorTest < Minitest::Test
     destination_candidates = @root.join(NativeAppleScreenshotCandidateValidator::CANDIDATE_ROOT)
     clone_tree(source_candidates, destination_candidates)
     NativeAppleScreenshotCandidateValidator::PLATFORMS.each do |platform|
-      relative = QuakeSignalPlatformScreenshotPlan::EXPECTED.fetch(platform).fetch(:manifest)
+      relative = NativeAppleScreenshotCandidateValidator::HISTORICAL_PLAN_EXPECTED.fetch(platform).fetch(:manifest)
       copy_one(SOURCE_ROOT.join(relative), @root.join(relative))
     end
   end
@@ -536,7 +536,7 @@ class NativeAppleScreenshotCandidateValidatorTest < Minitest::Test
   end
 
   def plan_path(platform)
-    @root.join(QuakeSignalPlatformScreenshotPlan::EXPECTED.fetch(platform).fetch(:manifest))
+    @root.join(NativeAppleScreenshotCandidateValidator::HISTORICAL_PLAN_EXPECTED.fetch(platform).fetch(:manifest))
   end
 
   def rehash_aggregate_in_metadata(platform)

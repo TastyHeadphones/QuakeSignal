@@ -51,7 +51,7 @@ on:
       build_number:
         description: Exact pre-approved CFBundleVersion from ios/project.yml and the Worker App Attest allow-list
         required: false
-        default: "8"
+        default: "9"
         type: string
       source_commit:
         description: Exact 40-character lowercase protected-main commit to sign
@@ -664,7 +664,7 @@ jobs:
           ATTESTATION_PATH="$attestation_root/signed-release-attestation.json" \
             /usr/bin/ruby -rjson -rtime -e '
               build = Integer(ENV.fetch("BUILD_NUMBER"), 10)
-              abort "signed release attestation requires build 8" unless build == 8
+              abort "signed release attestation requires build 9" unless build == 9
               sha256 = ENV.fetch("IPA_SHA256")
               abort "signed release attestation requires a valid IPA SHA-256" unless sha256.match?(/\A[0-9a-f]{64}\z/)
               attestation = {

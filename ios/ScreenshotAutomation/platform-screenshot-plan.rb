@@ -18,11 +18,11 @@ module QuakeSignalPlatformScreenshotPlan
 
   EXPECTED = {
     "tvos" => {
-      manifest: "ios/AppStore/platforms/tvos/screenshot-manifest-v1.1-build8.json",
+      manifest: "ios/AppStore/platforms/tvos/screenshot-manifest-v1.1-build9.json",
       product: {
         "platform" => "tvOS",
         "marketingVersion" => "1.1",
-        "build" => 8,
+        "build" => 9,
         "bundleIdentifier" => "com.quakesignal.app",
         "scheme" => "QuakeSignalTV",
       },
@@ -42,11 +42,11 @@ module QuakeSignalPlatformScreenshotPlan
       ],
     },
     "visionos" => {
-      manifest: "ios/AppStore/platforms/visionos/screenshot-manifest-v1.1-build8.json",
+      manifest: "ios/AppStore/platforms/visionos/screenshot-manifest-v1.1-build9.json",
       product: {
         "platform" => "visionOS",
         "marketingVersion" => "1.1",
-        "build" => 8,
+        "build" => 9,
         "bundleIdentifier" => "com.quakesignal.app",
         "scheme" => "QuakeSignalVision",
       },
@@ -69,11 +69,11 @@ module QuakeSignalPlatformScreenshotPlan
       ],
     },
     "watchos" => {
-      manifest: "ios/AppStore/platforms/watchos/screenshot-manifest-v1.1-build8.json",
+      manifest: "ios/AppStore/platforms/watchos/screenshot-manifest-v1.1-build9.json",
       product: {
         "platform" => "watchOS-companion",
         "marketingVersion" => "1.1",
-        "build" => 8,
+        "build" => 9,
         "hostBundleIdentifier" => "com.quakesignal.app",
         "bundleIdentifier" => "com.quakesignal.app.watchkitapp",
         "scheme" => "QuakeSignalWatch",
@@ -97,14 +97,24 @@ module QuakeSignalPlatformScreenshotPlan
     },
   }.freeze
 
+  # Build 8 captures are retained as immutable historical evidence.  They must
+  # continue to be interpreted against their own plan instead of the active
+  # build 9 release plan.
+  HISTORICAL_BUILD8_EXPECTED = EXPECTED.each_with_object({}) do |(platform, expected), historical|
+    historical[platform] = expected.merge(
+      manifest: expected.fetch(:manifest).sub("build9", "build8"),
+      product: expected.fetch(:product).merge("build" => 8),
+    ).freeze
+  end.freeze
+
   module_function
 
   def repository_root
     Pathname.new(__dir__).join("../..").realpath
   end
 
-  def load(platform, repository_root: self.repository_root)
-    expected = EXPECTED.fetch(platform) do
+  def load(platform, repository_root: self.repository_root, expected_plans: EXPECTED)
+    expected = expected_plans.fetch(platform) do
       raise Error, "unsupported platform #{platform.inspect}; expected tvos, visionos, or watchos"
     end
     root = Pathname.new(repository_root).realpath

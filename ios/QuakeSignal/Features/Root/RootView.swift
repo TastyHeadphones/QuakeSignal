@@ -60,6 +60,10 @@ struct RootView: View {
                         .tag(RootTab.settings)
                 }
                 .tint(Color("BrandColor"))
+                // On regular-width iPad scenes, TabView may otherwise adopt
+                // its child content's intrinsic height instead of the scene.
+                // Keep every tab's background and hit-testing surface full size.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)
             }

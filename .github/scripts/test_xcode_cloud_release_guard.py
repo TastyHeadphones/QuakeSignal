@@ -74,7 +74,7 @@ def ready_metadata(fingerprint=guard.APP_ATTEST_FINGERPRINT):
         "appAttestPolicy": {
             "format": guard.POLICY_FORMAT,
             "fingerprint": fingerprint,
-            "allowedBundleVersions": [str(value) for value in range(1, 9)],
+            "allowedBundleVersions": [str(value) for value in range(1, 10)],
         },
     }
 
@@ -111,7 +111,7 @@ class GuardContextTests(unittest.TestCase):
         mutations = (
             ("CI_START_CONDITION", "push"),
             ("CI_START_CONDITION", "manual_rebuild"),
-            ("CI_BUILD_NUMBER", "9"),
+            ("CI_BUILD_NUMBER", "8"),
             ("CI_TEAM_ID", "ABCDEFGHIJ"),
             ("CI_PRODUCT", "QuakeSignal Staging"),
             ("CI_PRODUCT_ID", ""),
@@ -1250,7 +1250,7 @@ class LiveWorkerContractTests(unittest.TestCase):
                     guard.verify_live_worker_release(fetcher=mutated_fetcher)
 
     def test_live_release_contract_rejects_non_exact_bundle_version_list(self):
-        for versions in (["8"], [str(value) for value in range(1, 10)], [1, 2, 3, 4, 5, 6, 7, 8]):
+        for versions in (["9"], [str(value) for value in range(1, 11)], [1, 2, 3, 4, 5, 6, 7, 8, 9]):
             with self.subTest(versions=versions):
                 metadata = ready_metadata()
                 metadata["appAttestPolicy"]["allowedBundleVersions"] = versions

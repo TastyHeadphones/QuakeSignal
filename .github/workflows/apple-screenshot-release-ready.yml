@@ -455,7 +455,7 @@ jobs:
                 attestation.fetch("sourceCommit") == source
               fail!("#{role} release product is wrong") unless
                 attestation.fetch("marketingVersion") == "1.1" &&
-                attestation.fetch("buildNumber") == 8 &&
+                attestation.fetch("buildNumber") == 9 &&
                 attestation.fetch("distributionMode") == "testflight-upload"
               fail!("#{role} platform set is wrong") unless attestation.fetch("platforms") == spec.fetch("platforms")
               artifact = attestation.fetch("artifact")
@@ -742,8 +742,8 @@ jobs:
       - name: Assemble source-addressed release evidence outside checkout
         run: |
           set -euo pipefail
-          output="$EVIDENCE_ROOT/ios/AppStore/screenshot-release-sets-v1.1-build8/$SOURCE_COMMIT"
-          index="$EVIDENCE_ROOT/ios/AppStore/screenshot-set-index-v1.1-build8.json"
+          output="$EVIDENCE_ROOT/ios/AppStore/screenshot-release-sets-v1.1-build9/$SOURCE_COMMIT"
+          index="$EVIDENCE_ROOT/ios/AppStore/screenshot-set-index-v1.1-build9.json"
           /usr/bin/ruby .github/scripts/assemble-apple-screenshot-release-set.rb \
             "--release-evidence-root=$EVIDENCE_ROOT" \
             "$SOURCE_COMMIT" "$output" "$index" \
@@ -771,8 +771,8 @@ jobs:
           /usr/bin/ruby -rjson -rdigest -rpathname -rtime -e '
             evidence = Pathname.new(ENV.fetch("EVIDENCE_ROOT")).realpath
             source = ENV.fetch("SOURCE_COMMIT")
-            index_path = evidence.join("ios/AppStore/screenshot-set-index-v1.1-build8.json")
-            release_root = evidence.join("ios/AppStore/screenshot-release-sets-v1.1-build8", source)
+            index_path = evidence.join("ios/AppStore/screenshot-set-index-v1.1-build9.json")
+            release_root = evidence.join("ios/AppStore/screenshot-release-sets-v1.1-build9", source)
             manifest_path = release_root.join("release-set.json")
             approval_path = release_root.join("release-approval.json")
             abort "approval target already exists" if approval_path.exist? || approval_path.symlink?
@@ -817,7 +817,7 @@ jobs:
             reviewed_at = parsed_review_times.values.max.utc.iso8601
             approval = {
               "schemaVersion" => 3,
-              "status" => "approved-for-build8-upload",
+              "status" => "approved-for-build9-upload",
               "uploadApproved" => true,
               "sourceCommit" => source,
               "releaseSetManifestSha256" => manifest_sha256,
@@ -842,7 +842,7 @@ jobs:
               file.flush
               file.fsync
             end
-            active["approvalFile"] = "ios/AppStore/screenshot-release-sets-v1.1-build8/#{source}/release-approval.json"
+            active["approvalFile"] = "ios/AppStore/screenshot-release-sets-v1.1-build9/#{source}/release-approval.json"
             active["approvalSha256"] = Digest::SHA256.file(approval_path).hexdigest
             staged_index = index_path.sub_ext(".staged.json")
             File.open(staged_index, File::WRONLY | File::CREAT | File::EXCL, 0o600) do |file|
@@ -857,7 +857,7 @@ jobs:
         run: |
           set -euo pipefail
           /usr/bin/ruby .github/scripts/verify-store-assets.rb \
-            --require-build8-screenshot-release-ready \
+            --require-build9-screenshot-release-ready \
             --expected-source-commit="$SOURCE_COMMIT" \
             --screenshot-release-evidence-root="$EVIDENCE_ROOT"
           test "$(git rev-parse --verify HEAD)" = "$SOURCE_COMMIT"
@@ -865,8 +865,8 @@ jobs:
           /usr/bin/ruby -rpathname -e '
             root = Pathname.new(ENV.fetch("EVIDENCE_ROOT")).realpath.join("ios/AppStore")
             expected = [
-              "screenshot-set-index-v1.1-build8.json",
-              "screenshot-release-sets-v1.1-build8",
+              "screenshot-set-index-v1.1-build9.json",
+              "screenshot-release-sets-v1.1-build9",
             ]
             abort "final evidence upload inventory is not exact" unless
               root.children.map { |entry| entry.basename.to_s }.sort == expected.sort
@@ -875,10 +875,10 @@ jobs:
       - name: Upload one short-lived approved screenshot artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: APPROVED-build8-apple-screenshots-${{ inputs.source_commit }}
+          name: APPROVED-build9-apple-screenshots-${{ inputs.source_commit }}
           path: |
-            ${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-set-index-v1.1-build8.json
-            ${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-release-sets-v1.1-build8/${{ inputs.source_commit }}
+            ${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-set-index-v1.1-build9.json
+            ${{ env.EVIDENCE_ROOT }}/ios/AppStore/screenshot-release-sets-v1.1-build9/${{ inputs.source_commit }}
           if-no-files-found: error
           include-hidden-files: false
           compression-level: 0
