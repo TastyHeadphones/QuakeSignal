@@ -411,7 +411,7 @@ elif [ "$platform" = "visionos" ]; then
     "$simulator_id" "$bundle_id" "$candidate" "$locale" "$apple_locale" \
     "$frame_selector" "$temporary_root" "$expected_width" "$expected_height" \
     "$script_dir/validate-vision-map-content.rb" \
-    "$vision_settle_seconds" sips /usr/bin/ruby || \
+    "$vision_settle_seconds" 120 sips /usr/bin/ruby || \
     vision_capture_status=$?
   if [ "$vision_capture_status" -ne 0 ]; then
     echo "error: Vision screenshot capture/validation failed with status $vision_capture_status" >&2

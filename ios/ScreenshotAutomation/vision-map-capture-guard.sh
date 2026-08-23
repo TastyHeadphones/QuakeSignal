@@ -7,8 +7,8 @@
 # candidate or write provenance. The validator applies stricter map-specific
 # evidence when the selected route is visionos-map.
 quakesignal_capture_validated_vision_screenshot() {
-  if [ "$#" -ne 13 ]; then
-    echo "error: validated Vision capture expects 13 arguments" >&2
+  if [ "$#" -ne 14 ]; then
+    echo "error: validated Vision capture expects 14 arguments" >&2
     return 64
   fi
 
@@ -23,8 +23,9 @@ quakesignal_capture_validated_vision_screenshot() {
   local expected_height="$9"
   local validator_path="${10}"
   local retry_settle_seconds="${11}"
-  local sips_executable="${12}"
-  local ruby_executable="${13}"
+  local capture_timeout_seconds="${12}"
+  local sips_executable="${13}"
+  local ruby_executable="${14}"
   local xcrun_executable="${QUAKESIGNAL_XCRUN_EXECUTABLE:-xcrun}"
   local candidate_parent=""
   local capture_attempt=1
@@ -36,6 +37,8 @@ quakesignal_capture_validated_vision_screenshot() {
   local validator_status=0
   local spawned_pid=""
   local sleep_status=0
+  local capture_started_at_seconds=0
+  local capture_elapsed_seconds=0
 
   case "$frame_selector" in
     visionos-home|visionos-reports|visionos-map|visionos-guide|visionos-alert-preferences) ;;
@@ -46,6 +49,10 @@ quakesignal_capture_validated_vision_screenshot() {
   esac
   if ! [[ "$retry_settle_seconds" =~ ^(0|[1-9][0-9]*)$ ]]; then
     echo "error: Vision retry settle time must be a canonical nonnegative integer" >&2
+    return 64
+  fi
+  if ! [[ "$capture_timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
+    echo "error: Vision capture timeout must be a canonical positive integer" >&2
     return 64
   fi
   if [ ! -d "$validation_root" ] || [ -L "$validation_root" ]; then
@@ -89,6 +96,17 @@ quakesignal_capture_validated_vision_screenshot() {
     fi
     screenshot_pid="$spawned_pid"
     quakesignal_restore_tracked_spawn_signals
+    capture_started_at_seconds="$SECONDS"
+    while kill -0 "$screenshot_pid" >/dev/null 2>&1; do
+      sleep 1
+      capture_elapsed_seconds=$((SECONDS - capture_started_at_seconds))
+      if [ "$capture_elapsed_seconds" -ge "$capture_timeout_seconds" ]; then
+        quakesignal_stop_processes "$screenshot_pid"
+        screenshot_pid=""
+        echo "error: Vision screenshot exceeded the ${capture_timeout_seconds}s hard timeout" >&2
+        return 124
+      fi
+    done
     if wait "$screenshot_pid"; then
       capture_status=0
     else
