@@ -231,7 +231,7 @@ module QuakeSignalIOSScreenshotProvenance
         "completedAt" => capture_windows.map { |window| window.fetch("completedAt") }.max,
       },
       "frames" => frames,
-        "approvalRequired" => "Named visual review and signed Release build 16 parity comparison",
+        "approvalRequired" => "Named visual review and signed Release build 17 parity comparison",
     }
     output_path.write(JSON.pretty_generate(aggregate) + "\n", mode: "wx")
     aggregate
@@ -285,7 +285,7 @@ module QuakeSignalIOSScreenshotProvenance
       {
         "bundleIdentifier" => "com.quakesignal.app",
         "marketingVersion" => "1.1",
-        "build" => 15,
+        "build" => 17,
         "scheme" => "QuakeSignal",
         "destination" => "generic/platform=iOS Simulator",
         "configuration" => "Debug",

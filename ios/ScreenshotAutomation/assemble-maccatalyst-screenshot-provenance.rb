@@ -129,7 +129,7 @@ module QuakeSignalMacCatalystScreenshotProvenance
         "completedAt" => captured_at_values.max,
       },
       "frames" => frames,
-        "approvalRequired" => "Named visual review and signed Release build 16 parity comparison",
+        "approvalRequired" => "Named visual review and signed Release build 17 parity comparison",
     }
     output_path.dirname.mkpath
     output_path.write(JSON.pretty_generate(aggregate) + "\n", mode: "wx")
@@ -177,7 +177,7 @@ module QuakeSignalMacCatalystScreenshotProvenance
       {
         "bundleIdentifier" => "com.quakesignal.app",
         "marketingVersion" => "1.1",
-        "build" => 15,
+        "build" => 17,
         "scheme" => "QuakeSignal",
         "destination" => "platform=macOS,variant=Mac Catalyst",
         "configuration" => "Debug",

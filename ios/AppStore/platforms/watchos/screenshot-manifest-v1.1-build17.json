@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "status": "planned-not-captured",
+  "product": {
+    "appleId": "6800642443",
+    "platform": "watchOS-companion",
+    "marketingVersion": "1.1",
+    "build": 17,
+    "hostBundleIdentifier": "com.quakesignal.app",
+    "bundleIdentifier": "com.quakesignal.app.watchkitapp",
+    "scheme": "QuakeSignalWatch",
+    "delivery": "embedded-in-ios-upload"
+  },
+  "specification": {
+    "officialUrl": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/",
+    "minimumCount": 1,
+    "maximumCount": 10,
+    "acceptedPortraitPixels": [[422, 514], [410, 502], [416, 496], [396, 484], [368, 448], [312, 390]],
+    "acceptedDeviceClasses": {"422x514": "Apple Watch Ultra 3", "410x502": "Apple Watch Ultra 2 / Ultra", "416x496": "Apple Watch Series 11 / Series 10", "396x484": "Apple Watch Series 9 / Series 8 / Series 7", "368x448": "Apple Watch Series 6 / Series 5 / Series 4 / SE 3 / SE", "312x390": "Apple Watch Series 3"},
+    "selectedPixels": [410, 502],
+    "sameSizeRequiredAcrossAllLocalizations": true,
+    "acceptedFormats": ["jpeg", "jpg", "png"],
+    "alphaAllowed": false
+  },
+  "captureEvidence": {"sourceBaselineCommit": null, "signedHostArtifactSha256": null, "runtime": null, "pairedIPhone": null, "watchDevice": null, "capturedAtUtc": null, "reviewer": null},
+  "locales": [{"directory": "en-US", "publicationStatus": "approved-primary-only"}],
+  "frames": [
+    {"file": "en-US/01-headline.png", "captureSelector": "watchos-headline", "screen": "Watch dashboard headline", "purpose": "Compact headline with visible foreground-only context", "setup": "Benign finalized historical report; no live or simulated emergency.", "pixels": [410, 502], "captureStatus": "pending", "sha256": null},
+    {"file": "en-US/02-recent-reports.png", "captureSelector": "watchos-recent-reports", "screen": "Recent reports", "purpose": "Compact report list and manual refresh behavior", "setup": "Ordinary source data with no private information.", "pixels": [410, 502], "captureStatus": "pending", "sha256": null},
+    {"file": "en-US/03-event-detail.png", "captureSelector": "watchos-event-detail", "screen": "Event detail", "purpose": "Available event fields and foreground-only disclosure", "setup": "A finalized historical report, not an active warning.", "pixels": [410, 502], "captureStatus": "pending", "sha256": null}
+  ]
+}

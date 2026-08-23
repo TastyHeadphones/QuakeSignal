@@ -2,7 +2,7 @@
 
 This directory contains offline, English (U.S.) review drafts for the native
 Apple TV, Apple Vision Pro, Apple Watch, and Mac Catalyst experiences in
-QuakeSignal 1.1, build 16. Nothing here changes App Store Connect, uploads a
+QuakeSignal 1.1, build 17. Nothing here changes App Store Connect, uploads a
 build, certifies a questionnaire, or authorizes release.
 
 The canonical App Store Connect record for these targets is **QuakeSignal**,
@@ -75,16 +75,16 @@ and archive digests; the checked-in validator proves the full local hash chain.
 These files are durable historical evidence, not permission to upload them.
 They are also historical relative to the current JMA-only and Mac Catalyst
 source changes made after `b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2`.
-The final build-16 commit must be recaptured as a complete iPhone, iPad, Apple
+The final build-17 commit must be recaptured as a complete iPhone, iPad, Apple
 TV, Apple Watch, Apple Vision Pro, and Mac Catalyst set; do not weaken or
 rewrite the source guard to make these older packages pass.
 
 The cross-platform catalog is
-[`../screenshot-set-index-v1.1-build16.json`](../screenshot-set-index-v1.1-build16.json).
+[`../screenshot-set-index-v1.1-build17.json`](../screenshot-set-index-v1.1-build17.json).
 Normal listing CI verifies its immutable historical locks and allows
 `activeReleaseSet: null`. Once the final commit is frozen, integrate exactly
 one complete package below
-`../screenshot-release-sets-v1.1-build16/<40-character-source-commit>/` and
+`../screenshot-release-sets-v1.1-build17/<40-character-source-commit>/` and
 point the index at its hashed `release-set.json`. The set is indivisible: 10
 iPhone/iPad, 3 Apple TV, 3 Apple Watch, 5 Apple Vision Pro, and 5 Mac Catalyst
 frames. Partial, mixed-commit, or historically copied sets are rejected.
@@ -97,7 +97,7 @@ gate with the following job-internal command; do not run it locally:
 
 ```sh
 ruby .github/scripts/verify-store-assets.rb \
-  --require-build16-screenshot-release-ready \
+  --require-build17-screenshot-release-ready \
   --expected-source-commit=<40-character-source-commit> \
   --screenshot-release-evidence-root="$EVIDENCE_ROOT"
 ```
@@ -113,12 +113,12 @@ owner approves each exact display name, availability, and trademark review.
 
 ## Required human gates
 
-- [ ] Freeze the exact source commit and build 16 archives.
+- [ ] Freeze the exact source commit and build 17 archives.
 - [ ] Use the currently defined protected GitHub signing workflows at the
   frozen source commit, then validate every signed archive/profile/entitlement,
   the embedded Watch signature, and each machine-readable signed-run
   attestation. Xcode Cloud remains unconfigured as of 2026-08-22.
-- [ ] Recapture the complete screenshot set at the exact final build-16 commit,
+- [ ] Recapture the complete screenshot set at the exact final build-17 commit,
   then compare those source-matching Debug candidates with the matching signed
   Release uploads, preserve the four exact upload-run IDs, and obtain named
   visual approval before screenshot upload, version attachment, or submission.

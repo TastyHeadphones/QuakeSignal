@@ -74,7 +74,7 @@ def ready_metadata(fingerprint=guard.APP_ATTEST_FINGERPRINT):
         "appAttestPolicy": {
             "format": guard.POLICY_FORMAT,
             "fingerprint": fingerprint,
-            "allowedBundleVersions": [str(value) for value in range(1, 17)],
+            "allowedBundleVersions": [str(value) for value in range(1, 18)],
         },
     }
 

@@ -34,7 +34,7 @@ repo_root="$(cd "$ios_root/.." && pwd -P)"
 # shellcheck source=screenshot-process-guard.sh
 . "$script_dir/screenshot-process-guard.sh"
 debug_local_override="$repo_root/ios/QuakeSignal/Supporting/Debug.local.xcconfig"
-manifest_file="ios/AppStore/screenshot-manifest-v1.1-build16.template.json"
+manifest_file="ios/AppStore/screenshot-manifest-v1.1-build17.template.json"
 manifest_path="$repo_root/$manifest_file"
 output_parent="$(dirname "$requested_output")"
 if [ ! -d "$output_parent" ] || [ -L "$output_parent" ]; then

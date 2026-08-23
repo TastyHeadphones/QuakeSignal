@@ -34,7 +34,7 @@ Watch product.
 The hosted `workflow-lint` and protected archive jobs run this offline contract
 before any build or signing step. The commands below document that job-internal
 gate; they are not a supported local release path and must not be run locally
-for build 16:
+for build 17:
 
 ```sh
 node --test .github/scripts/verify-ios-release-contract.test.mjs
@@ -48,7 +48,7 @@ workflow or build history; App Store Connect remains on the initial screen that
 requires creating the first workflow in Xcode. Under this release's no-local-
 Xcode/build constraint, the workflow described below is a future configuration
 specification, not an available lane. Use the protected GitHub workflows in
-this runbook for build 16 unless an initial Xcode Cloud workflow is created by an
+this runbook for build 17 unless an initial Xcode Cloud workflow is created by an
 authorized release owner outside this run.
 
 Configure exactly one Xcode Cloud workflow named
@@ -97,7 +97,7 @@ Do not add a `QuakeSignalWatch` Archive action. The Watch product is delivered
 only inside the iOS artifact, and the post-build verifier rejects a missing,
 additional, or independently substituted Watch bundle.
 
-For the final build-16 workflow, set **Deployment Preparation** to
+For the final build-17 workflow, set **Deployment Preparation** to
 **TestFlight and App Store** on all four Archive actions. Eligibility alone
 does not upload a build. Add a **TestFlight Internal Testing** post-action for
 each archived product and target only the existing internal group
@@ -107,7 +107,7 @@ no distribution post-action (and should use no distribution preparation), so
 its intentionally rejected bootstrap cannot reach testers.
 
 The repository hooks cannot inspect Xcode Cloud's server-side workflow graph.
-Before starting build 16, retain a portal screenshot or App Store Connect API
+Before starting build 17, retain a portal screenshot or App Store Connect API
 export proving the exact workflow name, restricted editing, clean environment,
 four Archive actions and scheme/platform mappings, **TestFlight and App
 Store** preparation on each, and the four `QuakeSignal Internal QA`-only
@@ -149,7 +149,7 @@ documented Python 3 runtime, shell/Xcode tools, environment variables, and
 Apple-provided artifact paths. They never assume Node.js or repository source
 is present in those later phases. For the iOS action only, both later hooks
 wait for the exact `https://quakesignal-api.hopeso.workers.dev` production
-origin to become fully ready and run its build-16 remote smoke contract. Mac
+origin to become fully ready and run its build-17 remote smoke contract. Mac
 Catalyst, tvOS, and visionOS are foreground-only and make no
 notification-relay request.
 
@@ -297,7 +297,7 @@ The GitHub release workflows remain a separately protected fallback and
 archive-evidence lane. They are manual-only for signed artifacts. Their signing jobs
 also require protected `main`, the protected environment, exactly one of
 `archive_only` or `upload_to_testflight`, and the shared non-cancelling Worker
-policy lock. Do not dispatch these commands until the Worker build-16 policy and
+policy lock. Do not dispatch these commands until the Worker build-17 policy and
 profiles are approved:
 
 ```sh
@@ -314,7 +314,7 @@ gh workflow run ios.yml --ref main \
   --repo "$QUAKESIGNAL_REPOSITORY" \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=15 \
+  -f build_number=17 \
   -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 
 gh workflow run apple-platforms.yml --ref main \
@@ -322,7 +322,7 @@ gh workflow run apple-platforms.yml --ref main \
   -f platform=tvos \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=15 \
+  -f build_number=17 \
   -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 
 gh workflow run apple-platforms.yml --ref main \
@@ -330,7 +330,7 @@ gh workflow run apple-platforms.yml --ref main \
   -f platform=visionos \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=15 \
+  -f build_number=17 \
   -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 
 gh workflow run apple-platforms.yml --ref main \
@@ -338,12 +338,12 @@ gh workflow run apple-platforms.yml --ref main \
   -f platform=maccatalyst \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=15 \
+  -f build_number=17 \
   -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 ```
 
 The four archive-only dispatches are optional signing rehearsals. Once the exact
-source, Worker build-16 policy, distribution profiles/certificates/API-key
+source, Worker build-17 policy, distribution profiles/certificates/API-key
 configuration, and store-complete icon catalogs pass their gates, repeat the
 four commands with `archive_only=false` and `upload_to_testflight=true`.
 Do this before TestFlight/physical-platform QA and signed screenshot comparison:
@@ -384,9 +384,9 @@ the same combined run and IPA evidence.
   the listing validator pins its catalog, vector geometry, color profile, and
   opacity. Obtain named visual approval against that exact digest; do not
   invent divergent Watch artwork merely to make it different.
-- Capture and hash screenshots from the frozen build-16 binaries at Apple’s
+- Capture and hash screenshots from the frozen build-17 binaries at Apple’s
   accepted sizes. The Mac source-only plan is
-[`platforms/maccatalyst/screenshot-manifest-v1.1-build16.json`](./platforms/maccatalyst/screenshot-manifest-v1.1-build16.json):
+[`platforms/maccatalyst/screenshot-manifest-v1.1-build17.json`](./platforms/maccatalyst/screenshot-manifest-v1.1-build17.json):
   five unapproved `2560 × 1600` frames from a `1280 × 800` point window at 2×,
   using the exact `maccatalyst-*`
   selectors. Existing Tauri screenshots cannot serve as Catalyst evidence.
@@ -733,7 +733,7 @@ the same combined run and IPA evidence.
 
 The App Store Connect audit found platform drafts in Apple ID `6800642443`.
 Reuse the existing native drafts and change an editable version number to
-`1.1` only after the corresponding build-16 release evidence is frozen. Do not
+`1.1` only after the corresponding build-17 release evidence is frozen. Do not
 delete a draft or create a duplicate platform. The macOS platform on this
 shared record is now reserved for the `com.quakesignal.app` Catalyst archive.
 Do not attach the separate Tauri package (`com.quakesignal.desktop`) to it;
