@@ -111,7 +111,7 @@ class GuardContextTests(unittest.TestCase):
         mutations = (
             ("CI_START_CONDITION", "push"),
             ("CI_START_CONDITION", "manual_rebuild"),
-            ("CI_BUILD_NUMBER", "9"),
+            ("CI_BUILD_NUMBER", "8"),
             ("CI_TEAM_ID", "ABCDEFGHIJ"),
             ("CI_PRODUCT", "QuakeSignal Staging"),
             ("CI_PRODUCT_ID", ""),

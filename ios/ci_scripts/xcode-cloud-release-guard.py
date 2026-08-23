@@ -1433,8 +1433,8 @@ def verify_bounded_source_contract(repository_root: Path) -> None:
     project = (repository_root / "ios/project.yml").read_text(encoding="utf-8")
     if len(re.findall(r'^\s*MARKETING_VERSION:\s*["\']1\.1["\']\s*$', project, re.MULTILINE)) != 1:
         fail("ios/project.yml must contain exactly one MARKETING_VERSION 1.1.")
-    if len(re.findall(r'^\s*CURRENT_PROJECT_VERSION:\s*["\']8["\']\s*$', project, re.MULTILINE)) != 1:
-        fail("ios/project.yml must contain exactly one CURRENT_PROJECT_VERSION 8.")
+    if len(re.findall(rf'^\s*CURRENT_PROJECT_VERSION:\s*["\']{re.escape(BUILD_NUMBER)}["\']\s*$', project, re.MULTILINE)) != 1:
+        fail(f"ios/project.yml must contain exactly one CURRENT_PROJECT_VERSION {BUILD_NUMBER}.")
     for required in (
         "QuakeSignal:",
         "platform: iOS",
