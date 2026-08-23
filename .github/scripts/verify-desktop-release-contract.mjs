@@ -93,7 +93,7 @@ const DESKTOP_JOB_IDS = [
 // The explicit frontend gate below also covers every npm-based desktop build
 // job, including Windows and the Mac App Store lane.
 const MACOS_DIRECT_STEPS_FINGERPRINT = "sha256:9_cZ-KeTzLZFiOlAwbIJw4av4Zlihs9Xr2eXsQfnbmA";
-const MACOS_APP_STORE_STEPS_FINGERPRINT = "sha256:hTaWK2GTIrrEc34RKsSVTM0n4llBmdOqS9KNelgqgF4";
+const MACOS_APP_STORE_STEPS_FINGERPRINT = "sha256:opGuWr6w9jqW9HY4s7SE3SOSkM4aRZBPW6RjfI331pE";
 const RELEASE_STEPS_FINGERPRINT = "sha256:3dX8Og0fyNOioMHFK-Jt8FiTZTqwkc8dhXjbovwV2qI";
 const HOMEBREW_PUBLISH_STEPS_FINGERPRINT = "sha256:NuwuAFiTLY6LC19V3jx8XcjFSwpafYQVpgHgnveCywY";
 
@@ -455,7 +455,10 @@ function verifyDesktopWorkflow(workflow) {
     'case "$MACOS_APP_STORE_INSTALLER_IDENTITY" in',
     'pkgutil --check-signature "$package" > "$signature_listing" 2>&1',
     '"Status: signed by a certificate trusted by macOS"',
-    'leaf_identities != [expected_identity]',
+    'developer_certificate_status = "Status: signed by a developer certificate issued by Apple (Development)"',
+    'certificate_chain[0] != expected_identity',
+    '"Apple Worldwide Developer Relations Certification Authority"',
+    'developer-certificate package signature does not expose the expected Apple chain',
     'package_sha256="$(/usr/bin/shasum -a 256 "$package")"',
     'echo "MACOS_APP_STORE_PACKAGE_SHA256=$package_sha256" >> "$GITHUB_ENV"',
     "echo 'MACOS_APP_STORE_PACKAGE_VERIFIED=true' >> \"$GITHUB_ENV\"",

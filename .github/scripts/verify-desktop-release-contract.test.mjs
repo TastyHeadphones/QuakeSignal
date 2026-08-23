@@ -64,7 +64,7 @@ test("the checked-in direct macOS and Homebrew release contracts are coherent", 
   const verified = await verifyDesktopReleaseContract({ root: repositoryRoot });
   assert.deepEqual(verified, {
     directStepsFingerprint: "sha256:9_cZ-KeTzLZFiOlAwbIJw4av4Zlihs9Xr2eXsQfnbmA",
-    macAppStoreStepsFingerprint: "sha256:hTaWK2GTIrrEc34RKsSVTM0n4llBmdOqS9KNelgqgF4",
+    macAppStoreStepsFingerprint: "sha256:opGuWr6w9jqW9HY4s7SE3SOSkM4aRZBPW6RjfI331pE",
     releaseStepsFingerprint: "sha256:3dX8Og0fyNOioMHFK-Jt8FiTZTqwkc8dhXjbovwV2qI",
     homebrewStepsFingerprint: "sha256:NuwuAFiTLY6LC19V3jx8XcjFSwpafYQVpgHgnveCywY",
   });
@@ -231,10 +231,14 @@ test("pins the trusted Mac App Store installer leaf and verified package digest"
       "'Mac Installer Distribution: '*' (5TT564H883)'|'3rd Party Mac Developer Installer: '*' (5TT564H883)'",
       "'Mac Installer Distribution: '*' (ABCDEFGHIJ)'|'3rd Party Mac Developer Installer: '*' (ABCDEFGHIJ)'",
     ],
-    ["if leaf_identities != [expected_identity]:", "if False:"],
+    ["if not certificate_chain or certificate_chain[0] != expected_identity:", "if False:"],
     [
-      '"Status: signed by a certificate trusted by macOS"',
-      '"Status: signed by an unknown certificate"',
+      'developer_certificate_status = "Status: signed by a developer certificate issued by Apple (Development)"',
+      'developer_certificate_status = "Status: signed by an unknown certificate"',
+    ],
+    [
+      '"Apple Worldwide Developer Relations Certification Authority"',
+      '"Unreviewed Certificate Authority"',
     ],
     [
       'package_sha256="$(/usr/bin/shasum -a 256 "$package")"',
