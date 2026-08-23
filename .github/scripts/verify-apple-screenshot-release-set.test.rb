@@ -250,7 +250,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
     error = assert_raises(AppleScreenshotReleaseSetValidationError) do
       validator.validate!(require_release_ready: true, expected_source_commit: SOURCE_COMMIT)
     end
-    assert_match(/complete active build-16 screenshot release set/, error.message)
+    assert_match(/complete active build-17 screenshot release set/, error.message)
     assert_empty @source_guard.validations
   end
 
@@ -1232,7 +1232,7 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
             AppleScreenshotReleaseSetValidator::SIGNED_RELEASE_ARTIFACT_KINDS.fetch(platform),
           "signedReleaseArtifactSha256" => Digest::SHA256.hexdigest("signed:#{signed_hash_platform}"),
           "signedMarketingVersion" => "1.1",
-          "signedBuildNumber" => 15,
+          "signedBuildNumber" => 17,
           "signedDistributionMode" => "testflight-upload",
           "signedReleaseAttestedAtUtc" => "2026-08-20T00:53:00Z",
           "signedBuildSourceCommit" => SIGNED_COMMIT,

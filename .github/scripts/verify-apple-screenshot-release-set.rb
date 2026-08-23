@@ -234,7 +234,7 @@ class AppleScreenshotReleaseSetValidator
   PRODUCT = {
     "appleId" => "6800642443",
     "marketingVersion" => "1.1",
-    "build" => 15,
+    "build" => 17,
   }.freeze
   REQUIRED_PLATFORMS = {
     "ios-ipados" => 10,
@@ -430,7 +430,7 @@ class AppleScreenshotReleaseSetValidator
     unless index_path.exist? || index_path.symlink?
       if require_release_ready
         raise AppleScreenshotReleaseSetValidationError,
-              "a complete active build-16 screenshot release set is required"
+              "a complete active build-17 screenshot release set is required"
       end
       return :pending
     end
@@ -444,7 +444,7 @@ class AppleScreenshotReleaseSetValidator
     if active.nil?
       if require_release_ready
         raise AppleScreenshotReleaseSetValidationError,
-              "a complete active build-16 screenshot release set is required"
+              "a complete active build-17 screenshot release set is required"
       end
       return :pending
     end
@@ -1587,7 +1587,7 @@ if $PROGRAM_NAME == __FILE__
       expected_source_commit: expected_source_commit,
     )
     if result == :pending
-      puts "Historical Apple screenshot evidence is locked; final 26-frame build-16 release set is pending."
+      puts "Historical Apple screenshot evidence is locked; final 26-frame build-17 release set is pending."
     elsif result == :active_unapproved
       puts "Complete source-addressed 26-frame Apple screenshot set validated; named signed approval is pending."
     else
