@@ -1954,8 +1954,8 @@ test("fails closed when the Mac Catalyst signed-package route drifts", async (t)
       "'UNREVIEWED_CATALYST_PROFILE' }}",
     ],
     [
-      "secrets.APP_STORE_CONNECT_API_KEY || ''",
-      "secrets.UNREVIEWED_AUTOMATIC_SIGNING_KEY || ''",
+      "secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || ''",
+      "secrets.UNREVIEWED_INSTALLER_CERTIFICATE || ''",
     ],
     [
       "vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || ''",
@@ -1990,12 +1990,16 @@ test("fails closed when the Mac Catalyst signed-package route drifts", async (t)
       "Add :installerSigningCertificate string Unreviewed Installer",
     ],
     [
-      "PROVISIONING_PROFILE_SPECIFIER=",
-      "PROVISIONING_PROFILE_SPECIFIER=Automatic",
+      "code_sign_style=Manual",
+      "code_sign_style=Automatic",
     ],
     [
-      "CODE_SIGN_IDENTITY=",
-      "CODE_SIGN_IDENTITY=Apple Development",
+      'QUAKESIGNAL_CATALYST_PROFILE_NAME="$PLATFORM_PROFILE_NAME"',
+      'QUAKESIGNAL_CATALYST_PROFILE_NAME="Unreviewed Catalyst Profile"',
+    ],
+    [
+      "CODE_SIGN_IDENTITY='Apple Distribution'",
+      "CODE_SIGN_IDENTITY='Apple Development'",
     ],
     [
       "verifier_arguments+=(--installer-identity",

@@ -140,9 +140,6 @@ jobs:
           PLATFORM_PROFILE: ${{ secrets[matrix.profile_secret] }}
           PLATFORM_PROFILE_NAME: ${{ vars[matrix.profile_variable] }}
           PLATFORM_INSTALLER_IDENTITY: ${{ inputs.platform == 'maccatalyst' && vars.MACCATALYST_APP_STORE_INSTALLER_IDENTITY || '' }}
-          PLATFORM_AUTOMATIC_SIGNING_KEY: ${{ inputs.platform == 'maccatalyst' && secrets.APP_STORE_CONNECT_API_KEY || '' }}
-          PLATFORM_AUTOMATIC_SIGNING_KEY_ID: ${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_KEY_ID || '' }}
-          PLATFORM_AUTOMATIC_SIGNING_ISSUER: ${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_ISSUER || '' }}
           PLATFORM_INSTALLER_CERTIFICATE: ${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE || '' }}
           PLATFORM_INSTALLER_CERTIFICATE_PASSWORD: ${{ inputs.platform == 'maccatalyst' && secrets.MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD || '' }}
           IOS_CERTIFICATE: ${{ secrets.IOS_APP_STORE_CERTIFICATE }}
@@ -176,9 +173,6 @@ jobs:
           if [ "$PLATFORM_KEY" = maccatalyst ]; then
             required+=(
               PLATFORM_INSTALLER_IDENTITY
-              PLATFORM_AUTOMATIC_SIGNING_KEY
-              PLATFORM_AUTOMATIC_SIGNING_KEY_ID
-              PLATFORM_AUTOMATIC_SIGNING_ISSUER
               PLATFORM_INSTALLER_CERTIFICATE
               PLATFORM_INSTALLER_CERTIFICATE_PASSWORD
             )
@@ -293,27 +287,10 @@ jobs:
           PLATFORM_SCHEME: ${{ matrix.scheme }}
           PLATFORM_DESTINATION: ${{ matrix.destination }}
           PLATFORM_PROFILE_NAME: ${{ vars[matrix.profile_variable] }}
-          PLATFORM_AUTOMATIC_SIGNING_KEY: ${{ inputs.platform == 'maccatalyst' && secrets.APP_STORE_CONNECT_API_KEY || '' }}
-          PLATFORM_AUTOMATIC_SIGNING_KEY_ID: ${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_KEY_ID || '' }}
-          PLATFORM_AUTOMATIC_SIGNING_ISSUER: ${{ inputs.platform == 'maccatalyst' && vars.APP_STORE_CONNECT_API_ISSUER || '' }}
         run: |
           set -euo pipefail
           signing_arguments=()
           code_sign_style=Manual
-          if [ "$PLATFORM_KEY" = maccatalyst ]; then
-            automatic_key="$RUNNER_TEMP/quakesignal-maccatalyst-automatic-signing.p8"
-            printf '%s' "$PLATFORM_AUTOMATIC_SIGNING_KEY" > "$automatic_key"
-            chmod 600 "$automatic_key"
-            code_sign_style=Automatic
-            signing_arguments=(
-              -allowProvisioningUpdates
-              -authenticationKeyPath "$automatic_key"
-              -authenticationKeyID "$PLATFORM_AUTOMATIC_SIGNING_KEY_ID"
-              -authenticationKeyIssuerID "$PLATFORM_AUTOMATIC_SIGNING_ISSUER"
-              PROVISIONING_PROFILE_SPECIFIER=
-              CODE_SIGN_IDENTITY=
-            )
-          fi
           xcodebuild archive \
             -project "$XCODE_PROJECT" \
             -scheme "$PLATFORM_SCHEME" \
@@ -455,7 +432,6 @@ jobs:
         run: |
           rm -f "$RUNNER_TEMP/quakesignal-$PLATFORM_KEY-distribution.p12"
           rm -f "$RUNNER_TEMP/quakesignal-$PLATFORM_KEY-installer.p12"
-          rm -f "$RUNNER_TEMP/quakesignal-maccatalyst-automatic-signing.p8"
           rm -f "$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY-ExportOptions.plist"
           rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/quakesignal-$PLATFORM_KEY.$PLATFORM_PROFILE_EXTENSION"
           rmdir "$RUNNER_TEMP/appstore-private-keys" 2>/dev/null || true
