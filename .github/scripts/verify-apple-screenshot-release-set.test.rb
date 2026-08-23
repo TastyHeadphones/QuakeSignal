@@ -4,6 +4,7 @@ require "digest"
 require "fileutils"
 require "json"
 require "minitest/autorun"
+require "open3"
 require "pathname"
 require "rbconfig"
 require "tmpdir"
@@ -200,11 +201,14 @@ class AppleScreenshotReleaseSetValidatorTest < Minitest::Test
           helper.teardown
         end
       RUBY
-      success = system(
+      output, error_output, status = Open3.capture3(
         RbConfig.ruby, "-e", script, assembler_test.to_s, destination.to_s,
-        out: File::NULL, err: File::NULL,
       )
-      raise "failed to build realistic active release-set fixture" unless success && destination.directory?
+      unless status.success? && destination.directory?
+        detail = [error_output.strip, output.strip].reject(&:empty?).join("\n")
+        suffix = detail.empty? ? "" : ":\n#{detail}"
+        raise "failed to build realistic active release-set fixture#{suffix}"
+      end
 
       @realistic_active_release_fixture = destination.realpath
       Minitest.after_run { FileUtils.remove_entry(cache) if cache.directory? && !cache.symlink? }
