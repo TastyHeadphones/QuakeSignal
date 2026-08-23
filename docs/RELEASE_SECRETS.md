@@ -39,8 +39,10 @@ environment review history and fails closed when this machine binding is absent.
 | `VISIONOS_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal visionOS App Store Release` |
 | `MACCATALYST_APP_STORE_PROVISIONING_PROFILE` | Secret | Base64-encoded Mac App Store provisioning profile for the Catalyst `com.quakesignal.app` |
 | `MACCATALYST_APP_STORE_PROFILE_NAME` | Environment variable | `QuakeSignal Mac Catalyst App Store Release` |
+| `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE` | Secret | Base64-encoded Mac Installer Distribution `.p12` used only to sign the exported App Store `.pkg` |
+| `MACCATALYST_APP_STORE_INSTALLER_CERTIFICATE_PASSWORD` | Secret | Password used when exporting the Mac Installer Distribution `.p12` |
 | `MACCATALYST_APP_STORE_INSTALLER_IDENTITY` | Environment variable | Expected `Mac Installer Distribution: … (5TT564H883)` or legacy `3rd Party Mac Developer Installer: … (5TT564H883)` package identity |
-| `APP_STORE_CONNECT_API_KEY` | Secret | Team App Store Connect API private `.p8`; uploads builds and lets the protected Catalyst lane create/update Apple-managed signing material |
+| `APP_STORE_CONNECT_API_KEY` | Secret | Team App Store Connect API private `.p8`; uploads builds and enables the protected Catalyst archive's automatic signing |
 | `APP_STORE_CONNECT_API_KEY_ID` | Environment variable | App Store Connect API key ID for upload and Catalyst automatic signing |
 | `APP_STORE_CONNECT_API_ISSUER` | Environment variable | App Store Connect API issuer UUID for upload and Catalyst automatic signing |
 | `CLOUDFLARE_WORKER_URL` | Environment variable | Exactly `https://quakesignal-api.hopeso.workers.dev`; the Release archive verifies this user-approved public Workers.dev production origin |
@@ -51,9 +53,9 @@ starts **iOS** or **Native Apple platform release → Run workflow** with
 `upload_to_testflight` enabled and the exact lowercase protected-main
 `source_commit`. The job checks out that commit without persisted credentials
 and requires it to equal the dispatch head before exposing any signing secret.
-The Catalyst lane requires both the Apple
-Distribution application identity and the separate Mac Installer Distribution
-identity. Because this repository is public, the verified iOS, tvOS, and
+The Catalyst lane requires both the Apple Distribution application identity and
+the separate password-protected Mac Installer Distribution identity. Because
+this repository is public, the verified iOS, tvOS, and
 visionOS `.ipa` files and Catalyst `.pkg` are never retained as GitHub Actions
 artifacts. Each workflow retains only a small 30-day JSON attestation binding
 the canonical workflow run/head SHA to the artifact kind and SHA-256 digest and, only with

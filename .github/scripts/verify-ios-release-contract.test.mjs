@@ -1986,12 +1986,8 @@ test("fails closed when the Mac Catalyst signed-package route drifts", async (t)
       'false',
     ],
     [
-      "Set :signingStyle automatic",
-      "Set :signingStyle manual",
-    ],
-    [
-      "-allowProvisioningUpdates",
-      "-skipProvisioningUpdates",
+      "Add :installerSigningCertificate string $PLATFORM_INSTALLER_IDENTITY",
+      "Add :installerSigningCertificate string Unreviewed Installer",
     ],
     [
       "PROVISIONING_PROFILE_SPECIFIER=",
