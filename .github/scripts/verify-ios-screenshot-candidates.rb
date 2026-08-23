@@ -597,7 +597,7 @@ class IOSBuild8ScreenshotCandidateValidator
     require_equal!(product.fetch("appleId"), "6800642443", "#{label} appleId")
     require_equal!(product.fetch("platform"), "iOS/iPadOS", "#{label} platform")
     require_equal!(product.fetch("marketingVersion"), "1.1", "#{label} marketingVersion")
-    require_equal!(product.fetch("build"), 8, "#{label} build")
+    require_equal!(product.fetch("build"), 9, "#{label} build")
     require_equal!(product.fetch("bundleIdentifier"), "com.quakesignal.app", "#{label} bundleIdentifier")
     require_equal!(product.fetch("configuration"), "Debug", "#{label} configuration")
     return unless require_simulator_fields
