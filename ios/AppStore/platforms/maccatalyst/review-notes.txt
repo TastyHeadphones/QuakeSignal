@@ -8,7 +8,7 @@ credential is required. For a permission-free route, skip location access,
 choose a listed city, and review Home, Reports, Map, Guide, and Settings. The
 Mac app uses a native resizable window and local app sandbox.
 
-Build 12 reads only Wolfx feed identifiers jma_eew and jma_eqlist. CENC,
+Build 13 reads only Wolfx feed identifiers jma_eew and jma_eqlist. CENC,
 Sichuan, Fujian, and Chongqing feeds are disabled. QuakeSignal formats and
 normalizes JMA-issued factual information; magnitude and distance controls
 filter presentation only and do not calculate predicted local intensity or
@@ -31,6 +31,6 @@ The five planned screenshots use direct @2x UIKit hierarchy renders of the
 exact live 1280 × 800-point Mac Catalyst UIWindow, producing 2560 × 1600
 pixels without resize or crop. The source display scale is recorded separately
 and is not claimed to be Retina. These candidates are not yet approved or
-uploaded. Review only screenshots captured from the exact signed build-12
+uploaded. Review only screenshots captured from the exact signed build-13
 source and accepted after signed-Release parity, privacy, and named visual
 review.

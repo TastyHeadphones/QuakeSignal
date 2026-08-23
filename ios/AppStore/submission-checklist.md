@@ -8,25 +8,25 @@ value.
 
 ## Public-build and service gate
 
-- [x] Identify the exact signed public `Release` 1.1 archive/IPA, source
-  commit, SHA-256, and `CFBundleVersion` `12`, including the embedded Watch app.
-  The signed source-addressed attestations and all four native upload run IDs
-  are recorded in `app-store-connect-portal-audit-2026-08-24.md`.
-- [x] Confirm that build `1.1 (12)` is not the legacy TestFlight `1.0 (2)`
+- [ ] Identify the exact signed public `Release` 1.1 archive/IPA, source
+  commit, SHA-256, and `CFBundleVersion` `13`, including the embedded Watch app.
+  Build-12 signed attestations and upload run IDs are historical evidence in
+  `app-store-connect-portal-audit-2026-08-24.md`; they do not prove build 13.
+- [ ] Confirm that build `1.1 (13)` is not the legacy TestFlight `1.0 (2)`
   InternalQA-only evidence build and that it contains no delayed
-  background-training control; retain the build-12 release-contract result.
-- [x] Confirm the App Attest version policy admits build `12` and record the
+  background-training control; retain the build-13 release-contract result.
+- [ ] Confirm the App Attest version policy admits build `13` and record the
   live production service-metadata policy-fingerprint proof from the protected
-  deployment and archive workflows. The immutable values are in the 2026-08-24
-  audit; do not substitute a later live check for those source-bound proofs.
+  deployment and archive workflows. Do not substitute a build-12 or later
+  unrelated live check for the source-bound proof.
 - [ ] Complete the required physical-device/TestFlight evidence, including the
   production App Attest and APNs checks, then obtain the required protected
   production health/readiness proof before public launch promotion. Terminal-DLQ
   monitoring is an optional operational control, not a deployment attestation.
-- [x] Confirm the approved production endpoint, `/privacy`, `/support`, and
+- [ ] Confirm the approved production endpoint, `/privacy`, `/support`, and
   intended `/terms` URL respond over public Cloudflare Web-PKI TLS. The
-  source-bound deployment smoke proof is in the 2026-08-24 audit. Do not use a
-  private CA, origin certificate, or client certificate.
+  build-12 source-bound deployment smoke proof is historical only. Do not use
+  a private CA, origin certificate, or client certificate.
 
 ## Product page and review information
 
@@ -39,9 +39,9 @@ value.
 - [x] Save the shared Mac draft as `1.1` with exact Catalyst metadata, manual
   release, and Designed for iPad on Mac disabled (2026-08-22 portal audit).
 - [ ] Complete Mac Catalyst QA, exact approved screenshots, signed-Release
-  parity, availability, and named independent approval. Protected signing and
-  TestFlight processing of build `12` are complete, but do not treat them as
-  those remaining gates.
+  parity, availability, and named independent approval. Build-12 signing and
+  TestFlight processing are historical only; build 13 must complete its own
+  protected signing and processing gates.
 - [ ] Verify the English name, category, bundle ID, SKU, version, copyright,
   exact `en-US/subtitle.txt`, and current build against
   `submission-answers.md` and the signed archive.
@@ -63,18 +63,19 @@ value.
 - [x] Preserve the historical build-7/build-8 image sets without relabeling
   them. A complete five-platform Debug Simulator candidate was recaptured for
   source `93a5055e95551a39f89b771fa01cf44eea0fb62d` by run `32647878229`.
-  It remains explicitly unapproved and non-uploadable until the protected
-  finalizer records named independent visual, privacy, and signed-Release
-  parity review.
+  It remains historical, explicitly unapproved, and non-uploadable.
+- [ ] Capture a complete five-platform Debug Simulator candidate for the
+  build-13 source, then retain it as unapproved until the protected finalizer
+  records named independent visual, privacy, and signed-Release parity review.
 - [x] Save the exact tvOS and Mac Catalyst `1.1` copy recorded in the 2026-08-22
   portal audit.
 - [ ] Resave the corrected visionOS description and review notes that distinguish
   platform support for App Attest from the unavailable APNs capability; the
   audit saved the superseded wording and is not evidence of this correction.
 - [ ] Complete Apple Watch/tvOS/visionOS/Mac screenshot approval, remaining
-  privacy/App Motion answers, and platform QA before submission. The four
-  signed build-12 uploads are processed, but no platform screenshot is approved
-  or attached.
+  privacy/App Motion answers, and platform QA before submission. Build 13
+  signing, processing, and all platform screenshots remain pending; no platform
+  screenshot is approved or attached.
   All four remain foreground-only in every independent-notification claim.
 - [ ] Download only the exact source-addressed approved screenshot artifact from
   the successful finalizer run, upload the six source directories in the order
@@ -100,7 +101,7 @@ value.
 - [x] Record the release owner's published-terms Content Rights basis and
   decision not to send the Wolfx request in `content-rights-evidence.md` and
   `release-owner-decisions-2026-08-20.md`.
-- [x] Record build 12's exact source inventory as `jma_eew` and `jma_eqlist`,
+- [ ] Record build 13's exact signed/deployed source inventory as `jma_eew` and `jma_eqlist`,
   with CENC, Sichuan, Fujian, and Chongqing feeds disabled in submitted Apple
   clients and relay policy. Record the official-source review supporting that
   narrowing and the implemented 89-day relay event/revision cleanup cutoff.
