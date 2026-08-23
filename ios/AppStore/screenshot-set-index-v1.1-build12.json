@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "product": {
+    "appleId": "6800642443",
+    "marketingVersion": "1.1",
+    "build": 12
+  },
+  "historicalContentManifestAlgorithm": "sha256 of sorted UTF-8 records: <file-sha256><two spaces><repository-relative-path><newline>",
+  "requiredPlatforms": [
+    {
+      "platform": "ios-ipados",
+      "frameCount": 10
+    },
+    {
+      "platform": "tvos",
+      "frameCount": 3
+    },
+    {
+      "platform": "watchos",
+      "frameCount": 3
+    },
+    {
+      "platform": "visionos",
+      "frameCount": 5
+    },
+    {
+      "platform": "maccatalyst",
+      "frameCount": 5
+    }
+  ],
+  "historicalEvidence": [
+    {
+      "id": "ios-ipados-legacy-unversioned",
+      "sourceCommit": null,
+      "status": "historical-pre-source-binding",
+      "eligibleForBuild8Upload": false,
+      "paths": [
+        "ios/AppStore/screenshot-manifest.json",
+        "ios/AppStore/screenshot-provenance.json",
+        "ios/AppStore/screenshots"
+      ],
+      "fileCount": 32,
+      "totalBytes": 32627800,
+      "contentManifestSha256": "81b1bbf1dcd225696c8da53ff120f225c2a6ade6ca7886114fcab22a2a69fc89"
+    },
+    {
+      "id": "ios-ipados-release-simulator-build7-19b9260801e99a77b2352931dc2d701045d4eb94",
+      "sourceCommit": "19b9260801e99a77b2352931dc2d701045d4eb94",
+      "status": "historical-build7",
+      "eligibleForBuild8Upload": false,
+      "paths": [
+        "ios/AppStore/screenshot-manifest-v1.1.json",
+        "ios/AppStore/screenshot-provenance-v1.1.json",
+        "ios/AppStore/screenshots-v1.1"
+      ],
+      "fileCount": 32,
+      "totalBytes": 39384886,
+      "contentManifestSha256": "a16732fc2051d8cc5d562b19d8971acc44afee4f0b13d52a58c83019e801289c"
+    },
+    {
+      "id": "ios-ipados-debug-simulator-build8-64854d0c398c0377c464056751457c4943b4d714",
+      "sourceCommit": "64854d0c398c0377c464056751457c4943b4d714",
+      "status": "historical-unapproved",
+      "eligibleForBuild8Upload": false,
+      "paths": [
+        "ios/AppStore/screenshot-manifest-v1.1-build8.json",
+        "ios/AppStore/screenshot-provenance-v1.1-build8.json",
+        "ios/AppStore/screenshots-v1.1-build8",
+        "ios/AppStore/screenshot-evidence-v1.1-build8"
+      ],
+      "fileCount": 19,
+      "totalBytes": 12380118,
+      "contentManifestSha256": "b9f6e6979b56046b8fb3c528f724bcb293c1c42df2f64fbd323130781c73064c"
+    },
+    {
+      "id": "native-debug-simulator-build8-b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2",
+      "sourceCommit": "b461083bb5bff21eb4f1f4a8b5ef8f0764d89dd2",
+      "status": "historical-unapproved",
+      "eligibleForBuild8Upload": false,
+      "paths": [
+        "ios/AppStore/platforms/screenshot-candidates-v1.1-build8"
+      ],
+      "fileCount": 33,
+      "totalBytes": 31940854,
+      "contentManifestSha256": "89f679e7d457bf74b1fb7e4bcef46a24bf5aa300b6882a88ccd8cffab6e001aa"
+    }
+  ],
+  "activeReleaseSet": null
+}

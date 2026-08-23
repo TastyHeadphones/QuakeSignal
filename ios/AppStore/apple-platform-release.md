@@ -1,4 +1,4 @@
-# Coordinated Apple platform release 1.1 (11)
+# Coordinated Apple platform release 1.1 (12)
 
 This runbook covers the protected archive automation for the native Apple
 targets. It prepares uploads; it does not authorize an App Store submission or
@@ -26,7 +26,7 @@ current saved portal state, remaining contradictions, and non-destructive action
 ## Version contract
 
 All four Xcode targets use marketing version `1.1` and coordinated integer
-build `11`. The checked-in XcodeGen project, generated project, four Info.plists,
+build `12`. The checked-in XcodeGen project, generated project, four Info.plists,
 workflow defaults, and Worker App Attest allow-list must agree before any
 signing secret is materialized. Never reuse build `7` after adding the embedded
 Watch product.
@@ -34,11 +34,11 @@ Watch product.
 The hosted `workflow-lint` and protected archive jobs run this offline contract
 before any build or signing step. The commands below document that job-internal
 gate; they are not a supported local release path and must not be run locally
-for build 11:
+for build 12:
 
 ```sh
 node --test .github/scripts/verify-ios-release-contract.test.mjs
-node .github/scripts/verify-ios-release-contract.mjs --build-number 11
+node .github/scripts/verify-ios-release-contract.mjs --build-number 12
 ```
 
 ## Xcode Cloud protected native release workflow
@@ -48,11 +48,11 @@ workflow or build history; App Store Connect remains on the initial screen that
 requires creating the first workflow in Xcode. Under this release's no-local-
 Xcode/build constraint, the workflow described below is a future configuration
 specification, not an available lane. Use the protected GitHub workflows in
-this runbook for build 11 unless an initial Xcode Cloud workflow is created by an
+this runbook for build 12 unless an initial Xcode Cloud workflow is created by an
 authorized release owner outside this run.
 
 Configure exactly one Xcode Cloud workflow named
-`QuakeSignal 1.1 (11) Native Release`. A single workflow is required because
+`QuakeSignal 1.1 (12) Native Release`. A single workflow is required because
 Xcode Cloud assigns one `CI_BUILD_NUMBER` to the build; separate
 workflows could silently assign different bundle versions to the native
 products.
@@ -63,9 +63,9 @@ Treat that first run as onboarding only: do not enable distribution or grant a
 release approval. If it reaches these hooks as an Archive action, the
 checked-in gate intentionally rejects build `1` before Xcode builds or signs
 the app. After onboarding, open App Store Connect → Xcode Cloud → Settings →
-Build Number, set the next build to exactly `11`, finish the exact workflow
+Build Number, set the next build to exactly `12`, finish the exact workflow
 configuration below, and start a fresh manual build. Do not use **Rebuild**:
-the guard rejects `manual_rebuild` and accepts only a new manual build `11`.
+the guard rejects `manual_rebuild` and accepts only a new manual build `12`.
 Retain the bootstrap log's `CI_PRODUCT_ID` and `CI_WORKFLOW_ID` as release
 evidence; these opaque IDs are created by Apple during onboarding and therefore
 cannot be pinned in the pre-onboarding source. Set both observed values as the
@@ -78,7 +78,7 @@ The 2026-08-20 account audit confirmed that the explicit Watch identifier
 the checked-in Release settings select automatic signing with every
 `QUAKESIGNAL_*_PROFILE_NAME` variable absent. Automatic-signing resolution for
 all four native Archive actions remains unproven until Xcode Cloud is onboarded
-and a signed build `11` completes. Keep those profile-name variables absent in
+and a signed build `12` completes. Keep those profile-name variables absent in
 Xcode Cloud; they are manual-signing inputs for the separate GitHub fallback
 lanes, not Xcode Cloud requirements.
 
@@ -97,7 +97,7 @@ Do not add a `QuakeSignalWatch` Archive action. The Watch product is delivered
 only inside the iOS artifact, and the post-build verifier rejects a missing,
 additional, or independently substituted Watch bundle.
 
-For the final build-11 workflow, set **Deployment Preparation** to
+For the final build-12 workflow, set **Deployment Preparation** to
 **TestFlight and App Store** on all four Archive actions. Eligibility alone
 does not upload a build. Add a **TestFlight Internal Testing** post-action for
 each archived product and target only the existing internal group
@@ -107,7 +107,7 @@ no distribution post-action (and should use no distribution preparation), so
 its intentionally rejected bootstrap cannot reach testers.
 
 The repository hooks cannot inspect Xcode Cloud's server-side workflow graph.
-Before starting build 11, retain a portal screenshot or App Store Connect API
+Before starting build 12, retain a portal screenshot or App Store Connect API
 export proving the exact workflow name, restricted editing, clean environment,
 four Archive actions and scheme/platform mappings, **TestFlight and App
 Store** preparation on each, and the four `QuakeSignal Internal QA`-only
@@ -149,12 +149,12 @@ documented Python 3 runtime, shell/Xcode tools, environment variables, and
 Apple-provided artifact paths. They never assume Node.js or repository source
 is present in those later phases. For the iOS action only, both later hooks
 wait for the exact `https://quakesignal-api.hopeso.workers.dev` production
-origin to become fully ready and run its build-11 remote smoke contract. Mac
+origin to become fully ready and run its build-12 remote smoke contract. Mac
 Catalyst, tvOS, and visionOS are foreground-only and make no
 notification-relay request.
 
 After Xcode finishes, the hook requires a successful `xcodebuild`, marketing
-version `1.1`, build `11`, the reviewed host/Watch structure, and no unexpected
+version `1.1`, build `12`, the reviewed host/Watch structure, and no unexpected
 nested app or app-extension bundles in the raw `CI_ARCHIVE_PATH`. Apple's raw
 archive can still carry development signing before export, so that path is not
 required to have a distribution identity. The
@@ -297,7 +297,7 @@ The GitHub release workflows remain a separately protected fallback and
 archive-evidence lane. They are manual-only for signed artifacts. Their signing jobs
 also require protected `main`, the protected environment, exactly one of
 `archive_only` or `upload_to_testflight`, and the shared non-cancelling Worker
-policy lock. Do not dispatch these commands until the Worker build-11 policy and
+policy lock. Do not dispatch these commands until the Worker build-12 policy and
 profiles are approved:
 
 ```sh
@@ -314,7 +314,7 @@ gh workflow run ios.yml --ref main \
   --repo "$QUAKESIGNAL_REPOSITORY" \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=11 \
+  -f build_number=12 \
   -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 
 gh workflow run apple-platforms.yml --ref main \
@@ -322,7 +322,7 @@ gh workflow run apple-platforms.yml --ref main \
   -f platform=tvos \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=11 \
+  -f build_number=12 \
   -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 
 gh workflow run apple-platforms.yml --ref main \
@@ -330,7 +330,7 @@ gh workflow run apple-platforms.yml --ref main \
   -f platform=visionos \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=11 \
+  -f build_number=12 \
   -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 
 gh workflow run apple-platforms.yml --ref main \
@@ -338,12 +338,12 @@ gh workflow run apple-platforms.yml --ref main \
   -f platform=maccatalyst \
   -f archive_only=true \
   -f upload_to_testflight=false \
-  -f build_number=11 \
+  -f build_number=12 \
   -f source_commit="$QUAKESIGNAL_SOURCE_COMMIT"
 ```
 
 The four archive-only dispatches are optional signing rehearsals. Once the exact
-source, Worker build-11 policy, distribution profiles/certificates/API-key
+source, Worker build-12 policy, distribution profiles/certificates/API-key
 configuration, and store-complete icon catalogs pass their gates, repeat the
 four commands with `archive_only=false` and `upload_to_testflight=true`.
 Do this before TestFlight/physical-platform QA and signed screenshot comparison:
@@ -384,9 +384,9 @@ the same combined run and IPA evidence.
   the listing validator pins its catalog, vector geometry, color profile, and
   opacity. Obtain named visual approval against that exact digest; do not
   invent divergent Watch artwork merely to make it different.
-- Capture and hash screenshots from the frozen build-11 binaries at Apple’s
+- Capture and hash screenshots from the frozen build-12 binaries at Apple’s
   accepted sizes. The Mac source-only plan is
-  [`platforms/maccatalyst/screenshot-manifest-v1.1-build8.json`](./platforms/maccatalyst/screenshot-manifest-v1.1-build8.json):
+[`platforms/maccatalyst/screenshot-manifest-v1.1-build12.json`](./platforms/maccatalyst/screenshot-manifest-v1.1-build12.json):
   five unapproved `2560 × 1600` frames from a `1280 × 800` point window at 2×,
   using the exact `maccatalyst-*`
   selectors. Existing Tauri screenshots cannot serve as Catalyst evidence.
@@ -733,7 +733,7 @@ the same combined run and IPA evidence.
 
 The App Store Connect audit found platform drafts in Apple ID `6800642443`.
 Reuse the existing native drafts and change an editable version number to
-`1.1` only after the corresponding build-11 release evidence is frozen. Do not
+`1.1` only after the corresponding build-12 release evidence is frozen. Do not
 delete a draft or create a duplicate platform. The macOS platform on this
 shared record is now reserved for the `com.quakesignal.app` Catalyst archive.
 Do not attach the separate Tauri package (`com.quakesignal.desktop`) to it;
