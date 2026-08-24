@@ -25,7 +25,7 @@ token, an exact current location, or a test-push result in product-page imagery.
 | tvOS / visionOS / Watch / Mac Catalyst metadata and screenshot plans | `platforms/` |
 | Historical, superseded tvOS / visionOS / Watch candidate packages | `platforms/screenshot-candidates-v1.1-build8/` |
 | Historical release-owner Mac and content-rights decisions | `release-owner-decisions-2026-08-20.md` |
-| Current portal/build handoff and safe submission sequence | `app-store-connect-portal-audit-2026-08-24.md` (retain the 2026-08-19/20/22 audits as history) |
+| Current build-17 portal handoff and safe submission sequence | `app-store-connect-build17-handoff-2026-08-24.md` (retain the earlier portal audits as history) |
 
 ## App record
 
@@ -39,16 +39,17 @@ iPad on Mac; that availability checkbox was cleared and saved on 2026-08-22.
 Do not attach or submit the separate Tauri package from Apple ID `6800642853`
 for this release.
 
-The latest portal/build handoff is in
-[`app-store-connect-portal-audit-2026-08-24.md`](./app-store-connect-portal-audit-2026-08-24.md).
+The current source-bound build-17 handoff is in
+[`app-store-connect-build17-handoff-2026-08-24.md`](./app-store-connect-build17-handoff-2026-08-24.md).
 The historical release-owner decisions are recorded in
 [`release-owner-decisions-2026-08-20.md`](./release-owner-decisions-2026-08-20.md).
 Mac Catalyst metadata is saved in the shared `1.1` draft with manual release.
 The processed build-12 uploads are retained as historical evidence for their
 own source commit; they cannot be attached to the current source. Build 17 is
-the current coordinated candidate and still requires protected signing and
-processing, screenshot approval, QA, required portal answers, contact
-verification, and named independent review before attachment or submission.
+the current coordinated candidate and has source-bound protected upload
+evidence. It still requires App Store Connect processing confirmation,
+screenshot approval, QA, required portal answers, contact verification, and
+named independent review before attachment or submission.
 
 - Name: `QuakeSignal`
 - English (U.S.) subtitle: `Earthquake Reports & Safety`
@@ -74,15 +75,15 @@ Version `1.0` build `6` is already Ready for Distribution. Builds `2` through
 
 App Store Connect rejects a repeat upload with the same build number. The
 checked-in release candidate is coordinated as version `1.1`,
-`CFBundleVersion` `13`: `CURRENT_PROJECT_VERSION` is `13`, the Worker App
-Attest allow-list retains versions `1` through `13`, and the protected archive
-workflows are bound to `13`. Older allowlisted versions remain deliberately
+`CFBundleVersion` `17`: `CURRENT_PROJECT_VERSION` is `17`, the Worker App
+Attest allow-list retains versions `1` through `17`, and the protected archive
+workflows are bound to `17`. Older allowlisted versions remain deliberately
 available to installed clients. Build 12 from
 `93a5055e95551a39f89b771fa01cf44eea0fb62d` produced one signed upload for
 each required native platform; those run IDs and the action-time portal state
-remain in the 2026-08-24 audit as historical evidence. Build 17 must receive
-its own source-addressed uploads and portal handoff. Do not attach or submit a
-superseded build.
+remain historical evidence. Build 17's source-addressed uploads and handoff
+are recorded in `app-store-connect-build17-handoff-2026-08-24.md`. Do not
+attach or submit a superseded build.
 
 Upload, processing, and internal group assignment do not by themselves
 establish physical-device evidence, Content Rights, protected launch
