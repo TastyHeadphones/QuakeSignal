@@ -47,9 +47,10 @@ Mac Catalyst metadata is saved in the shared `1.1` draft with manual release.
 The processed build-12 uploads are retained as historical evidence for their
 own source commit; they cannot be attached to the current source. Build 17 is
 the current coordinated candidate and has source-bound protected upload
-evidence. It still requires App Store Connect processing confirmation,
-screenshot approval, QA, required portal answers, contact verification, and
-named independent review before attachment or submission.
+evidence plus authenticated portal processing confirmation. It still requires
+draft build selection, screenshot approval, QA, required portal answers,
+contact verification, and named independent review before attachment or
+submission.
 
 - Name: `QuakeSignal`
 - English (U.S.) subtitle: `Earthquake Reports & Safety`
