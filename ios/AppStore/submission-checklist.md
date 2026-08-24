@@ -8,14 +8,15 @@ value.
 
 ## Public-build and service gate
 
-- [ ] Identify the exact signed public `Release` 1.1 archive/IPA, source
-  commit, SHA-256, and `CFBundleVersion` `13`, including the embedded Watch app.
-  Build-12 signed attestations and upload run IDs are historical evidence in
-  `app-store-connect-portal-audit-2026-08-24.md`; they do not prove build 17.
-- [ ] Confirm that build `1.1 (16)` is not the legacy TestFlight `1.0 (2)`
+- [ ] Retain the exact signed public `Release` 1.1 archive/IPA, source
+  commit, SHA-256, and `CFBundleVersion` `17`, including the embedded Watch app.
+  Build-17 upload run IDs and the current handoff are recorded in
+  `app-store-connect-build17-handoff-2026-08-24.md`; verify the selected
+  App Store Connect builds against their signed attestations.
+- [ ] Confirm that build `1.1 (17)` is not the legacy TestFlight `1.0 (2)`
   InternalQA-only evidence build and that it contains no delayed
   background-training control; retain the build-17 release-contract result.
-- [ ] Confirm the App Attest version policy admits build `13` and record the
+- [ ] Confirm the App Attest version policy admits build `17` and record the
   live production service-metadata policy-fingerprint proof from the protected
   deployment and archive workflows. Do not substitute a build-12 or later
   unrelated live check for the source-bound proof.
@@ -39,9 +40,9 @@ value.
 - [x] Save the shared Mac draft as `1.1` with exact Catalyst metadata, manual
   release, and Designed for iPad on Mac disabled (2026-08-22 portal audit).
 - [ ] Complete Mac Catalyst QA, exact approved screenshots, signed-Release
-  parity, availability, and named independent approval. Build-12 signing and
-  TestFlight processing are historical only; build 17 must complete its own
-  protected signing and processing gates.
+  parity, availability, named independent approval, and App Store Connect
+  processing confirmation. Build-12 signing and TestFlight processing are
+  historical only; build-17 signed upload evidence is recorded separately.
 - [ ] Verify the English name, category, bundle ID, SKU, version, copyright,
   exact `en-US/subtitle.txt`, and current build against
   `submission-answers.md` and the signed archive.
@@ -64,18 +65,19 @@ value.
   them. A complete five-platform Debug Simulator candidate was recaptured for
   source `93a5055e95551a39f89b771fa01cf44eea0fb62d` by run `32647878229`.
   It remains historical, explicitly unapproved, and non-uploadable.
-- [ ] Capture a complete five-platform Debug Simulator candidate for the
-  build-17 source, then retain it as unapproved until the protected finalizer
-  records named independent visual, privacy, and signed-Release parity review.
+- [ ] Retain the complete five-platform Debug Simulator candidate from run
+  `32678113996` for the build-17 source as unapproved until the protected
+  finalizer records named independent visual, privacy, and signed-Release
+  parity review.
 - [x] Save the exact tvOS and Mac Catalyst `1.1` copy recorded in the 2026-08-22
   portal audit.
 - [ ] Resave the corrected visionOS description and review notes that distinguish
   platform support for App Attest from the unavailable APNs capability; the
   audit saved the superseded wording and is not evidence of this correction.
 - [ ] Complete Apple Watch/tvOS/visionOS/Mac screenshot approval, remaining
-  privacy/App Motion answers, and platform QA before submission. Build 17
-  signing, processing, and all platform screenshots remain pending; no platform
-  screenshot is approved or attached.
+  privacy/App Motion answers, and platform QA before submission. Build-17
+  App Store Connect processing and all platform screenshot approvals remain
+  pending; no platform screenshot is approved or attached.
   All four remain foreground-only in every independent-notification claim.
 - [ ] Download only the exact source-addressed approved screenshot artifact from
   the successful finalizer run, upload the six source directories in the order
