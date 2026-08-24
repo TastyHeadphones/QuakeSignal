@@ -68,6 +68,30 @@ signed-release-parity review times, and the four source-matching signed-release
 attestations listed above. The environment reviewer must differ from the
 workflow dispatch actor.
 
+## Authenticated Add-for-Review validation
+
+After the release owner expressly authorized an App Review submission attempt
+on 24 August 2026, App Store Connect validated every native `1.1 (17)` draft
+and rejected each request without changing its **Prepare for Submission**
+status. No version entered **Waiting for Review** or **In Review**. This is
+validation evidence, not an authorization to invent metadata, attach the
+unapproved screenshot candidate, or change any accountable/legal answer.
+
+| Platform | Exact portal requirements reported by App Store Connect |
+| --- | --- |
+| iOS / iPadOS with embedded Apple Watch | A 13-inch iPad screenshot, a 6.5-inch iPhone screenshot, an Apple Watch screenshot, the Apple TV Privacy Policy in App Privacy, and `What's New in This Version` for Japanese and Simplified Chinese. |
+| Mac Catalyst | At least one screenshot, the Apple TV Privacy Policy in App Privacy, and the Japanese description. |
+| tvOS | At least one screenshot, the Apple TV Privacy Policy in App Privacy, and descriptions for Japanese and Simplified Chinese. |
+| visionOS | At least one screenshot, the required App Motion answer, the Apple TV Privacy Policy in App Privacy, and descriptions for Japanese and Simplified Chinese. |
+
+The policy field is a separately reviewed Apple TV privacy-policy text field,
+not a substitute for the public Privacy Policy URL. The versioned source keeps
+its draft marker until legal/release-owner approval. Likewise, the Japanese
+and Simplified Chinese localizations must not be completed or uploaded until
+their exact product-page names, availability, and trademark review are
+approved. The source-bound 26-frame screenshot set remains unapproved pending
+the protected independent-review finalizer.
+
 ## Required action-time completion
 
 - Keep only the confirmed, exact `1.1 (17)` build associated with each
