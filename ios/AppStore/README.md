@@ -48,9 +48,10 @@ The processed build-12 uploads are retained as historical evidence for their
 own source commit; they cannot be attached to the current source. Build 17 is
 the current coordinated candidate and has source-bound protected upload
 evidence plus authenticated portal processing confirmation. It still requires
-draft build selection, screenshot approval, QA, required portal answers,
-contact verification, and named independent review before attachment or
-submission.
+approved screenshot evidence, QA, required portal answers, contact
+verification, and named independent review before submission. The B17 build is
+selected in each native draft and the platform review notes are saved; see the
+current handoff for the verified portal scope and remaining gates.
 
 - Name: `QuakeSignal`
 - English (U.S.) subtitle: `Earthquake Reports & Safety`
