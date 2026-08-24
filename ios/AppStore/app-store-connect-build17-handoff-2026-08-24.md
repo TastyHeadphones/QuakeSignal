@@ -87,10 +87,24 @@ unapproved screenshot candidate, or change any accountable/legal answer.
 The policy field is a separately reviewed Apple TV privacy-policy text field,
 not a substitute for the public Privacy Policy URL. The versioned source keeps
 its draft marker until legal/release-owner approval. Likewise, the Japanese
-and Simplified Chinese localizations must not be completed or uploaded until
-their exact product-page names, availability, and trademark review are
-approved. The source-bound 26-frame screenshot set remains unapproved pending
-the protected independent-review finalizer.
+and Simplified Chinese product-page names, availability, and trademark review
+remain unapproved; do not add a new customer-facing localized product page or
+claim that those decisions are complete. The source-bound 26-frame screenshot
+set remains unapproved pending the protected independent-review finalizer.
+
+## Saved iOS version-localization notes
+
+On 24 August 2026, the authorized release operator saved the exact checked-in
+version `1.1` `What's New in This Version` values for the existing Japanese
+and Simplified Chinese iOS localizations:
+
+- Japanese: [`ja/whats_new_v1.1.txt`](./ja/whats_new_v1.1.txt)
+- Simplified Chinese: [`zh-Hans/whats_new_v1.1.txt`](./zh-Hans/whats_new_v1.1.txt)
+
+Both values were re-opened after saving. This resolves only those two iOS
+required-field errors. It neither approves a localized product-page name nor
+attaches localized screenshots, changes the product-page copy, completes the
+Apple TV privacy-policy field, or authorizes App Review submission.
 
 ## Required action-time completion
 
