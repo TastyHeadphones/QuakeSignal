@@ -121,6 +121,7 @@ flowchart LR
 
 ### Repository map
 
+- [`docs/FEATURES.md`](docs/FEATURES.md) — cross-platform feature matrix and backend responsibilities
 - [`ios/`](ios/) — native SwiftUI app for iOS 17+, built with Swift 6
 - [`desktop/`](desktop/) — local-first Tauri app for macOS and Windows, with direct feeds, SQLite, and native alarms
 - [`extension/`](extension/) — Manifest V3 Chrome extension with direct feeds, local history, browser notifications, and alarm sound
