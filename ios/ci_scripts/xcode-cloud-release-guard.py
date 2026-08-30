@@ -907,15 +907,16 @@ def verify_jma_only_source_contract(sources: Mapping[str, str]) -> None:
             )
     if "WolfxNormalizer.events(" in socket:
         fail("direct JMA WebSocket ingestion must not use the permissive normalizer.")
-    for marker in (
-        'let serial = positiveInteger(value["Serial"])',
-        "serial: serial,",
-    ):
-        if client.count(marker) != 1:
-            fail(
-                "JMA EEW validation must require the raw Serial field and preserve "
-                f"its exact value; missing marker {marker!r}."
-            )
+    if client.count('let serial = positiveInteger(value["Serial"])') != 1:
+        fail(
+            "JMA EEW validation must require the raw Serial field and preserve "
+            "its exact value; missing marker 'let serial = positiveInteger(value[\"Serial\"])'."
+        )
+    if client.count("serial: serial,") != 3:
+        fail(
+            "Wolfx EEW validation must preserve parsed serials on JMA and China feeds; "
+            "missing marker 'serial: serial,'."
+        )
     if settings.count("static let allSources = EarthquakeSources.all") != 1:
         fail("AppSettings must derive its selectable sources from EarthquakeSources.all.")
     catalog = sources["ios/QuakeSignal/Networking/CatalogClient.swift"]
@@ -947,7 +948,12 @@ def verify_foreground_push_presentation_contract(sources: Mapping[str, str]) -> 
         "Self.legacyRevisionKey(",
         'let kind = nonEmptyString(userInfo["kind"]),',
         '(sourceID == "jma_eew" && kind == "eew") ||\n'
+        '                (sourceID == "cenc_eew" && kind == "eew") ||\n'
+        '                (sourceID == "sc_eew" && kind == "eew") ||\n'
+        '                (sourceID == "fj_eew" && kind == "eew") ||\n'
+        '                (sourceID == "cq_eew" && kind == "eew") ||\n'
         '                (sourceID == "jma_eqlist" && kind == "report") ||\n'
+        '                (sourceID == "cenc_eqlist" && kind == "report") ||\n'
         '                (EarthquakeSources.isCatalog(sourceID) && kind == "report"),',
         'let serial = nonnegativeInteger(userInfo["serial"]),',
         'let isWarning = strictBoolean(userInfo["isWarn"]),',
