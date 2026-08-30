@@ -233,6 +233,7 @@ const REVIEWED_WORKFLOW_FILES = [
   ".github/workflows/homebrew-tap.yml",
   ".github/workflows/ios.yml",
   ".github/workflows/listing-assets.yml",
+  ".github/workflows/skill-validation.yml",
   ".github/workflows/terminal-dlq-fallback-monitor.yml",
   ".github/workflows/terminal-dlq-monitor.yml",
   ".github/workflows/workflow-lint.yml",
@@ -425,8 +426,8 @@ const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:jW4JzW6f1y2Ku66tQU-j36
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:z8z7Z5IyS_v7A_5HCnl4hvk--W9QTRS0jLXV8B-8Nmw";
 const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:zisYrCyM8IuKaAa949DVdbO_P0zlsJbgKjEbyzOPlvs";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:6oSJ3IUy_YKDphx_K-FQ9L6A2Cc1bwEJQXTwEZYmbh4";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:g8qKnNpUIt3aFPEAbmmuRRlI8FtmcvqEShNsTXZ0JCY";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:w-aXu2utEIaG-YTwiFwvLzsafn-AeZOVU1m3xit9Y5Y";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:NvD5UXO9Q5hBGvvKvl2y7kUvVSfMCpRO9wIqADTzXjw";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:RnWenLvputtku5X6DOfdXrJflYePVPa0uaTthrBGxwI";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -1718,12 +1719,20 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
     fail(`credential-bearing workflows must match the reviewed fingerprint (received ${credentialFingerprint}).`);
   }
   const directoryFingerprint = workflowSequenceFingerprint(parsedWorkflows);
-  if (directoryFingerprint !== WORKFLOW_DIRECTORY_FINGERPRINT) {
-    fail(`the complete workflow directory must match the reviewed parsed-content fingerprint (received ${directoryFingerprint}).`);
-  }
   const directorySourceFingerprint = workflowSequenceFingerprint(workflowFiles);
+  const directoryFingerprintErrors = [];
+  if (directoryFingerprint !== WORKFLOW_DIRECTORY_FINGERPRINT) {
+    directoryFingerprintErrors.push(
+      `the complete workflow directory must match the reviewed parsed-content fingerprint (received ${directoryFingerprint}).`,
+    );
+  }
   if (directorySourceFingerprint !== WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT) {
-    fail(`the complete workflow directory must match the reviewed raw path-and-source fingerprint (received ${directorySourceFingerprint}).`);
+    directoryFingerprintErrors.push(
+      `the complete workflow directory must match the reviewed raw path-and-source fingerprint (received ${directorySourceFingerprint}).`,
+    );
+  }
+  if (directoryFingerprintErrors.length > 0) {
+    fail(directoryFingerprintErrors.join(" "));
   }
 }
 
