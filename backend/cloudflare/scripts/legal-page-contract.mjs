@@ -2,7 +2,7 @@ export const LEGAL_PAGE_CONTRACTS = [
   {
     path: "/privacy",
     title: "Privacy Policy",
-    effectiveDate: "22 August 2026",
+    effectiveDate: "30 August 2026",
     requiredText: [
       "Only the app when running on an iPhone or iPad can register",
       "embedded Apple Watch companion and Apple TV app",
@@ -78,14 +78,14 @@ export const LEGAL_PAGE_CONTRACTS = [
       "SHA-256 APNs-token hash, synthetic training event/outbox references",
       "a crash releases it after 60 seconds without claiming APNs acceptance",
       "A resolved marker becomes eligible for deletion 14 days after admission",
-      "watches the jma_eew and jma_eqlist Wolfx feeds together with the USGS, EMSC, and GeoNet earthquake catalogs",
+      "watches the jma_eew, jma_eqlist, cenc_eew, cenc_eqlist, sc_eew, fj_eew, and cq_eew Wolfx feeds together with the USGS, EMSC, and GeoNet earthquake catalogs",
       "does not create an earthquake forecast or predict local intensity or arrival time",
     ],
   },
   {
     path: "/support",
     title: "Support",
-    effectiveDate: "20 August 2026",
+    effectiveDate: "30 August 2026",
     requiredText: [
       "iPhone and iPad alerts",
       "embedded Apple Watch companion and Apple TV app",
@@ -101,7 +101,7 @@ export const LEGAL_PAGE_CONTRACTS = [
       "next successful daily cleanup",
       "operational cleanup failure can delay deletion",
       "Never include an APNs device token",
-      "selected JMA feed type",
+      "selected earthquake feed type",
       "do not predict local intensity or arrival time",
     ],
   },

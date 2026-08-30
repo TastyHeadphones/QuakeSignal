@@ -53,10 +53,13 @@ enum PushTestAlertPolicy {
 final class AppSettings {
     static let shared = AppSettings()
 
-    /// Build 8's reviewed source-rights boundary. Keep settings and direct
-    /// foreground fetches on the same allow-list so a stale preference cannot
-    /// silently restore an unreviewed upstream feed.
+    /// Reviewed source-rights boundary. Keep settings and direct foreground
+    /// fetches on the same allow-list so a stale preference cannot silently
+    /// restore an unreviewed upstream feed.
     static let allSources = EarthquakeSources.all
+    static let chinaWolfxSources: Set<String> = [
+        "cenc_eew", "cenc_eqlist", "sc_eew", "fj_eew", "cq_eew",
+    ]
     static let radiusTiersKm: [Double] = [50, 100, 300, 500]
     static let magnitudeTiers: [Double] = [3, 4, 5, 6]
 
@@ -171,6 +174,7 @@ final class AppSettings {
         static let alertSound = "settings.alertSound"
         static let pushSubscriptionEnabled = "settings.pushSubscriptionEnabled"
         static let pushRegistrationState = "settings.pushRegistrationState"
+        static let chinaWolfxSourcesMigration21 = "settings.migratedChinaWolfxSources21"
     }
 
     private let defaults: UserDefaults
@@ -189,7 +193,13 @@ final class AppSettings {
         radiusKm = defaults.object(forKey: Keys.radiusKm) as? Double ?? 100
         minMagnitude = defaults.object(forKey: Keys.minMagnitude) as? Double ?? 3
         if let saved = defaults.array(forKey: Keys.sources) as? [String] {
-            let reviewedSources = Set(saved).intersection(Self.allSources)
+            var reviewedSources = Set(saved).intersection(Self.allSources)
+            if defaults.object(forKey: Keys.chinaWolfxSourcesMigration21) == nil {
+                if !reviewedSources.isEmpty {
+                    reviewedSources.formUnion(Self.chinaWolfxSources.intersection(Self.allSources))
+                }
+                defaults.set(true, forKey: Keys.chinaWolfxSourcesMigration21)
+            }
             let normalizedSources = reviewedSources.isEmpty
                 ? Set(Self.allSources)
                 : reviewedSources
@@ -199,6 +209,7 @@ final class AppSettings {
             }
         } else {
             enabledSources = Set(Self.allSources)
+            defaults.set(true, forKey: Keys.chinaWolfxSourcesMigration21)
         }
         includeTestAlerts = defaults.object(forKey: Keys.includeTestAlerts) as? Bool ?? false
         notifyAtNight = defaults.object(forKey: Keys.notifyAtNight) as? Bool ?? true

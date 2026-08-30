@@ -130,7 +130,7 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         )
     }
 
-    func testPersistedSourcesAreMigratedToTheReviewedJMAAllowList() throws {
+    func testPersistedSourcesGainChinaWolfxFeedsOnce() throws {
         let suiteName = "PushRegistrationLifecycleTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -141,10 +141,43 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         )
 
         let settings = AppSettings(defaults: defaults)
+        XCTAssertEqual(AppSettings.allSources, EarthquakeSources.all)
         XCTAssertEqual(
-            AppSettings.allSources,
-            ["jma_eew", "jma_eqlist", "usgs_eqlist", "emsc_eqlist", "geonet_eqlist"]
+            settings.enabledSources,
+            [
+                "cenc_eew",
+                "cenc_eqlist",
+                "cq_eew",
+                "fj_eew",
+                "jma_eew",
+                "jma_eqlist",
+                "sc_eew",
+            ]
         )
+        XCTAssertEqual(
+            defaults.stringArray(forKey: "settings.sources"),
+            [
+                "cenc_eew",
+                "cenc_eqlist",
+                "cq_eew",
+                "fj_eew",
+                "jma_eew",
+                "jma_eqlist",
+                "sc_eew",
+            ]
+        )
+        XCTAssertEqual(defaults.bool(forKey: "settings.migratedChinaWolfxSources21"), true)
+    }
+
+    func testChinaWolfxMigrationDoesNotUndoALaterOptOut() throws {
+        let suiteName = "PushRegistrationLifecycleTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(["jma_eew", "jma_eqlist"], forKey: "settings.sources")
+        defaults.set(true, forKey: "settings.migratedChinaWolfxSources21")
+
+        let settings = AppSettings(defaults: defaults)
         XCTAssertEqual(settings.enabledSources, ["jma_eew", "jma_eqlist"])
         XCTAssertEqual(
             defaults.stringArray(forKey: "settings.sources"),
@@ -475,7 +508,7 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         }
     }
 
-    func testPushPayloadRejectsAnUnreviewedSourceAndSnapshot() throws {
+    func testPushPayloadAcceptsCencEarlyWarningSnapshots() throws {
         let event = EEWEvent(
             id: "cenc_eew:test",
             sourceId: "cenc_eew",
@@ -489,7 +522,7 @@ final class PushRegistrationLifecycleTests: XCTestCase {
             longitude: 140,
             magnitude: 5,
             depth: 10,
-            maxIntensity: "5-",
+            maxIntensity: "5.0",
             isWarn: true,
             isFinal: false,
             isCancel: false,
@@ -503,7 +536,34 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         let payload = PushPayload(userInfo: [
             "sourceId": "cenc_eew",
             "eventId": "test",
+            "kind": "eew",
+            "reason": "new",
+            "serial": 1,
+            "isWarn": true,
+            "isFinal": false,
+            "isCancel": false,
+            "isTraining": false,
+            "reportTimeUtc": event.reportTimeUtc as Any,
+            "originTimeUtc": event.originTimeUtc as Any,
             "event": snapshot,
+        ])
+
+        XCTAssertEqual(payload.sourceId, "cenc_eew")
+        XCTAssertEqual(payload.compositeEventId, "cenc_eew:test")
+        XCTAssertEqual(payload.eventSnapshot?.kind, "eew")
+        XCTAssertTrue(payload.hasUsableMatchingEventSnapshot)
+    }
+
+    func testPushPayloadRejectsAnUnreviewedMultiplexedSource() throws {
+        let payload = PushPayload(userInfo: [
+            "sourceId": "all_eew",
+            "eventId": "test",
+            "kind": "eew",
+            "serial": 1,
+            "isWarn": true,
+            "isFinal": false,
+            "isCancel": false,
+            "isTraining": false,
         ])
 
         XCTAssertNil(payload.sourceId)

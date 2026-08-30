@@ -21,12 +21,12 @@ final class WolfxHTTPFetchPacingTests: XCTestCase {
     }
 
     func testSnapshotRequestsAreSpacedWithinWolfxPublicLimit() {
-        XCTAssertEqual(WolfxClient.sources, ["jma_eew", "jma_eqlist"])
+        XCTAssertEqual(WolfxClient.sources, EarthquakeSources.wolfx)
         XCTAssertEqual(WolfxHTTPFetchPacing.delayNanoseconds(forSourceIndex: 0), 0)
         XCTAssertGreaterThanOrEqual(WolfxHTTPFetchPacing.requestIntervalNanoseconds, 500_000_000)
         XCTAssertEqual(
             WolfxHTTPFetchPacing.delayNanoseconds(forSourceIndex: WolfxClient.sources.count - 1),
-            600_000_000
+            WolfxHTTPFetchPacing.requestIntervalNanoseconds * UInt64(WolfxClient.sources.count - 1)
         )
     }
 

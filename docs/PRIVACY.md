@@ -1,6 +1,6 @@
 # QuakeSignal — Privacy Policy
 
-Effective date: 22 August 2026
+Effective date: 30 August 2026
 
 This policy covers every QuakeSignal client: the **Windows desktop app** and
 legacy **Tauri macOS desktop builds** (dormant for Apple release 1.1 build 8),
@@ -144,7 +144,7 @@ stored for your device:
 | APNs device token | Addressing the notification to your device |
 | An approximate coordinate on a 0.1° grid, derived from either a selected city's coordinate or the most recent current-device location that the app successfully registered while open | Deciding whether an event is near enough to alert you |
 | Optional chosen city name | Showing and matching the selected alert area |
-| Alert radius, minimum magnitude, selected JMA feed types | Filtering JMA-issued information against your alert choices; QuakeSignal does not create a new local-intensity or arrival-time forecast |
+| Alert radius, minimum magnitude, selected earthquake feed types | Filtering source-issued information against your alert choices; QuakeSignal does not create a new local-intensity or arrival-time forecast |
 | Locale, UTC offset, night-notification preference | Localizing text and honouring quiet hours |
 | Test-alert preference | Respecting your alert choices |
 | Created and updated timestamps plus a fresh opaque registration revision | Housekeeping and ensuring a stale APNs response can act only on the exact registration snapshot that was sent |
@@ -181,7 +181,7 @@ they were last seen; the active `BadDeviceToken` exception is described below. A
 alert-lifecycle recipient record contains only the pseudonymous fields listed
 above and becomes eligible for deletion 14 days after its latest accepted or
 possible-contact active-warning evidence. This continuity bypasses only revised magnitude and
-location matching; removing a JMA feed from the current registration prevents
+location matching; removing an earthquake feed from the current registration prevents
 later lifecycle notifications from that feed. A provider-page incident is
 automatically resolved by confirmed later processing of that page; a
 terminal-Queue incident remains active until an operator verifies recovery and
@@ -225,7 +225,7 @@ finalization and during startup/alarm. Malformed records or records whose
 recomputed token hash/storage identity does not match are preserved for
 operator repair, can exceed 14 days until repaired, and make readiness degraded
 rather than being silently discarded. Replay requires a current registration
-that still selects the same JMA feed and still passes its current
+that still selects the same earthquake feed and still passes its current
 magnitude/location/training/quiet-hour eligibility. Ordinary token rotation and
 a fresh exact-token key rebind may preserve continuity, but an explicit removal,
 empty-source remediation, or stale-registration retention fence blocks the
@@ -399,13 +399,13 @@ purchases.
 
 | Service | Used by | What it receives |
 |---|---|---|
-| [Wolfx](https://wolfx.jp) | All clients; the current Apple release requests only JMA feeds | Ordinary connection metadata such as your IP address, under [its own policies](https://wolfx.jp) |
+| [Wolfx](https://wolfx.jp) | All clients; the current Apple release requests JMA and CENC Wolfx earthquake feeds, including Sichuan, Fujian, and Chongqing early-warning feeds | Ordinary connection metadata such as your IP address, under [its own policies](https://wolfx.jp) |
 | [Apple Maps](https://www.apple.com/legal/privacy/data/en/apple-maps/) and [Location Services](https://www.apple.com/legal/privacy/data/en/location-services/) | Full-interface Apple experiences when you use maps or current location | Apple may process associated map, location-service, device, and network data under its own policies; QuakeSignal does not include the exact fix in Wolfx requests or its notification relay |
 | Cloudflare (Workers, D1) | Public legal/support pages; opted-in iPhone/iPad alerts | Ordinary web-request and security metadata for public pages; the device registration and App Attest integrity record described above only for opted-in alerts |
 | Apple APNs and App Attest | Opted-in iPhone/iPad alerts only | Notification delivery and Apple-managed app-instance attestation material under Apple's policies |
 | GitHub | Downloads, source links, and public support issues | Standard web-request and account data under GitHub's policies when you use those services |
 
-QuakeSignal is not affiliated with JMA, Wolfx, or any government
+QuakeSignal is not affiliated with JMA, CENC, Wolfx, or any government
 emergency agency.
 
 ## Children

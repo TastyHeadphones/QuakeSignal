@@ -27,6 +27,10 @@
 "quake.intensity.label" = "最大震度 %1$@";
 "quake.depth.label" = "深さ %1$@ km";
 "quake.source.jma" = "気象庁";
+"quake.source.cenc" = "中国地震台網";
+"quake.source.sc" = "四川省地震局";
+"quake.source.fj" = "福建省地震局";
+"quake.source.cq" = "重慶市地震局";
 "quake.source.usgs" = "USGS";
 "quake.source.emsc" = "EMSC";
 "quake.source.geonet" = "GeoNet";
@@ -66,6 +70,11 @@
 "settings.section.sources" = "警報の情報源";
 "settings.source.jma_eew" = "気象庁 — 緊急地震速報";
 "settings.source.jma_eqlist" = "気象庁 — 地震情報";
+"settings.source.cenc_eew" = "中国地震台網 — 緊急地震速報";
+"settings.source.cenc_eqlist" = "中国地震台網 — 地震情報";
+"settings.source.sc_eew" = "四川省 — 緊急地震速報";
+"settings.source.fj_eew" = "福建省 — 緊急地震速報";
+"settings.source.cq_eew" = "重慶市 — 緊急地震速報";
 "settings.source.usgs_eqlist" = "USGS — 地震情報";
 "settings.source.emsc_eqlist" = "EMSC — 地震情報";
 "settings.source.geonet_eqlist" = "GeoNet NZ — 地震情報";
@@ -271,8 +280,9 @@
 "disclaimer.badge" = "公式の警報プラットフォームではありません";
 "disclaimer.summary" = "気象庁の情報をWolfx経由で取得しています。正式な情報は公式発表をご確認ください。データには遅延・欠落・誤差が生じる場合があります。";
 "disclaimer.section.sources" = "データソース";
-"disclaimer.source.wolfx" = "Wolfx Open API（気象庁データの中継）";
+"disclaimer.source.wolfx" = "Wolfx Open API（気象庁および中国地震台網データの中継）";
 "disclaimer.source.jma" = "気象庁 公開地震情報";
+"disclaimer.source.cenc" = "中国地震台網（CENC）の公開地震情報。四川・福建・重慶の緊急地震速報をWolfx経由で取得";
 "disclaimer.source.jmaAttribution" = "出典：気象庁（JMA）。QuakeSignalが正規化・編集したもので、気象庁が作成または推薦したものではありません。公共データ利用規約1.0に基づき利用しています。";
 "disclaimer.source.jmaTerms" = "気象庁の利用規約・出典表示";
 "disclaimer.source.publicDataLicense" = "公共データ利用規約1.0";

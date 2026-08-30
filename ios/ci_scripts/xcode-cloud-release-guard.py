@@ -21,19 +21,19 @@ from urllib.parse import urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
-BUILD_NUMBER = "20"
+BUILD_NUMBER = "21"
 MARKETING_VERSION = "1.2"
 TEAM_ID = "5TT564H883"
 RELEASE_REF = "refs/heads/main"
-RELEASE_WORKFLOW = "QuakeSignal 1.2 (20) Native Release"
+RELEASE_WORKFLOW = "QuakeSignal 1.2 (21) Native Release"
 PRODUCT_NAME = "QuakeSignal"
 WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev"
 VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open."
 MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
-APP_ATTEST_FINGERPRINT = "sha256:8_djuZ9IjD-ODoULY8ztcGJFZJ7tOxWiThhtqpdIMYQ"
-XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:ed4a8WYD1jf9VTxuObdvuGeNP70mIvG2xHJ1NQdMaIg"
+APP_ATTEST_FINGERPRINT = "sha256:dan9Ebj9evPDQWnls4i-XgQnZ1s8Idrvl0CjAIFlHFk"
+XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:OqFwasaS2_sJ-sGJyvQs0mujdjcGwABuz1HMiKZEabw"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
-PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:WVwMU3r-EeeN2tqkzM-qGigvCZX2XW-Qxx91H-P0ymg"
+PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:DzIFMVcV0X9GU0Zqnh__lAxlBWThigDp4V5mxOqshb8"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
 MAX_RESPONSE_BYTES = 1024 * 1024
 READINESS_TIMEOUT_SECONDS = 180.0
@@ -160,12 +160,17 @@ ARCHIVE_SCHEME_NAMES = (
 REQUIRED_WOLFX_SOURCES = (
     "jma_eew",
     "jma_eqlist",
+    "cenc_eew",
+    "cenc_eqlist",
+    "sc_eew",
+    "fj_eew",
+    "cq_eew",
 )
 LEGAL_PAGE_CONTRACTS = (
     {
         "path": "/privacy",
         "title": "Privacy Policy",
-        "effectiveDate": "22 August 2026",
+        "effectiveDate": "30 August 2026",
         "requiredText": (
             "Only the app when running on an iPhone or iPad can register",
             "embedded Apple Watch companion and Apple TV app",
@@ -188,14 +193,14 @@ LEGAL_PAGE_CONTRACTS = (
             "delivery-failure token hashes become eligible for deletion after 14 days",
             "next successful daily cleanup",
             "operational cleanup failure can delay deletion",
-            "watches the jma_eew and jma_eqlist Wolfx feeds together with the USGS, EMSC, and GeoNet earthquake catalogs",
+            "watches the jma_eew, jma_eqlist, cenc_eew, cenc_eqlist, sc_eew, fj_eew, and cq_eew Wolfx feeds together with the USGS, EMSC, and GeoNet earthquake catalogs",
             "does not create an earthquake forecast or predict local intensity or arrival time",
         ),
     },
     {
         "path": "/support",
         "title": "Support",
-        "effectiveDate": "20 August 2026",
+        "effectiveDate": "30 August 2026",
         "requiredText": (
             "iPhone and iPad alerts",
             "embedded Apple Watch companion and Apple TV app",
@@ -211,7 +216,7 @@ LEGAL_PAGE_CONTRACTS = (
             "next successful daily cleanup",
             "operational cleanup failure can delay deletion",
             "Never include an APNs device token",
-            "selected JMA feed type",
+            "selected earthquake feed type",
             "do not predict local intensity or arrival time",
         ),
     },
@@ -854,39 +859,36 @@ def verify_jma_only_source_contract(sources: Mapping[str, str]) -> None:
         "ios/QuakeSignal/State/AppSettings.swift",
     }
     if not required_paths.issubset(sources):
-        fail("JMA-only Apple source inventory is incomplete.")
+        fail("reviewed Apple source inventory is incomplete.")
 
-    forbidden = (
-        "all_eew",
-        "cenc_eew",
-        "cenc_eqlist",
-        "cq_eew",
-        "fj_eew",
-        "sc_eew",
-        "query_cenceew",
-        "query_cenceqlist",
-        "query_cqeew",
-        "query_fjeew",
-        "query_sceew",
-    )
+    forbidden = ("all_eew",)
     combined = "\n".join(sources.values())
     found = [token for token in forbidden if token in combined]
     if found:
-        fail(f"Apple release sources contain disabled non-JMA feed surface: {', '.join(found)}.")
+        fail(f"Apple release sources contain disabled multiplexed feed surface: {', '.join(found)}.")
 
     client = sources["ios/QuakeSignal/Networking/WolfxClient.swift"]
     socket = sources["ios/QuakeSignal/Networking/LiveSocketClient.swift"]
+    catalog = sources["ios/QuakeSignal/Networking/CatalogClient.swift"]
     settings = sources["ios/QuakeSignal/State/AppSettings.swift"]
-    if client.count('static let sources = ["jma_eew", "jma_eqlist"]') != 1:
-        fail("WolfxClient.sources must be exactly jma_eew and jma_eqlist.")
+    if client.count("static let sources = EarthquakeSources.wolfx") != 1:
+        fail("WolfxClient.sources must be EarthquakeSources.wolfx.")
+    if "enum EarthquakeSources {" not in client or "static let wolfx = [" not in client:
+        fail("EarthquakeSources.wolfx must remain the reviewed Wolfx feed list.")
+    for source_id in REQUIRED_WOLFX_SOURCES:
+        if client.count(f'"{source_id}"') < 1:
+            fail(f"EarthquakeSources.wolfx is missing {source_id}.")
     for marker, count in (
-        ('.source("jma_eew")', 2),
-        ('.source("jma_eqlist")', 2),
         ('return ["query_jmaeew"]', 1),
         ('return ["query_jmaeqlist"]', 1),
+        ('return ["query_sceew"]', 1),
+        ('return ["query_cenceew"]', 1),
+        ('return ["query_fjeew"]', 1),
+        ('return ["query_cqeew"]', 1),
+        ('return ["query_cenceqlist"]', 1),
     ):
         if socket.count(marker) != count:
-            fail(f"direct JMA WebSocket contract is missing exact marker {marker!r}.")
+            fail(f"direct Wolfx WebSocket contract is missing exact marker {marker!r}.")
     socket_readiness_markers = (
         ('WolfxNormalizer.validatedEvents(source: source, data: data)', 1),
         ('object["type"] as? String == source', 1),
@@ -905,19 +907,21 @@ def verify_jma_only_source_contract(sources: Mapping[str, str]) -> None:
             )
     if "WolfxNormalizer.events(" in socket:
         fail("direct JMA WebSocket ingestion must not use the permissive normalizer.")
-    for marker in (
-        'let serial = positiveInteger(value["Serial"])',
-        "serial: serial,",
-    ):
-        if client.count(marker) != 1:
-            fail(
-                "JMA EEW validation must require the raw Serial field and preserve "
-                f"its exact value; missing marker {marker!r}."
-            )
+    if client.count('let serial = positiveInteger(value["Serial"])') != 1:
+        fail(
+            "JMA EEW validation must require the raw Serial field and preserve "
+            "its exact value; missing marker 'let serial = positiveInteger(value[\"Serial\"])'."
+        )
+    if client.count("serial: serial,") != 3:
+        fail(
+            "Wolfx EEW validation must preserve parsed serials on JMA and China feeds; "
+            "missing marker 'serial: serial,'."
+        )
     if settings.count("static let allSources = EarthquakeSources.all") != 1:
         fail("AppSettings must derive its selectable sources from EarthquakeSources.all.")
-    catalog = sources["ios/QuakeSignal/Networking/CatalogClient.swift"]
-    if catalog.count('static let catalog = ["usgs_eqlist", "emsc_eqlist", "geonet_eqlist"]') != 1:
+    if client.count('static let catalog = ["usgs_eqlist", "emsc_eqlist", "geonet_eqlist"]') != 1:
+        fail("EarthquakeSources.catalog must enable USGS, EMSC, and GeoNet report sources.")
+    if catalog.count("static let sources = EarthquakeSources.catalog") != 1:
         fail("CatalogClient must enable USGS, EMSC, and GeoNet report sources.")
 
 
@@ -945,7 +949,12 @@ def verify_foreground_push_presentation_contract(sources: Mapping[str, str]) -> 
         "Self.legacyRevisionKey(",
         'let kind = nonEmptyString(userInfo["kind"]),',
         '(sourceID == "jma_eew" && kind == "eew") ||\n'
+        '                (sourceID == "cenc_eew" && kind == "eew") ||\n'
+        '                (sourceID == "sc_eew" && kind == "eew") ||\n'
+        '                (sourceID == "fj_eew" && kind == "eew") ||\n'
+        '                (sourceID == "cq_eew" && kind == "eew") ||\n'
         '                (sourceID == "jma_eqlist" && kind == "report") ||\n'
+        '                (sourceID == "cenc_eqlist" && kind == "report") ||\n'
         '                (EarthquakeSources.isCatalog(sourceID) && kind == "report"),',
         'let serial = nonnegativeInteger(userInfo["serial"]),',
         'let isWarning = strictBoolean(userInfo["isWarn"]),',

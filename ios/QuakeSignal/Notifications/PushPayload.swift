@@ -90,7 +90,12 @@ struct PushPayload {
               let eventID,
               let kind = nonEmptyString(userInfo["kind"]),
               (sourceID == "jma_eew" && kind == "eew") ||
+                (sourceID == "cenc_eew" && kind == "eew") ||
+                (sourceID == "sc_eew" && kind == "eew") ||
+                (sourceID == "fj_eew" && kind == "eew") ||
+                (sourceID == "cq_eew" && kind == "eew") ||
                 (sourceID == "jma_eqlist" && kind == "report") ||
+                (sourceID == "cenc_eqlist" && kind == "report") ||
                 (EarthquakeSources.isCatalog(sourceID) && kind == "report"),
               let serial = nonnegativeInteger(userInfo["serial"]),
               let isWarning = strictBoolean(userInfo["isWarn"]),
@@ -158,9 +163,9 @@ struct PushPayload {
         }
 
         switch sourceID {
-        case "jma_eew":
+        case "jma_eew", "cenc_eew", "sc_eew", "fj_eew", "cq_eew":
             return event.kind == "eew"
-        case "jma_eqlist":
+        case "jma_eqlist", "cenc_eqlist":
             return event.kind == "report"
         case "usgs_eqlist", "emsc_eqlist", "geonet_eqlist":
             return event.kind == "report"

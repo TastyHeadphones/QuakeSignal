@@ -1326,6 +1326,73 @@ final class AlertPolicyTests: XCTestCase {
         XCTAssertEqual(emscEvents[0].kind, "report")
         XCTAssertEqual(EarthquakeSources.all.contains("usgs_eqlist"), true)
         XCTAssertEqual(EarthquakeSources.all.contains("geonet_eqlist"), true)
+        XCTAssertEqual(EarthquakeSources.all.contains("cenc_eew"), true)
+        XCTAssertEqual(EarthquakeSources.all.contains("cenc_eqlist"), true)
+        XCTAssertEqual(EarthquakeSources.wolfx.contains("sc_eew"), true)
+    }
+
+    func testCencNormalizerMapsWolfxEarlyWarningOntoTheNotificationPath() throws {
+        let object: [String: Any] = [
+            "type": "cenc_eew",
+            "ID": "b3i6pz76gqcyy",
+            "EventID": "202607181347.0001",
+            "ReportTime": "2026-07-18 13:47:20",
+            "ReportNum": 1,
+            "OriginTime": "2026-07-18 13:47:20",
+            "HypoCenter": "Xinjiang",
+            "Latitude": 38.747,
+            "Longitude": 75.088,
+            "Magnitude": 4.8,
+            "Depth": 5,
+            "MaxIntensity": 6.2,
+        ]
+        let events = try WolfxNormalizer.validatedEvents(
+            source: "cenc_eew",
+            data: try JSONSerialization.data(withJSONObject: object)
+        )
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events[0].id, "cenc_eew:202607181347.0001")
+        XCTAssertEqual(events[0].sourceId, "cenc_eew")
+        XCTAssertEqual(events[0].kind, "eew")
+        XCTAssertEqual(events[0].originTimeUtc, "2026-07-18T05:47:20.000Z")
+        XCTAssertEqual(events[0].maxIntensity, "6.2")
+        XCTAssertTrue(events[0].isWarn)
+
+        let payload = PushPayload(userInfo: [
+            "eventId": events[0].eventId,
+            "sourceId": events[0].sourceId,
+            "kind": events[0].kind,
+            "reason": "new",
+            "serial": events[0].serial,
+            "isWarn": events[0].isWarn,
+            "isFinal": events[0].isFinal,
+            "isCancel": events[0].isCancel,
+            "isTraining": events[0].isTraining,
+            "reportTimeUtc": events[0].reportTimeUtc as Any,
+            "originTimeUtc": events[0].originTimeUtc as Any,
+            "event": [
+                "id": events[0].id,
+                "sourceId": events[0].sourceId,
+                "eventId": events[0].eventId,
+                "serial": events[0].serial,
+                "kind": events[0].kind,
+                "originTimeUtc": events[0].originTimeUtc as Any,
+                "reportTimeUtc": events[0].reportTimeUtc as Any,
+                "hypocenter": events[0].hypocenter,
+                "latitude": events[0].latitude as Any,
+                "longitude": events[0].longitude as Any,
+                "magnitude": events[0].magnitude as Any,
+                "depth": events[0].depth as Any,
+                "maxIntensity": events[0].maxIntensity as Any,
+                "isWarn": events[0].isWarn,
+                "isFinal": events[0].isFinal,
+                "isCancel": events[0].isCancel,
+                "isTraining": events[0].isTraining,
+            ] as [String: Any],
+        ])
+        XCTAssertEqual(payload.sourceId, "cenc_eew")
+        XCTAssertEqual(payload.eventSnapshot?.kind, "eew")
+        XCTAssertTrue(payload.hasUsableMatchingEventSnapshot)
     }
 
     func testLocationFixPolicyRejectsStaleInvalidAndInaccurateLocations() {

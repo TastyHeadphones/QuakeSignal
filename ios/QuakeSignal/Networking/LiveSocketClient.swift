@@ -141,6 +141,16 @@ private enum WolfxRoute: Hashable {
             return ["query_jmaeew"]
         case .source("jma_eqlist"):
             return ["query_jmaeqlist"]
+        case .source("sc_eew"):
+            return ["query_sceew"]
+        case .source("cenc_eew"):
+            return ["query_cenceew"]
+        case .source("fj_eew"):
+            return ["query_fjeew"]
+        case .source("cq_eew"):
+            return ["query_cqeew"]
+        case .source("cenc_eqlist"):
+            return ["query_cenceqlist"]
         case .source:
             return []
         }
@@ -158,10 +168,7 @@ private enum WolfxRoute: Hashable {
 @Observable
 @MainActor
 final class LiveSocketClient {
-    private static let routes: [WolfxRoute] = [
-        .source("jma_eew"),
-        .source("jma_eqlist"),
-    ]
+    private static let routes: [WolfxRoute] = EarthquakeSources.wolfx.map(WolfxRoute.source)
 
     private(set) var isConnected = false
     var onEvents: (([EEWEvent], Bool) -> Void)?

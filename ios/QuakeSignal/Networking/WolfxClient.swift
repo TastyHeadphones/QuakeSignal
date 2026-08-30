@@ -1,6 +1,26 @@
 import CoreFoundation
 import Foundation
 
+/// Direct Wolfx earthquake feeds plus official catalog companions. Keep this
+/// identical to the Worker APNs relay Wolfx allow-list.
+enum EarthquakeSources {
+    static let wolfx = [
+        "jma_eew",
+        "jma_eqlist",
+        "cenc_eew",
+        "cenc_eqlist",
+        "sc_eew",
+        "fj_eew",
+        "cq_eew",
+    ]
+    static let catalog = ["usgs_eqlist", "emsc_eqlist", "geonet_eqlist"]
+    static let all = wolfx + catalog
+
+    static func isCatalog(_ source: String) -> Bool {
+        catalog.contains(source)
+    }
+}
+
 enum WolfxError: LocalizedError {
     case invalidResponse(source: String)
 
@@ -153,10 +173,9 @@ actor WolfxHTTPRequestPacer {
 final class WolfxClient: Sendable {
     static let shared = WolfxClient()
 
-    /// Build 8 ships only sources whose upstream terms have been mapped to the
-    /// product's exact use. Do not add a feed here without updating the source-
-    /// rights evidence and the Worker allow-list in the same reviewed change.
-    static let sources = ["jma_eew", "jma_eqlist"]
+    /// Direct Wolfx HTTP/WebSocket earthquake feeds. Keep this identical to
+    /// `EarthquakeSources.wolfx` and the Worker APNs relay Wolfx allow-list.
+    static let sources = EarthquakeSources.wolfx
 
     private let session: URLSession
     private let httpBaseURL: URL
@@ -328,6 +347,12 @@ enum WolfxNormalizer {
             events = [try validatedJmaEew(object)]
         case "jma_eqlist":
             events = try validatedJmaEqlist(object)
+        case "sc_eew", "fj_eew":
+            events = [try validatedScFjEew(object, source: source)]
+        case "cenc_eew", "cq_eew":
+            events = [try validatedCencCqEew(object, source: source)]
+        case "cenc_eqlist":
+            events = try validatedCencEqlist(object)
         default:
             throw WolfxError.invalidResponse(source: source)
         }
@@ -469,6 +494,144 @@ enum WolfxNormalizer {
         )
     }
 
+    private static func validatedScFjEew(_ value: Object, source: String) throws -> EEWEvent {
+        guard let eventID = nonEmptyString(value["EventID"]), eventID.count <= 64,
+              let serial = positiveInteger(value["ReportNum"]),
+              let originRaw = string(value["OriginTime"]),
+              let origin = parseCstDateTime(originRaw),
+              let reportRaw = string(value["ReportTime"]),
+              let report = parseCstDateTime(reportRaw),
+              milliseconds(report) >= milliseconds(origin),
+              let hypocenter = nonEmptyString(value["HypoCenter"]),
+              let latitude = finiteJSONNumber(value["Latitude"]), (-90...90).contains(latitude),
+              let longitude = finiteJSONNumber(value["Longitude"]), (-180...180).contains(longitude),
+              let magnitude = finiteJSONNumber(value["Magunitude"]),
+              (minimumMagnitude...maximumMagnitude).contains(magnitude) else {
+            throw WolfxError.invalidResponse(source: source)
+        }
+        let depth = finiteJSONNumber(value["Depth"])
+        if let depth, !(0...maximumDepthKm).contains(depth) {
+            throw WolfxError.invalidResponse(source: source)
+        }
+        let intensity = finiteJSONNumber(value["MaxIntensity"])
+        return EEWEvent(
+            id: "\(source):\(eventID)",
+            sourceId: source,
+            eventId: eventID,
+            serial: serial,
+            kind: "eew",
+            originTimeUtc: iso8601(origin, offsetHours: 8),
+            reportTimeUtc: iso8601(report, offsetHours: 8),
+            hypocenter: hypocenter,
+            latitude: latitude,
+            longitude: longitude,
+            magnitude: magnitude,
+            depth: depth,
+            maxIntensity: intensity.map { String(format: "%.1f", $0) },
+            isWarn: true,
+            isFinal: strictBoolean(value["isFinal"]) ?? false,
+            isCancel: false,
+            isTraining: false,
+            tsunami: nil
+        )
+    }
+
+    private static func validatedCencCqEew(_ value: Object, source: String) throws -> EEWEvent {
+        guard let eventID = nonEmptyString(value["EventID"]), eventID.count <= 64,
+              let serial = positiveInteger(value["ReportNum"]),
+              let originRaw = string(value["OriginTime"]),
+              let origin = parseCstDateTime(originRaw),
+              let reportRaw = string(value["ReportTime"]),
+              let report = parseCstDateTime(reportRaw),
+              milliseconds(report) >= milliseconds(origin),
+              let hypocenter = nonEmptyString(value["HypoCenter"]),
+              let latitude = finiteJSONNumber(value["Latitude"]), (-90...90).contains(latitude),
+              let longitude = finiteJSONNumber(value["Longitude"]), (-180...180).contains(longitude),
+              let magnitude = finiteJSONNumber(value["Magnitude"]),
+              (minimumMagnitude...maximumMagnitude).contains(magnitude),
+              let depth = finiteJSONNumber(value["Depth"]),
+              (0...maximumDepthKm).contains(depth) else {
+            throw WolfxError.invalidResponse(source: source)
+        }
+        let intensity = finiteJSONNumber(value["MaxIntensity"])
+        return EEWEvent(
+            id: "\(source):\(eventID)",
+            sourceId: source,
+            eventId: eventID,
+            serial: serial,
+            kind: "eew",
+            originTimeUtc: iso8601(origin, offsetHours: 8),
+            reportTimeUtc: iso8601(report, offsetHours: 8),
+            hypocenter: hypocenter,
+            latitude: latitude,
+            longitude: longitude,
+            magnitude: magnitude,
+            depth: depth,
+            maxIntensity: intensity.map { String(format: "%.1f", $0) },
+            isWarn: true,
+            isFinal: false,
+            isCancel: false,
+            isTraining: false,
+            tsunami: nil
+        )
+    }
+
+    private static func validatedCencEqlist(_ value: Object) throws -> [EEWEvent] {
+        guard let md5 = string(value["md5"]),
+              md5.wholeMatch(of: /[0-9a-f]{32}/) != nil else {
+            throw WolfxError.invalidResponse(source: "cenc_eqlist")
+        }
+        let ranked = rankedEntries(value)
+        let rankedKeys = value.keys.filter { $0.hasPrefix("No") }
+        guard !ranked.isEmpty,
+              ranked.count <= 50,
+              rankedKeys.count == ranked.count,
+              ranked.enumerated().allSatisfy({ index, item in item.rank == index + 1 }) else {
+            throw WolfxError.invalidResponse(source: "cenc_eqlist")
+        }
+        return try ranked.map { try validatedCencEqlistEntry($0.entry) }
+    }
+
+    private static func validatedCencEqlistEntry(_ value: Object) throws -> EEWEvent {
+        guard let eventID = nonEmptyString(value["EventID"]), eventID.count <= 64,
+              let originRaw = string(value["time"]),
+              let origin = parseCstDateTime(originRaw),
+              let reportRaw = string(value["ReportTime"]),
+              let report = parseCstDateTime(reportRaw),
+              let hypocenter = nonEmptyString(value["placeName"]) ?? nonEmptyString(value["location"]),
+              let magnitude = canonicalDecimal(value["magnitude"]),
+              (minimumMagnitude...maximumMagnitude).contains(magnitude),
+              let latitude = canonicalDecimal(value["latitude"]), (-90...90).contains(latitude),
+              let longitude = canonicalDecimal(value["longitude"]), (-180...180).contains(longitude) else {
+            throw WolfxError.invalidResponse(source: "cenc_eqlist")
+        }
+        let reviewed = string(value["type"]) == "reviewed"
+        let depth = canonicalDecimal(value["depth"])
+        if let depth, !(0...maximumDepthKm).contains(depth) {
+            throw WolfxError.invalidResponse(source: "cenc_eqlist")
+        }
+        return EEWEvent(
+            id: "cenc_eqlist:\(eventID)",
+            sourceId: "cenc_eqlist",
+            eventId: eventID,
+            serial: reviewed ? 2 : 1,
+            kind: "report",
+            originTimeUtc: iso8601(origin, offsetHours: 8),
+            reportTimeUtc: iso8601(report, offsetHours: 8),
+            hypocenter: hypocenter,
+            latitude: latitude,
+            longitude: longitude,
+            magnitude: magnitude,
+            depth: depth,
+            maxIntensity: nonEmptyString(value["intensity"]),
+            isWarn: false,
+            isFinal: reviewed,
+            isCancel: false,
+            isTraining: false,
+            tsunami: nil
+        )
+    }
+
     private static func rankedEntries(_ object: Object) -> [(rank: Int, entry: Object)] {
         object.compactMap { key, value -> (Int, Object)? in
             guard key.wholeMatch(of: /No(?:[1-9]|[1-4]\d|50)/) != nil,
@@ -538,6 +701,16 @@ enum WolfxNormalizer {
 
     private static func parseEventID(_ raw: String) -> JmaCalendarParts? {
         guard let match = raw.wholeMatch(of: /([1-9]\d{3})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/) else {
+            return nil
+        }
+        return validatedParts(
+            year: Int(match.1), month: Int(match.2), day: Int(match.3),
+            hour: Int(match.4), minute: Int(match.5), second: Int(match.6)
+        )
+    }
+
+    private static func parseCstDateTime(_ raw: String) -> JmaCalendarParts? {
+        guard let match = raw.wholeMatch(of: /([1-9]\d{3})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/) else {
             return nil
         }
         return validatedParts(

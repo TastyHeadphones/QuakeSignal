@@ -24,6 +24,7 @@ struct SourceDisclaimerView: View {
                     .foregroundStyle(.secondary)
                 Link("disclaimer.source.jmaTerms", destination: Self.jmaTermsURL)
                 Link("disclaimer.source.publicDataLicense", destination: Self.publicDataLicenseURL)
+                Label("disclaimer.source.cenc", systemImage: "globe.asia.australia")
                 Label("disclaimer.source.usgs", systemImage: "globe.americas")
                 Label("disclaimer.source.emsc", systemImage: "globe.europe.africa")
                 Label("disclaimer.source.geonet", systemImage: "globe.asia.australia")
