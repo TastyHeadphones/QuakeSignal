@@ -504,12 +504,12 @@ async function expectFailure(t, options, expression) {
 
 test("the checked-in public Release contract is coherent", async () => {
   const verified = await verifyIOSReleaseContract({ root: repositoryRoot });
-  assert.equal(verified.buildNumber, "19");
-  assert.deepEqual(verified.allowedBundleVersions, ["1", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "2", "3", "4", "5", "6", "7", "8", "9"]);
+  assert.equal(verified.buildNumber, "20");
+  assert.deepEqual(verified.allowedBundleVersions, ["1", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "2", "20", "3", "4", "5", "6", "7", "8", "9"]);
   assert.deepEqual(verified.appIdentityRoutes, reviewedAppIdentityRoutes);
   assert.equal(
     verified.appAttestPolicyFingerprint,
-    "sha256:Xi7-P7lRuHwf80Mr3C88xKbRoUX7ncvel4-aDvKwisM",
+    "sha256:8_djuZ9IjD-ODoULY8ztcGJFZJ7tOxWiThhtqpdIMYQ",
   );
 });
 
@@ -1349,10 +1349,10 @@ test("fails closed on source/version drift", async (t) => {
     );
   });
   await expectFailure(t, {
-    buildNumber: "19",
-    allowedVersions: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19",
+    buildNumber: "20",
+    allowedVersions: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20",
     workflowDefault: "7",
-  }, /build_number default 7 does not match ios\/project\.yml 19/i);
+  }, /build_number default 7 does not match ios\/project\.yml 20/i);
 });
 
 test("fails closed when the remote smoke changes origin or executable command", async (t) => {
@@ -1845,10 +1845,10 @@ test("fails closed when Worker validation omits the historical APNs incident gua
 });
 
 test("fails closed when a JSONC comment impersonates the Worker allow-list", async (t) => {
-  await withFixture(t, { workerConfigSuffix: "\n// \"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS\": \"1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19\"" }, async (root) => {
+  await withFixture(t, { workerConfigSuffix: "\n// \"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS\": \"1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20\"" }, async (root) => {
     const path = join(root, "backend/cloudflare/wrangler.jsonc");
     const contents = await readFile(path, "utf8");
-    await writeFile(path, contents.replace('    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19",\n', ""), "utf8");
+    await writeFile(path, contents.replace('    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20",\n', ""), "utf8");
     await assert.rejects(verifyIOSReleaseContract({ root }), /must be defined exactly once outside comments/i);
   });
 });

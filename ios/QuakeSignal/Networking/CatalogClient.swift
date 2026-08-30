@@ -236,18 +236,20 @@ enum CatalogNormalizer {
             let millis = number > 1_000_000_000_000 ? number : number * 1_000
             return ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: millis / 1_000))
         }
-        if let text = value as? String, let parsed = ISO8601DateFormatter().date(from: text)
-            ?? fractionalISO8601.date(from: text) {
+        if let text = value as? String, let parsed = parseISO8601(text) {
             return ISO8601DateFormatter().string(from: parsed)
         }
         return nil
     }
 
-    private static let fractionalISO8601: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
+    private static func parseISO8601(_ value: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: value) {
+            return date
+        }
+        return ISO8601DateFormatter().date(from: value)
+    }
 
     private static func finiteNumber(_ value: Any?) -> Double? {
         if let number = value as? NSNumber {
