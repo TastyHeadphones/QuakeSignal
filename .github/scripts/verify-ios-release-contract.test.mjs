@@ -1462,6 +1462,7 @@ test("fails closed when the public archive drifts from reviewed Release argument
 });
 
 test("fails closed when a post-smoke step can alter the signed artifact sequence", async (t) => {
+  const marker = "      - name: Remove signing material\n        if: always()\n";
   for (const overwrite of [
     "        run: xcodebuild archive -configuration InternalQA -archivePath \"$RUNNER_TEMP/QuakeSignal.xcarchive\"\n",
     "        run: tool=xcodebuild; \"$tool\" archive -configuration InternalQA -archivePath \"$RUNNER_TEMP/QuakeSignal.xcarchive\"\n",
@@ -1469,14 +1470,16 @@ test("fails closed when a post-smoke step can alter the signed artifact sequence
   ]) {
     await withFixture(t, {}, async (root) => {
       const path = join(root, ".github/workflows/ios.yml");
+      const source = await readFile(path, "utf8");
+      if (!source.includes(marker)) throw new Error("fixture could not locate testflight cleanup step");
       await writeFile(
         path,
-        `${await readFile(path, "utf8")}      - name: Overwrite signed archive\n${overwrite}`,
+        source.replace(marker, `      - name: Overwrite signed archive\n${overwrite}${marker}`),
         "utf8",
       );
       await assert.rejects(
         verifyIOSReleaseContract({ root }),
-        /post-remote signing sequence must match the reviewed fingerprint/i,
+        /post-remote signing sequence must match the reviewed fingerprint|release-job graph fingerprint/i,
       );
     });
   }
