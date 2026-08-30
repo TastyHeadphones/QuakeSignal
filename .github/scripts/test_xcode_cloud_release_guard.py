@@ -399,21 +399,24 @@ class GuardContextTests(unittest.TestCase):
             relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
             for relative in guard.PLATFORM_CAPABILITY_POLICY_PATHS
         }
-        self.assertEqual(guard.REQUIRED_WOLFX_SOURCES, ("jma_eew", "jma_eqlist"))
+        self.assertEqual(
+            guard.REQUIRED_WOLFX_SOURCES,
+            ("jma_eew", "jma_eqlist", "cenc_eew", "cenc_eqlist", "sc_eew", "fj_eew", "cq_eew"),
+        )
         guard.verify_jma_only_source_contract(sources)
 
         mutations = (
             (
                 "ios/QuakeSignal/Networking/WolfxClient.swift",
-                'static let sources = ["jma_eew", "jma_eqlist"]',
-                'static let sources = ["jma_eew", "jma_eqlist", "cenc_eew"]',
-                "disabled non-JMA feed surface",
+                "static let sources = EarthquakeSources.wolfx",
+                'static let sources = EarthquakeSources.wolfx + ["all_eew"]',
+                "WolfxClient.sources must be EarthquakeSources.wolfx",
             ),
             (
                 "ios/QuakeSignal/Networking/LiveSocketClient.swift",
                 'return ["query_jmaeew"]',
                 "return []",
-                "direct JMA WebSocket contract",
+                "direct Wolfx WebSocket contract",
             ),
             (
                 "ios/QuakeSignal/Networking/LiveSocketClient.swift",
@@ -1213,11 +1216,11 @@ class LiveWorkerContractTests(unittest.TestCase):
 
     def test_live_release_contract_rejects_stale_or_incomplete_legal_pages(self):
         for target_path, marker in (
-            ("/privacy", "QuakeSignal · Effective 22 August 2026"),
+            ("/privacy", "QuakeSignal · Effective 30 August 2026"),
             ("/privacy", "Only the app when running on an iPhone or iPad can register"),
             ("/privacy", "last successfully registered bounded alert area remains in use until the next foreground renewal"),
             ("/privacy", "without a fallback it attempts to delete the stale relay row"),
-            ("/privacy", "watches the jma_eew and jma_eqlist Wolfx feeds together with the USGS, EMSC, and GeoNet earthquake catalogs"),
+            ("/privacy", "watches the jma_eew, jma_eqlist, cenc_eew, cenc_eqlist, sc_eew, fj_eew, and cq_eew Wolfx feeds together with the USGS, EMSC, and GeoNet earthquake catalogs"),
             ("/privacy", "does not create an earthquake forecast or predict local intensity or arrival time"),
             ("/support", "support cannot identify the old registration from a public issue"),
             ("/support", "do not predict local intensity or arrival time"),

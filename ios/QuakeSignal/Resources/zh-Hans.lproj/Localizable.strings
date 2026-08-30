@@ -27,6 +27,10 @@
 "quake.intensity.label" = "最大烈度 %1$@";
 "quake.depth.label" = "深度 %1$@ 公里";
 "quake.source.jma" = "日本气象厅";
+"quake.source.cenc" = "中国地震台网";
+"quake.source.sc" = "四川地震局";
+"quake.source.fj" = "福建地震局";
+"quake.source.cq" = "重庆地震局";
 "quake.source.usgs" = "USGS";
 "quake.source.emsc" = "EMSC";
 "quake.source.geonet" = "GeoNet";
@@ -66,6 +70,11 @@
 "settings.section.sources" = "预警数据源";
 "settings.source.jma_eew" = "日本气象厅 — 地震预警";
 "settings.source.jma_eqlist" = "日本气象厅 — 地震速报";
+"settings.source.cenc_eew" = "中国地震台网 — 地震预警";
+"settings.source.cenc_eqlist" = "中国地震台网 — 地震速报";
+"settings.source.sc_eew" = "四川 — 地震预警";
+"settings.source.fj_eew" = "福建 — 地震预警";
+"settings.source.cq_eew" = "重庆 — 地震预警";
 "settings.source.usgs_eqlist" = "USGS — 地震速报";
 "settings.source.emsc_eqlist" = "EMSC — 地震速报";
 "settings.source.geonet_eqlist" = "GeoNet NZ — 地震速报";
@@ -271,8 +280,9 @@
 "disclaimer.badge" = "本应用非官方预警平台";
 "disclaimer.summary" = "日本气象厅信息由 Wolfx 中继。权威信息请以官方发布为准。信息可能存在延迟、缺失或误差。";
 "disclaimer.section.sources" = "数据来源";
-"disclaimer.source.wolfx" = "Wolfx Open API（日本气象厅数据中继）";
+"disclaimer.source.wolfx" = "Wolfx Open API（日本气象厅与中国地震台网数据中继）";
 "disclaimer.source.jma" = "日本气象厅公开地震信息";
+"disclaimer.source.cenc" = "中国地震台网（CENC）公开地震信息，含四川、福建、重庆预警，经 Wolfx 中继";
 "disclaimer.source.jmaAttribution" = "来源：日本气象厅（JMA）。内容经 QuakeSignal 规范化和编辑，并非由日本气象厅创建或认可。依据《公共数据使用条款 1.0》使用。";
 "disclaimer.source.jmaTerms" = "日本气象厅条款与来源说明";
 "disclaimer.source.publicDataLicense" = "公共数据使用条款 1.0";

@@ -27,6 +27,10 @@
 "quake.intensity.label" = "Max intensity %1$@";
 "quake.depth.label" = "Depth %1$@ km";
 "quake.source.jma" = "JMA";
+"quake.source.cenc" = "CENC";
+"quake.source.sc" = "Sichuan EQA";
+"quake.source.fj" = "Fujian EQA";
+"quake.source.cq" = "Chongqing EQA";
 "quake.source.usgs" = "USGS";
 "quake.source.emsc" = "EMSC";
 "quake.source.geonet" = "GeoNet";
@@ -66,6 +70,11 @@
 "settings.section.sources" = "Alert Sources";
 "settings.source.jma_eew" = "JMA — Early Warning";
 "settings.source.jma_eqlist" = "JMA — Earthquake Reports";
+"settings.source.cenc_eew" = "CENC — Early Warning";
+"settings.source.cenc_eqlist" = "CENC — Earthquake Reports";
+"settings.source.sc_eew" = "Sichuan — Early Warning";
+"settings.source.fj_eew" = "Fujian — Early Warning";
+"settings.source.cq_eew" = "Chongqing — Early Warning";
 "settings.source.usgs_eqlist" = "USGS — Earthquake Reports";
 "settings.source.emsc_eqlist" = "EMSC — Earthquake Reports";
 "settings.source.geonet_eqlist" = "GeoNet NZ — Earthquake Reports";
@@ -273,8 +282,9 @@
 "disclaimer.badge" = "Not an official warning platform";
 "disclaimer.summary" = "JMA information is relayed through Wolfx. Refer to official announcements for authoritative information. Data may be delayed, incomplete, or inaccurate.";
 "disclaimer.section.sources" = "Data Sources";
-"disclaimer.source.wolfx" = "Wolfx Open API (JMA data relay)";
+"disclaimer.source.wolfx" = "Wolfx Open API (JMA and CENC data relay)";
 "disclaimer.source.jma" = "JMA public earthquake information";
+"disclaimer.source.cenc" = "China Earthquake Networks Center (CENC) public earthquake information, including Sichuan, Fujian, and Chongqing early-warning feeds relayed via Wolfx";
 "disclaimer.source.jmaAttribution" = "Source: Japan Meteorological Agency (JMA). Normalized and edited by QuakeSignal; not created or endorsed by JMA. Used under Public Data License 1.0.";
 "disclaimer.source.jmaTerms" = "JMA terms and source notice";
 "disclaimer.source.publicDataLicense" = "Public Data License 1.0";

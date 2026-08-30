@@ -4431,16 +4431,24 @@ test("queued event validation requires strict numeric in-range coordinates", asy
   const event = message(1).event;
   assert.deepEqual(APNS_RELAY_SOURCES, [
     "jma_eew",
+    "cenc_eew",
+    "sc_eew",
+    "fj_eew",
+    "cq_eew",
     "jma_eqlist",
+    "cenc_eqlist",
     "usgs_eqlist",
     "emsc_eqlist",
     "geonet_eqlist",
   ]);
   assert.equal(isApnsRelaySource("jma_eew"), true);
   assert.equal(isApnsRelaySource("jma_eqlist"), true);
+  assert.equal(isApnsRelaySource("cenc_eew"), true);
+  assert.equal(isApnsRelaySource("cenc_eqlist"), true);
   assert.equal(isApnsRelaySource("usgs_eqlist"), true);
   assert.equal(isApnsRelaySource("emsc_eqlist"), true);
   assert.equal(isApnsRelaySource("geonet_eqlist"), true);
+  assert.deepEqual(APNS_RELAY_DISABLED_SOURCES, []);
   for (const sourceId of APNS_RELAY_DISABLED_SOURCES) {
     assert.equal(isApnsRelaySource(sourceId), false);
     assert.equal(
@@ -4470,7 +4478,7 @@ test("queued event validation requires strict numeric in-range coordinates", asy
           throw new Error("disabled delivery must stop before D1");
         },
       },
-      { ...event, id: "cenc_eew:example", sourceId: "cenc_eew" },
+      { ...event, id: "all_eew:example", sourceId: "all_eew" },
       "new",
       "unused",
       "disabled-source-delivery",
@@ -4511,16 +4519,16 @@ test("disabled sources stop before live journaling or HTTP recovery I/O", async 
     );
     const blockedEvent = {
       ...message(1).event,
-      id: "cenc_eew:example",
-      sourceId: "cenc_eew",
+      id: "all_eew:example",
+      sourceId: "all_eew",
     };
     await relay.enqueueLiveIngest(blockedEvent);
     assert.deepEqual(errors, [{
-      sourceId: "cenc_eew",
+      sourceId: "all_eew",
       outcome: "disabled_source_live_ingest_rejected",
     }]);
     assert.deepEqual(
-      await relay.seedHttpSource("cenc_eqlist", "recovery"),
+      await relay.seedHttpSource("all_eew", "recovery"),
       { completed: false, snapshotWorkStarted: false },
     );
     assert.equal(storageTouched, false);
@@ -7385,6 +7393,116 @@ test("training pushes obtain APNs authorization from the relay cache and fail cl
   }
 });
 
+test("a production training relay registration miss is repairable as device not found", async () => {
+  const { handleDeviceTestPush } = await workerModule();
+  const token = "abcdef0123456789".repeat(4);
+  const keyId = "production-app-attest-key";
+  const device = {
+    token,
+    environment: "production",
+    locale: null,
+    sources: '["jma_eew"]',
+    min_magnitude: 0,
+    critical_alerts_enabled: 0,
+    city_name: null,
+    latitude: null,
+    longitude: null,
+    radius_km: null,
+    include_test_alerts: 1,
+    utc_offset_minutes: null,
+    notify_at_night: 1,
+    app_attest_key_id: keyId,
+    registration_revision: "rev-1",
+    app_identity: "5TT564H883.com.quakesignal.app",
+    apns_topic: "com.quakesignal.app",
+    app_platform: "ios",
+    created_at: "2026-08-12T00:00:00.000Z",
+    updated_at: "2026-08-12T00:00:00.000Z",
+  };
+  const response = await handleDeviceTestPush(
+    new Request("https://quakesignal-api.example/v1/devices/test", { method: "POST" }),
+    {
+      APP_ATTEST_ENFORCEMENT: "required",
+      APNS_PRIVATE_KEY: "test-key",
+      APNS_KEY_ID: "ABCDEFGHIJ",
+      APNS_TEAM_ID: "ABCDEFGHIJ",
+      APNS_BUNDLE_ID: "com.quakesignal.app",
+      DB: {
+        prepare() {
+          return {
+            bind() {
+              return {
+                async first() {
+                  return device;
+                },
+              };
+            },
+          };
+        },
+        async batch() {
+          return [
+            { meta: { changes: 1 } },
+            { meta: { changes: 1 } },
+            { meta: { changes: 1 } },
+          ];
+        },
+      },
+      DEVICE_MUTATION_RATE_LIMIT: {
+        async limit() {
+          return { success: true };
+        },
+      },
+      RELAY: {
+        idFromName() {
+          return "global";
+        },
+        get() {
+          return {
+            async fetch() {
+              return Response.json(
+                { error: "production training registration changed" },
+                { status: 409 },
+              );
+            },
+          };
+        },
+      },
+    },
+    {
+      body: { token },
+      bytes: new TextEncoder().encode(JSON.stringify({ token })),
+    },
+    {
+      mode: "attested",
+      keyId,
+      environment: "production",
+      appRoute: {
+        appIdentity: "5TT564H883.com.quakesignal.app",
+        apnsTopic: "com.quakesignal.app",
+        platform: "ios",
+      },
+      challenge: {
+        id: "training-challenge",
+        keyId,
+        wireKeyId: `wire-${keyId}`,
+        challenge: "nonce-training-challenge",
+        operation: "test-push",
+        method: "POST",
+        path: "/v1/devices/test",
+        bodySha256: "body-training-challenge",
+        requiredProof: "assertion",
+      },
+      verification: {
+        proofType: "assertion",
+        signCount: 2,
+        metadata: null,
+      },
+    },
+  );
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "device not found" });
+});
+
 test("an undrained live-ingest journal immediately makes its source stale", async () => {
   const { isUpstreamSourceStale } = await workerModule();
   const now = Date.parse("2026-08-12T00:10:00.000Z");
@@ -7792,6 +7910,7 @@ test("shipped normalize-to-notify path maps Wolfx EEW and USGS/EMSC catalogs", a
     notificationReasonForEvent,
     normalizeJmaEew,
     normalizeCatalogGeoJSON,
+    normalizeCencCqEew,
   } = await workerModule();
   const nowMs = Date.parse("2026-08-30T03:00:00.000Z");
   const announced = new Date(nowMs);
@@ -7885,6 +8004,27 @@ test("shipped normalize-to-notify path maps Wolfx EEW and USGS/EMSC catalogs", a
   assert.equal(emscPayload.sourceId, "emsc_eqlist");
   assert.equal(emscPayload.aps.alert["title-loc-args"][0], "EMSC");
   assert.ok(emscPayload.aps.alert);
+
+  const cencEvent = normalizeCencCqEew({
+    ID: "b3i6pz76gqcyy",
+    EventID: "202607181347.0001",
+    ReportTime: "2026-07-18 13:47:20",
+    ReportNum: 1,
+    OriginTime: "2026-07-18 13:47:20",
+    HypoCenter: "Xinjiang",
+    Latitude: 38.747,
+    Longitude: 75.088,
+    Magnitude: 4.8,
+    Depth: 5,
+    MaxIntensity: 6.2,
+  }, "cenc_eew");
+  assert.equal(cencEvent.sourceId, "cenc_eew");
+  assert.equal(notificationReasonForEvent(cencEvent, null), "new");
+  const cencNowMs = Date.parse("2026-07-18T05:50:00.000Z");
+  const cencPayload = buildPushPayload(cencEvent, "new", "urgent-tone", cencNowMs);
+  assert.equal(cencPayload.sourceId, "cenc_eew");
+  assert.equal(cencPayload.aps.alert["title-loc-args"][0], "CENC");
+  assert.equal(cencPayload.aps["interruption-level"], "time-sensitive");
 });
 
 test("accepts only exact alert-sound registration identifiers and defaults old clients to system", async () => {
@@ -9058,15 +9198,10 @@ test("terminalizes pre-build-8 non-JMA Queue work without reaching APNs", async 
   assert.equal(rejected.status, 200);
   assert.equal(batches.length, 1);
   assert.match(batches[0][0].sql, /terminal_reason = COALESCE\(terminal_reason, 'superseded'\)/);
-  assert.match(
-    batches[0][0].sql,
-    /substr\(event_ref, 1, instr\(event_ref, ':'\) - 1\) IN/,
-    "the authoritative rollover predicate extracts an exact source ID",
-  );
-  for (const source of ["sc_eew", "cenc_eew", "fj_eew", "cq_eew", "cenc_eqlist"]) {
-    assert.match(batches[0][0].sql, new RegExp(`'${source}'`));
+  assert.match(batches[0][0].sql, /AND 0/, "no Wolfx earthquake feed is source-policy-disabled");
+  for (const source of ["sc_eew", "cenc_eew", "fj_eew", "cq_eew", "cenc_eqlist", "jma_eew", "jma_eqlist"]) {
+    assert.doesNotMatch(batches[0][0].sql, new RegExp(`'${source}'`));
   }
-  assert.doesNotMatch(batches[0][0].sql, /'jma_(?:eew|eqlist)'/);
 
   const relayPaths = [];
   let acknowledged = 0;
@@ -9096,9 +9231,12 @@ test("terminalizes pre-build-8 non-JMA Queue work without reaching APNs", async 
       },
     },
   );
-  assert.deepEqual(relayPaths, ["/outbox/source-policy/reject"]);
-  assert.equal(acknowledged, 1);
-  assert.equal(retried, 0);
+  assert.equal(
+    relayPaths.includes("/outbox/source-policy/reject"),
+    false,
+    "CENC Queue work must not be discarded as a disabled source",
+  );
+  assert.ok(relayPaths.includes("/deliver"));
 });
 
 test("D1-unavailable DLQ persistence is acknowledged only after token-free Durable Object fallback", async () => {

@@ -1,8 +1,11 @@
 import {
   extractEqlistEntries,
   normalizeCatalogGeoJSON,
+  normalizeCencCqEew,
+  normalizeCencEqlistEntry,
   normalizeJmaEew,
   normalizeJmaEqlistEntry,
+  normalizeScFjEew,
 } from "../../src/alerts/normalize";
 import {
   CATALOG_HTTP_URLS,
@@ -32,13 +35,19 @@ export {
   notificationReasonForEvent,
   reconcileEventRevision,
   normalizeCatalogGeoJSON,
+  normalizeCencCqEew,
+  normalizeCencEqlistEntry,
   normalizeJmaEew,
+  normalizeScFjEew,
 };
 import {
   isHeartbeat,
   isPong,
+  type CencCqEewMessage,
+  type CencEqlistEntry,
   type JmaEewMessage,
   type JmaEqlistEntry,
+  type ScFjEewMessage,
   type WolfxEqlistMessage,
   type WolfxSourceId,
 } from "../../src/types/wolfx";
@@ -203,22 +212,21 @@ const HTTP_BASE = "https://api.wolfx.jp";
  */
 export const APNS_RELAY_EEW_SOURCES = [
   "jma_eew",
+  "cenc_eew",
+  "sc_eew",
+  "fj_eew",
+  "cq_eew",
 ] as const satisfies readonly WolfxSourceId[];
 const APNS_RELAY_REPORT_SOURCES = [
   "jma_eqlist",
+  "cenc_eqlist",
   ...CATALOG_SOURCE_IDS,
 ] as const satisfies readonly WolfxSourceId[];
 export const APNS_RELAY_SOURCES = [
   ...APNS_RELAY_EEW_SOURCES,
   ...APNS_RELAY_REPORT_SOURCES,
 ] as const satisfies readonly WolfxSourceId[];
-export const APNS_RELAY_DISABLED_SOURCES = [
-  "sc_eew",
-  "cenc_eew",
-  "fj_eew",
-  "cq_eew",
-  "cenc_eqlist",
-] as const satisfies readonly WolfxSourceId[];
+export const APNS_RELAY_DISABLED_SOURCES = [] as const satisfies readonly WolfxSourceId[];
 type ApnsRelaySourceId = (typeof APNS_RELAY_SOURCES)[number];
 
 export function isApnsRelaySource(value: unknown): value is ApnsRelaySourceId {
@@ -236,8 +244,35 @@ function isDisabledApnsRelaySource(value: unknown): value is WolfxSourceId {
     (APNS_RELAY_DISABLED_SOURCES as readonly string[]).includes(value);
 }
 
-const UPSTREAM_ROUTES = ["jma_eew", "jma_eqlist"] as const;
+const UPSTREAM_ROUTES = [
+  "jma_eew",
+  "jma_eqlist",
+  "cenc_eew",
+  "cenc_eqlist",
+  "sc_eew",
+  "fj_eew",
+  "cq_eew",
+] as const;
 type UpstreamRoute = (typeof UPSTREAM_ROUTES)[number];
+
+function wolfxQueryForRoute(route: UpstreamRoute): string {
+  switch (route) {
+    case "jma_eew":
+      return "query_jmaeew";
+    case "jma_eqlist":
+      return "query_jmaeqlist";
+    case "sc_eew":
+      return "query_sceew";
+    case "cenc_eew":
+      return "query_cenceew";
+    case "fj_eew":
+      return "query_fjeew";
+    case "cq_eew":
+      return "query_cqeew";
+    case "cenc_eqlist":
+      return "query_cenceqlist";
+  }
+}
 interface UpstreamDataReadinessCandidate {
   socket: WebSocket;
   durableIntentRecorded: boolean;
@@ -273,6 +308,9 @@ const DELAYED_TRAINING_TEST_PUSH_DELAY_MS =
 const DELAYED_TRAINING_TEST_PUSH_MAX_LATE_SECONDS = 30;
 const DELAYED_TRAINING_TEST_PUSH_MAX_LATE_MS =
   DELAYED_TRAINING_TEST_PUSH_MAX_LATE_SECONDS * 1_000;
+// Immediate Send Test Alert shares the relay serial lane with live fan-out.
+// Give it enough time to wait, unlike the delayed-scheduler lateness window.
+const IMMEDIATE_TRAINING_TEST_PUSH_DEADLINE_MS = 120_000;
 const DELAYED_TRAINING_TEST_PUSH_STORAGE_KEY =
   "delayed-training-test-push:v1";
 const TRAINING_TEST_EVENT_ID = "test:0";
@@ -2525,12 +2563,25 @@ function normalizeMessages(
       return extractEqlistEntries<JmaEqlistEntry>(
         message as WolfxEqlistMessage,
       ).map(({ entry }) => normalizeJmaEqlistEntry(entry));
+    case "sc_eew":
+    case "fj_eew":
+      return "EventID" in message
+        ? [normalizeScFjEew(message as ScFjEewMessage, sourceId)]
+        : [];
+    case "cenc_eew":
+    case "cq_eew":
+      return "EventID" in message
+        ? [normalizeCencCqEew(message as CencCqEewMessage, sourceId)]
+        : [];
+    case "cenc_eqlist":
+      return extractEqlistEntries<CencEqlistEntry>(
+        message as WolfxEqlistMessage,
+      ).map(({ entry }) => normalizeCencEqlistEntry(entry));
     case "usgs_eqlist":
     case "emsc_eqlist":
     case "geonet_eqlist":
       return normalizeCatalogGeoJSON(sourceId, message);
     default:
-      // Disabled Wolfx provincial feeds stay fail-closed for APNs delivery.
       return [];
   }
 }
@@ -4429,6 +4480,16 @@ export async function cachedApnsAuthorizationFromRelay(env: Env): Promise<string
   return authorization;
 }
 
+class ProductionTrainingRelayError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ProductionTrainingRelayError";
+    this.status = status;
+  }
+}
+
 async function productionTrainingPushThroughRelay(
   env: Env,
   device: RoutedDeviceRecord,
@@ -4456,6 +4517,22 @@ async function productionTrainingPushThroughRelay(
     },
   ));
   const body: unknown = await response.json().catch(() => null);
+  const errorMessage =
+    body && typeof body === "object" && !Array.isArray(body) &&
+      typeof (body as { error?: unknown }).error === "string"
+      ? (body as { error: string }).error
+      : null;
+  if (
+    response.status === 404 ||
+    response.status === 409 ||
+    response.status === 403 ||
+    response.status === 503
+  ) {
+    throw new ProductionTrainingRelayError(
+      response.status,
+      errorMessage ?? "production training delivery failed",
+    );
+  }
   const result = body && typeof body === "object" && !Array.isArray(body) &&
       Object.hasOwn(body, "result")
     ? (body as { result?: unknown }).result
@@ -4466,7 +4543,10 @@ async function productionTrainingPushThroughRelay(
     !(typeof (result as { apnsId?: unknown }).apnsId === "string" ||
       (result as { apnsId?: unknown }).apnsId === null)
   ) {
-    throw new Error("production training relay returned an invalid result");
+    throw new ProductionTrainingRelayError(
+      502,
+      "test alert could not be delivered",
+    );
   }
   return result as ApnsDeliveryResult;
 }
@@ -9501,13 +9581,7 @@ export class QuakeRelay {
              AND acknowledged_at_utc IS NULL
              AND final_status IS NULL
              AND instr(event_ref, ':') > 1
-             AND substr(event_ref, 1, instr(event_ref, ':') - 1) IN (
-               'sc_eew',
-               'cenc_eew',
-               'fj_eew',
-               'cq_eew',
-               'cenc_eqlist'
-             )`,
+             AND 0`,
         )
         .bind(now, outboxId),
       this.env.DB
@@ -10985,10 +11059,7 @@ export class QuakeRelay {
     // accept the Upgrade and immediately close; freshness and reconnect
     // recovery begin only after a later valid Wolfx message reaches the
     // listener below.
-    const queries = route === "jma_eew"
-      ? ["query_jmaeew"]
-      : ["query_jmaeqlist"];
-    for (const query of queries) socket.send(query);
+    socket.send(wolfxQueryForRoute(route));
   }
 
   private rejectUpstreamFrame(
@@ -15052,7 +15123,7 @@ export async function handleDeviceTestPush(
           env,
           device,
           "immediate",
-          new Date(Date.now() + DELAYED_TRAINING_TEST_PUSH_MAX_LATE_MS)
+          new Date(Date.now() + IMMEDIATE_TRAINING_TEST_PUSH_DEADLINE_MS)
             .toISOString(),
           await apnsCollapseID(event),
         )
@@ -15066,6 +15137,9 @@ export async function handleDeviceTestPush(
         );
     if (!result.ok) {
       logApnsFailure(event, "training", deviceTokenHash, result);
+      if (result.deactivated || result.terminalInvalidToken || result.terminalUnregistration) {
+        return json({ error: "device not found" }, 404, noStoreHeaders());
+      }
       return json(
         { error: "test alert could not be delivered" },
         502,
@@ -15073,6 +15147,12 @@ export async function handleDeviceTestPush(
       );
     }
   } catch (error) {
+    if (error instanceof ProductionTrainingRelayError) {
+      if (error.status === 409 || error.status === 404) {
+        return json({ error: "device not found" }, 404, noStoreHeaders());
+      }
+      return json({ error: error.message }, error.status, noStoreHeaders());
+    }
     logApnsException(event, "training", deviceTokenHash, error);
     return json(
       { error: "test alert could not be delivered" },
@@ -15124,7 +15204,7 @@ async function handleRequest(
         },
         {
           heading: "Data we process",
-          body: "If you enable alert registration on an iPhone or iPad, the service stores the APNs device token, app locale, selected JMA feed types, magnitude threshold, alert preferences (including the exact alert-sound identifier and a test-alert preference), alert radius, optional selected-city label, registration timestamps, a fresh opaque registration revision, and one approximate coordinate on a 0.1° grid. The opaque revision lets a stale APNs response act only on the exact registration snapshot that was sent. That coordinate is derived from either the selected city's coordinate or the most recent current-device location that the app successfully registered while open; neither an exact GPS fix nor an unrounded selected-city coordinate is sent. While the app is inactive, its last successfully registered bounded alert area remains in use until the next foreground renewal, removal, or retention cleanup. To prevent fraudulent subscription changes, the service also stores an opaque Apple App Attest key identifier, public verification key, attestation receipt, monotonic assertion counter, and integrity timestamps; newer Apple proofs may additionally carry the app build version and distribution category. QuakeSignal does not require an account, name, email address, contacts, photos, or advertising identifier for this registration.",
+          body: "If you enable alert registration on an iPhone or iPad, the service stores the APNs device token, app locale, selected earthquake feed types, magnitude threshold, alert preferences (including the exact alert-sound identifier and a test-alert preference), alert radius, optional selected-city label, registration timestamps, a fresh opaque registration revision, and one approximate coordinate on a 0.1° grid. The opaque revision lets a stale APNs response act only on the exact registration snapshot that was sent. That coordinate is derived from either the selected city's coordinate or the most recent current-device location that the app successfully registered while open; neither an exact GPS fix nor an unrounded selected-city coordinate is sent. While the app is inactive, its last successfully registered bounded alert area remains in use until the next foreground renewal, removal, or retention cleanup. To prevent fraudulent subscription changes, the service also stores an opaque Apple App Attest key identifier, public verification key, attestation receipt, monotonic assertion counter, and integrity timestamps; newer Apple proofs may additionally carry the app build version and distribution category. QuakeSignal does not require an account, name, email address, contacts, photos, or advertising identifier for this registration.",
         },
         {
           heading: "Data kept on your device",
@@ -15132,7 +15212,7 @@ async function handleRequest(
         },
         {
           heading: "How data is used",
-          body: "The iPhone/iPad subscription data is used only to secure the notification service, apply your selected JMA feed type, magnitude, and radius filters to JMA-issued information relayed through Wolfx, send the requested Apple Push Notification, and investigate bounded delivery failures. A short-lived alert-lifecycle record lets a final or cancellation reach a current registration when APNs accepted the earlier active warning or a crash left provider acceptance unknowable, even if revised magnitude or location estimates no longer match; neither evidence kind proves display, and the current registration must still select that JMA feed. Before routing every public request—including this page, root, health, OPTIONS, disabled endpoints, and normalized unmatched paths—the Worker derives a route-scoped SHA-256 pseudonym from Cloudflare's authenticated client-IP header for a per-location counter that admits at most 60 requests per 60 seconds for that normalized method/route family; a missing or malformed header shares one bounded fallback bucket. Only admitted requests consume the separate 300-per-minute route-wide circuit breaker, so one client cannot consume more than 60 of that route budget. QuakeSignal never writes the raw IP or this pseudonym to D1 or application logs, although Cloudflare may separately process ordinary request/security metadata under its own policies. These filters control relay delivery and presentation only; QuakeSignal does not forecast earthquakes or predict local intensity or arrival time. Location is not used for advertising, profiling, or sale.",
+          body: "The iPhone/iPad subscription data is used only to secure the notification service, apply your selected earthquake feed type, magnitude, and radius filters to source-issued information relayed through Wolfx, send the requested Apple Push Notification, and investigate bounded delivery failures. A short-lived alert-lifecycle record lets a final or cancellation reach a current registration when APNs accepted the earlier active warning or a crash left provider acceptance unknowable, even if revised magnitude or location estimates no longer match; neither evidence kind proves display, and the current registration must still select that earthquake feed. Before routing every public request—including this page, root, health, OPTIONS, disabled endpoints, and normalized unmatched paths—the Worker derives a route-scoped SHA-256 pseudonym from Cloudflare's authenticated client-IP header for a per-location counter that admits at most 60 requests per 60 seconds for that normalized method/route family; a missing or malformed header shares one bounded fallback bucket. Only admitted requests consume the separate 300-per-minute route-wide circuit breaker, so one client cannot consume more than 60 of that route budget. QuakeSignal never writes the raw IP or this pseudonym to D1 or application logs, although Cloudflare may separately process ordinary request/security metadata under its own policies. These filters control relay delivery and presentation only; QuakeSignal does not forecast earthquakes or predict local intensity or arrival time. Location is not used for advertising, profiling, or sale.",
         },
         {
           heading: "Storage and deletion",
@@ -15148,14 +15228,14 @@ async function handleRequest(
         },
         {
           heading: "Third-party services",
-          body: "Clients fetch earthquake information from the Wolfx Open API for JMA early-warning and report feeds and from the USGS, EMSC, and GeoNet public earthquake catalogs, which receive ordinary connection metadata such as an IP address under their own policies. Full-interface Apple clients also use Apple Maps and system Location Services when those features are used; Apple handles associated service data under its own policies, while QuakeSignal does not include the exact location in those earthquake requests or its relay. Cloudflare hosts these public pages and may process ordinary web-request and security metadata. Cloudflare D1, Apple Push Notification service, and Apple App Attest are used for app data only on opted-in iPhone/iPad alerts: Cloudflare stores subscriptions, verifies proofs, watches the jma_eew and jma_eqlist Wolfx feeds together with the USGS, EMSC, and GeoNet earthquake catalogs, filters and presents the relayed source-issued information, and requests delivery through APNs. The relay does not create an earthquake forecast or predict local intensity or arrival time. The App Attest private key never leaves the iPhone or iPad. Following the public GitHub support link is subject to GitHub's policies.",
+          body: "Clients fetch earthquake information from the Wolfx Open API for JMA and CENC early-warning and report feeds, including Sichuan, Fujian, and Chongqing early-warning feeds, and from the USGS, EMSC, and GeoNet public earthquake catalogs, which receive ordinary connection metadata such as an IP address under their own policies. Full-interface Apple clients also use Apple Maps and system Location Services when those features are used; Apple handles associated service data under its own policies, while QuakeSignal does not include the exact location in those earthquake requests or its relay. Cloudflare hosts these public pages and may process ordinary web-request and security metadata. Cloudflare D1, Apple Push Notification service, and Apple App Attest are used for app data only on opted-in iPhone/iPad alerts: Cloudflare stores subscriptions, verifies proofs, watches the jma_eew, jma_eqlist, cenc_eew, cenc_eqlist, sc_eew, fj_eew, and cq_eew Wolfx feeds together with the USGS, EMSC, and GeoNet earthquake catalogs, filters and presents the relayed source-issued information, and requests delivery through APNs. The relay does not create an earthquake forecast or predict local intensity or arrival time. The App Attest private key never leaves the iPhone or iPad. Following the public GitHub support link is subject to GitHub's policies.",
         },
         {
           heading: "Safety notice",
           body: "QuakeSignal is not an official government warning platform. Data and notifications can be delayed, incomplete, or inaccurate. Follow official announcements and local emergency instructions.",
         },
       ],
-      "22 August 2026",
+      "30 August 2026",
     );
   }
   if (url.pathname === "/terms" && request.method === "GET") {
@@ -15189,7 +15269,7 @@ async function handleRequest(
       [
         {
           heading: "iPhone and iPad alerts",
-          body: "For opted-in background alerts, confirm that alert registration is enabled in QuakeSignal, notifications are allowed in system Settings, the selected JMA feed type and magnitude/radius filters match the issued report, and the device has a working network connection. If you use Current Location for radius filtering, also confirm location access. These settings filter relayed JMA-issued information; they do not predict local intensity or arrival time. Focus modes, system settings, and device state can delay or suppress delivery; Time Sensitive notifications remain under user and system control and are not Critical Alerts.",
+          body: "For opted-in background alerts, confirm that alert registration is enabled in QuakeSignal, notifications are allowed in system Settings, the selected earthquake feed type and magnitude/radius filters match the issued report, and the device has a working network connection. If you use Current Location for radius filtering, also confirm location access. These settings filter relayed source-issued information; they do not predict local intensity or arrival time. Focus modes, system settings, and device state can delay or suppress delivery; Time Sensitive notifications remain under user and system control and are not Critical Alerts.",
         },
         {
           heading: "Foreground-only Apple experiences",
@@ -15208,7 +15288,7 @@ async function handleRequest(
           body: "Open a GitHub issue with the app version and build, exact platform and operating-system version, language, selected data source, expected result, and what happened. Redact screenshots before posting. Never include an APNs device token, App Attest proof, exact address or GPS coordinate, family contact details, or other private information.",
         },
       ],
-      "20 August 2026",
+      "30 August 2026",
     );
   }
   if (
