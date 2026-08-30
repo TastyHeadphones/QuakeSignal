@@ -27,6 +27,9 @@
 "quake.intensity.label" = "最大烈度 %1$@";
 "quake.depth.label" = "深度 %1$@ 公里";
 "quake.source.jma" = "日本气象厅";
+"quake.source.usgs" = "USGS";
+"quake.source.emsc" = "EMSC";
+"quake.source.geonet" = "GeoNet";
 
 /* Full-screen alert */
 "alert.badge.new" = "地震预警";
@@ -63,7 +66,10 @@
 "settings.section.sources" = "预警数据源";
 "settings.source.jma_eew" = "日本气象厅 — 地震预警";
 "settings.source.jma_eqlist" = "日本气象厅 — 地震速报";
-"settings.sources.minimum" = "请至少启用一个日本气象厅提醒来源。";
+"settings.source.usgs_eqlist" = "USGS — 地震速报";
+"settings.source.emsc_eqlist" = "EMSC — 地震速报";
+"settings.source.geonet_eqlist" = "GeoNet NZ — 地震速报";
+"settings.sources.minimum" = "请至少启用一个提醒来源。";
 "settings.section.threshold" = "最小震级";
 "settings.section.notifications" = "通知";
 "settings.openNotificationSettings" = "检查通知设置";
@@ -270,6 +276,9 @@
 "disclaimer.source.jmaAttribution" = "来源：日本气象厅（JMA）。内容经 QuakeSignal 规范化和编辑，并非由日本气象厅创建或认可。依据《公共数据使用条款 1.0》使用。";
 "disclaimer.source.jmaTerms" = "日本气象厅条款与来源说明";
 "disclaimer.source.publicDataLicense" = "公共数据使用条款 1.0";
+"disclaimer.source.usgs" = "美国地质调查局地震灾害计划（公有领域）";
+"disclaimer.source.emsc" = "EMSC / 欧洲地中海地震中心";
+"disclaimer.source.geonet" = "新西兰 GeoNet（CC BY 3.0）";
 "disclaimer.notOfficial" = "本应用不是官方政府地震预警平台，不替代官方权威信息。";
 "disclaimer.mayBeDelayed" = "信息可能延迟、不完整或不准确，请以官方发布与当地应急指示为准。";
 "disclaimer.deliveryNotGuaranteed" = "通知送达取决于操作系统、网络状况与设备设置，无法保证秒级到达。";

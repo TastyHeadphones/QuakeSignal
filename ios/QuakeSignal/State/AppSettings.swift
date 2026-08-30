@@ -56,7 +56,7 @@ final class AppSettings {
     /// Build 8's reviewed source-rights boundary. Keep settings and direct
     /// foreground fetches on the same allow-list so a stale preference cannot
     /// silently restore an unreviewed upstream feed.
-    static let allSources = WolfxClient.sources
+    static let allSources = EarthquakeSources.all
     static let radiusTiersKm: [Double] = [50, 100, 300, 500]
     static let magnitudeTiers: [Double] = [3, 4, 5, 6]
 
@@ -96,7 +96,7 @@ final class AppSettings {
                 ? (previousReviewedSources.isEmpty ? Set(Self.allSources) : previousReviewedSources)
                 : reviewedSources
             if enabledSources != normalizedSources {
-                // At least one reviewed JMA source is required by both the
+                // At least one reviewed alert source is required by both the
                 // foreground policy and protected registration contract.
                 isNormalizingSources = true
                 enabledSources = normalizedSources

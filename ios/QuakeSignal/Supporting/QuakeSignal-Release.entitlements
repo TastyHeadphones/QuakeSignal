@@ -8,5 +8,7 @@
 	<string>production</string>
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
+	<key>com.apple.developer.usernotifications.critical-alerts</key>
+	<true/>
 </dict>
 </plist>

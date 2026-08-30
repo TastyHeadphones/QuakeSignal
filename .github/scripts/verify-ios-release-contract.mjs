@@ -36,6 +36,7 @@ const contractFiles = {
     "ios/QuakeSignal/Features/Settings/SettingsView.swift",
     "ios/QuakeSignal/Models/EEWEvent.swift",
     "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
+    "ios/QuakeSignal/Networking/CatalogClient.swift",
     "ios/QuakeSignal/Networking/LiveSocketClient.swift",
     "ios/QuakeSignal/Networking/WolfxClient.swift",
     "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
@@ -268,6 +269,7 @@ const RELEASE_ALERT_ENTITLEMENTS = {
   "aps-environment": "production",
   "com.apple.developer.devicecheck.appattest-environment": "production",
   "com.apple.developer.usernotifications.time-sensitive": true,
+  "com.apple.developer.usernotifications.critical-alerts": true,
 };
 const RELEASE_CATALYST_ENTITLEMENTS = {
   "com.apple.security.app-sandbox": true,
@@ -412,23 +414,23 @@ const CLOUDFLARE_DEPLOY_PRODUCTION_HEADER = {
 // alongside its tests; an unreviewed sibling job, extra post-smoke step, or
 // edited signing/upload action fails before release automation can use
 // credentials.
-const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:NbhOb48m74yYiBCFWmVPCkc9aK9BTQvM3p7FDbYHtKg";
-const WORKFLOW_JOBS_FINGERPRINT = "sha256:TrLja6O7553qTXHvPwntD-IHYDrlwVOmRpUSr9LSF3U";
-const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:9WOjxQCAHRKjESUc5bbgDAKrz0ESFEgn8DLWHmPuAe8";
-const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:EFSSyDdv6gsU_dXqA66-at9gF7PZiAz9v0zj0QTTDME";
+const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:Y-FvcOHoVtAUSOJ4jMspeE-5y4Ls68Ek0wnV9y1axa4";
+const WORKFLOW_JOBS_FINGERPRINT = "sha256:gQFP-qDmeThO6s1DSV0oWsasAP61Rj__xktOujejCpw";
+const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:4KWll5tSB9bZ8zwK06hQsTUbAIk2g4PSV1zT9r4tSMw";
+const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:_xm4Kj9ApSDDyaY247D0hbIpSZs4vvV7Cg44tc9_Azs";
 const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:eZXAGoApcqbQaWSpzr4Mt6WBRlPNDwEf6SwYXXYlTME";
 const SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT = "sha256:dEPzJS5uvYmQZI9d6CpECUvzkOhjfj_ydwiWqrj3ZQM";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
-const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:l5lzZIupRuzl7aWa-nZjZlJBX1Fdu5MU_3iM1DI6_ug";
+const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:VMClBpMExodh9JcvzyZxcwX0JfluS2P_vRtn57YMpqg";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
-const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:me50_vIN9GTPsZq8znFefH6hzGl6UIptomau-hYCSqk";
-const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:78mjLbawQ7Q7JQrnyWoQhJRkyI51xH_jJbyATpZg_To";
+const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:V2v9lIX-VlWRFi9UbR3vnOF2Aujs1ynrTd2KQO8Fmvo";
+const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:_QpkVw0MV5dH-UGIwV9wywbYd0ZkUyhtq8U9VR356dc";
 const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:jW4JzW6f1y2Ku66tQU-j36SF3beYFVGEzxbwEdUoq18";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
-const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:q925tdUIvaCW4xzxI74yx8tjkQlauv1DVRwoYtcmm7k";
-const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:lrTwom4rCjrSa2BoAQfqxEagWvWMMjauuviBL6PETdQ";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:j-Ol79VCsgEaHD1EVCcqeHlHthrdGdARgQrIgalYPjs";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:5jCJM3Vzl5j_8Zq-VSG9HhEtFcqRnt28uaHVgVknUgw";
+const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:cO2ENhTA7zn3vOC5ngwX8otw3NzOqYN96tt5QeYbzpM";
+const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:jCCA3qyBaxQK93q2IiT7KjcLD680bxLEXTWZhY2XwiA";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:-6J2VySZxeKhgX4pzujOm90-U__oM88LMqx0hIly3i8";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:GGw9dK8Klnk9hW6uEDpyB3Mvxpe7AR_JwGKt7ed-FWc";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:RnWenLvputtku5X6DOfdXrJflYePVPa0uaTthrBGxwI";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";

@@ -2721,6 +2721,9 @@ test("coalesces concurrent HTTP recovery sweeps without durable lease or cursor 
     relay.statuses.set(source, source === "jma_eqlist" ? "error" : "open");
     relay.lastSuccessfulUpstreamMs.set(source, Date.now());
   }
+  for (const source of ["usgs_eqlist", "emsc_eqlist", "geonet_eqlist"]) {
+    relay.lastSuccessfulHttpPollMs.set(source, Date.now());
+  }
   let release;
   const gate = new Promise((resolve) => {
     release = resolve;
@@ -2833,7 +2836,7 @@ test("a legacy sweep lease fences the low-write recovery scheduler during rollin
 });
 
 test("rotates recovery sweep fairness in memory and treats a silent open socket as degraded", async () => {
-  const { QuakeRelay } = await workerModule();
+  const { QuakeRelay, APNS_RELAY_SOURCES } = await workerModule();
   const state = {
     storage: {
       async get() { return undefined; },
@@ -2842,7 +2845,7 @@ test("rotates recovery sweep fairness in memory and treats a silent open socket 
     waitUntil() {},
   };
   const relay = new QuakeRelay(state, {});
-  const sources = ["jma_eew", "jma_eqlist"];
+  const sources = [...APNS_RELAY_SOURCES];
   for (const source of sources) relay.statuses.set(source, "error");
 
   assert.deepEqual(relay.recoverySweepSources(0), sources);
@@ -2852,7 +2855,7 @@ test("rotates recovery sweep fairness in memory and treats a silent open socket 
     "each minute starts at the next source without a durable recovery cursor",
   );
   assert.deepEqual(
-    relay.recoverySweepSources(2 * 60_000),
+    relay.recoverySweepSources(sources.length * 60_000),
     sources,
     "the fair source order wraps after every source receives first position",
   );
@@ -2920,6 +2923,9 @@ test("a due HTTP recovery sweep writes no polling rows and reserves the fallback
   ]) {
     relay.statuses.set(source, source === "jma_eqlist" ? "error" : "open");
     relay.lastSuccessfulUpstreamMs.set(source, now);
+  }
+  for (const source of ["usgs_eqlist", "emsc_eqlist", "geonet_eqlist"]) {
+    relay.lastSuccessfulHttpPollMs.set(source, now);
   }
   relay.reconcileDlqPersistenceFallbacks = async () => maintenance.push("dlq");
   relay.migrateLegacyPendingDeliveries = async () => maintenance.push("legacy");
@@ -4423,9 +4429,18 @@ test("queued event validation requires strict numeric in-range coordinates", asy
     isQueuedEvent,
   } = await workerModule();
   const event = message(1).event;
-  assert.deepEqual(APNS_RELAY_SOURCES, ["jma_eew", "jma_eqlist"]);
+  assert.deepEqual(APNS_RELAY_SOURCES, [
+    "jma_eew",
+    "jma_eqlist",
+    "usgs_eqlist",
+    "emsc_eqlist",
+    "geonet_eqlist",
+  ]);
   assert.equal(isApnsRelaySource("jma_eew"), true);
   assert.equal(isApnsRelaySource("jma_eqlist"), true);
+  assert.equal(isApnsRelaySource("usgs_eqlist"), true);
+  assert.equal(isApnsRelaySource("emsc_eqlist"), true);
+  assert.equal(isApnsRelaySource("geonet_eqlist"), true);
   for (const sourceId of APNS_RELAY_DISABLED_SOURCES) {
     assert.equal(isApnsRelaySource(sourceId), false);
     assert.equal(
@@ -5099,6 +5114,9 @@ test("health reports HTTP polling as ready only while every fallback source is f
     "cq_eew",
     "cenc_eqlist",
     "jma_eqlist",
+    "usgs_eqlist",
+    "emsc_eqlist",
+    "geonet_eqlist",
   ]) {
     values.set(`upstream-last-http-success-ms:${source}`, now);
   }
@@ -5201,6 +5219,9 @@ test("health status reads the fallback marker without Durable Object writes", as
   ]) {
     relay.statuses.set(source, "open");
     relay.lastSuccessfulUpstreamMs.set(source, now);
+  }
+  for (const source of ["usgs_eqlist", "emsc_eqlist", "geonet_eqlist"]) {
+    relay.lastSuccessfulHttpPollMs.set(source, now);
   }
 
   for (const storedFallbackActive of [true, false]) {
@@ -7707,8 +7728,8 @@ test("builds bounded typed APNs snapshots and reserves custom Time Sensitive sou
     ["japanese-voice", "quakesignal_japanese_voice.caf"],
   ]) {
     const payload = buildPushPayload(warning, "new", alertSound, nowMs);
-    assert.equal(payload.aps.sound, expectedFile);
-    assert.equal(payload.aps["interruption-level"], "time-sensitive");
+    assert.deepEqual(payload.aps.sound, { critical: 1, name: expectedFile, volume: 1.0 });
+    assert.equal(payload.aps["interruption-level"], "critical");
     assert.deepEqual(payload.event, expectedSnapshot);
     assert.deepEqual(JSON.parse(JSON.stringify(payload)).event, expectedSnapshot);
     assert.equal(payload.eventId, warning.eventId, "legacy payload fields remain available");
@@ -7780,7 +7801,7 @@ test("accepts only exact alert-sound registration identifiers and defaults old c
   };
   const legacy = validatedRegistrationValues(registration);
   assert.equal(legacy.alertSound, "system");
-  assert.deepEqual(JSON.parse(legacy.sources), ["jma_eew", "jma_eqlist"]);
+  assert.deepEqual(JSON.parse(legacy.sources), [...APNS_RELAY_SOURCES]);
   for (const invalidToken of [
     "0123456789abcde",
     "0123456789ABCDEf",
@@ -7813,7 +7834,7 @@ test("accepts only exact alert-sound registration identifiers and defaults old c
     sources: ["jma_eew", "jma_eqlist"],
   });
   assert.ok(!(jmaOnly instanceof Response));
-  assert.deepEqual(JSON.parse(jmaOnly.sources), APNS_RELAY_SOURCES);
+  assert.deepEqual(JSON.parse(jmaOnly.sources), ["jma_eew", "jma_eqlist"]);
   const registrationCapture = capturedStatementDatabase();
   registrationStatement(
     registrationCapture.database,

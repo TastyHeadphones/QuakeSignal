@@ -27,6 +27,9 @@
 "quake.intensity.label" = "Max intensity %1$@";
 "quake.depth.label" = "Depth %1$@ km";
 "quake.source.jma" = "JMA";
+"quake.source.usgs" = "USGS";
+"quake.source.emsc" = "EMSC";
+"quake.source.geonet" = "GeoNet";
 
 /* Full-screen alert */
 "alert.badge.new" = "EARTHQUAKE EARLY WARNING";
@@ -63,7 +66,10 @@
 "settings.section.sources" = "Alert Sources";
 "settings.source.jma_eew" = "JMA — Early Warning";
 "settings.source.jma_eqlist" = "JMA — Earthquake Reports";
-"settings.sources.minimum" = "Keep at least one JMA alert source enabled.";
+"settings.source.usgs_eqlist" = "USGS — Earthquake Reports";
+"settings.source.emsc_eqlist" = "EMSC — Earthquake Reports";
+"settings.source.geonet_eqlist" = "GeoNet NZ — Earthquake Reports";
+"settings.sources.minimum" = "Keep at least one alert source enabled.";
 "settings.section.threshold" = "Minimum Magnitude";
 "settings.section.notifications" = "Notifications";
 "settings.openNotificationSettings" = "Review Notification Settings";
@@ -272,6 +278,9 @@
 "disclaimer.source.jmaAttribution" = "Source: Japan Meteorological Agency (JMA). Normalized and edited by QuakeSignal; not created or endorsed by JMA. Used under Public Data License 1.0.";
 "disclaimer.source.jmaTerms" = "JMA terms and source notice";
 "disclaimer.source.publicDataLicense" = "Public Data License 1.0";
+"disclaimer.source.usgs" = "USGS Earthquake Hazards Program (public domain)";
+"disclaimer.source.emsc" = "EMSC / European-Mediterranean Seismological Centre";
+"disclaimer.source.geonet" = "GeoNet New Zealand (CC BY 3.0)";
 "disclaimer.notOfficial" = "QuakeSignal is not an official government earthquake warning platform and does not replace official authoritative information.";
 "disclaimer.mayBeDelayed" = "Information may be delayed, incomplete, or inaccurate — always follow official announcements and local emergency instructions.";
 "disclaimer.deliveryNotGuaranteed" = "Notification delivery depends on the operating system, network conditions, and device settings, and cannot be guaranteed to arrive within seconds.";

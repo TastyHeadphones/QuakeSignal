@@ -47,12 +47,13 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         }
         let center = UNUserNotificationCenter.current()
         do {
-            // The backend marks genuinely current warnings as time-sensitive.
-            // iOS 26 uses the signed time-sensitive entitlement instead of a
-            // separate permission option; people still control that behavior
-            // in the system notification settings. Critical Alerts remain
-            // intentionally unsupported.
-            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            // Genuine current EEW warnings are Apple emergency alerts
+            // (`interruption-level: critical`). Request Critical Alerts only
+            // on the iPhone/iPad relay surface; Time Sensitive remains the
+            // entitlement fallback if Apple has not granted Critical Alerts.
+            let granted = try await center.requestAuthorization(
+                options: [.alert, .sound, .badge, .criticalAlert]
+            )
             await refreshAuthorizationStatusAsync()
             return granted
         } catch {

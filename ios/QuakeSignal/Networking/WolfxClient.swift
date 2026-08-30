@@ -28,9 +28,10 @@ struct WolfxSnapshotFetchResult: Sendable {
         guard !failedSources.isEmpty else { return nil }
         let unavailable = failedSources.joined(separator: ", ")
         if successfulSourceCount == 0 {
-            return "Wolfx snapshot unavailable; affected sources: \(unavailable)."
+            return "Earthquake snapshot unavailable; affected sources: \(unavailable)."
         }
-        return "Updated from \(successfulSourceCount) of \(WolfxClient.sources.count) Wolfx sources; unavailable: \(unavailable)."
+        let total = successfulSourceCount + failedSources.count
+        return "Updated from \(successfulSourceCount) of \(total) sources; unavailable: \(unavailable)."
     }
 
     static func aggregate(

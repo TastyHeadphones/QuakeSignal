@@ -78,7 +78,7 @@ export const LEGAL_PAGE_CONTRACTS = [
       "SHA-256 APNs-token hash, synthetic training event/outbox references",
       "a crash releases it after 60 seconds without claiming APNs acceptance",
       "A resolved marker becomes eligible for deletion 14 days after admission",
-      "watches only the jma_eew and jma_eqlist Wolfx feeds",
+      "watches the jma_eew and jma_eqlist Wolfx feeds together with the USGS, EMSC, and GeoNet earthquake catalogs",
       "does not create an earthquake forecast or predict local intensity or arrival time",
     ],
   },

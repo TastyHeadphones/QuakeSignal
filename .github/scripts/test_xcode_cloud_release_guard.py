@@ -459,7 +459,7 @@ class GuardContextTests(unittest.TestCase):
             ),
             (
                 "ios/QuakeSignal/State/AppSettings.swift",
-                "static let allSources = WolfxClient.sources",
+                "static let allSources = EarthquakeSources.all",
                 'static let allSources = ["jma_eew"]',
                 "AppSettings",
             ),
@@ -482,7 +482,7 @@ class GuardContextTests(unittest.TestCase):
         mutations = (
             (
                 "ios/QuakeSignal/Notifications/PushPayload.swift",
-                "WolfxClient.sources.contains($0) ? $0 : nil",
+                "EarthquakeSources.all.contains($0) ? $0 : nil",
                 "$0",
                 "strictly typed",
             ),
@@ -501,7 +501,8 @@ class GuardContextTests(unittest.TestCase):
             (
                 "ios/QuakeSignal/Notifications/PushPayload.swift",
                 '(sourceID == "jma_eew" && kind == "eew") ||\n'
-                '                (sourceID == "jma_eqlist" && kind == "report"),',
+                '                (sourceID == "jma_eqlist" && kind == "report") ||\n'
+                '                (EarthquakeSources.isCatalog(sourceID) && kind == "report"),',
                 "true,",
                 "strictly typed",
             ),
@@ -1216,7 +1217,7 @@ class LiveWorkerContractTests(unittest.TestCase):
             ("/privacy", "Only the app when running on an iPhone or iPad can register"),
             ("/privacy", "last successfully registered bounded alert area remains in use until the next foreground renewal"),
             ("/privacy", "without a fallback it attempts to delete the stale relay row"),
-            ("/privacy", "watches only the jma_eew and jma_eqlist Wolfx feeds"),
+            ("/privacy", "watches the jma_eew and jma_eqlist Wolfx feeds together with the USGS, EMSC, and GeoNet earthquake catalogs"),
             ("/privacy", "does not create an earthquake forecast or predict local intensity or arrival time"),
             ("/support", "support cannot identify the old registration from a public issue"),
             ("/support", "do not predict local intensity or arrival time"),

@@ -47,7 +47,7 @@ final class WolfxHTTPFetchPacingTests: XCTestCase {
         XCTAssertEqual(result.events.last?.serial, 2)
         XCTAssertEqual(
             result.statusDescription,
-            "Updated from 1 of 2 Wolfx sources; unavailable: jma_eqlist."
+            "Updated from 1 of 2 sources; unavailable: jma_eqlist."
         )
     }
 

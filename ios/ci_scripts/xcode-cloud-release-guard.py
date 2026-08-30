@@ -21,19 +21,19 @@ from urllib.parse import urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
-BUILD_NUMBER = "19"
+BUILD_NUMBER = "20"
 MARKETING_VERSION = "1.2"
 TEAM_ID = "5TT564H883"
 RELEASE_REF = "refs/heads/main"
-RELEASE_WORKFLOW = "QuakeSignal 1.2 (19) Native Release"
+RELEASE_WORKFLOW = "QuakeSignal 1.2 (20) Native Release"
 PRODUCT_NAME = "QuakeSignal"
 WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev"
 VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open."
 MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
-APP_ATTEST_FINGERPRINT = "sha256:Xi7-P7lRuHwf80Mr3C88xKbRoUX7ncvel4-aDvKwisM"
-XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:NQbr8STIwB03Xz83_brpUz6c6FbOAHIlI-RoW0cSCHs"
+APP_ATTEST_FINGERPRINT = "sha256:8_djuZ9IjD-ODoULY8ztcGJFZJ7tOxWiThhtqpdIMYQ"
+XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:ed4a8WYD1jf9VTxuObdvuGeNP70mIvG2xHJ1NQdMaIg"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
-PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:me50_vIN9GTPsZq8znFefH6hzGl6UIptomau-hYCSqk"
+PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:V2v9lIX-VlWRFi9UbR3vnOF2Aujs1ynrTd2KQO8Fmvo"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
 MAX_RESPONSE_BYTES = 1024 * 1024
 READINESS_TIMEOUT_SECONDS = 180.0
@@ -90,6 +90,7 @@ PLATFORM_CAPABILITY_POLICY_PATHS = (
     "ios/QuakeSignal/Features/Settings/SettingsView.swift",
     "ios/QuakeSignal/Models/EEWEvent.swift",
     "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
+    "ios/QuakeSignal/Networking/CatalogClient.swift",
     "ios/QuakeSignal/Networking/LiveSocketClient.swift",
     "ios/QuakeSignal/Networking/WolfxClient.swift",
     "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
@@ -137,6 +138,7 @@ RELEASE_ALERT_ENTITLEMENTS = {
     "aps-environment": "production",
     "com.apple.developer.devicecheck.appattest-environment": "production",
     "com.apple.developer.usernotifications.time-sensitive": True,
+    "com.apple.developer.usernotifications.critical-alerts": True,
 }
 RELEASE_CATALYST_ENTITLEMENTS = {
     "com.apple.security.app-sandbox": True,
@@ -187,7 +189,7 @@ LEGAL_PAGE_CONTRACTS = (
             "delivery-failure token hashes become eligible for deletion after 14 days",
             "next successful daily cleanup",
             "operational cleanup failure can delay deletion",
-            "watches only the jma_eew and jma_eqlist Wolfx feeds",
+            "watches the jma_eew and jma_eqlist Wolfx feeds together with the USGS, EMSC, and GeoNet earthquake catalogs",
             "does not create an earthquake forecast or predict local intensity or arrival time",
         ),
     },
@@ -846,6 +848,7 @@ def verify_jma_only_source_contract(sources: Mapping[str, str]) -> None:
     required_paths = {
         "ios/QuakeSignal/Features/List/QuakeListView.swift",
         "ios/QuakeSignal/Features/Settings/SourceDisclaimerView.swift",
+        "ios/QuakeSignal/Networking/CatalogClient.swift",
         "ios/QuakeSignal/Networking/LiveSocketClient.swift",
         "ios/QuakeSignal/Networking/WolfxClient.swift",
         "ios/QuakeSignal/Notifications/PushPayload.swift",
@@ -912,8 +915,11 @@ def verify_jma_only_source_contract(sources: Mapping[str, str]) -> None:
                 "JMA EEW validation must require the raw Serial field and preserve "
                 f"its exact value; missing marker {marker!r}."
             )
-    if settings.count("static let allSources = WolfxClient.sources") != 1:
-        fail("AppSettings must derive its selectable sources from WolfxClient.sources.")
+    if settings.count("static let allSources = EarthquakeSources.all") != 1:
+        fail("AppSettings must derive its selectable sources from EarthquakeSources.all.")
+    catalog = sources["ios/QuakeSignal/Networking/CatalogClient.swift"]
+    if catalog.count('static let catalog = ["usgs_eqlist", "emsc_eqlist", "geonet_eqlist"]') != 1:
+        fail("CatalogClient must enable USGS, EMSC, and GeoNet report sources.")
 
 
 def verify_foreground_push_presentation_contract(sources: Mapping[str, str]) -> None:
@@ -926,7 +932,7 @@ def verify_foreground_push_presentation_contract(sources: Mapping[str, str]) -> 
 
     payload_markers = (
         'Self.nonEmptyString(userInfo["sourceId"]).flatMap {',
-        "WolfxClient.sources.contains($0) ? $0 : nil",
+        "EarthquakeSources.all.contains($0) ? $0 : nil",
         "Self.isStructurallyUsable(",
         "event.sourceId == sourceID,",
         "event.eventId == eventID,",
@@ -940,7 +946,8 @@ def verify_foreground_push_presentation_contract(sources: Mapping[str, str]) -> 
         "Self.legacyRevisionKey(",
         'let kind = nonEmptyString(userInfo["kind"]),',
         '(sourceID == "jma_eew" && kind == "eew") ||\n'
-        '                (sourceID == "jma_eqlist" && kind == "report"),',
+        '                (sourceID == "jma_eqlist" && kind == "report") ||\n'
+        '                (EarthquakeSources.isCatalog(sourceID) && kind == "report"),',
         'let serial = nonnegativeInteger(userInfo["serial"]),',
         'let isWarning = strictBoolean(userInfo["isWarn"]),',
         'let isFinal = strictBoolean(userInfo["isFinal"]),',
