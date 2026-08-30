@@ -223,7 +223,7 @@ jobs:
 
             const capabilities = await api(
               'GET',
-              `/v1/bundleIds/${encodeURIComponent(bundle.id)}/bundleIdCapabilities?limit=200`,
+              `/v1/bundleIds/${encodeURIComponent(bundle.id)}/bundleIdCapabilities`,
             );
             if (capabilities.status !== 200) {
               throw new Error(`listing capabilities failed (${capabilities.status}): ${JSON.stringify(capabilities.json)}`);
@@ -258,7 +258,7 @@ jobs:
 
             const refreshed = await api(
               'GET',
-              `/v1/bundleIds/${encodeURIComponent(bundle.id)}/bundleIdCapabilities?limit=200`,
+              `/v1/bundleIds/${encodeURIComponent(bundle.id)}/bundleIdCapabilities`,
             );
             const refreshedTypes = (refreshed.json.data || [])
               .map((item) => item.attributes?.capabilityType)
