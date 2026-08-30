@@ -218,11 +218,11 @@
 "status.training" = "訓練";
 
 /* タブ */
-"tab.list" = "一覧";
+"tab.list" = "報告";
 "tab.guide" = "ガイド";
 
 /* 一覧タブ */
-"map.title.list" = "地震一覧";
+"map.title.list" = "報告";
 "list.region.all" = "全部";
 "list.empty.title" = "該当する地震がありません";
 "list.empty.detail" = "選択した範囲と条件に一致する地震記録がありません。条件を調整してください。";

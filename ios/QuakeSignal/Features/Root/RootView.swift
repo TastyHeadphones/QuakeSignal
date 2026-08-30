@@ -4,14 +4,6 @@ import CryptoKit
 import UIKit
 #endif
 
-private enum RootTab: Hashable {
-    case home
-    case reports
-    case map
-    case guide
-    case settings
-}
-
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var store = QuakeStore.shared
@@ -22,10 +14,10 @@ struct RootView: View {
     @State private var needsPushRegistration = false
     @State private var showingUnavailableAlert = false
     @AppStorage("onboarding.completed") private var hasCompletedOnboarding = false
-    @State private var selectedTab: RootTab
+    @State private var selectedTab: NativeUITab
 
     init() {
-        let initialTab: RootTab = switch ScreenshotAutomation.rootDestination(
+        let initialTab: NativeUITab = switch ScreenshotAutomation.rootDestination(
             for: ScreenshotAutomation.selectedFrame
         ) {
         case .home: .home
@@ -37,6 +29,17 @@ struct RootView: View {
         _selectedTab = State(initialValue: initialTab)
     }
 
+    @ViewBuilder
+    private func nativeTabRoot(_ tab: NativeUITab) -> some View {
+        switch tab {
+        case .home: HomeView()
+        case .reports: QuakeListView()
+        case .map: EpicenterMapView()
+        case .guide: DisasterGuideView()
+        case .settings: SettingsView()
+        }
+    }
+
     var body: some View {
         @Bindable var store = store
 
@@ -44,23 +47,14 @@ struct RootView: View {
             Group {
                 if hasCompletedOnboarding || ScreenshotAutomation.isEnabled {
                     TabView(selection: $selectedTab) {
-                        HomeView()
-                            .tabItem { Label("tab.home", systemImage: "waveform.path.ecg") }
-                            .tag(RootTab.home)
-                        QuakeListView()
-                            .tabItem { Label("tab.list", systemImage: "list.bullet") }
-                            .tag(RootTab.reports)
-                        EpicenterMapView()
-                            .tabItem { Label("tab.map", systemImage: "map") }
-                            .tag(RootTab.map)
-                        DisasterGuideView()
-                            .tabItem { Label("tab.guide", systemImage: "cross.case") }
-                            .tag(RootTab.guide)
-                        SettingsView()
-                            .tabItem { Label("tab.settings", systemImage: "gearshape") }
-                            .tag(RootTab.settings)
+                        ForEach(NativeUINavigation.rootTabs) { tab in
+                            nativeTabRoot(tab)
+                                .tabItem { Label(LocalizedStringKey(tab.titleKey), systemImage: tab.systemImage) }
+                                .tag(tab)
+                        }
                     }
                     .tint(Color("BrandColor"))
+                    .environment(\.nativeUITabSelection, $selectedTab)
                     .frame(width: geometry.size.width, height: geometry.size.height)
                 } else {
                     OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)

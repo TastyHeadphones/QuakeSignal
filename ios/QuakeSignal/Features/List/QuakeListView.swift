@@ -37,7 +37,7 @@ struct QuakeListView: View {
                     }
                 }
             }
-            .navigationTitle("map.title.list")
+            .navigationTitle("tab.list")
             .navigationDestination(for: EEWEvent.self) { event in
                 QuakeDetailView(event: event)
             }
@@ -94,8 +94,8 @@ private struct FilterChip: View {
             .padding(.horizontal, chipHorizontalPadding)
             .padding(.vertical, chipVerticalPadding)
             .frame(minWidth: minimumHitTarget, minHeight: minimumHitTarget)
-            .background(Capsule().fill(isSelected ? Color("BrandColor") : Color("CardColor")))
-            .foregroundStyle(isSelected ? .white : .primary)
+            .background(Capsule().fill(isSelected ? Color.primary : Color.primary.opacity(0.07)))
+            .foregroundStyle(isSelected ? Color("GroupedBGColor") : Color.primary)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
