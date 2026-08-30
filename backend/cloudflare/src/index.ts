@@ -220,6 +220,11 @@ export function isApnsRelaySource(value: unknown): value is ApnsRelaySourceId {
     (APNS_RELAY_SOURCES as readonly string[]).includes(value);
 }
 
+function isUpstreamRoute(value: unknown): value is UpstreamRoute {
+  return typeof value === "string" &&
+    (UPSTREAM_ROUTES as readonly string[]).includes(value);
+}
+
 function isDisabledApnsRelaySource(value: unknown): value is WolfxSourceId {
   return typeof value === "string" &&
     (APNS_RELAY_DISABLED_SOURCES as readonly string[]).includes(value);
@@ -8574,6 +8579,7 @@ export class QuakeRelay {
 
   private async repairPendingLiveSnapshotSlots(): Promise<void> {
     for (const source of APNS_RELAY_REPORT_SOURCES) {
+      if (!isLiveSnapshotSource(source)) continue;
       await this.liveSnapshotDrain(source, async () => {
         await this.readAndRepairLiveSnapshotSlots(source);
       });
@@ -11269,7 +11275,7 @@ export class QuakeRelay {
     expectedReadySocket?: WebSocket,
   ): Promise<boolean> {
     return this.serializeFreshnessUpdate(`websocket:${source}`, async () => {
-      const route = isApnsRelaySource(source) ? source : null;
+      const route = isUpstreamRoute(source) ? source : null;
       if (
         expectedReadySocket &&
         (
@@ -11322,7 +11328,7 @@ export class QuakeRelay {
   private async markSourceSuccessfulAndPublishReadiness(
     source: WolfxSourceId,
   ): Promise<void> {
-    const route = isApnsRelaySource(source) ? source : null;
+    const route = isUpstreamRoute(source) ? source : null;
     const candidate = route === null
       ? null
       : this.validatedUpstreamDataSockets.get(route) ?? null;
