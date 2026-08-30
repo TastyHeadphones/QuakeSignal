@@ -26,6 +26,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
 
       - name: Validate skill structure and metadata
         shell: bash
@@ -88,3 +95,6 @@ jobs:
               print("\n".join(failures), file=sys.stderr)
               sys.exit(1)
           PY
+
+      - name: Validate reviewed workflow inventory
+        run: node .github/scripts/verify-ios-release-contract.mjs
