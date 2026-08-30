@@ -3,6 +3,7 @@ import CoreLocation
 
 struct HomeView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.nativeUITabSelection) private var selectedTab
     @State private var store = QuakeStore.shared
     @State private var settings = AppSettings.shared
     @State private var locationManager = LocationManager.shared
@@ -49,7 +50,7 @@ struct HomeView: View {
                             Spacer(minLength: 16)
                         }
 
-                        QuickActionsRow(showingCityPicker: $showingCityPicker)
+                        QuickActionsRow(showingCityPicker: $showingCityPicker, selectedTab: selectedTab)
 
                         Text("shared.disclaimer")
                             .font(.caption2)
@@ -121,40 +122,28 @@ private struct StatusCardView: View {
     let coordinate: CLLocationCoordinate2D?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: symbolName)
-                    .foregroundStyle(coordinate == nil ? .orange : bannerState.color)
+        HStack(alignment: .center, spacing: 14) {
+            StatusRipple(color: coordinate == nil ? Color.orange : bannerState.color)
+            VStack(alignment: .leading, spacing: 4) {
                 Text(titleKey)
-                    .font(.headline)
-                Spacer()
+                    .font(.title3.weight(.semibold))
+                Text(detailText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
-            Text(detailText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color("CardColor")))
+        .nativeGlassCard(cornerRadius: NativeGlass.heroRadius)
         .padding(.horizontal)
     }
 
-    private var symbolName: String {
-        if coordinate == nil { return "location.slash.fill" }
-        switch bannerState {
-        case .normal: return "checkmark.circle.fill"
-        case .caution: return "exclamationmark.circle.fill"
-        case .alert: return "exclamationmark.triangle.fill"
-        }
-    }
-
     private var titleKey: LocalizedStringKey {
-        if coordinate == nil { return "home.status.locationRequired" }
-        switch bannerState {
-        case .normal: return "home.status.normal"
-        case .caution: return "home.status.caution"
-        case .alert: return "home.status.alert"
+        if coordinate == nil {
+            return "home.status.locationRequired"
         }
+        return LocalizedStringKey(NativeStatusHeroMapping.titleKey(for: bannerState))
     }
 
     private var detailText: String {
@@ -246,11 +235,26 @@ private struct LatestQuakeCardView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
             .tint(Color("BrandColor"))
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color("CardColor")))
+        .nativeGlassCard()
         .padding(.horizontal)
+    }
+}
+
+private struct StatusRipple: View {
+    let color: Color
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(color.opacity(0.16), lineWidth: 2).frame(width: 54, height: 54)
+            Circle().stroke(color.opacity(0.28), lineWidth: 2).frame(width: 34, height: 34)
+            Circle().fill(color).frame(width: 14, height: 14)
+        }
+        .frame(width: 72, height: 72)
+        .accessibilityHidden(true)
     }
 }
 
@@ -271,30 +275,27 @@ private struct DetailFieldRow: View {
 
 private struct QuickActionsRow: View {
     @Binding var showingCityPicker: Bool
+    var selectedTab: Binding<NativeUITab>?
 
     var body: some View {
-        HStack(spacing: 12) {
-            QuickActionButton(labelKey: "home.action.nearby", systemImage: "location.circle") {
-                showingCityPicker = true
+        HStack(spacing: 8) {
+            ForEach(NativeUIQuickAction.allCases, id: \.self) { action in
+                QuickActionButton(
+                    labelKey: LocalizedStringKey(action.titleKey),
+                    systemImage: action.systemImage
+                ) {
+                    switch action.destination {
+                    case .cityPicker:
+                        showingCityPicker = true
+                    case .notifications:
+                        selectedTab?.wrappedValue = .settings
+                    case .map:
+                        selectedTab?.wrappedValue = .map
+                    default:
+                        break
+                    }
+                }
             }
-            NavigationLink {
-                EpicenterMapView()
-            } label: {
-                QuickActionButtonLabel(labelKey: "tab.map", systemImage: "map")
-            }
-            .buttonStyle(.plain)
-            NavigationLink {
-                DisasterGuideView()
-            } label: {
-                QuickActionButtonLabel(labelKey: "tab.guide", systemImage: "cross.case")
-            }
-            .buttonStyle(.plain)
-            NavigationLink {
-                SettingsView()
-            } label: {
-                QuickActionButtonLabel(labelKey: "home.action.notify", systemImage: "bell")
-            }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal)
     }
@@ -324,10 +325,10 @@ private struct QuickActionButtonLabel: View {
             Text(labelKey)
                 .font(.caption2)
         }
-        .foregroundStyle(Color("BrandColor"))
+        .foregroundStyle(Color.primary)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color("CardColor")))
+        .nativeGlassCard(cornerRadius: NativeGlass.groupedRadius)
     }
 }
 
@@ -354,7 +355,7 @@ private struct InlineBanner: View {
             Spacer()
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color("CardColor")))
+        .nativeGlassCard(cornerRadius: NativeGlass.groupedRadius)
         .padding(.horizontal)
     }
 }

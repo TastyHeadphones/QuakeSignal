@@ -346,7 +346,10 @@ class GuardContextTests(unittest.TestCase):
         mutated = dict(sources)
         path = "ios/QuakeSignal/App/PlatformCapabilities.swift"
         self.assertIn(path, guard.PLATFORM_CAPABILITY_POLICY_PATHS)
-        mutated[path] = mutated[path].replace("#elseif os(visionOS)\n        false", "#elseif os(visionOS)\n        true")
+        mutated[path] = mutated[path].replace(
+            "#elseif os(visionOS)\n        return .vision",
+            "#elseif os(visionOS)\n        return .iPhone",
+        )
         self.assertNotEqual(mutated[path], sources[path])
         with self.assertRaisesRegex(guard.ReleaseGuardError, "platform capability policy fingerprint"):
             guard.verify_platform_capabilities_sources(mutated)

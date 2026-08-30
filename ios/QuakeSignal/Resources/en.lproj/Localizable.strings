@@ -219,11 +219,12 @@
 "status.training" = "Training";
 
 /* Tabs */
-"tab.list" = "List";
+"tab.list" = "Reports";
 "tab.guide" = "Guide";
+"settings.foregroundAlerts" = "Foreground alerts";
 
 /* List tab */
-"map.title.list" = "Earthquake List";
+"map.title.list" = "Reports";
 "list.region.all" = "All";
 "list.empty.title" = "No matching earthquakes";
 "list.empty.detail" = "No earthquake records match the selected range and filters. Try adjusting them.";
