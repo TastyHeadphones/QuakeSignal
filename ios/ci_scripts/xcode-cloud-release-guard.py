@@ -919,8 +919,9 @@ def verify_jma_only_source_contract(sources: Mapping[str, str]) -> None:
         )
     if settings.count("static let allSources = EarthquakeSources.all") != 1:
         fail("AppSettings must derive its selectable sources from EarthquakeSources.all.")
-    catalog = sources["ios/QuakeSignal/Networking/CatalogClient.swift"]
-    if catalog.count('static let catalog = ["usgs_eqlist", "emsc_eqlist", "geonet_eqlist"]') != 1:
+    if client.count('static let catalog = ["usgs_eqlist", "emsc_eqlist", "geonet_eqlist"]') != 1:
+        fail("EarthquakeSources.catalog must enable USGS, EMSC, and GeoNet report sources.")
+    if catalog.count("static let sources = EarthquakeSources.catalog") != 1:
         fail("CatalogClient must enable USGS, EMSC, and GeoNet report sources.")
 
 
