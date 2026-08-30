@@ -97,6 +97,7 @@ const contractFiles = {
     ".github/scripts/assemble-apple-screenshot-release-set.test.rb",
     ".github/scripts/verify-apple-screenshot-release-set.rb",
     ".github/scripts/verify-apple-screenshot-release-set.test.rb",
+    ".github/scripts/assign-testflight-groups.mjs",
     ".github/scripts/verify-store-assets.rb",
     ".github/scripts/verify-store-assets.test.rb",
     "backend/cloudflare/scripts/legal-page-contract.mjs",
@@ -411,8 +412,8 @@ const CLOUDFLARE_DEPLOY_PRODUCTION_HEADER = {
 // alongside its tests; an unreviewed sibling job, extra post-smoke step, or
 // edited signing/upload action fails before release automation can use
 // credentials.
-const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:dt6TjrLJ6NwC6bA6_BNYd2k8oEbKempjt2Z-c0Lxmro";
-const WORKFLOW_JOBS_FINGERPRINT = "sha256:wmKbdrpefJFLeabPEE9vUpON3kjweo10-VYEs4vDrlA";
+const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:NbhOb48m74yYiBCFWmVPCkc9aK9BTQvM3p7FDbYHtKg";
+const WORKFLOW_JOBS_FINGERPRINT = "sha256:TrLja6O7553qTXHvPwntD-IHYDrlwVOmRpUSr9LSF3U";
 const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:9WOjxQCAHRKjESUc5bbgDAKrz0ESFEgn8DLWHmPuAe8";
 const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:EFSSyDdv6gsU_dXqA66-at9gF7PZiAz9v0zj0QTTDME";
 const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:eZXAGoApcqbQaWSpzr4Mt6WBRlPNDwEf6SwYXXYlTME";
@@ -421,13 +422,13 @@ const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNB
 const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:l5lzZIupRuzl7aWa-nZjZlJBX1Fdu5MU_3iM1DI6_ug";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
 const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:me50_vIN9GTPsZq8znFefH6hzGl6UIptomau-hYCSqk";
-const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:sndV2jVBVGMte90Z25tcrEPG_yyFEpwLbrnMEQ7moqA";
+const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:78mjLbawQ7Q7JQrnyWoQhJRkyI51xH_jJbyATpZg_To";
 const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:jW4JzW6f1y2Ku66tQU-j36SF3beYFVGEzxbwEdUoq18";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:q925tdUIvaCW4xzxI74yx8tjkQlauv1DVRwoYtcmm7k";
-const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:lqw6_BdDuIkNlvKhXWzyVPLQlE3wOKkwac5gNhpbSiM";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:s7KB7lFTtucrq_KNP2cKxd3WdL6sZcUMqjeWQJDX0fo";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:kI0hUMNoY_UnwZmeHsH02CLpQhLs9u0TI4IY3pEJJNs";
+const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:lrTwom4rCjrSa2BoAQfqxEagWvWMMjauuviBL6PETdQ";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:j-Ol79VCsgEaHD1EVCcqeHlHthrdGdARgQrIgalYPjs";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:5jCJM3Vzl5j_8Zq-VSG9HhEtFcqRnt28uaHVgVknUgw";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:RnWenLvputtku5X6DOfdXrJflYePVPa0uaTthrBGxwI";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -1791,6 +1792,12 @@ function verifyArchiveWorkflow(workflowSource, buildNumber) {
     default: false,
     type: "boolean",
   }, "iOS workflow upload_to_testflight input");
+  exactRecord(record(dispatch.assign_testflight_groups, "iOS workflow assign_testflight_groups input"), {
+    description: "Assign the processed TestFlight build to every App Store Connect tester group",
+    required: false,
+    default: false,
+    type: "boolean",
+  }, "iOS workflow assign_testflight_groups input");
   const buildInput = record(dispatch.build_number, "iOS workflow build_number input");
   const defaultBuildNumber = releaseBuildNumber(buildInput.default, "iOS workflow build_number default");
   if (defaultBuildNumber !== buildNumber) {

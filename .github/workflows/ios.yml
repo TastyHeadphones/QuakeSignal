@@ -48,6 +48,11 @@ on:
         required: false
         default: false
         type: boolean
+      assign_testflight_groups:
+        description: Assign the processed TestFlight build to every App Store Connect tester group
+        required: false
+        default: false
+        type: boolean
       build_number:
         description: Exact pre-approved CFBundleVersion from ios/project.yml and the Worker App Attest allow-list
         required: false
@@ -641,6 +646,17 @@ jobs:
           xcrun altool --validate-app "$IPA_PATH" "${upload_arguments[@]}"
           xcrun altool --upload-package "$IPA_PATH" "${upload_arguments[@]}"
 
+      - name: Add TestFlight build to all tester groups
+        if: ${{ inputs.upload_to_testflight && !inputs.archive_only }}
+        env:
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          MARKETING_VERSION: "1.2"
+          APP_STORE_CONNECT_APPLE_ID: "6800642443"
+          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER: ${{ vars.APP_STORE_CONNECT_API_ISSUER }}
+        run: node .github/scripts/assign-testflight-groups.mjs
+
       - name: Remove signing material
         if: always()
         run: |
@@ -701,3 +717,49 @@ jobs:
           compression-level: 0
           overwrite: false
           retention-days: 30
+
+  testflight-groups:
+    name: Add TestFlight build to all tester groups
+    if: github.event_name == 'workflow_dispatch' && inputs.assign_testflight_groups && github.ref == 'refs/heads/main' && github.ref_protected
+    runs-on: macos-latest
+    environment:
+      name: ios-app-store-release
+    concurrency:
+      group: quakesignal-production-app-attest-policy
+      cancel-in-progress: false
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate immutable signed source
+        env:
+          REF_PROTECTED: ${{ github.ref_protected }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = TastyHeadphones/QuakeSignal
+          test "$GITHUB_REF" = refs/heads/main
+          test "$REF_PROTECTED" = true
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$SOURCE_COMMIT" = "$GITHUB_SHA"
+          test "$(git rev-parse --verify HEAD)" = "$SOURCE_COMMIT"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Verify iOS and Worker release contract
+        env:
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        run: node .github/scripts/verify-ios-release-contract.mjs --build-number "$BUILD_NUMBER"
+
+      - name: Add TestFlight build to all tester groups
+        env:
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          MARKETING_VERSION: "1.2"
+          APP_STORE_CONNECT_APPLE_ID: "6800642443"
+          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER: ${{ vars.APP_STORE_CONNECT_API_ISSUER }}
+        run: node .github/scripts/assign-testflight-groups.mjs
