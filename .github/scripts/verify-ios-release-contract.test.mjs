@@ -132,10 +132,10 @@ const executableScreenshotAutomationFiles = new Set([
 ]);
 
 function fixtureFiles({
-  buildNumber = "18",
+  buildNumber = "19",
   projectFileVersions = [buildNumber, buildNumber, buildNumber],
   infoBundleVersion = "$(CURRENT_PROJECT_VERSION)",
-  allowedVersions = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18",
+  allowedVersions = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19",
   workflowDefault = buildNumber,
   archiveConfiguration = "Release",
   remoteOrigin = "${{ vars.CLOUDFLARE_WORKER_URL }}",
@@ -279,7 +279,7 @@ env:
 }
 
 async function fixtureWorkflow({
-  workflowDefault = "18",
+  workflowDefault = "19",
   remoteOrigin = "${{ vars.CLOUDFLARE_WORKER_URL }}",
   remoteRunPrefix = "",
   archiveConfiguration = "Release",
@@ -290,9 +290,9 @@ async function fixtureWorkflow({
     workflow = workflow.replace(from, to);
   };
 
-  if (workflowDefault !== "18") {
+  if (workflowDefault !== "19") {
     replaceOnce(
-      '        default: "18"\n        type: string\n',
+      '        default: "19"\n        type: string\n',
       `        default: "${workflowDefault}"\n        type: string\n`,
       "build_number default",
     );
@@ -328,10 +328,10 @@ async function fixtureWorkflow({
   return workflow;
 }
 
-async function fixturePlatformWorkflow({ workflowDefault = "18" } = {}) {
+async function fixturePlatformWorkflow({ workflowDefault = "19" } = {}) {
   let workflow = await readFile(join(repositoryRoot, ".github/workflows/apple-platforms.yml"), "utf8");
-  if (workflowDefault !== "18") {
-    const from = '        default: "18"\n        type: string\n';
+  if (workflowDefault !== "19") {
+    const from = '        default: "19"\n        type: string\n';
     if (!workflow.includes(from)) throw new Error("fixture could not locate native platform build_number default");
     workflow = workflow.replace(from, `        default: "${workflowDefault}"\n        type: string\n`);
   }
@@ -342,27 +342,27 @@ async function writeFixture(options = {}) {
   const tempRoot = process.env.QUAKESIGNAL_TEST_TEMP_ROOT || tmpdir();
   const root = await mkdtemp(join(tempRoot, "quakesignal-ios-release-contract-"));
   const files = fixtureFiles(options);
-  const buildNumber = options.buildNumber ?? "18";
+  const buildNumber = options.buildNumber ?? "19";
   let project = await readFile(join(repositoryRoot, "ios/project.yml"), "utf8");
-  if (buildNumber !== "18") {
+  if (buildNumber !== "19") {
     project = project.replace(
-      '    CURRENT_PROJECT_VERSION: "18"\n',
+      '    CURRENT_PROJECT_VERSION: "19"\n',
       `    CURRENT_PROJECT_VERSION: "${buildNumber}"\n`,
     );
   }
   files["ios/project.yml"] = project;
-  const allowedVersions = options.allowedVersions ?? "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18";
+  const allowedVersions = options.allowedVersions ?? "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19";
   const workerConfigSuffix = options.workerConfigSuffix ?? "";
   const workerConfig = await readFile(join(repositoryRoot, "backend/cloudflare/wrangler.jsonc"), "utf8");
   files["backend/cloudflare/wrangler.jsonc"] = workerConfig.replace(
-    '"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18"',
+    '"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19"',
     `"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "${allowedVersions}"`,
   ) + workerConfigSuffix;
   const projectFileVersions = options.projectFileVersions ?? [buildNumber, buildNumber, buildNumber];
   let projectFileIndex = 0;
   files["ios/QuakeSignal.xcodeproj/project.pbxproj"] = (
     await readFile(join(repositoryRoot, "ios/QuakeSignal.xcodeproj/project.pbxproj"), "utf8")
-  ).replace(/CURRENT_PROJECT_VERSION = 18;/g, () => {
+  ).replace(/CURRENT_PROJECT_VERSION = 19;/g, () => {
     const version = projectFileVersions[projectFileIndex++];
     if (version === undefined) throw new Error("fixture projectFileVersions must contain three entries");
     return `CURRENT_PROJECT_VERSION = ${version};`;
@@ -502,12 +502,12 @@ async function expectFailure(t, options, expression) {
 
 test("the checked-in public Release contract is coherent", async () => {
   const verified = await verifyIOSReleaseContract({ root: repositoryRoot });
-  assert.equal(verified.buildNumber, "18");
-  assert.deepEqual(verified.allowedBundleVersions, ["1", "10", "11", "12", "13", "14", "15", "16", "17", "18", "2", "3", "4", "5", "6", "7", "8", "9"]);
+  assert.equal(verified.buildNumber, "19");
+  assert.deepEqual(verified.allowedBundleVersions, ["1", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "2", "3", "4", "5", "6", "7", "8", "9"]);
   assert.deepEqual(verified.appIdentityRoutes, reviewedAppIdentityRoutes);
   assert.equal(
     verified.appAttestPolicyFingerprint,
-    "sha256:9ijEgY1f29kDxx_mhoo6wZVgd5jlYwFRZGSXo5KTTgk",
+    "sha256:Xi7-P7lRuHwf80Mr3C88xKbRoUX7ncvel4-aDvKwisM",
   );
 });
 
@@ -1279,13 +1279,13 @@ test("fails closed on Worker dependency graph deletion, drift, or substitution",
 
 test("a future build is rejected until the Xcode Cloud guard is coordinated", async (t) => {
   await withFixture(t, {
-    buildNumber: "19",
-    allowedVersions: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19",
-    workflowDefault: "19",
+    buildNumber: "20",
+    allowedVersions: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20",
+    workflowDefault: "20",
   }, async (root) => {
     await assert.rejects(
       verifyIOSReleaseContract({ root }),
-      /Xcode Cloud guard BUILD_NUMBER must match 19 \(received 18\)/i,
+      /Xcode Cloud guard BUILD_NUMBER must match 20 \(received 19\)/i,
     );
   });
 });
@@ -1347,10 +1347,10 @@ test("fails closed on source/version drift", async (t) => {
     );
   });
   await expectFailure(t, {
-    buildNumber: "18",
-    allowedVersions: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18",
+    buildNumber: "19",
+    allowedVersions: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19",
     workflowDefault: "7",
-  }, /build_number default 7 does not match ios\/project\.yml 18/i);
+  }, /build_number default 7 does not match ios\/project\.yml 19/i);
 });
 
 test("fails closed when the remote smoke changes origin or executable command", async (t) => {
@@ -1840,10 +1840,10 @@ test("fails closed when Worker validation omits the historical APNs incident gua
 });
 
 test("fails closed when a JSONC comment impersonates the Worker allow-list", async (t) => {
-  await withFixture(t, { workerConfigSuffix: "\n// \"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS\": \"1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18\"" }, async (root) => {
+  await withFixture(t, { workerConfigSuffix: "\n// \"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS\": \"1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19\"" }, async (root) => {
     const path = join(root, "backend/cloudflare/wrangler.jsonc");
     const contents = await readFile(path, "utf8");
-    await writeFile(path, contents.replace('    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18",\n', ""), "utf8");
+    await writeFile(path, contents.replace('    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19",\n', ""), "utf8");
     await assert.rejects(verifyIOSReleaseContract({ root }), /must be defined exactly once outside comments/i);
   });
 });
@@ -2072,8 +2072,8 @@ test("fails closed when iOS loses its embedded Watch profile contract", async (t
 test("fails closed when the native target, bundle, or embedding matrix drifts", async (t) => {
   const mutations = [
     (contents) => contents.replace(
-      "    CURRENT_PROJECT_VERSION: \"18\"\n",
-      "    CURRENT_PROJECT_VERSION: \"18\"\n    TARGETED_DEVICE_FAMILY: \"1,2\"\n",
+      "    CURRENT_PROJECT_VERSION: \"19\"\n",
+      "    CURRENT_PROJECT_VERSION: \"19\"\n    TARGETED_DEVICE_FAMILY: \"1,2\"\n",
     ),
     (contents) => contents.replace(
       "        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app.watchkitapp\n",
