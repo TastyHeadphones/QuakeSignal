@@ -21,17 +21,17 @@ from urllib.parse import urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
-BUILD_NUMBER = "17"
+BUILD_NUMBER = "18"
 MARKETING_VERSION = "1.1"
 TEAM_ID = "5TT564H883"
 RELEASE_REF = "refs/heads/main"
-RELEASE_WORKFLOW = "QuakeSignal 1.1 (17) Native Release"
+RELEASE_WORKFLOW = "QuakeSignal 1.1 (18) Native Release"
 PRODUCT_NAME = "QuakeSignal"
 WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev"
 VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open."
 MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
-APP_ATTEST_FINGERPRINT = "sha256:49OkLNJxvSQlMmgip_qkDwzAxeOTP1rktrWiLDw88ek"
-XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:qw2E181DGke4PO0AP5MGNl_SLSAOadJImjNJjiQdSmQ"
+APP_ATTEST_FINGERPRINT = "sha256:9ijEgY1f29kDxx_mhoo6wZVgd5jlYwFRZGSXo5KTTgk"
+XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:gY0MKK9Um45wOZejlNaX4sNQ4G2iDkIKSx-ML3gt-WA"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
 PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:me50_vIN9GTPsZq8znFefH6hzGl6UIptomau-hYCSqk"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
@@ -573,8 +573,8 @@ def calculate_app_attest_fingerprint(repository_root: Path) -> str:
     if not isinstance(allowed_source, str) or not isinstance(routes_source, str):
         fail("checked-in Worker App Attest allow-list and routes must be JSON strings.")
     allowed = sorted(part.strip() for part in allowed_source.split(","))
-    if allowed != sorted(str(value) for value in range(1, 18)):
-        fail("APP_ATTEST_ALLOWED_BUNDLE_VERSIONS must be exactly 1 through 17.")
+    if allowed != sorted(str(value) for value in range(1, int(BUILD_NUMBER) + 1)):
+        fail(f"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS must be exactly 1 through {BUILD_NUMBER}.")
     try:
         routes = strict_json_loads(routes_source)
     except (TypeError, ValueError) as error:
@@ -1468,8 +1468,8 @@ def verify_bounded_source_contract(repository_root: Path) -> None:
         relative_path: (repository_root / relative_path).read_text(encoding="utf-8")
         for relative_path in XCODE_SCHEME_PATHS
     })
-    if len(re.findall(r"CURRENT_PROJECT_VERSION = 17;", generated)) != 3:
-        fail("generated Xcode project must contain exactly three build-17 settings.")
+    if len(re.findall(rf"CURRENT_PROJECT_VERSION = {re.escape(BUILD_NUMBER)};", generated)) != 3:
+        fail(f"generated Xcode project must contain exactly three build-{BUILD_NUMBER} settings.")
     generated_origins = re.findall(r"^\s*QUAKESIGNAL_API_BASE_URL = ([^;]+);\s*$", generated, re.MULTILINE)
     if generated_origins != [f'"{WORKER_ORIGIN}"'] * 2:
         fail("generated Xcode project must contain exactly two reviewed iOS Worker origin settings.")
@@ -1617,9 +1617,9 @@ def verify_live_worker_release(
     if (
         policy.get("format") != POLICY_FORMAT
         or policy.get("fingerprint") != APP_ATTEST_FINGERPRINT
-        or versions != [str(value) for value in range(1, 18)]
+        or versions != [str(value) for value in range(1, int(BUILD_NUMBER) + 1)]
     ):
-        fail("live App Attest fingerprint/allow-list does not match release build 17.")
+        fail(f"live App Attest fingerprint/allow-list does not match release build {BUILD_NUMBER}.")
 
     status, root_headers, root_bytes = _fetch("/", fetcher=fetcher)
     try:
