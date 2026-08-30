@@ -96,11 +96,11 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         }
         switch authorizationStatus {
         case .authorized, .provisional, .ephemeral:
-            true
+            return true
         case .notDetermined, .denied:
-            false
+            return false
         @unknown default:
-            false
+            return false
         }
     }
 
