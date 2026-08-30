@@ -2072,8 +2072,8 @@ test("fails closed when iOS loses its embedded Watch profile contract", async (t
 test("fails closed when the native target, bundle, or embedding matrix drifts", async (t) => {
   const mutations = [
     (contents) => contents.replace(
-      "    CURRENT_PROJECT_VERSION: \"17\"\n",
-      "    CURRENT_PROJECT_VERSION: \"17\"\n    TARGETED_DEVICE_FAMILY: \"1,2\"\n",
+      "    CURRENT_PROJECT_VERSION: \"18\"\n",
+      "    CURRENT_PROJECT_VERSION: \"18\"\n    TARGETED_DEVICE_FAMILY: \"1,2\"\n",
     ),
     (contents) => contents.replace(
       "        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app.watchkitapp\n",
