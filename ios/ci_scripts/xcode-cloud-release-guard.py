@@ -22,16 +22,16 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 BUILD_NUMBER = "18"
-MARKETING_VERSION = "1.1"
+MARKETING_VERSION = "1.2"
 TEAM_ID = "5TT564H883"
 RELEASE_REF = "refs/heads/main"
-RELEASE_WORKFLOW = "QuakeSignal 1.1 (18) Native Release"
+RELEASE_WORKFLOW = "QuakeSignal 1.2 (18) Native Release"
 PRODUCT_NAME = "QuakeSignal"
 WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev"
 VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open."
 MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
 APP_ATTEST_FINGERPRINT = "sha256:9ijEgY1f29kDxx_mhoo6wZVgd5jlYwFRZGSXo5KTTgk"
-XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:gY0MKK9Um45wOZejlNaX4sNQ4G2iDkIKSx-ML3gt-WA"
+XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:7Mwff-_YpEzp6P9dtrzEevjwUDhjOZGtOrpChHgKTMY"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
 PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:me50_vIN9GTPsZq8znFefH6hzGl6UIptomau-hYCSqk"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
@@ -1431,8 +1431,8 @@ def verify_info_plist_contract(
 
 def verify_bounded_source_contract(repository_root: Path) -> None:
     project = (repository_root / "ios/project.yml").read_text(encoding="utf-8")
-    if len(re.findall(r'^\s*MARKETING_VERSION:\s*["\']1\.1["\']\s*$', project, re.MULTILINE)) != 1:
-        fail("ios/project.yml must contain exactly one MARKETING_VERSION 1.1.")
+    if len(re.findall(rf'^\s*MARKETING_VERSION:\s*["\']{re.escape(MARKETING_VERSION)}["\']\s*$', project, re.MULTILINE)) != 1:
+        fail(f"ios/project.yml must contain exactly one MARKETING_VERSION {MARKETING_VERSION}.")
     if len(re.findall(rf'^\s*CURRENT_PROJECT_VERSION:\s*["\']{re.escape(BUILD_NUMBER)}["\']\s*$', project, re.MULTILINE)) != 1:
         fail(f"ios/project.yml must contain exactly one CURRENT_PROJECT_VERSION {BUILD_NUMBER}.")
     for required in (

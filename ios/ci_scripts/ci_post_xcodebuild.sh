@@ -33,7 +33,7 @@ exec "$script_dir/verify-signed-apple-artifacts.sh" \
   --platform "$verifier_platform" \
   --archive "${CI_ARCHIVE_PATH:?CI_ARCHIVE_PATH is required for an archive action}" \
   --exported "${CI_APP_STORE_SIGNED_APP_PATH:?CI_APP_STORE_SIGNED_APP_PATH is required for an App Store release archive}" \
-  --build-number 17 \
-  --marketing-version 1.1 \
+  --build-number 18 \
+  --marketing-version 1.2 \
   --team-id 5TT564H883 \
   --archive-signing structure-only

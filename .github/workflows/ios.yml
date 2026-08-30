@@ -580,7 +580,7 @@ jobs:
             --archive "$RUNNER_TEMP/QuakeSignal.xcarchive" \
             --exported "${IPA_PATH:?IPA_PATH is not set after export}" \
             --build-number "$BUILD_NUMBER" \
-            --marketing-version 1.1 \
+            --marketing-version 1.2 \
             --team-id 5TT564H883 \
             --archive-signing strict-distribution \
             --host-profile-name "$IOS_PROFILE_NAME" \
@@ -633,7 +633,7 @@ jobs:
             --apple-id "$APP_STORE_CONNECT_APPLE_ID"
             --bundle-id "$IOS_BUNDLE_IDENTIFIER"
             --bundle-version "$BUILD_NUMBER"
-            --bundle-short-version-string 1.1
+            --bundle-short-version-string 1.2
             --api-key "$APP_STORE_CONNECT_KEY_ID"
             --api-issuer "$APP_STORE_CONNECT_ISSUER"
             --output-format json

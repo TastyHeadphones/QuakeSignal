@@ -163,7 +163,7 @@ function fixtureFiles({
     visionOS: "1.0"
 settings:
   base:
-    MARKETING_VERSION: "1.1"
+    MARKETING_VERSION: "1.2"
     CURRENT_PROJECT_VERSION: "${buildNumber}"
 targets:
   QuakeSignal:
@@ -1536,7 +1536,7 @@ test("fails closed when iOS IPA export, digest binding, or App Store coordinates
       '--bundle-version 7',
     ],
     [
-      "--bundle-short-version-string 1.1",
+      "--bundle-short-version-string 1.2",
       "--bundle-short-version-string 1.0",
     ],
     [
