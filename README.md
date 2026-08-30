@@ -127,6 +127,7 @@ flowchart LR
 
 ### Repository map
 
+- [`docs/FEATURES.md`](docs/FEATURES.md) — cross-platform feature matrix and backend responsibilities
 - [`ios/`](ios/) — shared native SwiftUI app for iPhone, iPad, Watch, TV, Vision Pro, and Mac Catalyst, built with Swift 6
 - [`desktop/`](desktop/) — separately maintained Tauri client used for Windows; it is not the Mac App Store product for build 8
 - [`extension/`](extension/) — Manifest V3 Chrome extension with direct feeds, local history, browser notifications, and alarm sound

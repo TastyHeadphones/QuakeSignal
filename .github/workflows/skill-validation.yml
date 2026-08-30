@@ -1,0 +1,90 @@
+name: Repository skill validation
+
+on:
+  push:
+    branches:
+      - main
+      - "codex/**"
+    paths:
+      - "AGENTS.md"
+      - ".agents/skills/**"
+      - ".github/workflows/skill-validation.yml"
+  pull_request:
+    paths:
+      - "AGENTS.md"
+      - ".agents/skills/**"
+      - ".github/workflows/skill-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate repository skills
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Validate skill structure and metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          skills_root = pathlib.Path(".agents/skills")
+          skill_files = sorted(skills_root.glob("*/SKILL.md"))
+          if not skill_files:
+              sys.exit("No repository skills found under .agents/skills")
+
+          name_pattern = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+          failures = []
+
+          for skill_file in skill_files:
+              content = skill_file.read_text(encoding="utf-8")
+              if not content.startswith("---\n"):
+                  failures.append(f"{skill_file}: missing YAML frontmatter")
+                  continue
+
+              sections = content.split("---", 2)
+              if len(sections) != 3:
+                  failures.append(f"{skill_file}: unterminated YAML frontmatter")
+                  continue
+
+              frontmatter = sections[1]
+              body = sections[2].strip()
+              fields = {}
+              for line in frontmatter.splitlines():
+                  match = re.match(r"^(name|description):\s*(.+?)\s*$", line)
+                  if match:
+                      fields[match.group(1)] = match.group(2).strip('"\'')
+
+              name = fields.get("name", "")
+              description = fields.get("description", "")
+              if not name:
+                  failures.append(f"{skill_file}: missing name")
+              elif name != skill_file.parent.name:
+                  failures.append(
+                      f"{skill_file}: name {name!r} must match folder "
+                      f"{skill_file.parent.name!r}"
+                  )
+              elif len(name) > 63 or not name_pattern.fullmatch(name):
+                  failures.append(f"{skill_file}: invalid skill name {name!r}")
+
+              if not description:
+                  failures.append(f"{skill_file}: missing description")
+              if not body:
+                  failures.append(f"{skill_file}: empty instructions")
+              if re.search(r"\b(?:TODO|TBD|FIXME)\b", content, re.IGNORECASE):
+                  failures.append(f"{skill_file}: unfinished placeholder found")
+
+              print(f"Validated {skill_file} ({name})")
+
+          if failures:
+              print("\n".join(failures), file=sys.stderr)
+              sys.exit(1)
+          PY
