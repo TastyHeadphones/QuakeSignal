@@ -238,8 +238,11 @@ extension View {
     }
 
     func nativeGroupedChrome() -> some View {
-        self
-            .scrollContentBackground(.hidden)
+#if os(tvOS)
+        background(Color("GroupedBGColor"))
+#else
+        scrollContentBackground(.hidden)
             .background(Color("GroupedBGColor"))
+#endif
     }
 }
