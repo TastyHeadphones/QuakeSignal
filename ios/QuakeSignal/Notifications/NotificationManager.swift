@@ -91,6 +91,9 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     }
 
     var canRegisterForRemoteNotifications: Bool {
+        guard NativeUIRelaySurface.current().registersForNotificationRelay else {
+            return false
+        }
         switch authorizationStatus {
         case .authorized, .provisional, .ephemeral:
             true

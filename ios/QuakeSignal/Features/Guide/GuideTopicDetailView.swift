@@ -32,6 +32,7 @@ struct GuideTopicDetailView: View {
                 }
             }
         }
+        .nativeGroupedChrome()
         .navigationTitle(topic.titleKey)
         .navigationBarTitleDisplayMode(.inline)
     }

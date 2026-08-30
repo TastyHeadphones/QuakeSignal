@@ -31,11 +31,11 @@ struct QuakeRowView: View {
 
             VStack(alignment: .trailing, spacing: 4) {
                 Text(event.reportStatus.labelKey)
-                    .font(.caption2.bold())
-                    .foregroundStyle(.white)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(event.reportStatus.color)
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(event.reportStatus.color))
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(event.reportStatus.color.opacity(0.14)))
                 if let coordinate, let distance = event.distanceKm(from: coordinate) {
                     Text(L("home.distance", Int(distance.rounded())))
                         .font(.caption2)
@@ -52,9 +52,8 @@ private struct MagnitudeBadge: View {
 
     var body: some View {
         Text(event.magnitudeText)
-            .font(.headline.monospacedDigit())
-            .foregroundStyle(.white)
+            .font(.title3.weight(.bold).monospacedDigit())
+            .foregroundStyle(event.severity.color.opacity(event.isCancel ? 0.45 : 1))
             .frame(width: 52, height: 52)
-            .background(Circle().fill(event.severity.color.opacity(event.isCancel ? 0.35 : 0.9)))
     }
 }

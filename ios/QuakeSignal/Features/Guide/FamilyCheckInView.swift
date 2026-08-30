@@ -22,7 +22,17 @@ struct FamilyCheckInView: View {
                     TextField(String(localized: "guide.familyCheckIn.phone"), text: $guide.familyContactPhone)
                         .keyboardType(.phonePad)
                 }
+                Section {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("guide.familyCheckIn.save")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!guide.hasFamilyContact)
+                }
             }
+            .nativeGroupedChrome()
             .navigationTitle("guide.familyCheckIn.title")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -421,9 +421,10 @@ final class QuakeStore {
     }
 
     var bannerState: HomeBannerState {
-        if activeWarning != nil { return .alert }
-        if recentNearbyReport != nil { return .caution }
-        return .normal
+        NativeStatusHeroMapping.bannerState(
+            hasActiveWarning: activeWarning != nil,
+            hasRecentNearbyReport: recentNearbyReport != nil
+        )
     }
 }
 

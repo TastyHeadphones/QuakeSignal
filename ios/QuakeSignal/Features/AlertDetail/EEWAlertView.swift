@@ -234,6 +234,7 @@ struct EEWAlertView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
             .tint(.white)
             .foregroundStyle(backgroundColor)
 
@@ -242,6 +243,7 @@ struct EEWAlertView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
             .tint(.white)
         }
         .controlSize(.large)

@@ -8,9 +8,12 @@ struct DisasterGuideView: View {
         NavigationStack {
             List {
                 Section {
-                    Label("guide.offlineBadge", systemImage: "checkmark.icloud")
-                        .font(.caption)
+                    Text("guide.offlineBadge")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(Color("NormalColor"))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color("NormalColor").opacity(0.14)))
                 }
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
@@ -65,10 +68,11 @@ struct DisasterGuideView: View {
                     Button {
                         showingFamilyCheckIn = true
                     } label: {
-                        Label(guide.hasFamilyContact ? "guide.kit.familyContact.edit" : "guide.kit.familyContact.add", systemImage: "person.crop.circle.badge.plus")
+                        Label(guide.hasFamilyContact ? "guide.kit.familyContact.edit" : "guide.kit.familyContact.add", systemImage: "person.crop.circle")
                     }
                 }
             }
+            .nativeGroupedChrome()
             .navigationTitle("tab.guide")
             .navigationDestination(for: String.self) { topicId in
                 if let topic = GuideContent.duringQuakeTopics.first(where: { $0.id == topicId }) {

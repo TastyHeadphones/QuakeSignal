@@ -224,11 +224,11 @@
 "status.training" = "测试";
 
 /* 标签栏 */
-"tab.list" = "列表";
+"tab.list" = "报告";
 "tab.guide" = "指南";
 
 /* 列表 tab */
-"map.title.list" = "地震列表";
+"map.title.list" = "报告";
 "list.region.all" = "全部";
 "list.empty.title" = "暂无符合条件的地震";
 "list.empty.detail" = "所选范围与筛选条件内没有符合条件的地震记录，可以调整筛选条件试试。";
@@ -265,6 +265,16 @@
 "settings.includeTestAlerts" = "接收测试/演练信息";
 "settings.includeTestAlerts.detail" = "默认关闭";
 "settings.section.disclaimer" = "来源与免责声明";
+"settings.section.sourcesAlerts" = "来源与提醒";
+"settings.sources.enabledCount" = "已开启 %1$d 个";
+"settings.sources.explanation" = "每个 Wolfx 通道都可以单独开启。关闭的来源不会出现在首页和后台匹配中。";
+"settings.replayIntro" = "重新播放引导";
+"settings.foregroundAlerts" = "前台提醒";
+"settings.foregroundAlerts.local" = "本地";
+"settings.foregroundAlerts.detail" = "此界面在前台监视 Wolfx，不会加入 iPhone/iPad 通知中继。";
+"settings.pushOn" = "开";
+"settings.language.system" = "系统";
+"guide.familyCheckIn.save" = "保存到本机";
 
 /* 来源与免责声明 页面 */
 "disclaimer.badge" = "本应用非官方预警平台";

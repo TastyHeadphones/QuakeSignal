@@ -15,7 +15,10 @@ final class GuideStore {
         didSet { UserDefaults.standard.set(familyContactPhone, forKey: Keys.contactPhone) }
     }
 
-    var hasFamilyContact: Bool { !familyContactName.isEmpty }
+    var hasFamilyContact: Bool {
+        !familyContactName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !familyContactPhone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     private enum Keys {
         static let checkedKit = "guide.checkedKitItems"

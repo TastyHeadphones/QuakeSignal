@@ -5,19 +5,10 @@ struct SettingsView: View {
     @State private var settings = AppSettings.shared
     @State private var notifications = NotificationManager.shared
     @State private var locationManager = LocationManager.shared
-    @State private var isSendingTest = false
-    @State private var testResultMessage: String?
-#if QUAKESIGNAL_INTERNAL_QA
-    @State private var isSchedulingDelayedTest = false
-    @State private var delayedTestResultMessage: String?
-    @State private var showingDelayedTestConfirmation = false
-#endif
-    @State private var isUpdatingPushSubscription = false
     @State private var isSynchronizingPushPreferences = false
     @State private var needsPushPreferenceResync = false
-    @State private var pushSubscriptionMessage: String?
-    @State private var showingRemovePushConfirmation = false
     @State private var showingCityPicker = false
+    @AppStorage("onboarding.completed") private var hasCompletedOnboarding = true
 
     var body: some View {
         @Bindable var settings = settings
@@ -29,7 +20,10 @@ struct SettingsView: View {
                         showingCityPicker = true
                     } label: {
                         HStack {
-                            Text(settings.useCurrentLocation ? "city.useCurrentLocation" : "settings.subscribedCity")
+                            Label(
+                                settings.useCurrentLocation ? "city.useCurrentLocation" : "settings.subscribedCity",
+                                systemImage: "location"
+                            )
                             Spacer()
                             Text(locationSelectionDetail)
                                 .foregroundStyle(.secondary)
@@ -38,6 +32,9 @@ struct SettingsView: View {
                     }
                     .foregroundStyle(.primary)
 
+                    Text("city.section.radius")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                     HStack(spacing: 8) {
                         ForEach(AppSettings.radiusTiersKm, id: \.self) { tier in
                             TierChip(label: "\(Int(tier)) km", isSelected: settings.radiusKm == tier) {
@@ -49,6 +46,7 @@ struct SettingsView: View {
 
                     Text("settings.section.threshold")
                         .font(.subheadline)
+                        .foregroundStyle(.secondary)
                     HStack(spacing: 8) {
                         ForEach(AppSettings.magnitudeTiers, id: \.self) { tier in
                             TierChip(label: "M\(Int(tier))+", isSelected: settings.minMagnitude == tier) {
@@ -58,132 +56,73 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("settings.section.sources") {
-                    ForEach(AppSettings.allSources, id: \.self) { source in
-                        Toggle(isOn: sourceBinding(source)) {
-                            Text(NSLocalizedString("settings.source.\(source)", comment: "Earthquake data source"))
+                Section("settings.section.sourcesAlerts") {
+                    NavigationLink {
+                        AlertSourcesView()
+                    } label: {
+                        HStack {
+                            Label("settings.section.sources", systemImage: "globe")
+                            Spacer()
+                            Text(L("settings.sources.enabledCount", settings.enabledSources.count))
+                                .foregroundStyle(.secondary)
                         }
                     }
-                }
-
-                Section("settings.section.notifications") {
-                    if notifications.authorizationStatus == .notDetermined {
-                        Button("onboarding.enableNotifications") {
-                            Task { await enableNotifications() }
-                        }
-                    } else if notifications.authorizationStatus == .denied {
-                        Button("settings.openSystemSettings") { openNotificationSettings() }
-                        Text("settings.pushSubscription.permissionDenied")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    pushSubscriptionControl
 
                     NavigationLink {
-                        AlertSoundSelectionView()
+                        NotificationsSettingsView()
                     } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: settings.alertSound.systemImage)
-                                .foregroundStyle(Color("BrandColor"))
-                                .frame(width: 24)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("settings.alertSound.title")
-                                Text(LocalizedStringKey(settings.alertSound.titleKey))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                        HStack {
+                            Label(
+                                LocalizedStringKey(NativeUIRelaySurface.current().notificationsTitleKey),
+                                systemImage: "bell"
+                            )
+                            Spacer()
+                            Text(
+                                NativeUIRelaySurface.current().registersForNotificationRelay
+                                    && settings.pushSubscriptionEnabled
+                                    ? "settings.pushOn"
+                                    : "settings.foregroundAlerts.local"
+                            )
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if NativeUIRelaySurface.current().registersForNotificationRelay {
+                        NavigationLink {
+                            AlertSoundSelectionView()
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: settings.alertSound.systemImage)
+                                    .foregroundStyle(Color("BrandColor"))
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("settings.alertSound.title")
+                                    Text(LocalizedStringKey(settings.alertSound.titleKey))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
-
-                    if notifications.canRegisterForRemoteNotifications,
-                       (!notifications.hasVisibleAlertsEnabled ||
-                        !notifications.hasSoundsEnabled ||
-                        !notifications.hasTimeSensitiveAlertsEnabled) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("settings.notificationDelivery.degraded", systemImage: "exclamationmark.triangle.fill")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.orange)
-                            Text("settings.notificationDelivery.degraded.detail")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                            Button("settings.openNotificationSettings") {
-                                openNotificationSettings()
-                            }
-                        }
-                    }
-
-                    Toggle("settings.notifyAtNight", isOn: $settings.notifyAtNight)
-                    Toggle(isOn: $settings.includeTestAlerts) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("settings.includeTestAlerts")
-                            Text("settings.includeTestAlerts.detail")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Button {
-                        Task { await sendTestAlert() }
-                    } label: {
-                        if isSendingTest {
-                            ProgressView()
-                        } else {
-                            Text("settings.testAlert")
-                        }
-                    }
-                    .disabled(
-                        isSendingTest ||
-                        !PushTestAlertPolicy.isAvailable(
-                            subscriptionEnabled: settings.pushSubscriptionEnabled,
-                            registrationState: settings.pushRegistrationState,
-                            hasDeviceToken: notifications.deviceToken != nil
-                        )
-                    )
-
-                    if let testResultMessage {
-                        Text(testResultMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-#if QUAKESIGNAL_INTERNAL_QA
-                    Button {
-                        showingDelayedTestConfirmation = true
-                    } label: {
-                        if isSchedulingDelayedTest {
-                            ProgressView()
-                        } else {
-                            Text("settings.delayedTestAlert")
-                        }
-                    }
-                    .disabled(
-                        isSchedulingDelayedTest ||
-                        !settings.pushSubscriptionEnabled ||
-                        settings.pushRegistrationState != .active ||
-                        notifications.deviceToken == nil
-                    )
-
-                    Text("settings.delayedTestAlert.detail")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    if let delayedTestResultMessage {
-                        Text(delayedTestResultMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-#endif
-                }
-
-                Section("settings.section.language") {
-                    Text("settings.language.systemNote")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Button("settings.openSystemSettings") { openSystemSettings() }
                 }
 
                 Section("settings.section.about") {
+                    HStack {
+                        Text("settings.section.language")
+                        Spacer()
+                        Text("settings.language.system")
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("settings.openSystemSettings") { openSystemSettings() }
+
+                    NavigationLink("settings.section.disclaimer") {
+                        SourceDisclaimerView()
+                    }
+
+                    Button("settings.replayIntro") {
+                        hasCompletedOnboarding = false
+                    }
+
                     Link(destination: BackendConfig.httpBaseURL.appending(path: "/privacy")) {
                         Label("settings.privacyPolicy", systemImage: "hand.raised")
                     }
@@ -191,44 +130,10 @@ struct SettingsView: View {
                         Label("settings.support", systemImage: "questionmark.circle")
                     }
                 }
-
-                Section {
-                    NavigationLink("settings.section.disclaimer") {
-                        SourceDisclaimerView()
-                    }
-                }
             }
+            .nativeGroupedChrome()
             .navigationTitle("settings.title")
-            .confirmationDialog(
-                String(localized: "settings.pushSubscription.remove.confirmation.title"),
-                isPresented: $showingRemovePushConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("settings.pushSubscription.remove.confirm", role: .destructive) {
-                    Task { await removePushSubscription() }
-                }
-                Button("settings.pushSubscription.remove.cancel", role: .cancel) {}
-            } message: {
-                Text("settings.pushSubscription.remove.confirmation.message")
-            }
-#if QUAKESIGNAL_INTERNAL_QA
-            .confirmationDialog(
-                String(localized: "settings.delayedTestAlert.confirmation.title"),
-                isPresented: $showingDelayedTestConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("settings.delayedTestAlert.confirm") {
-                    Task { await scheduleDelayedTestAlert() }
-                }
-                Button("settings.pushSubscription.remove.cancel", role: .cancel) {}
-            } message: {
-                Text("settings.delayedTestAlert.confirmation.message")
-            }
-#endif
             .onChange(of: settings.minMagnitude) { _, _ in resyncPushPreferences() }
-            .onChange(of: settings.notifyAtNight) { _, _ in resyncPushPreferences() }
-            .onChange(of: settings.includeTestAlerts) { _, _ in resyncPushPreferences() }
-            .onChange(of: settings.alertSound) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.radiusKm) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.selectedCityId) { _, _ in resyncPushPreferences() }
             .onChange(of: settings.useCurrentLocation) { _, _ in resyncPushPreferences() }
@@ -236,20 +141,6 @@ struct SettingsView: View {
                 CityPickerView()
             }
         }
-    }
-
-    private func sourceBinding(_ source: String) -> Binding<Bool> {
-        Binding(
-            get: { settings.enabledSources.contains(source) },
-            set: { isOn in
-                if isOn {
-                    settings.enabledSources.insert(source)
-                } else {
-                    settings.enabledSources.remove(source)
-                }
-                resyncPushPreferences()
-            }
-        )
     }
 
     private var locationSelectionDetail: String {
@@ -288,11 +179,276 @@ struct SettingsView: View {
 
                 do {
                     try await QuakeStore.shared.registerForPush(token: token)
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+}
+
+private struct AlertSourcesView: View {
+    @State private var settings = AppSettings.shared
+
+    var body: some View {
+        @Bindable var settings = settings
+
+        List {
+            Section {
+                Text("settings.sources.explanation")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                ForEach(AppSettings.allSources, id: \.self) { source in
+                    Toggle(isOn: sourceBinding(source)) {
+                        Text(NSLocalizedString("settings.source.\(source)", comment: "Earthquake data source"))
+                    }
+                }
+            }
+        }
+        .nativeGroupedChrome()
+        .navigationTitle("settings.section.sources")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func sourceBinding(_ source: String) -> Binding<Bool> {
+        Binding(
+            get: { settings.enabledSources.contains(source) },
+            set: { isOn in
+                if isOn {
+                    settings.enabledSources.insert(source)
+                } else {
+                    settings.enabledSources.remove(source)
+                }
+                Task { @MainActor in
+                    let notifications = NotificationManager.shared
+                    guard settings.pushSubscriptionEnabled,
+                          notifications.canRegisterForRemoteNotifications,
+                          let token = notifications.deviceToken else {
+                        return
+                    }
+                    try? await QuakeStore.shared.registerForPush(token: token)
+                }
+            }
+        )
+    }
+}
+
+private struct NotificationsSettingsView: View {
+    @State private var settings = AppSettings.shared
+    @State private var notifications = NotificationManager.shared
+    @State private var isSendingTest = false
+    @State private var testResultMessage: String?
+#if QUAKESIGNAL_INTERNAL_QA
+    @State private var isSchedulingDelayedTest = false
+    @State private var delayedTestResultMessage: String?
+    @State private var showingDelayedTestConfirmation = false
+#endif
+    @State private var isUpdatingPushSubscription = false
+    @State private var isSynchronizingPushPreferences = false
+    @State private var needsPushPreferenceResync = false
+    @State private var pushSubscriptionMessage: String?
+    @State private var showingRemovePushConfirmation = false
+
+    var body: some View {
+        @Bindable var settings = settings
+
+        Form {
+            if NativeUIRelaySurface.current().registersForNotificationRelay {
+                notificationControls
+            } else {
+                Section {
+                    Text(foregroundOnlyMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .nativeGroupedChrome()
+        .navigationTitle(LocalizedStringKey(NativeUIRelaySurface.current().notificationsTitleKey))
+        .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(
+            String(localized: "settings.pushSubscription.remove.confirmation.title"),
+            isPresented: $showingRemovePushConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("settings.pushSubscription.remove.confirm", role: .destructive) {
+                Task { await removePushSubscription() }
+            }
+            Button("settings.pushSubscription.remove.cancel", role: .cancel) {}
+        } message: {
+            Text("settings.pushSubscription.remove.confirmation.message")
+        }
+#if QUAKESIGNAL_INTERNAL_QA
+        .confirmationDialog(
+            String(localized: "settings.delayedTestAlert.confirmation.title"),
+            isPresented: $showingDelayedTestConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("settings.delayedTestAlert.confirm") {
+                Task { await scheduleDelayedTestAlert() }
+            }
+            Button("settings.pushSubscription.remove.cancel", role: .cancel) {}
+        } message: {
+            Text("settings.delayedTestAlert.confirmation.message")
+        }
+#endif
+        .onChange(of: settings.notifyAtNight) { _, _ in resyncPushPreferences() }
+        .onChange(of: settings.includeTestAlerts) { _, _ in resyncPushPreferences() }
+        .onChange(of: settings.alertSound) { _, _ in resyncPushPreferences() }
+    }
+
+    private var foregroundOnlyMessage: LocalizedStringKey {
+        "settings.foregroundAlerts.detail"
+    }
+
+    @ViewBuilder
+    private var notificationControls: some View {
+        Section {
+            if notifications.authorizationStatus == .notDetermined {
+                Button("onboarding.enableNotifications") {
+                    Task { await enableNotifications() }
+                }
+            } else if notifications.authorizationStatus == .denied {
+                Button("settings.openSystemSettings") { openNotificationSettings() }
+                Text("settings.pushSubscription.permissionDenied")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            pushSubscriptionControl
+
+            NavigationLink {
+                AlertSoundSelectionView()
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: settings.alertSound.systemImage)
+                        .foregroundStyle(Color("BrandColor"))
+                        .frame(width: 24)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("settings.alertSound.title")
+                        Text(LocalizedStringKey(settings.alertSound.titleKey))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            if notifications.canRegisterForRemoteNotifications,
+               (!notifications.hasVisibleAlertsEnabled ||
+                !notifications.hasSoundsEnabled ||
+                !notifications.hasTimeSensitiveAlertsEnabled) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("settings.notificationDelivery.degraded", systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.orange)
+                    Text("settings.notificationDelivery.degraded.detail")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button("settings.openNotificationSettings") {
+                        openNotificationSettings()
+                    }
+                }
+            }
+
+            Toggle("settings.notifyAtNight", isOn: $settings.notifyAtNight)
+            Toggle(isOn: $settings.includeTestAlerts) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("settings.includeTestAlerts")
+                    Text("settings.includeTestAlerts.detail")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+
+        Section {
+            Button {
+                Task { await sendTestAlert() }
+            } label: {
+                if isSendingTest {
+                    ProgressView()
+                } else {
+                    Text("settings.testAlert")
+                }
+            }
+            .disabled(
+                isSendingTest ||
+                !PushTestAlertPolicy.isAvailable(
+                    subscriptionEnabled: settings.pushSubscriptionEnabled,
+                    registrationState: settings.pushRegistrationState,
+                    hasDeviceToken: notifications.deviceToken != nil
+                )
+            )
+
+            if let testResultMessage {
+                Text(testResultMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+#if QUAKESIGNAL_INTERNAL_QA
+            Button {
+                showingDelayedTestConfirmation = true
+            } label: {
+                if isSchedulingDelayedTest {
+                    ProgressView()
+                } else {
+                    Text("settings.delayedTestAlert")
+                }
+            }
+            .disabled(
+                isSchedulingDelayedTest ||
+                !settings.pushSubscriptionEnabled ||
+                settings.pushRegistrationState != .active ||
+                notifications.deviceToken == nil
+            )
+
+            Text("settings.delayedTestAlert.detail")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            if let delayedTestResultMessage {
+                Text(delayedTestResultMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+#endif
+        }
+    }
+
+    private func resyncPushPreferences() {
+        guard settings.pushSubscriptionEnabled,
+              notifications.canRegisterForRemoteNotifications,
+              notifications.deviceToken != nil else {
+            return
+        }
+
+        needsPushPreferenceResync = true
+        guard !isSynchronizingPushPreferences else { return }
+        isSynchronizingPushPreferences = true
+
+        Task { @MainActor in
+            defer { isSynchronizingPushPreferences = false }
+
+            while needsPushPreferenceResync {
+                needsPushPreferenceResync = false
+                guard settings.pushSubscriptionEnabled,
+                      notifications.canRegisterForRemoteNotifications,
+                      let token = notifications.deviceToken else {
+                    return
+                }
+
+                do {
+                    try await QuakeStore.shared.registerForPush(token: token)
                     pushSubscriptionMessage = nil
                 } catch {
-                    // `QuakeStore` has already persisted `.failed`; retain a
-                    // human-readable reason in this settings session and
-                    // leave the retry affordance visible.
                     pushSubscriptionMessage = L(
                         "settings.pushSubscription.sync.failure",
                         error.localizedDescription
@@ -582,6 +738,7 @@ private struct AlertSoundSelectionView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .nativeGroupedChrome()
         .navigationTitle("settings.alertSound.title")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -598,8 +755,8 @@ private struct TierChip: View {
                 .font(.subheadline.weight(.medium))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
-                .background(Capsule().fill(isSelected ? Color("BrandColor") : Color("GroupedBGColor")))
-                .foregroundStyle(isSelected ? .white : .primary)
+                .background(Capsule().fill(isSelected ? Color.primary : Color.primary.opacity(0.07)))
+                .foregroundStyle(isSelected ? Color("GroupedBGColor") : Color.primary)
         }
         .buttonStyle(.plain)
     }

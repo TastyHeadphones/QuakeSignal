@@ -5,9 +5,12 @@ struct SourceDisclaimerView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("disclaimer.badge", systemImage: "exclamationmark.triangle.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color("CautionColor"))
+                    Text("disclaimer.badge")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color("SevereColor"))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color("SevereColor").opacity(0.14)))
                     Text("disclaimer.summary")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -33,6 +36,7 @@ struct SourceDisclaimerView: View {
                 LabeledContent("settings.about.version", value: appVersion)
             }
         }
+        .nativeGroupedChrome()
         .navigationTitle("settings.section.disclaimer")
         .navigationBarTitleDisplayMode(.inline)
     }

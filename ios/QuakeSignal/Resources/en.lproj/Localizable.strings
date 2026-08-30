@@ -161,7 +161,7 @@
 "home.status.alert" = "Earthquake warning received";
 "home.status.alert.detail" = "Nearby M%1$@ — take protective action now";
 "home.section.latest" = "Latest Earthquake";
-"home.section.latestNearby" = "Latest Earthquake · Nearby";
+"home.section.latestNearby" = "Latest earthquake · nearby";
 "home.field.originTime" = "Origin time";
 "home.field.reportTime" = "Report time";
 "home.action.nearby" = "Nearby";
@@ -225,20 +225,20 @@
 "status.training" = "Training";
 
 /* Tabs */
-"tab.list" = "List";
+"tab.list" = "Reports";
 "tab.guide" = "Guide";
 
 /* List tab */
-"map.title.list" = "Earthquake List";
+"map.title.list" = "Reports";
 "list.region.all" = "All";
 "list.empty.title" = "No matching earthquakes";
 "list.empty.detail" = "No earthquake records match the selected range and filters. Try adjusting them.";
 "list.empty.adjustFilters" = "Adjust Filters";
 
 /* Map tab */
-"map.window.day" = "24 hours";
-"map.window.week" = "7 days";
-"map.window.month" = "30 days";
+"map.window.day" = "24 h";
+"map.window.week" = "7 d";
+"map.window.month" = "30 d";
 "map.filter.timeWindow" = "Time Range";
 "map.filter.minimumMagnitude" = "Minimum Magnitude";
 "map.share" = "Share";
@@ -266,6 +266,16 @@
 "settings.includeTestAlerts" = "Receive Test/Drill Alerts";
 "settings.includeTestAlerts.detail" = "Off by default";
 "settings.section.disclaimer" = "Sources & Disclaimer";
+"settings.section.sourcesAlerts" = "Sources & Alerts";
+"settings.sources.enabledCount" = "%1$d on";
+"settings.sources.explanation" = "Each Wolfx channel can be enabled independently. Disabled sources stay out of the home feed and background matching.";
+"settings.replayIntro" = "Replay intro";
+"settings.foregroundAlerts" = "Foreground alerts";
+"settings.foregroundAlerts.local" = "Local";
+"settings.foregroundAlerts.detail" = "This surface monitors Wolfx in the foreground. It does not join the iPhone/iPad notification relay.";
+"settings.pushOn" = "On";
+"settings.language.system" = "System";
+"guide.familyCheckIn.save" = "Save locally";
 
 /* Source & Disclaimer screen */
 "disclaimer.badge" = "Not an official warning platform";

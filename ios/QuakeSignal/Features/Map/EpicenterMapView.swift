@@ -149,7 +149,7 @@ struct EpicenterMapView: View {
             compactFilterMenus
         }
         .padding(10)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .nativeGlassCard(cornerRadius: 14)
         .padding(.horizontal)
         .padding(.top, 8)
     }
@@ -279,8 +279,8 @@ private struct MapFilterChip: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
                 .frame(minHeight: 44)
-                .background(Capsule().fill(isSelected ? Color("BrandColor") : Color("CardColor")))
-                .foregroundStyle(isSelected ? .white : .primary)
+                .background(Capsule().fill(isSelected ? Color.primary : Color.primary.opacity(0.07)))
+                .foregroundStyle(isSelected ? Color("GroupedBGColor") : Color.primary)
         }
         .buttonStyle(.plain)
         .contentShape(Capsule())
@@ -339,8 +339,7 @@ private struct SelectedEventCard: View {
             }
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color("CardColor")))
-        .shadow(radius: 8, y: 2)
+        .nativeGlassCard()
     }
 
     private var shareText: String {

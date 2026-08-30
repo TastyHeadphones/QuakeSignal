@@ -1,4 +1,5 @@
 import CoreLocation
+import UIKit
 import XCTest
 @testable import QuakeSignal
 
@@ -298,5 +299,121 @@ final class AlertPolicyTests: XCTestCase {
             isTraining: isTraining,
             tsunami: nil
         )
+    }
+}
+
+final class NativeUIPresentationTests: XCTestCase {
+    func testRootTabsAndQuickActionsMatchTheNativeUIRedesign() {
+        XCTAssertEqual(
+            NativeUINavigation.rootTabs,
+            [.home, .reports, .map, .guide, .settings]
+        )
+        XCTAssertEqual(
+            NativeUINavigation.rootTabs.map(\.titleKey),
+            ["tab.home", "tab.list", "tab.map", "tab.guide", "tab.settings"]
+        )
+        XCTAssertEqual(NativeUITab.reports.destinations, [.reports, .reportsFilters])
+        XCTAssertEqual(
+            NativeUIQuickAction.allCases.map(\.destination),
+            [.cityPicker, .notifications, .map]
+        )
+        XCTAssertTrue(NativeUITab.home.destinations.contains(.statusHero))
+        XCTAssertTrue(NativeUITab.home.destinations.contains(.latestEventCard))
+        XCTAssertTrue(NativeUITab.guide.destinations.contains(.familyCheckIn))
+        XCTAssertTrue(NativeUITab.settings.destinations.contains(.alertSources))
+        XCTAssertTrue(NativeUITab.settings.destinations.contains(.alertSound))
+        XCTAssertTrue(NativeUITab.settings.destinations.contains(.sourcesDisclaimer))
+        XCTAssertTrue(NativeUINavigation.overlayDestinations.contains(.onboarding))
+        XCTAssertTrue(NativeUINavigation.overlayDestinations.contains(.eewOverlay))
+        XCTAssertTrue(NativeUINavigation.eventDetailDestinations.contains(.revisionTimeline))
+    }
+
+    func testStatusHeroMappingPrefersLiveWarningOverNearbyReport() {
+        XCTAssertEqual(
+            NativeStatusHeroMapping.bannerState(
+                hasActiveWarning: false,
+                hasRecentNearbyReport: false
+            ),
+            .normal
+        )
+        XCTAssertEqual(
+            NativeStatusHeroMapping.bannerState(
+                hasActiveWarning: false,
+                hasRecentNearbyReport: true
+            ),
+            .caution
+        )
+        XCTAssertEqual(
+            NativeStatusHeroMapping.bannerState(
+                hasActiveWarning: true,
+                hasRecentNearbyReport: true
+            ),
+            .alert
+        )
+        XCTAssertEqual(NativeStatusHeroMapping.titleKey(for: .normal), "home.status.normal")
+        XCTAssertEqual(NativeStatusHeroMapping.titleKey(for: .caution), "home.status.caution")
+        XCTAssertEqual(NativeStatusHeroMapping.titleKey(for: .alert), "home.status.alert")
+        XCTAssertEqual(NativeStatusHeroMapping.detailKey(for: .normal), "home.status.normal.detail")
+        XCTAssertEqual(NativeStatusHeroMapping.detailKey(for: .caution), "home.status.caution.detail")
+        XCTAssertEqual(NativeStatusHeroMapping.detailKey(for: .alert), "home.status.alert.detail")
+    }
+
+    func testNotificationRelayRegistersOnlyOniPhoneAndiPad() {
+        XCTAssertTrue(
+            NativeUIRelaySurface.resolve(
+                userInterfaceIdiom: .phone,
+                isMacCatalyst: false
+            ).registersForNotificationRelay
+        )
+        XCTAssertTrue(
+            NativeUIRelaySurface.resolve(
+                userInterfaceIdiom: .pad,
+                isMacCatalyst: false
+            ).registersForNotificationRelay
+        )
+        XCTAssertFalse(
+            NativeUIRelaySurface.resolve(
+                userInterfaceIdiom: .phone,
+                isMacCatalyst: true
+            ).registersForNotificationRelay
+        )
+        XCTAssertFalse(
+            NativeUIRelaySurface.resolve(
+                userInterfaceIdiom: .mac,
+                isMacCatalyst: false
+            ).registersForNotificationRelay
+        )
+        XCTAssertFalse(
+            NativeUIRelaySurface.resolve(
+                userInterfaceIdiom: .vision,
+                isMacCatalyst: false
+            ).registersForNotificationRelay
+        )
+        XCTAssertFalse(NativeUIRelaySurface.watch.registersForNotificationRelay)
+        XCTAssertEqual(
+            NativeUIRelaySurface.iPhone.notificationsTitleKey,
+            "settings.section.notifications"
+        )
+        XCTAssertEqual(
+            NativeUIRelaySurface.macCatalyst.notificationsTitleKey,
+            "settings.foregroundAlerts"
+        )
+    }
+
+    func testCurrentIOSHostJoinsThePhoneOrPadRelay() {
+        let surface = NativeUIRelaySurface.current()
+        XCTAssertTrue(
+            surface == .iPhone || surface == .iPad,
+            "iOS unit tests run on iPhone/iPad Simulator and must keep the live APNs relay path"
+        )
+        XCTAssertTrue(surface.registersForNotificationRelay)
+    }
+
+    func testReportsTabEnglishTitleIsTheRedesignLabel() throws {
+        let appBundle = try XCTUnwrap(Bundle(identifier: "com.quakesignal.app"))
+        let enPath = try XCTUnwrap(appBundle.path(forResource: "en", ofType: "lproj"))
+        let enBundle = try XCTUnwrap(Bundle(path: enPath))
+        XCTAssertEqual(enBundle.localizedString(forKey: "tab.list", value: "MISSING", table: nil), "Reports")
+        XCTAssertNotEqual(enBundle.localizedString(forKey: "tab.list", value: "MISSING", table: nil), "List")
     }
 }

@@ -6,6 +6,7 @@ struct HomeView: View {
     @State private var settings = AppSettings.shared
     @State private var locationManager = LocationManager.shared
     @State private var showingCityPicker = false
+    @Environment(\.nativeUITabSelection) private var selectedTab
 
     var body: some View {
         NavigationStack {
@@ -43,7 +44,10 @@ struct HomeView: View {
                             .padding(.top, 40)
                     }
 
-                    QuickActionsRow(showingCityPicker: $showingCityPicker)
+                    QuickActionsRow(
+                        showingCityPicker: $showingCityPicker,
+                        selectedTab: selectedTab
+                    )
 
                     Text("shared.disclaimer")
                         .font(.caption2)
@@ -109,38 +113,22 @@ private struct StatusCardView: View {
     let coordinate: CLLocationCoordinate2D?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: symbolName)
-                    .foregroundStyle(bannerState.color)
-                Text(titleKey)
-                    .font(.headline)
-                Spacer()
+        HStack(alignment: .center, spacing: 14) {
+            StatusRipple(color: bannerState.color)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(LocalizedStringKey(NativeStatusHeroMapping.titleKey(for: bannerState)))
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                Text(detailText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
-            Text(detailText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
         }
-        .padding(16)
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color("CardColor")))
+        .nativeGlassCard(cornerRadius: NativeGlass.heroRadius)
         .padding(.horizontal)
-    }
-
-    private var symbolName: String {
-        switch bannerState {
-        case .normal: return "checkmark.circle.fill"
-        case .caution: return "exclamationmark.circle.fill"
-        case .alert: return "exclamationmark.triangle.fill"
-        }
-    }
-
-    private var titleKey: LocalizedStringKey {
-        switch bannerState {
-        case .normal: return "home.status.normal"
-        case .caution: return "home.status.caution"
-        case .alert: return "home.status.alert"
-        }
     }
 
     private var detailText: String {
@@ -229,11 +217,32 @@ private struct LatestQuakeCardView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
             .tint(Color("BrandColor"))
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color("CardColor")))
+        .nativeGlassCard()
         .padding(.horizontal)
+    }
+}
+
+private struct StatusRipple: View {
+    let color: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(color.opacity(0.16), lineWidth: 2)
+                .frame(width: 54, height: 54)
+            Circle()
+                .stroke(color.opacity(0.28), lineWidth: 2)
+                .frame(width: 34, height: 34)
+            Circle()
+                .fill(color)
+                .frame(width: 14, height: 14)
+        }
+        .frame(width: 72, height: 72)
+        .accessibilityHidden(true)
     }
 }
 
@@ -254,26 +263,26 @@ private struct DetailFieldRow: View {
 
 private struct QuickActionsRow: View {
     @Binding var showingCityPicker: Bool
+    var selectedTab: Binding<NativeUITab>?
 
     var body: some View {
-        HStack(spacing: 12) {
-            QuickActionButton(labelKey: "home.action.nearby", systemImage: "location.circle") {
-                showingCityPicker = true
-            }
-            NavigationLink {
-                EpicenterMapView()
-            } label: {
-                QuickActionButtonLabel(labelKey: "tab.map", systemImage: "map")
-            }
-            NavigationLink {
-                DisasterGuideView()
-            } label: {
-                QuickActionButtonLabel(labelKey: "tab.guide", systemImage: "cross.case")
-            }
-            NavigationLink {
-                SettingsView()
-            } label: {
-                QuickActionButtonLabel(labelKey: "home.action.notify", systemImage: "bell")
+        HStack(spacing: 8) {
+            ForEach(NativeUIQuickAction.allCases, id: \.self) { action in
+                QuickActionButton(
+                    labelKey: LocalizedStringKey(action.titleKey),
+                    systemImage: action.systemImage
+                ) {
+                    switch action.destination {
+                    case .cityPicker:
+                        showingCityPicker = true
+                    case .notifications:
+                        selectedTab?.wrappedValue = .settings
+                    case .map:
+                        selectedTab?.wrappedValue = .map
+                    default:
+                        break
+                    }
+                }
             }
         }
         .padding(.horizontal)
@@ -304,10 +313,10 @@ private struct QuickActionButtonLabel: View {
             Text(labelKey)
                 .font(.caption2)
         }
-        .foregroundStyle(Color("BrandColor"))
+        .foregroundStyle(Color.primary)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color("CardColor")))
+        .nativeGlassCard(cornerRadius: 16)
     }
 }
 
@@ -334,7 +343,7 @@ private struct InlineBanner: View {
             Spacer()
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color("CardColor")))
+        .nativeGlassCard(cornerRadius: NativeGlass.groupedRadius)
         .padding(.horizontal)
     }
 }

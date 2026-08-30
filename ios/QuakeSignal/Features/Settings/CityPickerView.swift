@@ -78,6 +78,7 @@ struct CityPickerView: View {
                 }
             }
             .searchable(text: $searchText)
+            .nativeGroupedChrome()
             .navigationTitle("city.pickerTitle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -118,8 +119,8 @@ private struct RadiusChip: View {
                 .font(.subheadline.weight(.medium))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
-                .background(Capsule().fill(isSelected ? Color("BrandColor") : Color("GroupedBGColor")))
-                .foregroundStyle(isSelected ? .white : .primary)
+                .background(Capsule().fill(isSelected ? Color.primary : Color.primary.opacity(0.07)))
+                .foregroundStyle(isSelected ? Color("GroupedBGColor") : Color.primary)
         }
         .buttonStyle(.plain)
     }

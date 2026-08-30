@@ -224,11 +224,11 @@
 "status.training" = "訓練";
 
 /* タブ */
-"tab.list" = "一覧";
+"tab.list" = "報告";
 "tab.guide" = "ガイド";
 
 /* 一覧タブ */
-"map.title.list" = "地震一覧";
+"map.title.list" = "報告";
 "list.region.all" = "全部";
 "list.empty.title" = "該当する地震がありません";
 "list.empty.detail" = "選択した範囲と条件に一致する地震記録がありません。条件を調整してください。";
@@ -236,8 +236,8 @@
 
 /* 地図タブ */
 "map.window.day" = "24時間";
-"map.window.week" = "7日間";
-"map.window.month" = "30日間";
+"map.window.week" = "7日";
+"map.window.month" = "30日";
 "map.filter.timeWindow" = "期間";
 "map.filter.minimumMagnitude" = "最小マグニチュード";
 "map.share" = "共有";
@@ -265,6 +265,16 @@
 "settings.includeTestAlerts" = "テスト・訓練情報を受信";
 "settings.includeTestAlerts.detail" = "デフォルトはオフ";
 "settings.section.disclaimer" = "情報源と免責事項";
+"settings.section.sourcesAlerts" = "情報源と警報";
+"settings.sources.enabledCount" = "%1$d 件オン";
+"settings.sources.explanation" = "Wolfx の各チャネルは個別にオンにできます。オフにした情報源はホームとバックグラウンド照合から外れます。";
+"settings.replayIntro" = "導入を再生";
+"settings.foregroundAlerts" = "フォアグラウンド通知";
+"settings.foregroundAlerts.local" = "ローカル";
+"settings.foregroundAlerts.detail" = "この画面ではフォアグラウンドで Wolfx を監視します。iPhone/iPad の通知リレーには参加しません。";
+"settings.pushOn" = "オン";
+"settings.language.system" = "システム";
+"guide.familyCheckIn.save" = "このデバイスに保存";
 
 /* 情報源・免責事項 画面 */
 "disclaimer.badge" = "公式の警報プラットフォームではありません";

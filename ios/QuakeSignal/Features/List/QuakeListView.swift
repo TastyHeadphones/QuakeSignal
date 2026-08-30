@@ -43,9 +43,11 @@ struct QuakeListView: View {
                         NavigationLink(value: event) {
                             QuakeRowView(event: event, coordinate: store.effectiveCoordinate)
                         }
+                        .listRowBackground(Color.clear)
                     }
                 }
                 .listStyle(.plain)
+                .nativeGroupedChrome()
                 .overlay {
                     if filteredEvents.isEmpty {
                         ContentUnavailableView {
@@ -61,7 +63,7 @@ struct QuakeListView: View {
                     }
                 }
             }
-            .navigationTitle("map.title.list")
+            .navigationTitle("tab.list")
             .navigationDestination(for: EEWEvent.self) { event in
                 QuakeDetailView(event: event)
             }
@@ -78,7 +80,7 @@ struct QuakeListView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(RegionFilter.allCases, id: \.self) { option in
-                        FilterChip(labelKey: option.labelKey, isSelected: region == option) {
+                        NativeFilterChip(labelKey: option.labelKey, isSelected: region == option) {
                             region = option
                         }
                     }
@@ -89,7 +91,10 @@ struct QuakeListView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(magnitudeTiers, id: \.self) { tier in
-                        FilterChip(labelKey: tier == 0 ? "list.region.all" : LocalizedStringKey("M\(Int(tier))+"), isSelected: minMagnitude == tier) {
+                        NativeFilterChip(
+                            labelKey: tier == 0 ? "list.region.all" : LocalizedStringKey("M\(Int(tier))+"),
+                            isSelected: minMagnitude == tier
+                        ) {
                             minMagnitude = tier
                         }
                     }
@@ -99,23 +104,5 @@ struct QuakeListView: View {
         }
         .padding(.vertical, 10)
         .background(Color("GroupedBGColor"))
-    }
-}
-
-private struct FilterChip: View {
-    let labelKey: LocalizedStringKey
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(labelKey)
-                .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(Capsule().fill(isSelected ? Color("BrandColor") : Color("CardColor")))
-                .foregroundStyle(isSelected ? .white : .primary)
-        }
-        .buttonStyle(.plain)
     }
 }

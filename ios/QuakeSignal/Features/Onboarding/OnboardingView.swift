@@ -23,7 +23,7 @@ private enum OnboardingStep: Int, CaseIterable {
 
     var symbol: String {
         switch self {
-        case .welcome: return "bolt.fill"
+        case .welcome: return "waveform.path.ecg"
         case .sources: return "globe.asia.australia.fill"
         case .notifications: return "bell.badge.fill"
         case .location: return "location.circle.fill"
@@ -43,8 +43,10 @@ struct OnboardingView: View {
                 ForEach(OnboardingStep.allCases, id: \.self) { step in
                     VStack(spacing: 20) {
                         Image(systemName: step.symbol)
-                            .font(.system(size: 64))
-                            .foregroundStyle(.tint)
+                            .font(.system(size: 36, weight: .medium))
+                            .foregroundStyle(Color("BrandColor"))
+                            .frame(width: 88, height: 88)
+                            .nativeGlassCard(cornerRadius: 28)
                         Text(step.title)
                             .font(.title.bold())
                             .multilineTextAlignment(.center)
@@ -55,12 +57,21 @@ struct OnboardingView: View {
                             .padding(.horizontal, 32)
 
                         if step == .sources {
-                            Text("onboarding.disclaimer")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .padding(12)
-                                .background(RoundedRectangle(cornerRadius: 12).fill(Color("CautionColor").opacity(0.12)))
-                                .padding(.horizontal, 32)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("disclaimer.badge")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Color("SevereColor"))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Capsule().fill(Color("SevereColor").opacity(0.14)))
+                                Text("onboarding.disclaimer")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .nativeGlassCard()
+                            .padding(.horizontal, 32)
                         }
                     }
                     .tag(step)
@@ -71,6 +82,7 @@ struct OnboardingView: View {
             actionArea
         }
         .padding(.vertical, 40)
+        .background(Color("GroupedBGColor").ignoresSafeArea())
         .sheet(isPresented: $showingCityPicker, onDismiss: { hasCompletedOnboarding = true }) {
             CityPickerView()
         }
@@ -86,6 +98,7 @@ struct OnboardingView: View {
                 Text("onboarding.continue").frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
             .controlSize(.large)
             .padding(.horizontal, 32)
 
@@ -109,6 +122,7 @@ struct OnboardingView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .disabled(isRequesting)
 
@@ -128,6 +142,7 @@ struct OnboardingView: View {
                     Text("onboarding.chooseLocation").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
                 .controlSize(.large)
 
                 Button("onboarding.skip") {

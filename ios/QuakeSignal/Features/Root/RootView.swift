@@ -15,19 +15,7 @@ struct RootView: View {
 
         Group {
             if hasCompletedOnboarding {
-                TabView {
-                    HomeView()
-                        .tabItem { Label("tab.home", systemImage: "waveform.path.ecg") }
-                    QuakeListView()
-                        .tabItem { Label("tab.list", systemImage: "list.bullet") }
-                    EpicenterMapView()
-                        .tabItem { Label("tab.map", systemImage: "map") }
-                    DisasterGuideView()
-                        .tabItem { Label("tab.guide", systemImage: "cross.case") }
-                    SettingsView()
-                        .tabItem { Label("tab.settings", systemImage: "gearshape") }
-                }
-                .tint(Color("BrandColor"))
+                NativeRootTabs()
             } else {
                 OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)
             }
@@ -174,5 +162,105 @@ struct RootView: View {
         if let fetched = store.events.first(where: { $0.id == compositeId }) {
             store.ingestForegroundNotification(event: fetched, reason: reason)
         }
+    }
+}
+
+private struct NativeRootTabs: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var selectedTab: NativeUITab = .home
+
+    var body: some View {
+        Group {
+            if horizontalSizeClass == .regular {
+                NavigationSplitView {
+                    NativeGlassSidebar(selection: $selectedTab)
+                } detail: {
+                    nativeTabRoot(selectedTab)
+                }
+            } else {
+                TabView(selection: $selectedTab) {
+                    ForEach(NativeUINavigation.rootTabs) { tab in
+                        nativeTabRoot(tab)
+                            .tag(tab)
+                    }
+                }
+                .toolbar(.hidden, for: .tabBar)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    NativeGlassTabBar(selection: $selectedTab)
+                }
+            }
+        }
+        .tint(Color("BrandColor"))
+        .environment(\.nativeUITabSelection, $selectedTab)
+    }
+
+    @ViewBuilder
+    private func nativeTabRoot(_ tab: NativeUITab) -> some View {
+        switch tab {
+        case .home: HomeView()
+        case .reports: QuakeListView()
+        case .map: EpicenterMapView()
+        case .guide: DisasterGuideView()
+        case .settings: SettingsView()
+        }
+    }
+}
+
+private struct NativeGlassTabBar: View {
+    @Binding var selection: NativeUITab
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(NativeUINavigation.rootTabs) { tab in
+                Button {
+                    selection = tab
+                } label: {
+                    VStack(spacing: 1) {
+                        Image(systemName: tab.systemImage)
+                            .font(.system(size: 18, weight: .medium))
+                        Text(LocalizedStringKey(tab.titleKey))
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
+                    .foregroundStyle(selection == tab ? Color("BrandColor") : Color.secondary)
+                    .background {
+                        if selection == tab {
+                            Capsule()
+                                .fill(Color("GroupedBGColor").opacity(0.72))
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(LocalizedStringKey(tab.titleKey)))
+                .accessibilityAddTraits(selection == tab ? .isSelected : [])
+            }
+        }
+        .padding(4)
+        .nativeGlassCard(cornerRadius: 32)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 10)
+    }
+}
+
+private struct NativeGlassSidebar: View {
+    @Binding var selection: NativeUITab
+
+    var body: some View {
+        List {
+            ForEach(NativeUINavigation.rootTabs) { tab in
+                Button {
+                    selection = tab
+                } label: {
+                    Label(LocalizedStringKey(tab.titleKey), systemImage: tab.systemImage)
+                }
+                .listRowBackground(selection == tab ? Color("BrandColor").opacity(0.12) : Color.clear)
+                .foregroundStyle(selection == tab ? Color("BrandColor") : Color.primary)
+                .accessibilityAddTraits(selection == tab ? .isSelected : [])
+            }
+        }
+        .listStyle(.sidebar)
+        .navigationTitle("app.name")
+        .nativeGroupedChrome()
     }
 }

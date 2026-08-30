@@ -57,6 +57,7 @@ struct QuakeDetailView: View {
                 }
             }
         }
+        .nativeGroupedChrome()
         .navigationTitle("detail.title")
         .navigationBarTitleDisplayMode(.inline)
     }
