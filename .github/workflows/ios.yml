@@ -51,7 +51,7 @@ on:
       build_number:
         description: Exact pre-approved CFBundleVersion from ios/project.yml and the Worker App Attest allow-list
         required: false
-        default: "17"
+        default: "18"
         type: string
       source_commit:
         description: Exact 40-character lowercase protected-main commit to sign
