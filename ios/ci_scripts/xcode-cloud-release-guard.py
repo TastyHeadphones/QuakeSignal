@@ -33,7 +33,7 @@ MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
 APP_ATTEST_FINGERPRINT = "sha256:8_djuZ9IjD-ODoULY8ztcGJFZJ7tOxWiThhtqpdIMYQ"
 XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:ed4a8WYD1jf9VTxuObdvuGeNP70mIvG2xHJ1NQdMaIg"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
-PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:V2v9lIX-VlWRFi9UbR3vnOF2Aujs1ynrTd2KQO8Fmvo"
+PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:WVwMU3r-EeeN2tqkzM-qGigvCZX2XW-Qxx91H-P0ymg"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
 MAX_RESPONSE_BYTES = 1024 * 1024
 READINESS_TIMEOUT_SECONDS = 180.0
@@ -138,7 +138,6 @@ RELEASE_ALERT_ENTITLEMENTS = {
     "aps-environment": "production",
     "com.apple.developer.devicecheck.appattest-environment": "production",
     "com.apple.developer.usernotifications.time-sensitive": True,
-    "com.apple.developer.usernotifications.critical-alerts": True,
 }
 RELEASE_CATALYST_ENTITLEMENTS = {
     "com.apple.security.app-sandbox": True,
