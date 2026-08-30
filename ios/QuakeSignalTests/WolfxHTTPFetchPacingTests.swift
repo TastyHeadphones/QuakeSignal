@@ -26,7 +26,7 @@ final class WolfxHTTPFetchPacingTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(WolfxHTTPFetchPacing.requestIntervalNanoseconds, 500_000_000)
         XCTAssertEqual(
             WolfxHTTPFetchPacing.delayNanoseconds(forSourceIndex: WolfxClient.sources.count - 1),
-            600_000_000
+            WolfxHTTPFetchPacing.requestIntervalNanoseconds * UInt64(WolfxClient.sources.count - 1)
         )
     }
 
