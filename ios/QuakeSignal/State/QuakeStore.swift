@@ -271,14 +271,23 @@ final class QuakeStore {
 
         activeRefreshTask?.cancel()
         let refreshTask = Task { [wolfx] in
+            let wolfxResult: WolfxSnapshotFetchResult
             if allowingPartialResults {
-                return try await wolfx.fetchRecentQuakesAllowingPartialResults()
+                wolfxResult = try await wolfx.fetchRecentQuakesAllowingPartialResults()
+            } else {
+                let events = try await wolfx.fetchRecentQuakes()
+                wolfxResult = WolfxSnapshotFetchResult(
+                    events: events,
+                    failedSources: [],
+                    successfulSourceCount: WolfxClient.sources.count
+                )
             }
-            let events = try await wolfx.fetchRecentQuakes()
-            return WolfxSnapshotFetchResult(
-                events: events,
-                failedSources: [],
-                successfulSourceCount: WolfxClient.sources.count
+            let catalogResult = try await CatalogClient.shared.fetchRecentQuakesAllowingPartialResults()
+            return WolfxSnapshotFetchResult.aggregate(
+                batches: [wolfxResult.events, catalogResult.events],
+                failedSources: wolfxResult.failedSources + catalogResult.failedSources,
+                successfulSourceCount: wolfxResult.successfulSourceCount + catalogResult.successfulSourceCount,
+                limit: 50
             )
         }
         activeRefreshTask = refreshTask
@@ -288,7 +297,7 @@ final class QuakeStore {
             guard generation == refreshGeneration, isForegroundActive else { return }
             guard snapshot.hasSuccessfulSources else {
                 loadError = snapshot.statusDescription
-                    ?? "Wolfx snapshot unavailable."
+                    ?? "Earthquake snapshot unavailable."
                 isLoading = false
                 activeRefreshTask = nil
                 return

@@ -1,8 +1,14 @@
 import {
   extractEqlistEntries,
+  normalizeCatalogGeoJSON,
   normalizeJmaEew,
   normalizeJmaEqlistEntry,
 } from "../../src/alerts/normalize";
+import {
+  CATALOG_HTTP_URLS,
+  CATALOG_SOURCE_IDS,
+  isCatalogSourceId,
+} from "../../src/types/catalog";
 import type {
   AlertSound,
   DeviceRecord,
@@ -194,6 +200,7 @@ export const APNS_RELAY_EEW_SOURCES = [
 ] as const satisfies readonly WolfxSourceId[];
 const APNS_RELAY_REPORT_SOURCES = [
   "jma_eqlist",
+  ...CATALOG_SOURCE_IDS,
 ] as const satisfies readonly WolfxSourceId[];
 export const APNS_RELAY_SOURCES = [
   ...APNS_RELAY_EEW_SOURCES,
@@ -242,6 +249,7 @@ const RELAY_EVENT_RETENTION_CUTOFF_MS = 89 * 24 * 60 * 60_000;
 // only long enough for operational review and bounded cleanup after its UTC
 // day has ended.
 const PRODUCTION_TRAINING_TEST_PUSH_CLAIM_RETENTION_MS = 14 * 24 * 60 * 60_000;
+export const PRODUCTION_TRAINING_TEST_PUSH_DAILY_LIMIT = 10;
 // A fixed server-side delay prevents a client from choosing an arbitrary
 // background job time. Ninety seconds is enough for a person to leave the
 // foreground and lock or terminate the TestFlight app, while remaining a
@@ -2506,9 +2514,12 @@ function normalizeMessages(
       return extractEqlistEntries<JmaEqlistEntry>(
         message as WolfxEqlistMessage,
       ).map(({ entry }) => normalizeJmaEqlistEntry(entry));
+    case "usgs_eqlist":
+    case "emsc_eqlist":
+    case "geonet_eqlist":
+      return normalizeCatalogGeoJSON(sourceId, message);
     default:
-      // The shared client domain still knows about other Wolfx source IDs,
-      // but the build-8 APNs relay must fail closed for every non-JMA feed.
+      // Disabled Wolfx provincial feeds stay fail-closed for APNs delivery.
       return [];
   }
 }
@@ -2860,13 +2871,41 @@ function isStructurallyValidEqlistSnapshot(
  * Wolfx's current earthquake feeds retain their latest report rather than
  * publishing a documented empty/idle object, so an empty object fails closed.
  */
+function isStructurallyValidCatalogSnapshot(
+  sourceId: WolfxSourceId,
+  message: unknown,
+  normalizedEvents: readonly NormalizedEvent[],
+): boolean {
+  if (!isCatalogSourceId(sourceId) || !message || typeof message !== "object" || Array.isArray(message)) {
+    return false;
+  }
+  const collection = message as { type?: unknown; features?: unknown };
+  if (collection.type !== "FeatureCollection" || !Array.isArray(collection.features)) {
+    return false;
+  }
+  const expected = normalizeCatalogGeoJSON(sourceId, message);
+  return (
+    expected.length === normalizedEvents.length &&
+    new Set(normalizedEvents.map((event) => event.id)).size === normalizedEvents.length &&
+    expected.every((event, index) =>
+      normalizedEventExactlyMatches(normalizedEvents[index], event)
+    )
+  );
+}
+
 export function isStructurallyValidHttpSnapshot(
   sourceId: WolfxSourceId,
   message: unknown,
   normalizedEvents: readonly NormalizedEvent[],
 ): boolean {
   if (!isApnsRelaySource(sourceId)) return false;
-  if (!message || typeof message !== "object" || Array.isArray(message)) {
+  if (!message || typeof message !== "object") {
+    return false;
+  }
+  if (isCatalogSourceId(sourceId)) {
+    return isStructurallyValidCatalogSnapshot(sourceId, message, normalizedEvents);
+  }
+  if (Array.isArray(message)) {
     return false;
   }
   if (
@@ -11367,11 +11406,22 @@ export class QuakeRelay {
     let message: unknown;
     try {
       message = await withHttpSnapshotTimeout(async (signal) => {
-        const response = await fetch(`${HTTP_BASE}/${source}.json`, {
+        const snapshotUrl = isCatalogSourceId(source)
+          ? CATALOG_HTTP_URLS[source]
+          : `${HTTP_BASE}/${source}.json`;
+        const response = await fetch(snapshotUrl, {
           signal,
           // Snapshot freshness is the alternate transport's readiness proof.
           // Never let an edge-cached historical Wolfx response refresh it.
           cache: "no-store",
+          ...(isCatalogSourceId(source)
+            ? {
+              headers: {
+                "user-agent":
+                  "QuakeSignal/1.2 (https://github.com/TastyHeadphones/QuakeSignal)",
+              },
+            }
+            : {}),
         });
         if (!response.ok) {
           await response.body?.cancel();
@@ -11423,6 +11473,17 @@ export class QuakeRelay {
       `${UPSTREAM_HTTP_FINGERPRINT_PREFIX}${source}`,
     );
     if (storedFingerprint === fingerprint) {
+      await this.markHttpSourceSuccessful(source);
+      return { completed: true, snapshotWorkStarted: false };
+    }
+
+    if (normalizedEvents.length === 0) {
+      // A quiet official catalog is a valid idle snapshot. Do not open a
+      // D1 cursor that requires at least one queued event.
+      await this.state.storage.put(
+        `${UPSTREAM_HTTP_FINGERPRINT_PREFIX}${source}`,
+        fingerprint,
+      );
       await this.markHttpSourceSuccessful(source);
       return { completed: true, snapshotWorkStarted: false };
     }
@@ -14675,9 +14736,9 @@ export interface ProductionTrainingTestPushClaimResult {
 
 /**
  * Atomically consume an already-verified App Attest assertion, advance its
- * monotonic counter, and claim the one permitted production training push for
- * this key and UTC day. The INSERT-or-ignore result is read from the same D1
- * transaction, so two concurrent valid assertions cannot both reach APNs.
+ * monotonic counter, and claim one of the ten permitted production training
+ * pushes for this key and UTC day. The countable D1 claim result is read from
+ * the same transaction, so concurrent valid assertions cannot exceed the quota.
  */
 export async function completeAttestedProductionTrainingTestPushClaim(
   db: D1Database,
@@ -14754,10 +14815,14 @@ export async function completeAttestedProductionTrainingTestPushClaim(
       ),
     db
       .prepare(
-        `INSERT OR IGNORE INTO production_training_test_push_claims (
-          app_attest_key_id, utc_day, claimed_at_utc, expires_at_utc
-        ) SELECT ?, ?, ?, ?
-        WHERE ${consumed.sql} AND ${ownsProductionDevice.sql}`,
+        `INSERT INTO production_training_test_push_claims (
+          app_attest_key_id, utc_day, claim_count, claimed_at_utc, expires_at_utc
+        ) SELECT ?, ?, 1, ?, ?
+        WHERE ${consumed.sql} AND ${ownsProductionDevice.sql}
+        ON CONFLICT(app_attest_key_id, utc_day) DO UPDATE SET
+          claim_count = claim_count + 1,
+          claimed_at_utc = excluded.claimed_at_utc
+        WHERE production_training_test_push_claims.claim_count < ${PRODUCTION_TRAINING_TEST_PUSH_DAILY_LIMIT}`,
       )
       .bind(
         authorization.keyId,
@@ -15060,7 +15125,7 @@ async function handleRequest(
         },
         {
           heading: "Third-party services",
-          body: "All clients fetch earthquake information directly from the Wolfx Open API, which receives ordinary connection metadata such as an IP address under its own policies. Full-interface Apple clients also use Apple Maps and system Location Services when those features are used; Apple handles associated service data under its own policies, while QuakeSignal does not include the exact location in Wolfx requests or its relay. Cloudflare hosts these public pages and may process ordinary web-request and security metadata. Cloudflare D1, Apple Push Notification service, and Apple App Attest are used for app data only on opted-in iPhone/iPad alerts: Cloudflare stores subscriptions, verifies proofs, watches only the jma_eew and jma_eqlist Wolfx feeds, filters and presents the relayed JMA-issued information, and requests delivery through APNs. The relay does not create an earthquake forecast or predict local intensity or arrival time. The App Attest private key never leaves the iPhone or iPad. Following the public GitHub support link is subject to GitHub's policies.",
+          body: "Clients fetch earthquake information from the Wolfx Open API for JMA early-warning and report feeds and from the USGS, EMSC, and GeoNet public earthquake catalogs, which receive ordinary connection metadata such as an IP address under their own policies. Full-interface Apple clients also use Apple Maps and system Location Services when those features are used; Apple handles associated service data under its own policies, while QuakeSignal does not include the exact location in those earthquake requests or its relay. Cloudflare hosts these public pages and may process ordinary web-request and security metadata. Cloudflare D1, Apple Push Notification service, and Apple App Attest are used for app data only on opted-in iPhone/iPad alerts: Cloudflare stores subscriptions, verifies proofs, watches the jma_eew and jma_eqlist Wolfx feeds together with the USGS, EMSC, and GeoNet earthquake catalogs, filters and presents the relayed source-issued information, and requests delivery through APNs. The relay does not create an earthquake forecast or predict local intensity or arrival time. The App Attest private key never leaves the iPhone or iPad. Following the public GitHub support link is subject to GitHub's policies.",
         },
         {
           heading: "Safety notice",

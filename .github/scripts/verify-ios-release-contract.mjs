@@ -36,6 +36,7 @@ const contractFiles = {
     "ios/QuakeSignal/Features/Settings/SettingsView.swift",
     "ios/QuakeSignal/Models/EEWEvent.swift",
     "ios/QuakeSignal/Networking/ForegroundHTTPFallbackPolicy.swift",
+    "ios/QuakeSignal/Networking/CatalogClient.swift",
     "ios/QuakeSignal/Networking/LiveSocketClient.swift",
     "ios/QuakeSignal/Networking/WolfxClient.swift",
     "ios/QuakeSignal/Notifications/EmergencyAlertAudio.swift",
@@ -268,6 +269,7 @@ const RELEASE_ALERT_ENTITLEMENTS = {
   "aps-environment": "production",
   "com.apple.developer.devicecheck.appattest-environment": "production",
   "com.apple.developer.usernotifications.time-sensitive": true,
+  "com.apple.developer.usernotifications.critical-alerts": true,
 };
 const RELEASE_CATALYST_ENTITLEMENTS = {
   "com.apple.security.app-sandbox": true,

@@ -4,6 +4,8 @@
  * verbatim — see docs/WOLFX_API.md for the verified schema this was built from.
  */
 
+import type { CatalogSourceId } from "./catalog.js";
+
 export type WolfxSourceId =
   | "jma_eew"
   | "sc_eew"
@@ -11,7 +13,11 @@ export type WolfxSourceId =
   | "fj_eew"
   | "cq_eew"
   | "cenc_eqlist"
-  | "jma_eqlist";
+  | "jma_eqlist"
+  | CatalogSourceId;
+
+/** Every earthquake origin the relay and clients may name, including catalogs. */
+export type EarthquakeSourceId = WolfxSourceId;
 
 export const ALL_WOLFX_SOURCES: WolfxSourceId[] = [
   "jma_eew",

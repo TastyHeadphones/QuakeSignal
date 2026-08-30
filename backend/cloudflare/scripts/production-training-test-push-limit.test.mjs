@@ -223,11 +223,15 @@ test("production training push claims shared by immediate and delayed modes are 
       seedKey(seed, keyId, firstAttemptAt.toISOString());
       seedKey(seed, foreignKeyId, firstAttemptAt.toISOString());
       seedProductionDevice(seed, token, keyId, firstAttemptAt.toISOString());
-      for (const [signCount, challengeId] of [
+      const challengeRows = [
         [1, "training-claim-first"],
-        [2, "training-claim-same-day"],
-        [3, "training-claim-next-day"],
-      ]) {
+        ...Array.from({ length: 10 }, (_, index) => [
+          index + 2,
+          `training-claim-same-day-${index + 2}`,
+        ]),
+        [12, "training-claim-next-day"],
+      ];
+      for (const [signCount, challengeId] of challengeRows) {
         seedChallenge(
           seed,
           authorization(keyId, signCount, challengeId).challenge,
@@ -259,16 +263,29 @@ test("production training push claims shared by immediate and delayed modes are 
     );
     assert.equal(first.outcome, "claimed");
 
+    for (let attempt = 2; attempt <= 10; attempt += 1) {
+      const sameDaySlot = await completeAttestedProductionTrainingTestPushClaim(
+        adapter.database,
+        authorization(keyId, attempt, `training-claim-same-day-${attempt}`),
+        token,
+        sameDayAttemptAt,
+      );
+      assert.equal(
+        sameDaySlot.outcome,
+        "claimed",
+        `same-UTC-day production test push ${attempt} of 10 must succeed`,
+      );
+    }
     const sameDay = await completeAttestedProductionTrainingTestPushClaim(
       adapter.database,
-      authorization(keyId, 2, "training-claim-same-day"),
+      authorization(keyId, 11, "training-claim-same-day-11"),
       token,
       sameDayAttemptAt,
     );
     assert.equal(
       sameDay.outcome,
       "already_claimed",
-      "the second valid assertion is consumed but cannot dispatch another same-day production push",
+      "the 11th valid assertion is consumed but cannot dispatch another same-day production push",
     );
     const limited = productionTrainingTestPushLimitResponse(sameDay.window);
     assert.equal(limited.status, 429);
@@ -284,32 +301,32 @@ test("production training push claims shared by immediate and delayed modes are 
         "SELECT sign_count FROM app_attest_keys WHERE key_id = ?",
         keyId,
       ),
-      [{ sign_count: 2 }],
-      "both proof attempts update the App Attest counter in their transactions",
+      [{ sign_count: 11 }],
+      "every proof attempt updates the App Attest counter in its transaction",
     );
     assert.deepEqual(
       adapter.all(
         `SELECT id, consumed_at_utc FROM app_attest_challenges
-         WHERE id IN ('training-claim-first', 'training-claim-same-day')
+         WHERE id IN ('training-claim-first', 'training-claim-same-day-11')
          ORDER BY id`,
       ),
       [
         { id: "training-claim-first", consumed_at_utc: firstAttemptAt.toISOString() },
-        { id: "training-claim-same-day", consumed_at_utc: sameDayAttemptAt.toISOString() },
+        { id: "training-claim-same-day-11", consumed_at_utc: sameDayAttemptAt.toISOString() },
       ],
       "the counter, challenge consumption, and claim share each D1 transaction",
     );
     assert.deepEqual(
       adapter.all(
-        "SELECT app_attest_key_id, utc_day FROM production_training_test_push_claims",
+        "SELECT app_attest_key_id, utc_day, claim_count FROM production_training_test_push_claims",
       ),
-      [{ app_attest_key_id: keyId, utc_day: "2026-08-12" }],
+      [{ app_attest_key_id: keyId, utc_day: "2026-08-12", claim_count: 10 }],
     );
     assert.deepEqual(
       adapter
         .all("PRAGMA table_info(production_training_test_push_claims)")
         .map(({ name }) => name),
-      ["app_attest_key_id", "utc_day", "claimed_at_utc", "expires_at_utc"],
+      ["app_attest_key_id", "utc_day", "claim_count", "claimed_at_utc", "expires_at_utc"],
       "the durable claim table contains no raw APNs token, proof, or request body",
     );
 
@@ -330,7 +347,7 @@ test("production training push claims shared by immediate and delayed modes are 
 
     const nextDay = await completeAttestedProductionTrainingTestPushClaim(
       adapter.database,
-      authorization(keyId, 3, "training-claim-next-day"),
+      authorization(keyId, 12, "training-claim-next-day"),
       token,
       nextDayAttemptAt,
     );
@@ -342,7 +359,7 @@ test("production training push claims shared by immediate and delayed modes are 
         keyId,
       ),
       [{ utc_day: "2026-08-12" }, { utc_day: "2026-08-13" }],
-      "a new UTC day, not the device locale, permits one new training push claim",
+      "a new UTC day, not the device locale, permits a new training push claim",
     );
 
     await adapter.database.batch([

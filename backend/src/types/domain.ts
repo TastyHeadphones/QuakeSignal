@@ -1,4 +1,4 @@
-import type { WolfxSourceId } from "./wolfx.js";
+import type { EarthquakeSourceId } from "./wolfx.js";
 
 export type EventKind = "eew" | "report";
 
@@ -10,7 +10,7 @@ export type EventKind = "eew" | "report";
 export interface NormalizedEvent {
   /** Stable key: `${sourceId}:${eventId}`. */
   id: string;
-  sourceId: WolfxSourceId;
+  sourceId: EarthquakeSourceId;
   eventId: string;
   /** EEW `Serial`/`ReportNum`, or the eqlist rank ("No<n>") for report-kind events. */
   serial: number;
@@ -49,7 +49,7 @@ export interface DeviceRecord {
   /** BCP-47 tag reported by the app, e.g. "ja", "zh-Hans", "en". Informational only --
    *  push text localization relies on APNs loc-key, not this field. */
   locale: string | null;
-  sources: WolfxSourceId[];
+  sources: EarthquakeSourceId[];
   minMagnitude: number;
   criticalAlertsEnabled: boolean;
   /** Bundled notification sound selected for fresh active EEW warnings. */

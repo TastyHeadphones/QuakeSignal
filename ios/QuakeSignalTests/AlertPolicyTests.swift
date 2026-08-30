@@ -1244,6 +1244,90 @@ final class AlertPolicyTests: XCTestCase {
         )
     }
 
+    func testCatalogNormalizerMapsUsgsAndEmscReportsOntoTheNotificationPath() throws {
+        let usgsJSON: [String: Any] = [
+            "type": "FeatureCollection",
+            "features": [[
+                "type": "Feature",
+                "id": "us7000abcd",
+                "properties": [
+                    "mag": 6.1,
+                    "place": "32 km WSW of Ovalle, Chile",
+                    "time": 1_788_067_498_000,
+                    "updated": 1_788_067_498_000,
+                    "type": "earthquake",
+                ] as [String: Any],
+                "geometry": [
+                    "type": "Point",
+                    "coordinates": [-71.3, -30.6, 40],
+                ] as [String: Any],
+            ] as [String: Any]],
+        ]
+        let usgsEvents = try CatalogNormalizer.validatedEvents(source: "usgs_eqlist", object: usgsJSON)
+        XCTAssertEqual(usgsEvents.count, 1)
+        XCTAssertEqual(usgsEvents[0].id, "usgs_eqlist:us7000abcd")
+        XCTAssertEqual(usgsEvents[0].kind, "report")
+        XCTAssertEqual(usgsEvents[0].sourceId, "usgs_eqlist")
+        let payload = PushPayload(userInfo: [
+            "eventId": "us7000abcd",
+            "sourceId": "usgs_eqlist",
+            "kind": "report",
+            "reason": "report",
+            "serial": 1,
+            "isWarn": false,
+            "isFinal": true,
+            "isCancel": false,
+            "isTraining": false,
+            "reportTimeUtc": usgsEvents[0].reportTimeUtc as Any,
+            "originTimeUtc": usgsEvents[0].originTimeUtc as Any,
+            "event": [
+                "id": usgsEvents[0].id,
+                "sourceId": usgsEvents[0].sourceId,
+                "eventId": usgsEvents[0].eventId,
+                "serial": usgsEvents[0].serial,
+                "kind": usgsEvents[0].kind,
+                "originTimeUtc": usgsEvents[0].originTimeUtc as Any,
+                "reportTimeUtc": usgsEvents[0].reportTimeUtc as Any,
+                "hypocenter": usgsEvents[0].hypocenter,
+                "latitude": usgsEvents[0].latitude as Any,
+                "longitude": usgsEvents[0].longitude as Any,
+                "magnitude": usgsEvents[0].magnitude as Any,
+                "depth": usgsEvents[0].depth as Any,
+                "maxIntensity": usgsEvents[0].maxIntensity as Any,
+                "isWarn": false,
+                "isFinal": true,
+                "isCancel": false,
+                "isTraining": false,
+            ] as [String: Any],
+        ])
+        XCTAssertEqual(payload.sourceId, "usgs_eqlist")
+        XCTAssertEqual(payload.eventSnapshot?.kind, "report")
+        XCTAssertTrue(payload.hasUsableMatchingEventSnapshot)
+
+        let emscJSON: [String: Any] = [
+            "type": "FeatureCollection",
+            "features": [[
+                "type": "Feature",
+                "id": "20260830_0000123",
+                "properties": [
+                    "time": "2026-08-30T02:15:00.000Z",
+                    "mag": 5.4,
+                    "flynn_region": "Greece",
+                ] as [String: Any],
+                "geometry": [
+                    "type": "Point",
+                    "coordinates": [21.7, 38.4, 12],
+                ] as [String: Any],
+            ] as [String: Any]],
+        ]
+        let emscEvents = try CatalogNormalizer.validatedEvents(source: "emsc_eqlist", object: emscJSON)
+        XCTAssertEqual(emscEvents.count, 1)
+        XCTAssertEqual(emscEvents[0].sourceId, "emsc_eqlist")
+        XCTAssertEqual(emscEvents[0].kind, "report")
+        XCTAssertEqual(EarthquakeSources.all.contains("usgs_eqlist"), true)
+        XCTAssertEqual(EarthquakeSources.all.contains("geonet_eqlist"), true)
+    }
+
     func testLocationFixPolicyRejectsStaleInvalidAndInaccurateLocations() {
         let coordinate = CLLocationCoordinate2D(latitude: 35.0, longitude: 140.0)
         let valid = CLLocation(

@@ -27,6 +27,9 @@
 "quake.intensity.label" = "最大震度 %1$@";
 "quake.depth.label" = "深さ %1$@ km";
 "quake.source.jma" = "気象庁";
+"quake.source.usgs" = "USGS";
+"quake.source.emsc" = "EMSC";
+"quake.source.geonet" = "GeoNet";
 
 /* Full-screen alert */
 "alert.badge.new" = "緊急地震速報";
@@ -63,7 +66,10 @@
 "settings.section.sources" = "警報の情報源";
 "settings.source.jma_eew" = "気象庁 — 緊急地震速報";
 "settings.source.jma_eqlist" = "気象庁 — 地震情報";
-"settings.sources.minimum" = "気象庁の通知ソースを1つ以上有効にしてください。";
+"settings.source.usgs_eqlist" = "USGS — 地震情報";
+"settings.source.emsc_eqlist" = "EMSC — 地震情報";
+"settings.source.geonet_eqlist" = "GeoNet NZ — 地震情報";
+"settings.sources.minimum" = "通知ソースを1つ以上有効にしてください。";
 "settings.section.threshold" = "最小マグニチュード";
 "settings.section.notifications" = "通知";
 "settings.openNotificationSettings" = "通知設定を確認";
@@ -270,6 +276,9 @@
 "disclaimer.source.jmaAttribution" = "出典：気象庁（JMA）。QuakeSignalが正規化・編集したもので、気象庁が作成または推薦したものではありません。公共データ利用規約1.0に基づき利用しています。";
 "disclaimer.source.jmaTerms" = "気象庁の利用規約・出典表示";
 "disclaimer.source.publicDataLicense" = "公共データ利用規約1.0";
+"disclaimer.source.usgs" = "USGS 地震ハザードプログラム（パブリックドメイン）";
+"disclaimer.source.emsc" = "EMSC / 欧州地中海地震センター";
+"disclaimer.source.geonet" = "GeoNet ニュージーランド（CC BY 3.0）";
 "disclaimer.notOfficial" = "震息は公式の政府地震警報プラットフォームではなく、公式情報の代わりにはなりません。";
 "disclaimer.mayBeDelayed" = "情報には遅延・欠落・誤差が生じる場合があります。必ず公式発表と地域の防災指示に従ってください。";
 "disclaimer.deliveryNotGuaranteed" = "通知の到達はOS、ネットワーク状況、端末設定に左右され、秒単位での到達を保証するものではありません。";

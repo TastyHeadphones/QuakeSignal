@@ -141,7 +141,10 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         )
 
         let settings = AppSettings(defaults: defaults)
-        XCTAssertEqual(AppSettings.allSources, ["jma_eew", "jma_eqlist"])
+        XCTAssertEqual(
+            AppSettings.allSources,
+            ["jma_eew", "jma_eqlist", "usgs_eqlist", "emsc_eqlist", "geonet_eqlist"]
+        )
         XCTAssertEqual(settings.enabledSources, ["jma_eew", "jma_eqlist"])
         XCTAssertEqual(
             defaults.stringArray(forKey: "settings.sources"),

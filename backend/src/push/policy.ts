@@ -22,6 +22,9 @@ const SOURCE_LABEL: Record<string, string> = {
   cq_eew: "Chongqing EQA",
   cenc_eqlist: "CENC",
   jma_eqlist: "JMA",
+  usgs_eqlist: "USGS",
+  emsc_eqlist: "EMSC",
+  geonet_eqlist: "GeoNet",
 };
 
 const LOC_KEYS: Record<NotifyReason, { title: string; body: string }> = {
@@ -72,8 +75,14 @@ export interface QuakeSignalPushPayload {
       "loc-key": string;
       "loc-args": string[];
     };
-    sound: string;
-    "interruption-level": "active" | "time-sensitive";
+    sound:
+      | string
+      | {
+          critical: 1;
+          name: string;
+          volume: number;
+        };
+    "interruption-level": "active" | "time-sensitive" | "critical";
     "relevance-score": number;
     category: "EEW_ALERT" | "EEW_TRAINING";
   };
@@ -270,6 +279,17 @@ function selectedSoundFile(alertSound: AlertSound, urgent: boolean): string {
   return CUSTOM_ALERT_SOUND_FILES[alertSound];
 }
 
+function selectedApnsSound(
+  alertSound: AlertSound,
+  urgent: boolean,
+): QuakeSignalPushPayload["aps"]["sound"] {
+  const name = selectedSoundFile(alertSound, urgent);
+  if (!urgent) return name;
+  // Apple emergency-alert / Critical Alert payload. Devices still need the
+  // Critical Alerts entitlement to present through Silent Mode.
+  return { critical: 1, name, volume: 1.0 };
+}
+
 export function pushPayloadSizeBytes(payload: QuakeSignalPushPayload): number {
   return new TextEncoder().encode(JSON.stringify(payload)).byteLength;
 }
@@ -298,10 +318,8 @@ export function buildPushPayload(
           snapshot.maxIntensity ?? "--",
         ],
       },
-      // Critical Alerts are not enabled. Only a fresh, genuine active warning
-      // gets Time Sensitive interruption and the user's bundled custom sound.
-      sound: selectedSoundFile(alertSound, urgent),
-      "interruption-level": urgent ? "time-sensitive" : "active",
+      sound: selectedApnsSound(alertSound, urgent),
+      "interruption-level": urgent ? "critical" : "active",
       "relevance-score": urgent ? 1 : 0.3,
       category: reason === "training" ? "EEW_TRAINING" : "EEW_ALERT",
     },

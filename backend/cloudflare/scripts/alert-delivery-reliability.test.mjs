@@ -4423,9 +4423,18 @@ test("queued event validation requires strict numeric in-range coordinates", asy
     isQueuedEvent,
   } = await workerModule();
   const event = message(1).event;
-  assert.deepEqual(APNS_RELAY_SOURCES, ["jma_eew", "jma_eqlist"]);
+  assert.deepEqual(APNS_RELAY_SOURCES, [
+    "jma_eew",
+    "jma_eqlist",
+    "usgs_eqlist",
+    "emsc_eqlist",
+    "geonet_eqlist",
+  ]);
   assert.equal(isApnsRelaySource("jma_eew"), true);
   assert.equal(isApnsRelaySource("jma_eqlist"), true);
+  assert.equal(isApnsRelaySource("usgs_eqlist"), true);
+  assert.equal(isApnsRelaySource("emsc_eqlist"), true);
+  assert.equal(isApnsRelaySource("geonet_eqlist"), true);
   for (const sourceId of APNS_RELAY_DISABLED_SOURCES) {
     assert.equal(isApnsRelaySource(sourceId), false);
     assert.equal(
@@ -7707,8 +7716,8 @@ test("builds bounded typed APNs snapshots and reserves custom Time Sensitive sou
     ["japanese-voice", "quakesignal_japanese_voice.caf"],
   ]) {
     const payload = buildPushPayload(warning, "new", alertSound, nowMs);
-    assert.equal(payload.aps.sound, expectedFile);
-    assert.equal(payload.aps["interruption-level"], "time-sensitive");
+    assert.deepEqual(payload.aps.sound, { critical: 1, name: expectedFile, volume: 1.0 });
+    assert.equal(payload.aps["interruption-level"], "critical");
     assert.deepEqual(payload.event, expectedSnapshot);
     assert.deepEqual(JSON.parse(JSON.stringify(payload)).event, expectedSnapshot);
     assert.equal(payload.eventId, warning.eventId, "legacy payload fields remain available");
@@ -7780,7 +7789,7 @@ test("accepts only exact alert-sound registration identifiers and defaults old c
   };
   const legacy = validatedRegistrationValues(registration);
   assert.equal(legacy.alertSound, "system");
-  assert.deepEqual(JSON.parse(legacy.sources), ["jma_eew", "jma_eqlist"]);
+  assert.deepEqual(JSON.parse(legacy.sources), [...APNS_RELAY_SOURCES]);
   for (const invalidToken of [
     "0123456789abcde",
     "0123456789ABCDEf",

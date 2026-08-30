@@ -13,7 +13,7 @@ struct PushPayload {
     init(userInfo: [AnyHashable: Any]) {
         let parsedEventID = Self.nonEmptyString(userInfo["eventId"])
         let parsedSourceID = Self.nonEmptyString(userInfo["sourceId"]).flatMap {
-            WolfxClient.sources.contains($0) ? $0 : nil
+            EarthquakeSources.all.contains($0) ? $0 : nil
         }
         eventId = parsedEventID
         sourceId = parsedSourceID
@@ -90,7 +90,8 @@ struct PushPayload {
               let eventID,
               let kind = nonEmptyString(userInfo["kind"]),
               (sourceID == "jma_eew" && kind == "eew") ||
-                (sourceID == "jma_eqlist" && kind == "report"),
+                (sourceID == "jma_eqlist" && kind == "report") ||
+                (EarthquakeSources.isCatalog(sourceID) && kind == "report"),
               let serial = nonnegativeInteger(userInfo["serial"]),
               let isWarning = strictBoolean(userInfo["isWarn"]),
               let isFinal = strictBoolean(userInfo["isFinal"]),
@@ -160,6 +161,8 @@ struct PushPayload {
         case "jma_eew":
             return event.kind == "eew"
         case "jma_eqlist":
+            return event.kind == "report"
+        case "usgs_eqlist", "emsc_eqlist", "geonet_eqlist":
             return event.kind == "report"
         default:
             return false
