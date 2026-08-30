@@ -254,7 +254,7 @@ const RELAY_EVENT_RETENTION_CUTOFF_MS = 89 * 24 * 60 * 60_000;
 // only long enough for operational review and bounded cleanup after its UTC
 // day has ended.
 const PRODUCTION_TRAINING_TEST_PUSH_CLAIM_RETENTION_MS = 14 * 24 * 60 * 60_000;
-export const PRODUCTION_TRAINING_TEST_PUSH_DAILY_LIMIT = 10;
+const PRODUCTION_TRAINING_TEST_PUSH_DAILY_LIMIT = 10;
 // A fixed server-side delay prevents a client from choosing an arbitrary
 // background job time. Ninety seconds is enough for a person to leave the
 // foreground and lock or terminate the TestFlight app, while remaining a
