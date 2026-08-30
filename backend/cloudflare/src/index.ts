@@ -27,7 +27,13 @@ import {
 
 // Named exports keep the safety policy directly exercisable by the focused
 // bundled Worker tests without duplicating its implementation in a fixture.
-export { buildPushPayload, notificationReasonForEvent, reconcileEventRevision };
+export {
+  buildPushPayload,
+  notificationReasonForEvent,
+  reconcileEventRevision,
+  normalizeCatalogGeoJSON,
+  normalizeJmaEew,
+};
 import {
   isHeartbeat,
   isPong,
