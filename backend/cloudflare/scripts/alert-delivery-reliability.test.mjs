@@ -5220,6 +5220,9 @@ test("health status reads the fallback marker without Durable Object writes", as
     relay.statuses.set(source, "open");
     relay.lastSuccessfulUpstreamMs.set(source, now);
   }
+  for (const source of ["usgs_eqlist", "emsc_eqlist", "geonet_eqlist"]) {
+    relay.lastSuccessfulHttpPollMs.set(source, now);
+  }
 
   for (const storedFallbackActive of [true, false]) {
     values.set("http-fallback-active", storedFallbackActive);
