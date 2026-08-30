@@ -10358,14 +10358,21 @@ export class QuakeRelay {
   }
 
   private sourcesNeedingHttpRecovery(now = Date.now()): WolfxSourceId[] {
-    return APNS_RELAY_SOURCES.filter(
-      (source) => isUpstreamSourceStale(
+    return APNS_RELAY_SOURCES.filter((source) => {
+      if (isCatalogSourceId(source)) {
+        return isHttpFallbackSourceStale(
+          this.lastSuccessfulHttpPollMs.get(source),
+          false,
+          now,
+        );
+      }
+      return isUpstreamSourceStale(
         this.statuses.get(source) ?? "connecting",
         this.lastSuccessfulUpstreamMs.get(source),
         false,
         now,
-      ),
-    );
+      );
+    });
   }
 
   /**
@@ -10583,11 +10590,13 @@ export class QuakeRelay {
           hasPendingLiveIngest || hasPendingHttpSnapshot || hasPendingLiveSnapshot,
           now,
         );
-        const transport = !websocketStale
-          ? "websocket"
-          : httpFallbackActive && !httpStale
-            ? "http-polling"
-            : "unavailable";
+        const transport = isCatalogSourceId(source)
+          ? (!httpStale ? "http-polling" : "unavailable")
+          : !websocketStale
+            ? "websocket"
+            : httpFallbackActive && !httpStale
+              ? "http-polling"
+              : "unavailable";
         const lastSuccessMs = transport === "http-polling"
           ? lastHttpSuccessMs
           : lastWebSocketSuccessMs;
@@ -10627,7 +10636,9 @@ export class QuakeRelay {
         source.pendingHttpSnapshot
       )
       .map((source) => source.source);
-    const websocketStatus = sourceHealth.every((source) => !source.websocketStale)
+    const websocketStatus = sourceHealth
+      .filter((source) => isUpstreamRoute(source.source))
+      .every((source) => !source.websocketStale)
       ? "ready"
       : "degraded";
     const activeTransports = new Set(sourceHealth.map((source) => source.transport));
