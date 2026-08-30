@@ -772,7 +772,10 @@ test("fails closed when foreground-only Vision capability, layout, or localized 
     const source = await readFile(path, "utf8");
     await writeFile(
       path,
-      source.replace("#elseif os(visionOS)\n        false", "#elseif os(visionOS)\n        true"),
+      source.replace(
+        "#elseif os(visionOS)\n        return .vision",
+        "#elseif os(visionOS)\n        return .iPhone",
+      ),
       "utf8",
     );
     await assert.rejects(
