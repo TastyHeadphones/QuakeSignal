@@ -409,7 +409,7 @@ class GuardContextTests(unittest.TestCase):
             (
                 "ios/QuakeSignal/Networking/WolfxClient.swift",
                 "static let sources = EarthquakeSources.wolfx",
-                'static let sources = EarthquakeSources.wolfx + ["all_eew"]',
+                "static let sources = EarthquakeSources.catalog",
                 "WolfxClient.sources must be EarthquakeSources.wolfx",
             ),
             (
@@ -504,7 +504,12 @@ class GuardContextTests(unittest.TestCase):
             (
                 "ios/QuakeSignal/Notifications/PushPayload.swift",
                 '(sourceID == "jma_eew" && kind == "eew") ||\n'
+                '                (sourceID == "cenc_eew" && kind == "eew") ||\n'
+                '                (sourceID == "sc_eew" && kind == "eew") ||\n'
+                '                (sourceID == "fj_eew" && kind == "eew") ||\n'
+                '                (sourceID == "cq_eew" && kind == "eew") ||\n'
                 '                (sourceID == "jma_eqlist" && kind == "report") ||\n'
+                '                (sourceID == "cenc_eqlist" && kind == "report") ||\n'
                 '                (EarthquakeSources.isCatalog(sourceID) && kind == "report"),',
                 "true,",
                 "strictly typed",

@@ -1,25 +1,5 @@
 import Foundation
 
-/// Official earthquake catalogs that are not Wolfx WebSocket feeds. These
-/// identifiers are the APNs-relay allow-list companions to JMA Wolfx sources.
-enum EarthquakeSources {
-    static let wolfx = [
-        "jma_eew",
-        "jma_eqlist",
-        "cenc_eew",
-        "cenc_eqlist",
-        "sc_eew",
-        "fj_eew",
-        "cq_eew",
-    ]
-    static let catalog = ["usgs_eqlist", "emsc_eqlist", "geonet_eqlist"]
-    static let all = wolfx + catalog
-
-    static func isCatalog(_ source: String) -> Bool {
-        catalog.contains(source)
-    }
-}
-
 enum CatalogClientError: LocalizedError {
     case invalidResponse(source: String)
 

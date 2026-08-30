@@ -33,7 +33,7 @@ MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
 APP_ATTEST_FINGERPRINT = "sha256:dan9Ebj9evPDQWnls4i-XgQnZ1s8Idrvl0CjAIFlHFk"
 XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:OqFwasaS2_sJ-sGJyvQs0mujdjcGwABuz1HMiKZEabw"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
-PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:WDaN7WihSIp3RaLVezMdrJnJhNpaxCs1aKM8miZyVuI"
+PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:DzIFMVcV0X9GU0Zqnh__lAxlBWThigDp4V5mxOqshb8"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"
 MAX_RESPONSE_BYTES = 1024 * 1024
 READINESS_TIMEOUT_SECONDS = 180.0
@@ -873,10 +873,10 @@ def verify_jma_only_source_contract(sources: Mapping[str, str]) -> None:
     settings = sources["ios/QuakeSignal/State/AppSettings.swift"]
     if client.count("static let sources = EarthquakeSources.wolfx") != 1:
         fail("WolfxClient.sources must be EarthquakeSources.wolfx.")
-    if 'static let wolfx = [' not in catalog:
+    if "enum EarthquakeSources {" not in client or "static let wolfx = [" not in client:
         fail("EarthquakeSources.wolfx must remain the reviewed Wolfx feed list.")
     for source_id in REQUIRED_WOLFX_SOURCES:
-        if catalog.count(f'"{source_id}"') < 1:
+        if client.count(f'"{source_id}"') < 1:
             fail(f"EarthquakeSources.wolfx is missing {source_id}.")
     for marker, count in (
         ('return ["query_jmaeew"]', 1),
