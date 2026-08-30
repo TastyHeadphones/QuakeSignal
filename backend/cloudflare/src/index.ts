@@ -1502,7 +1502,7 @@ export function isQueuedEvent(value: unknown): value is QueuedEvent {
     typeof event.serial === "number" &&
     Number.isSafeInteger(event.serial) &&
     event.serial >= 0 &&
-    (event.sourceId === "jma_eew"
+    ((APNS_RELAY_EEW_SOURCES as readonly string[]).includes(event.sourceId)
       ? event.kind === "eew"
       : event.kind === "report") &&
     isNonEmptyText(event.originTimeUtc) &&
@@ -3052,10 +3052,21 @@ export function isStructurallyValidHttpSnapshot(
     return false;
   }
 
-  if (sourceId !== "jma_eqlist") return false;
-  return isStructurallyValidEqlistSnapshot(
-    message as Record<string, unknown>,
-    normalizedEvents,
+  if (sourceId === "jma_eqlist") {
+    return isStructurallyValidEqlistSnapshot(
+      message as Record<string, unknown>,
+      normalizedEvents,
+    );
+  }
+
+  const expected = normalizeMessages(sourceId, message);
+  return (
+    expected.length === normalizedEvents.length &&
+    expected.length > 0 &&
+    hasValidNormalizedEventTimes(normalizedEvents) &&
+    expected.every((event, index) =>
+      normalizedEventExactlyMatches(normalizedEvents[index], event)
+    )
   );
 }
 

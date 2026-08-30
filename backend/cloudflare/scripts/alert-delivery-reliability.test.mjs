@@ -2237,7 +2237,7 @@ test("status probes preserve first boot but do not repeatedly run relay recovery
     await relay.fetch(new Request("https://relay.internal/status"));
     assert.equal(d1Batches, 0);
     assert.equal(httpSeedRequests, 0);
-    assert.equal(upgradeRequests, 2, "one Upgrade attempt per JMA watcher is enough");
+    assert.equal(upgradeRequests, 7, "one Upgrade attempt per Wolfx watcher is enough");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -2322,7 +2322,7 @@ test("a first status probe still performs operational bootstrap when no alarm ex
       0,
       "the initial snapshot is deferred to its own immediate relay alarm",
     );
-    assert.equal(upgradeRequests, 2, "first status opens one Upgrade per JMA route");
+    assert.equal(upgradeRequests, 7, "first status opens one Upgrade per Wolfx route");
     assert.notEqual(alarmAt, null, "first status schedules routine recovery");
   } finally {
     globalThis.fetch = originalFetch;
@@ -2405,7 +2405,7 @@ test("activates one fetch-Upgraded Wolfx route only after accept", async () => {
     // test. Calling twice exercises the real connectingRoutes guard.
     relay.connect("jma_eew");
     relay.connect("jma_eew");
-    relay.connect("cenc_eqlist");
+    relay.connect("all_eew");
     assert.equal(fetchCalls.length, 1, "an in-flight route must not be duplicated");
     assert.equal(fetchCalls[0].url, "https://ws-api.wolfx.jp/jma_eew");
     assert.equal(
@@ -9224,7 +9224,7 @@ test("terminalizes pre-build-8 non-JMA Queue work without reaching APNs", async 
           return {
             async fetch(request) {
               relayPaths.push(new URL(request.url).pathname);
-              return Response.json({ ok: true });
+              return new Response(null, { status: 204 });
             },
           };
         },
