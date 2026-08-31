@@ -7904,7 +7904,7 @@ test("builds bounded typed APNs snapshots and reserves custom Time Sensitive sou
   );
 });
 
-test("shipped normalize-to-notify path maps Wolfx EEW and USGS/EMSC catalogs", async () => {
+test("shipped normalize-to-notify path maps Wolfx EEW and USGS/EMSC/GeoNet catalogs", async () => {
   const {
     buildPushPayload,
     notificationReasonForEvent,
@@ -8008,6 +8008,52 @@ test("shipped normalize-to-notify path maps Wolfx EEW and USGS/EMSC catalogs", a
   assert.equal(emscPayload.sourceId, "emsc_eqlist");
   assert.equal(emscPayload.aps.alert["title-loc-args"][0], "EMSC");
   assert.ok(emscPayload.aps.alert);
+
+  const geonetEvents = normalizeCatalogGeoJSON("geonet_eqlist", {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: {
+          publicID: "2014p715167",
+          time: "2026-08-30T01:12:00.000Z",
+          magnitude: 5.2,
+          depth: 12.3,
+          locality: "20 km north of Wellington",
+          mmi: 5,
+          quality: "best",
+        },
+        geometry: { type: "Point", coordinates: [174.78, -41.29, 12.3] },
+      },
+    ],
+  });
+  assert.equal(geonetEvents.length, 1);
+  assert.equal(geonetEvents[0].id, "geonet_eqlist:2014p715167");
+  assert.equal(geonetEvents[0].sourceId, "geonet_eqlist");
+  assert.equal(geonetEvents[0].kind, "report");
+  assert.equal(geonetEvents[0].hypocenter, "20 km north of Wellington");
+  assert.equal(notificationReasonForEvent(geonetEvents[0], null), "report");
+  const geonetPayload = buildPushPayload(geonetEvents[0], "report", "system", nowMs);
+  assert.equal(geonetPayload.sourceId, "geonet_eqlist");
+  assert.equal(geonetPayload.aps.alert["title-loc-args"][0], "GeoNet");
+  assert.equal(geonetPayload.aps["interruption-level"], "active");
+  assert.ok(geonetPayload.aps.alert);
+  assert.equal(
+    normalizeCatalogGeoJSON("geonet_eqlist", {
+      type: "FeatureCollection",
+      features: [{
+        type: "Feature",
+        properties: {
+          locality: "20 km north of Wellington",
+          magnitude: 5.2,
+          time: "2026-08-30T01:12:00.000Z",
+        },
+        geometry: { type: "Point", coordinates: [174.78, -41.29, 12.3] },
+      }],
+    }).length,
+    0,
+    "live GeoNet identity is properties.publicID; missing it must not invent an event",
+  );
 
   const cencEvent = normalizeCencCqEew({
     ID: "b3i6pz76gqcyy",

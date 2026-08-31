@@ -220,7 +220,7 @@ function catalogTimestamp(value: unknown): string | null {
 function catalogEventId(feature: CatalogGeoJSONFeature, properties: Record<string, unknown>): string | null {
   if (typeof feature.id === "string" && feature.id.trim() !== "") return feature.id.trim();
   if (typeof feature.id === "number" && Number.isFinite(feature.id)) return String(feature.id);
-  for (const key of ["ids", "code", "publicid", "unid", "sourceId"]) {
+  for (const key of ["ids", "code", "publicID", "publicid", "unid", "sourceId"]) {
     const value = properties[key];
     if (typeof value === "string" && value.trim() !== "") return value.trim();
   }
