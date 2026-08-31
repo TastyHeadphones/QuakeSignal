@@ -21,11 +21,11 @@ from urllib.parse import urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
-BUILD_NUMBER = "22"
+BUILD_NUMBER = "23"
 MARKETING_VERSION = "1.2"
 TEAM_ID = "5TT564H883"
 RELEASE_REF = "refs/heads/main"
-RELEASE_WORKFLOW = "QuakeSignal 1.2 (22) Native Release"
+RELEASE_WORKFLOW = "QuakeSignal 1.2 (23) Native Release"
 PRODUCT_NAME = "QuakeSignal"
 WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev"
 VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open."
