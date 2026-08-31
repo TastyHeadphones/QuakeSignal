@@ -395,13 +395,20 @@ async function updateLocalizations(token, version, platform) {
     if (description) attributes.description = description;
     if (promotionalText) attributes.promotionalText = promotionalText;
     if (keywords) attributes.keywords = keywords;
-    const { status, payload } = await api(token, "PATCH", `/v1/appStoreVersionLocalizations/${localization.id}`, {
+    const patchLocalization = (fields) => api(token, "PATCH", `/v1/appStoreVersionLocalizations/${localization.id}`, {
       data: {
         type: "appStoreVersionLocalizations",
         id: localization.id,
-        attributes,
+        attributes: fields,
       },
     });
+    let { status, payload } = await patchLocalization(attributes);
+    if (status === 409 && attributes.whatsNew) {
+      console.log(`${platform} ${locale} what's new is not editable; retrying without it.`);
+      const retry = { ...attributes };
+      delete retry.whatsNew;
+      ({ status, payload } = await patchLocalization(retry));
+    }
     if (status !== 200) {
       fail(`could not update ${platform} ${locale} localization (${status}): ${errorDetail(payload)}`);
     }
