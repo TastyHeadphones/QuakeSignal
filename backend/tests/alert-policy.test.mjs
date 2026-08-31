@@ -206,8 +206,12 @@ test("legacy notification wrapper uses the shared typed payload policy", async (
   const notification = buildNotification(event, "new", "japanese-voice");
   assert.equal(notification.expiry, 0);
   assert.equal(notification.headers()["apns-expiration"], 0);
-  assert.equal(notification.rawPayload.aps.sound, "quakesignal_japanese_voice.caf");
-  assert.equal(notification.rawPayload.aps["interruption-level"], "time-sensitive");
+  assert.deepEqual(notification.rawPayload.aps.sound, {
+    critical: 1,
+    name: "quakesignal_japanese_voice.caf",
+    volume: 1.0,
+  });
+  assert.equal(notification.rawPayload.aps["interruption-level"], "critical");
   assert.deepEqual(notification.rawPayload.event, {
     sourceId: "jma_eew",
     eventId: "legacy-payload",
@@ -317,8 +321,12 @@ test("shipped normalize-to-notify path maps Wolfx EEW and new catalogs", async (
   assert.equal(wolfxEvent.sourceId, "jma_eew");
   assert.equal(notificationReasonForEvent(wolfxEvent, null), "new");
   const wolfxPayload = buildPushPayload(wolfxEvent, "new", "urgent-tone", nowMs);
-  assert.equal(wolfxPayload.aps["interruption-level"], "time-sensitive");
-  assert.equal(wolfxPayload.aps.sound, "quakesignal_urgent.caf");
+  assert.equal(wolfxPayload.aps["interruption-level"], "critical");
+  assert.deepEqual(wolfxPayload.aps.sound, {
+    critical: 1,
+    name: "quakesignal_urgent.caf",
+    volume: 1.0,
+  });
 
   const usgsEvents = normalizeCatalogGeoJSON("usgs_eqlist", USGS_FEATURE_COLLECTION);
   assert.equal(usgsEvents.length, 1);
