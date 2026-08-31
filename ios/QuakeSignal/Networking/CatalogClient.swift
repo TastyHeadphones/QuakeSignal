@@ -176,7 +176,7 @@ enum CatalogNormalizer {
             return value
         }
         if let value = feature["id"] as? NSNumber { return value.stringValue }
-        for key in ["publicid", "code", "unid"] {
+        for key in ["publicID", "publicid", "code", "unid"] {
             if let value = properties[key] as? String, !value.isEmpty { return value }
         }
         return nil

@@ -306,6 +306,26 @@ const EMSC_FEATURE_COLLECTION = {
   ],
 };
 
+// Live GeoNet /quake GeoJSON has no feature.id; identity is properties.publicID.
+const GEONET_FEATURE_COLLECTION = {
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      properties: {
+        publicID: "2014p715167",
+        time: "2026-08-30T01:12:00.000Z",
+        magnitude: 5.2,
+        depth: 12.3,
+        locality: "20 km north of Wellington",
+        mmi: 5,
+        quality: "best",
+      },
+      geometry: { type: "Point", coordinates: [174.78, -41.29, 12.3] },
+    },
+  ],
+};
+
 test("shipped normalize-to-notify path maps Wolfx EEW and new catalogs", async () => {
   const {
     normalizeJmaEew,
@@ -345,6 +365,27 @@ test("shipped normalize-to-notify path maps Wolfx EEW and new catalogs", async (
   const emscPayload = buildPushPayload(emscEvents[0], "report", "system", nowMs);
   assert.equal(emscPayload.aps["interruption-level"], "active");
   assert.equal(emscPayload.sourceId, "emsc_eqlist");
+
+  const geonetEvents = normalizeCatalogGeoJSON("geonet_eqlist", GEONET_FEATURE_COLLECTION);
+  assert.equal(geonetEvents.length, 1);
+  assert.equal(geonetEvents[0].id, "geonet_eqlist:2014p715167");
+  assert.equal(geonetEvents[0].sourceId, "geonet_eqlist");
+  assert.equal(geonetEvents[0].kind, "report");
+  assert.equal(geonetEvents[0].hypocenter, "20 km north of Wellington");
+  assert.equal(notificationReasonForEvent(geonetEvents[0], null), "report");
+  const geonetPayload = buildPushPayload(geonetEvents[0], "report", "system", nowMs);
+  assert.equal(geonetPayload.sourceId, "geonet_eqlist");
+  assert.equal(geonetPayload.aps["interruption-level"], "active");
+  assert.equal(geonetPayload.aps.alert["title-loc-args"][0], "GeoNet");
+  assert.ok(geonetPayload.aps.alert);
+  assert.equal(
+    normalizeCatalogGeoJSON("geonet_eqlist", {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: { locality: "nowhere", magnitude: 5, time: "2026-08-30T01:12:00.000Z" }, geometry: { type: "Point", coordinates: [174.78, -41.29, 12.3] } }],
+    }).length,
+    0,
+    "GeoNet features without publicID or feature.id must not invent an identity",
+  );
 });
 
 test("training and stale warnings are not Apple emergency alerts", async () => {

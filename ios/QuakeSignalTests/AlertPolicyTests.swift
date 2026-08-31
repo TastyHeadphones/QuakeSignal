@@ -1324,6 +1324,89 @@ final class AlertPolicyTests: XCTestCase {
         XCTAssertEqual(emscEvents.count, 1)
         XCTAssertEqual(emscEvents[0].sourceId, "emsc_eqlist")
         XCTAssertEqual(emscEvents[0].kind, "report")
+
+        // Live GeoNet /quake GeoJSON has no feature.id; identity is properties.publicID.
+        let geonetJSON: [String: Any] = [
+            "type": "FeatureCollection",
+            "features": [[
+                "type": "Feature",
+                "properties": [
+                    "publicID": "2014p715167",
+                    "time": "2026-08-30T01:12:00.000Z",
+                    "magnitude": 5.2,
+                    "depth": 12.3,
+                    "locality": "20 km north of Wellington",
+                    "mmi": 5,
+                    "quality": "best",
+                ] as [String: Any],
+                "geometry": [
+                    "type": "Point",
+                    "coordinates": [174.78, -41.29, 12.3],
+                ] as [String: Any],
+            ] as [String: Any]],
+        ]
+        let geonetEvents = try CatalogNormalizer.validatedEvents(source: "geonet_eqlist", object: geonetJSON)
+        XCTAssertEqual(geonetEvents.count, 1)
+        XCTAssertEqual(geonetEvents[0].id, "geonet_eqlist:2014p715167")
+        XCTAssertEqual(geonetEvents[0].sourceId, "geonet_eqlist")
+        XCTAssertEqual(geonetEvents[0].kind, "report")
+        XCTAssertEqual(geonetEvents[0].hypocenter, "20 km north of Wellington")
+        let geonetPayload = PushPayload(userInfo: [
+            "eventId": "2014p715167",
+            "sourceId": "geonet_eqlist",
+            "kind": "report",
+            "reason": "report",
+            "serial": 1,
+            "isWarn": false,
+            "isFinal": true,
+            "isCancel": false,
+            "isTraining": false,
+            "reportTimeUtc": geonetEvents[0].reportTimeUtc as Any,
+            "originTimeUtc": geonetEvents[0].originTimeUtc as Any,
+            "event": [
+                "id": geonetEvents[0].id,
+                "sourceId": geonetEvents[0].sourceId,
+                "eventId": geonetEvents[0].eventId,
+                "serial": geonetEvents[0].serial,
+                "kind": geonetEvents[0].kind,
+                "originTimeUtc": geonetEvents[0].originTimeUtc as Any,
+                "reportTimeUtc": geonetEvents[0].reportTimeUtc as Any,
+                "hypocenter": geonetEvents[0].hypocenter,
+                "latitude": geonetEvents[0].latitude as Any,
+                "longitude": geonetEvents[0].longitude as Any,
+                "magnitude": geonetEvents[0].magnitude as Any,
+                "depth": geonetEvents[0].depth as Any,
+                "maxIntensity": geonetEvents[0].maxIntensity as Any,
+                "isWarn": false,
+                "isFinal": true,
+                "isCancel": false,
+                "isTraining": false,
+            ] as [String: Any],
+        ])
+        XCTAssertEqual(geonetPayload.sourceId, "geonet_eqlist")
+        XCTAssertEqual(geonetPayload.eventSnapshot?.kind, "report")
+        XCTAssertTrue(geonetPayload.hasUsableMatchingEventSnapshot)
+
+        let missingIdentity: [String: Any] = [
+            "type": "FeatureCollection",
+            "features": [[
+                "type": "Feature",
+                "properties": [
+                    "locality": "20 km north of Wellington",
+                    "magnitude": 5.2,
+                    "time": "2026-08-30T01:12:00.000Z",
+                ] as [String: Any],
+                "geometry": [
+                    "type": "Point",
+                    "coordinates": [174.78, -41.29, 12.3],
+                ] as [String: Any],
+            ] as [String: Any]],
+        ]
+        XCTAssertEqual(
+            try CatalogNormalizer.validatedEvents(source: "geonet_eqlist", object: missingIdentity),
+            []
+        )
+
         XCTAssertEqual(EarthquakeSources.all.contains("usgs_eqlist"), true)
         XCTAssertEqual(EarthquakeSources.all.contains("geonet_eqlist"), true)
         XCTAssertEqual(EarthquakeSources.all.contains("cenc_eew"), true)
