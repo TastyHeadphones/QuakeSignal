@@ -7846,8 +7846,8 @@ test("builds bounded typed APNs snapshots and reserves custom Time Sensitive sou
     ["japanese-voice", "quakesignal_japanese_voice.caf"],
   ]) {
     const payload = buildPushPayload(warning, "new", alertSound, nowMs);
-    assert.equal(payload.aps.sound, expectedFile);
-    assert.equal(payload.aps["interruption-level"], "time-sensitive");
+    assert.deepEqual(payload.aps.sound, { critical: 1, name: expectedFile, volume: 1.0 });
+    assert.equal(payload.aps["interruption-level"], "critical");
     assert.deepEqual(payload.event, expectedSnapshot);
     assert.deepEqual(JSON.parse(JSON.stringify(payload)).event, expectedSnapshot);
     assert.equal(payload.eventId, warning.eventId, "legacy payload fields remain available");
@@ -7948,8 +7948,12 @@ test("shipped normalize-to-notify path maps Wolfx EEW and USGS/EMSC catalogs", a
   assert.equal(wolfxEvent.sourceId, "jma_eew");
   assert.equal(notificationReasonForEvent(wolfxEvent, null), "new");
   const wolfxPayload = buildPushPayload(wolfxEvent, "new", "urgent-tone", nowMs);
-  assert.equal(wolfxPayload.aps["interruption-level"], "time-sensitive");
-  assert.equal(wolfxPayload.aps.sound, "quakesignal_urgent.caf");
+  assert.equal(wolfxPayload.aps["interruption-level"], "critical");
+  assert.deepEqual(wolfxPayload.aps.sound, {
+    critical: 1,
+    name: "quakesignal_urgent.caf",
+    volume: 1.0,
+  });
 
   const usgsEvents = normalizeCatalogGeoJSON("usgs_eqlist", {
     type: "FeatureCollection",
@@ -8024,7 +8028,7 @@ test("shipped normalize-to-notify path maps Wolfx EEW and USGS/EMSC catalogs", a
   const cencPayload = buildPushPayload(cencEvent, "new", "urgent-tone", cencNowMs);
   assert.equal(cencPayload.sourceId, "cenc_eew");
   assert.equal(cencPayload.aps.alert["title-loc-args"][0], "CENC");
-  assert.equal(cencPayload.aps["interruption-level"], "time-sensitive");
+  assert.equal(cencPayload.aps["interruption-level"], "critical");
 });
 
 test("accepts only exact alert-sound registration identifiers and defaults old clients to system", async () => {
