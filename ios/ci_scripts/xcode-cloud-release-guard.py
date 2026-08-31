@@ -21,17 +21,17 @@ from urllib.parse import urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
-BUILD_NUMBER = "22"
+BUILD_NUMBER = "23"
 MARKETING_VERSION = "1.2"
 TEAM_ID = "5TT564H883"
 RELEASE_REF = "refs/heads/main"
-RELEASE_WORKFLOW = "QuakeSignal 1.2 (22) Native Release"
+RELEASE_WORKFLOW = "QuakeSignal 1.2 (23) Native Release"
 PRODUCT_NAME = "QuakeSignal"
 WORKER_ORIGIN = "https://quakesignal-api.hopeso.workers.dev"
 VISION_LOCATION_USAGE_DESCRIPTION = "QuakeSignal uses your location to show distance and nearby earthquake context while the app is open."
 MAIN_REMOTE_URL = "https://github.com/TastyHeadphones/QuakeSignal.git"
-APP_ATTEST_FINGERPRINT = "sha256:W_dhPZUqnrNPZmHT5r5DuZQosBQ5Ezb_8T5oXUFVXZI"
-XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:AVutD2WoMP5mGEYH36qgCLeiuKBJPrKjp-SY_YKPqjU"
+APP_ATTEST_FINGERPRINT = "sha256:iKt3u23cAwumwWnpzrqV19PIuxWCU9O1WLxz8kbIdWg"
+XCODE_SOURCE_GRAPH_FINGERPRINT = "sha256:jidhzh5jVr4SwIpgz3C1uLs891uBx83axFXiDh9Jra8"
 XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo"
 PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:jXPYzWXGedBAeJOPKR7svQa3KLS9flREc9GUin32uPg"
 POLICY_FORMAT = "quakesignal-app-attest-policy/v2"

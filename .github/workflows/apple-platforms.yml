@@ -25,7 +25,7 @@ on:
       build_number:
         description: Exact coordinated CFBundleVersion from ios/project.yml
         required: false
-        default: "22"
+        default: "23"
         type: string
       source_commit:
         description: Exact 40-character lowercase protected-main commit to sign
@@ -449,7 +449,7 @@ jobs:
           ATTESTATION_PATH="$attestation_root/signed-release-attestation.json" \
             /usr/bin/ruby -rjson -rtime -e '
               build = Integer(ENV.fetch("BUILD_NUMBER"), 10)
-              abort "signed release attestation requires build 22" unless build == 22
+              abort "signed release attestation requires build 23" unless build == 23
               platform = ENV.fetch("PLATFORM_KEY")
               abort "signed release attestation platform is invalid" unless %w[tvos visionos maccatalyst].include?(platform)
               sha256 = ENV.fetch("APPLE_ARTIFACT_SHA256")
