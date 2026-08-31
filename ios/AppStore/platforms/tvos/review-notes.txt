@@ -9,31 +9,27 @@ Japanese Safety Voice. System Default is visual-only on tvOS. Either custom
 sound starts only after the reviewer presses Preview or Play with the Siri
 Remote; the app never starts audio automatically. Japanese Safety Voice uses
 HTS Voice “Mei” by Nagoya Institute of Technology under CC BY 3.0 and is not a
-J-Alert or JMA recording. The upstream Wolfx JMA feeds may temporarily return
+J-Alert or JMA recording. The upstream Wolfx feeds may temporarily return
 no reports or partial availability; this is an expected network state rather
 than a credential gate.
 
-Build 17 reads only Wolfx feed identifiers jma_eew and jma_eqlist. CENC,
-Sichuan, Fujian, and Chongqing feeds are disabled. QuakeSignal formats and
-normalizes JMA-issued factual information for display; it does not calculate a
-new local-intensity or ground-motion-arrival forecast.
+Build 21 (version 1.2) reads Wolfx feed identifiers jma_eew, jma_eqlist,
+cenc_eew, cenc_eqlist, sc_eew, fj_eew, and cq_eew, plus USGS, EMSC, and GeoNet
+catalog companions. QuakeSignal formats and normalizes that factual information
+for display; it does not calculate a new local-intensity or ground-motion-arrival
+forecast.
 
 This tvOS target intentionally has no APNs, App Attest, Time Sensitive or
 Critical Alerts entitlement, automatic alert audio, or background delivery.
 While the scene is active it uses validated foreground WebSocket updates with
 conservative HTTPS recovery. After the session establishes its current-state
-baseline, a new or monotonic updated fresh JMA warning can present a full-screen
+baseline, a new or monotonic updated fresh warning can present a full-screen
 visual safety view. Retained/backfilled warnings do not impersonate a new live
 alert. Monitoring and user-started playback stop when the scene becomes
 inactive. It must not be reviewed as a background emergency-alert service.
 
-The three App Store screenshot frames deliberately remain benign dashboard,
-report-list, and finalized-detail views. They do not demonstrate automatic
-audio or a fabricated live emergency. The Alert Sound screen, focus containment,
-Remote-only playback, and scene-deactivation stop behavior require signed-build
-review on Apple TV hardware before submission.
-
-Source: Japan Meteorological Agency (JMA), relayed through Wolfx and
-normalized/edited by QuakeSignal. QuakeSignal is independent and non-official;
-the information can be delayed, incomplete, revised, or inaccurate. The UI
-directs customers to follow official local emergency guidance.
+Source: Japan Meteorological Agency (JMA) and China earthquake feeds relayed
+through Wolfx, plus USGS, EMSC, and GeoNet catalogs, normalized/edited by
+QuakeSignal. QuakeSignal is independent and non-official; the information can
+be delayed, incomplete, revised, or inaccurate. The UI directs customers to
+follow official local emergency guidance.

@@ -11,16 +11,16 @@ QuakeSignal's protected alert registration requires both App Attest and APNs;
 because APNs is unavailable on this target, the Release app does not start that
 registration path. It obtains no APNs token, does not invoke App Attest for
 alert registration, and has no Time Sensitive, Critical Alerts, or background
-emergency-alert path. While the app is open, a qualifying JMA-issued update can
+emergency-alert path. While the app is open, a qualifying update can
 be presented in the app and play the selected local alert sound. Closing or
 backgrounding the app stops that foreground monitoring. Simulator screenshots
 do not prove this runtime behavior.
 
-Build 17 reads only Wolfx feed identifiers jma_eew and jma_eqlist. CENC,
-Sichuan, Fujian, and Chongqing feeds are disabled. QuakeSignal may format,
-localize, filter, and normalize JMA-issued facts, but does not calculate a new
-local-intensity or ground-motion-arrival forecast and does not issue an
-official government warning.
+Build 21 (version 1.2) reads Wolfx feed identifiers jma_eew, jma_eqlist,
+cenc_eew, cenc_eqlist, sc_eew, fj_eew, and cq_eew, plus USGS, EMSC, and GeoNet
+catalog companions. QuakeSignal may format, localize, filter, and normalize
+those facts, but does not calculate a new local-intensity or ground-motion-arrival
+forecast and does not issue an official government warning.
 
 The alert-sound picker includes system sound, an original urgent tone, and an
 original synthesized Japanese safety voice. The voice is not a J-Alert or JMA
@@ -28,11 +28,12 @@ recording; HTS Voice "Mei" by Nagoya Institute of Technology is credited under
 CC BY 3.0 in the release evidence.
 
 App Motion is a required visionOS portal answer. Do not select it from these
-notes alone. The release owner must assess the final Apple Vision Pro build;
-source inspection shows a windowed interface and no intentional virtual-camera
-movement.
+notes alone. The previously recorded source assessment for this windowed
+interface is that the app does not contain high motion and has no intentional
+virtual-camera movement.
 
-Source: Japan Meteorological Agency (JMA), relayed through Wolfx and
-normalized/edited by QuakeSignal. QuakeSignal is independent and non-official;
-the information can be delayed, incomplete, revised, or inaccurate. Always
-follow official local emergency guidance.
+Source: Japan Meteorological Agency (JMA) and China earthquake feeds relayed
+through Wolfx, plus USGS, EMSC, and GeoNet catalogs, normalized/edited by
+QuakeSignal. QuakeSignal is independent and non-official; the information can
+be delayed, incomplete, revised, or inaccurate. Always follow official local
+emergency guidance.

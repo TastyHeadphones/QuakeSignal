@@ -99,6 +99,7 @@ const contractFiles = {
     ".github/scripts/verify-apple-screenshot-release-set.rb",
     ".github/scripts/verify-apple-screenshot-release-set.test.rb",
     ".github/scripts/assign-testflight-groups.mjs",
+    ".github/scripts/submit-app-store-review.mjs",
     ".github/scripts/verify-store-assets.rb",
     ".github/scripts/verify-store-assets.test.rb",
     "backend/cloudflare/scripts/legal-page-contract.mjs",
@@ -224,6 +225,7 @@ const EXECUTABLE_SCREENSHOT_AUTOMATION_FILES = new Set([
 
 const REVIEWED_WORKFLOW_FILES = [
   ".github/workflows/apns-incident-disposition.yml",
+  ".github/workflows/app-store-review.yml",
   ".github/workflows/apple-platform-screenshots.yml",
   ".github/workflows/apple-platforms.yml",
   ".github/workflows/apple-screenshot-release-ready.yml",
@@ -415,21 +417,21 @@ const CLOUDFLARE_DEPLOY_PRODUCTION_HEADER = {
 // credentials.
 const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:lM0Y8PhdzU8c1Ar_QxytdVZFYRkXbpWws5pkwqYtTdc";
 const WORKFLOW_JOBS_FINGERPRINT = "sha256:j74WBTtqd4ck9nLxRbHSedcqscq_6Xq7Yl2LFsliflg";
-const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:4KWll5tSB9bZ8zwK06hQsTUbAIk2g4PSV1zT9r4tSMw";
-const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:_xm4Kj9ApSDDyaY247D0hbIpSZs4vvV7Cg44tc9_Azs";
+const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:NDfVjJy5jSRRRbWaPH9OtmzYNeRk_hnXBRwkLsPDcMM";
+const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:OD8eQSKlmvgseNlTNfZnZFfo6PUep1Fm9_-O4jLhjZQ";
 const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:eZXAGoApcqbQaWSpzr4Mt6WBRlPNDwEf6SwYXXYlTME";
 const SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT = "sha256:dEPzJS5uvYmQZI9d6CpECUvzkOhjfj_ydwiWqrj3ZQM";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
 const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:92U5wak8lm0hLb1NkGliX65VmcVj6HzpdGrHHiO500A";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
 const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:DzIFMVcV0X9GU0Zqnh__lAxlBWThigDp4V5mxOqshb8";
-const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:sAoWUm7YZg5802sYSgkjJ7JsfALIyv5soQK-EXC5yMY";
+const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:WGzY3Fseq8kj5ZkB9m6WSmWfRu5sLWDJ2xG6T9BV3d0";
 const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:jW4JzW6f1y2Ku66tQU-j36SF3beYFVGEzxbwEdUoq18";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:kYVckHtc36qR5xwpYM5WdQ3Ecvb2uc7Ol8KOBOnTBOs";
-const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:P6xB5YTN3fKjP_db6LRXjOL9VamGAQt-G4WfTdWCiaM";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:QiLRKiawTvwIJeWYEDwBxDqGlSb34RDdUEufuqNJG04";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:PMVW499kAyeitfeQ5acSKfJzjLlzqlDjxZegKQpqX7w";
+const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:m1Jjmma6dm1fmNrdw9A0XSiBgSNdjOjzy16J1V87BzU";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:SHZ0T87JcHPGEf6EM0SLWkvMaUbFQjwl3GXK5hlpuOM";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:KqtlJ9X_K1BuBkVnpwBmQODPCwEXJ21H7tDnx_4XgZc";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:RnWenLvputtku5X6DOfdXrJflYePVPa0uaTthrBGxwI";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -1578,6 +1580,7 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
     contractFiles.iosWorkflow,
     contractFiles.platformWorkflow,
     contractFiles.screenshotReleaseWorkflow,
+    ".github/workflows/app-store-review.yml",
     ".github/workflows/xcode-cloud-signing-inspect.yml",
   ]);
   const appleUploadFiles = new Set([
@@ -1702,6 +1705,7 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
   }
   const expectedCredentialWorkflowPaths = [
     ".github/workflows/apns-incident-disposition.yml",
+    ".github/workflows/app-store-review.yml",
     ".github/workflows/apple-platforms.yml",
     ".github/workflows/cloudflare-staging.yml",
     ".github/workflows/cloudflare.yml",

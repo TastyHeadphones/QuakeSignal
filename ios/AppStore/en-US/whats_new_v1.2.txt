@@ -1,0 +1,8 @@
+New in 1.2:
+
+• Added Wolfx China earthquake feeds (CENC early warning and catalog, Sichuan, Fujian, and Chongqing) alongside JMA.
+• Added USGS, EMSC, and GeoNet catalog companions.
+• Improved delivery of the optional Send Test Alert control.
+• Qualifying fresh warnings may be marked Time Sensitive. This release has no Critical Alerts entitlement.
+
+QuakeSignal remains independent and non-official. Always follow official emergency guidance.
