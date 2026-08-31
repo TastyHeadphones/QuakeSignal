@@ -99,6 +99,8 @@ const contractFiles = {
     ".github/scripts/verify-apple-screenshot-release-set.rb",
     ".github/scripts/verify-apple-screenshot-release-set.test.rb",
     ".github/scripts/assign-testflight-groups.mjs",
+    ".github/scripts/release-app-store-if-approved.mjs",
+    ".github/scripts/release-app-store-if-approved.test.mjs",
     ".github/scripts/submit-app-store-review.mjs",
     ".github/scripts/verify-store-assets.rb",
     ".github/scripts/verify-store-assets.test.rb",
@@ -225,6 +227,7 @@ const EXECUTABLE_SCREENSHOT_AUTOMATION_FILES = new Set([
 
 const REVIEWED_WORKFLOW_FILES = [
   ".github/workflows/apns-incident-disposition.yml",
+  ".github/workflows/app-store-release.yml",
   ".github/workflows/app-store-review.yml",
   ".github/workflows/apple-platform-screenshots.yml",
   ".github/workflows/apple-platforms.yml",
@@ -425,13 +428,13 @@ const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNB
 const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:shu5kqeesjNfF3-5kX9yoe0twgOeFbnjecjiaZSMSAo";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
 const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:jXPYzWXGedBAeJOPKR7svQa3KLS9flREc9GUin32uPg";
-const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:Crrrn3dfvIDOMnUmXzIFevoVBxq1TVABfuPUFMWq6G0";
+const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:o9LT70Dw5lipPN_iNx3w_rznyxJoRjZORJv2P1noxTI";
 const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:jW4JzW6f1y2Ku66tQU-j36SF3beYFVGEzxbwEdUoq18";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
 const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:mS1FLhZdMzjQZnvMpNuNKOgia9DunwFvMpAHWSb7aWI";
-const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:2XoL3fK8snXwu6-b77DkY0PpFQCUZjmMdZ2iqTPTVAw";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:mH4anAlAJxluYKhkWsuo79gSJM3BC-wkUtzcwAOS1vw";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:UiJ4McWEL-hHe21n6pKQpLY4IcD4Ns6WxxoCgo-OOFk";
+const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:hRhXk7mEWdfdiT6S6ofewAmGe0_c8wiO-cLoPngLmxE";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:BwGa59CmWJjogSchgnhea5d_UROyocX0WRYiq91IAAs";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:s-69xEDTTy5mtqRKOr8XsbrrKLSuvBt4HQoghRkjIrU";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:RnWenLvputtku5X6DOfdXrJflYePVPa0uaTthrBGxwI";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -1580,6 +1583,7 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
     contractFiles.iosWorkflow,
     contractFiles.platformWorkflow,
     contractFiles.screenshotReleaseWorkflow,
+    ".github/workflows/app-store-release.yml",
     ".github/workflows/app-store-review.yml",
     ".github/workflows/xcode-cloud-signing-inspect.yml",
   ]);
@@ -1705,6 +1709,7 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
   }
   const expectedCredentialWorkflowPaths = [
     ".github/workflows/apns-incident-disposition.yml",
+    ".github/workflows/app-store-release.yml",
     ".github/workflows/app-store-review.yml",
     ".github/workflows/apple-platforms.yml",
     ".github/workflows/cloudflare-staging.yml",
