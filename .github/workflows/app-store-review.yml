@@ -1,0 +1,79 @@
+name: App Store Review submission
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: Exact coordinated CFBundleVersion from ios/project.yml
+        required: false
+        default: "21"
+        type: string
+      source_commit:
+        description: Exact 40-character lowercase protected-main commit whose listing copy is submitted
+        required: true
+        type: string
+      platforms:
+        description: Comma-separated App Store Connect platforms (IOS,MAC_OS,TV_OS,VISION_OS)
+        required: false
+        default: "IOS,MAC_OS,TV_OS,VISION_OS"
+        type: string
+
+concurrency:
+  group: app-store-review-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    name: Submit native Apple platforms for App Store Review
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.ref_protected
+    runs-on: ubuntu-latest
+    environment:
+      name: ios-app-store-release
+    concurrency:
+      group: quakesignal-production-app-attest-policy
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate immutable signed source
+        env:
+          REF_PROTECTED: ${{ github.ref_protected }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = TastyHeadphones/QuakeSignal
+          test "$GITHUB_REF" = refs/heads/main
+          test "$REF_PROTECTED" = true
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$SOURCE_COMMIT" = "$GITHUB_SHA"
+          test "$(git rev-parse --verify HEAD)" = "$SOURCE_COMMIT"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Verify iOS and Worker release contract
+        env:
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        run: node .github/scripts/verify-ios-release-contract.mjs --build-number "$BUILD_NUMBER"
+
+      - name: Submit App Store Review for selected platforms
+        env:
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          MARKETING_VERSION: "1.2"
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          PLATFORMS: ${{ inputs.platforms }}
+          APP_STORE_CONNECT_APPLE_ID: "6800642443"
+          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER: ${{ vars.APP_STORE_CONNECT_API_ISSUER }}
+        run: node .github/scripts/submit-app-store-review.mjs

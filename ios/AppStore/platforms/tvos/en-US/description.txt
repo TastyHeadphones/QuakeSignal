@@ -7,7 +7,7 @@ BROWSE RECENT ACTIVITY
 Move through a focus-friendly list of recent earthquake reports and open a report to see its hypocenter, magnitude, available intensity, depth, source, and time.
 
 REFRESH WHILE YOU WATCH
-The dashboard refreshes when opened, can be refreshed manually, and monitors the supported JMA feeds in real time only while the app is active. A fresh warning received after the current session establishes its baseline can take over the screen with protective-action guidance.
+The dashboard refreshes when opened, can be refreshed manually, and monitors the supported Wolfx and catalog feeds in real time only while the app is active. A fresh warning received after the current session establishes its baseline can take over the screen with protective-action guidance.
 
 CHOOSE ALERT AUDIO
 Choose System Default, QuakeSignal Urgent Tone, or Japanese Safety Voice. Apple TV never starts alert audio automatically. System Default keeps warnings visual-only; either custom QuakeSignal sound plays only when you press Preview or Play with the Siri Remote.
@@ -15,4 +15,4 @@ Choose System Default, QuakeSignal Urgent Tone, or Japanese Safety Voice. Apple 
 FOREGROUND ONLY
 The Apple TV app does not register for push notifications, App Attest, Time Sensitive or Critical Alerts, or background emergency delivery. Monitoring and any user-started audio stop when the app is no longer active. Optional nearby push alerts remain features of the iPhone and iPad editions.
 
-QuakeSignal is independent and is not affiliated with JMA or any government agency. It reads public JMA earthquake information relayed by the Wolfx Open API. Information can be delayed, incomplete, revised, or inaccurate. Always follow official announcements and local emergency instructions.
+QuakeSignal is independent and is not affiliated with JMA, CENC, USGS, EMSC, GeoNet, or any government agency. It reads public earthquake information relayed by the Wolfx Open API plus USGS, EMSC, and GeoNet catalogs. Information can be delayed, incomplete, revised, or inaccurate. Always follow official announcements and local emergency instructions.

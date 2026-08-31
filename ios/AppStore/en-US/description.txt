@@ -1,7 +1,7 @@
 QuakeSignal brings earthquake reports, nearby context, and practical preparedness guidance together on iPhone and iPad.
 
 FOLLOW LIVE EARTHQUAKE INFORMATION
-View normalized JMA earthquake early warnings and reports relayed through the Wolfx Open API.
+View normalized JMA and China earthquake early warnings and reports relayed through the Wolfx Open API, plus USGS, EMSC, and GeoNet catalog companions.
 
 UNDERSTAND WHAT IS NEARBY
 Choose a city or use your current location to see distance, direction, magnitude, intensity, depth, and report timing in context. Filter events by magnitude or explore epicenters on the map.
@@ -10,10 +10,10 @@ RECOGNIZE EVERY STATUS
 Preliminary, updated, final, cancelled, and training messages use distinct labels, icons, and colors. Event details preserve a report-revision timeline when updates are available.
 
 OPTIONAL LOCAL ALERTS
-When you choose to enable notifications, QuakeSignal can send nearby alerts for JMA reports that match your selected feed type, magnitude, city or approximate location, and radius. This optional feature is best-effort, not a government emergency service, and not a replacement for official alerts.
+When you choose to enable notifications, QuakeSignal can send nearby alerts for reports that match your selected feed type, magnitude, city or approximate location, and radius. This optional feature is best-effort, not a government emergency service, and not a replacement for official alerts.
 
 APPLE WATCH COMPANION
-Open QuakeSignal on Apple Watch to refresh a compact headline and recent earthquake reports, then view available magnitude, status, source, time, intensity, and depth details. While the Watch app is open, a fresh active JMA earthquake early warning can show protective-action guidance with the native Watch warning haptic. A custom QuakeSignal sound selected on the paired iPhone is mirrored to Watch and may also play while the app is active. The companion does not independently register for push notifications or background emergency delivery; optional background alerts remain on the paired iPhone.
+Open QuakeSignal on Apple Watch to refresh a compact headline and recent earthquake reports, then view available magnitude, status, source, time, intensity, and depth details. While the Watch app is open, a fresh active earthquake early warning can show protective-action guidance with the native Watch warning haptic. A custom QuakeSignal sound selected on the paired iPhone is mirrored to Watch and may also play while the app is active. The companion does not independently register for push notifications or background emergency delivery; optional background alerts remain on the paired iPhone.
 
 PREPARE OFFLINE
 Keep drop-cover-hold-on guidance, situation-specific safety actions, an emergency kit checklist, and family check-in notes available even without a network connection.
@@ -21,4 +21,4 @@ Keep drop-cover-hold-on guidance, situation-specific safety actions, an emergenc
 ACCESSIBLE AND LOCALIZED
 QuakeSignal supports English, Japanese, and Simplified Chinese, along with Dynamic Type, VoiceOver-friendly labels, system appearance, and clear status treatments.
 
-IMPORTANT: QuakeSignal is an independent, non-official app and is not affiliated with JMA. JMA-issued information relayed through Wolfx may be delayed, incomplete, revised, or inaccurate. Notifications are best-effort and are not guaranteed. Always follow official announcements and local emergency instructions.
+IMPORTANT: QuakeSignal is an independent, non-official app and is not affiliated with JMA, CENC, USGS, EMSC, GeoNet, or any government agency. Information relayed through Wolfx and companion catalogs may be delayed, incomplete, revised, or inaccurate. Notifications are best-effort and are not guaranteed. Always follow official announcements and local emergency instructions.

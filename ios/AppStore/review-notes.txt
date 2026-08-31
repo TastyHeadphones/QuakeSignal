@@ -1,9 +1,9 @@
-QuakeSignal is an independent, non-official earthquake-information app. Build 17
-reads only the Wolfx jma_eew and jma_eqlist feeds; CENC, Sichuan, Fujian,
-and Chongqing feeds are disabled. It formats JMA-issued factual information and
-tells people to follow official local emergency guidance. Data can be delayed,
-incomplete, revised, or inaccurate; notifications are best-effort and are not a
-government emergency-alert service.
+QuakeSignal is an independent, non-official earthquake-information app. Build 21
+(version 1.2) reads the Wolfx feeds jma_eew, jma_eqlist, cenc_eew, cenc_eqlist,
+sc_eew, fj_eew, and cq_eew, plus USGS, EMSC, and GeoNet catalog companions. It
+formats that factual information and tells people to follow official local
+emergency guidance. Data can be delayed, incomplete, revised, or inaccurate;
+notifications are best-effort and are not a government emergency-alert service.
 
 No account, sign-in, payment, demo account, or review credential is required.
 For a permission-free review path, start the app, choose Skip at the
@@ -12,8 +12,8 @@ and Settings tabs. Alternatively, a reviewer can choose a listed city instead of
 granting location access.
 
 Notifications are optional. If enabled, the app uses a selected city or rounded
-location plus the chosen JMA feed type, magnitude, and radius filters to route
-JMA-issued reports. Those settings do not calculate predicted local intensity
+location plus the chosen earthquake feed type, magnitude, and radius filters to
+route matching reports. Those settings do not calculate predicted local intensity
 or ground-motion arrival time. Qualifying fresh warnings may be marked Time
 Sensitive, subject to the user's notification and Focus settings. This release
 has no Critical Alerts entitlement, does not bypass the mute switch as a Critical
@@ -33,7 +33,7 @@ settings; this release does not claim Critical Alert behavior.
 
 The embedded Apple Watch app is a foreground-only companion. Open it to refresh
 a compact headline and recent reports, then open an event for available details.
-While open, a fresh active JMA warning can show protective-action guidance with
+While open, a fresh active warning can show protective-action guidance with
 the native Watch warning haptic. The selected QuakeSignal custom sound is mirrored
 from the paired iPhone and may also play while the Watch scene is active. It does
 not independently register for APNs, App Attest, Time Sensitive or Critical
@@ -41,9 +41,10 @@ notifications, or background delivery. Optional background alerts remain an
 iPhone feature. Review the companion from the signed iOS host on a paired Apple
 Watch; no separate Watch IPA or reviewer account is required.
 
-Source: Japan Meteorological Agency (JMA), relayed through Wolfx and
-normalized/edited by QuakeSignal. QuakeSignal is independent and is not
-affiliated with or endorsed by JMA.
+Source: Japan Meteorological Agency (JMA) and China earthquake feeds relayed
+through Wolfx, plus USGS, EMSC, and GeoNet catalogs, normalized/edited by
+QuakeSignal. QuakeSignal is independent and is not affiliated with or endorsed
+by JMA, CENC, USGS, EMSC, GeoNet, or any government agency.
 
 Settings links to the Privacy Policy and Support pages. The optional Terms URL in
 the release worksheet is not currently an in-app Settings link and must not be

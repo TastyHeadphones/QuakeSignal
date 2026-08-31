@@ -1,7 +1,7 @@
 QuakeSignal for Mac brings current earthquake reports, nearby context, maps, and practical preparedness guidance into a native SwiftUI window.
 
 FOLLOW EARTHQUAKE INFORMATION
-Review normalized JMA earthquake early warnings and reports relayed through the Wolfx Open API. Preliminary, updated, final, cancelled, and training messages use distinct status treatments.
+Review normalized JMA and China earthquake early warnings and reports relayed through the Wolfx Open API, plus USGS, EMSC, and GeoNet catalog companions. Preliminary, updated, final, cancelled, and training messages use distinct status treatments.
 
 UNDERSTAND WHAT IS NEARBY
 Choose a city or use your current location to review distance, direction, magnitude, available intensity, depth, timing, and epicenter context on the map.
@@ -13,9 +13,9 @@ PREPARE OFFLINE
 Keep drop-cover-hold-on guidance, situation-specific safety actions, an emergency-kit checklist, and family check-in notes available without a network connection.
 
 FOREGROUND SAFETY ALERTS
-When QuakeSignal is open, a fresh qualifying JMA warning can take over the window with protective guidance and the selected System, Urgent, or Japanese Voice presentation sound. This is foreground-only behavior, not an Apple Critical Alert, and it does not claim to bypass system sound or Focus controls.
+When QuakeSignal is open, a fresh qualifying warning can take over the window with protective guidance and the selected System, Urgent, or Japanese Voice presentation sound. This is foreground-only behavior, not an Apple Critical Alert, and it does not claim to bypass system sound or Focus controls.
 
 FOREGROUND ONLY
-The Mac app refreshes JMA information while open. It does not independently register for APNs or App Attest and does not claim background emergency-alert delivery. Magnitude and distance controls filter presentation only; QuakeSignal does not predict local intensity or ground-motion arrival time.
+The Mac app refreshes earthquake information while open. It does not independently register for APNs or App Attest and does not claim background emergency-alert delivery. Magnitude and distance controls filter presentation only; QuakeSignal does not predict local intensity or ground-motion arrival time.
 
-QuakeSignal is independent and is not affiliated with JMA or any government agency. JMA-issued information is relayed through Wolfx and normalized/edited by QuakeSignal. It can be delayed, incomplete, revised, or inaccurate. Always follow official announcements and local emergency instructions.
+QuakeSignal is independent and is not affiliated with JMA, CENC, USGS, EMSC, GeoNet, or any government agency. Information is relayed through Wolfx and companion catalogs and normalized/edited by QuakeSignal. It can be delayed, incomplete, revised, or inaccurate. Always follow official announcements and local emergency instructions.
