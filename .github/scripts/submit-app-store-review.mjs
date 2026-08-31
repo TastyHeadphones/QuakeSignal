@@ -157,6 +157,8 @@ const EDITABLE_VERSION_STATES = [
   "READY_FOR_REVIEW",
   "INVALID_BINARY",
 ];
+const OPEN_REVIEW_STATES = ["READY_FOR_REVIEW", "WAITING_FOR_REVIEW", "IN_REVIEW"];
+const PENDING_RELEASE_STATES = ["PENDING_DEVELOPER_RELEASE", "PENDING_APPLE_RELEASE", "ACCEPTED"];
 
 function summarizeVersions(versions) {
   return versions
@@ -164,31 +166,99 @@ function summarizeVersions(versions) {
     .join(", ") || "none";
 }
 
-async function findOrCreateVersion(token, platform, marketingVersion) {
-  const versions = await collect(
+async function cancelOpenReviewSubmissions(token, platform) {
+  const submissions = await collect(
+    token,
+    `/v1/reviewSubmissions?filter[app]=${APP_ID}&filter[platform]=${platform}&filter[state]=${OPEN_REVIEW_STATES.join(",")}`,
+  );
+  for (const submission of submissions) {
+    console.log(`${platform}: canceling review submission ${submission.id} state=${submission.attributes?.state}`);
+    const { status, payload } = await api(token, "PATCH", `/v1/reviewSubmissions/${submission.id}`, {
+      data: {
+        type: "reviewSubmissions",
+        id: submission.id,
+        attributes: { canceled: true },
+      },
+    });
+    if (status !== 200 && status !== 409) {
+      fail(`could not cancel ${platform} review submission ${submission.id} (${status}): ${errorDetail(payload)}`);
+    }
+  }
+}
+
+async function releasePendingVersion(token, version) {
+  const platformNote = version.attributes?.platform || "unknown";
+  console.log(`${platformNote}: releasing ${version.attributes?.versionString} from ${versionState(version)} so 1.2 can be created.`);
+  const { status, payload } = await api(token, "POST", "/v1/appStoreVersionReleaseRequests", {
+    data: {
+      type: "appStoreVersionReleaseRequests",
+      relationships: {
+        appStoreVersion: { data: { type: "appStoreVersions", id: version.id } },
+      },
+    },
+  });
+  if (status !== 201 && status !== 409) {
+    fail(`could not release ${platformNote} ${version.attributes?.versionString} (${status}): ${errorDetail(payload)}`);
+  }
+  const deadline = Date.now() + BUILD_WAIT_MS;
+  while (Date.now() <= deadline) {
+    const current = await api(token, "GET", `/v1/appStoreVersions/${version.id}`);
+    const state = versionState(current.payload?.data ?? {});
+    if (state === "READY_FOR_DISTRIBUTION") return;
+    console.log(`${platformNote} ${version.attributes?.versionString} release state=${state}; waiting.`);
+    await sleep(BUILD_POLL_MS);
+  }
+  fail(`${platformNote} ${version.attributes?.versionString} did not reach READY_FOR_DISTRIBUTION after release.`);
+}
+
+async function retargetVersion(token, version, marketingVersion) {
+  if (version.attributes?.versionString === marketingVersion) return version;
+  const { status, payload } = await api(token, "PATCH", `/v1/appStoreVersions/${version.id}`, {
+    data: {
+      type: "appStoreVersions",
+      id: version.id,
+      attributes: { versionString: marketingVersion, releaseType: "MANUAL" },
+    },
+  });
+  if (status !== 200) {
+    fail(`could not retarget ${version.attributes?.platform} ${version.attributes?.versionString} to ${marketingVersion} (${status}): ${errorDetail(payload)}`);
+  }
+  return payload.data;
+}
+
+async function listVersions(token, platform) {
+  return collect(
     token,
     `/v1/apps/${APP_ID}/appStoreVersions?filter[platform]=${platform}&limit=50`,
   );
+}
+
+async function findOrCreateVersion(token, platform, marketingVersion) {
+  let versions = await listVersions(token, platform);
   console.log(`${platform} existing versions: ${summarizeVersions(versions)}`);
   const exact = versions.find((version) => version.attributes?.versionString === marketingVersion);
   if (exact) return exact;
-  const editable = versions.find((version) => EDITABLE_VERSION_STATES.includes(versionState(version)));
-  if (editable) {
-    if (editable.attributes?.versionString !== marketingVersion) {
-      const { status, payload } = await api(token, "PATCH", `/v1/appStoreVersions/${editable.id}`, {
-        data: {
-          type: "appStoreVersions",
-          id: editable.id,
-          attributes: { versionString: marketingVersion, releaseType: "MANUAL" },
-        },
-      });
-      if (status !== 200) {
-        fail(`could not retarget ${platform} draft ${editable.attributes?.versionString} to ${marketingVersion} (${status}): ${errorDetail(payload)}`);
-      }
-      return payload.data;
-    }
-    return editable;
+
+  const pending = versions.find((version) => PENDING_RELEASE_STATES.includes(versionState(version)));
+  if (pending) {
+    await releasePendingVersion(token, pending);
+    versions = await listVersions(token, platform);
   }
+
+  const inReview = versions.find((version) =>
+    version.attributes?.versionString !== marketingVersion && OPEN_REVIEW_STATES.includes(versionState(version)),
+  );
+  if (inReview) {
+    await cancelOpenReviewSubmissions(token, platform);
+    versions = await listVersions(token, platform);
+  }
+
+  const exactAfter = versions.find((version) => version.attributes?.versionString === marketingVersion);
+  if (exactAfter) return exactAfter;
+
+  const editable = versions.find((version) => EDITABLE_VERSION_STATES.includes(versionState(version)));
+  if (editable) return retargetVersion(token, editable, marketingVersion);
+
   const { status, payload } = await api(token, "POST", "/v1/appStoreVersions", {
     data: {
       type: "appStoreVersions",
