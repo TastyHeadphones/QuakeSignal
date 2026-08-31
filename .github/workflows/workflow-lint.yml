@@ -299,6 +299,7 @@ jobs:
             ios/ci_scripts/verify-signed-apple-artifacts.sh \
             .github/scripts/verify-signed-apple-artifacts.test.sh
           node --test .github/scripts/verify-ios-release-contract.test.mjs
+          node --test .github/scripts/release-app-store-if-approved.test.mjs
           PYTHONDONTWRITEBYTECODE=1 python3 .github/scripts/test_xcode_cloud_release_guard.py
           node .github/scripts/verify-ios-release-contract.mjs
           .github/scripts/verify-signed-apple-artifacts.test.sh

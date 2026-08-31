@@ -99,6 +99,8 @@ const contractFiles = {
     ".github/scripts/verify-apple-screenshot-release-set.rb",
     ".github/scripts/verify-apple-screenshot-release-set.test.rb",
     ".github/scripts/assign-testflight-groups.mjs",
+    ".github/scripts/release-app-store-if-approved.mjs",
+    ".github/scripts/release-app-store-if-approved.test.mjs",
     ".github/scripts/submit-app-store-review.mjs",
     ".github/scripts/verify-store-assets.rb",
     ".github/scripts/verify-store-assets.test.rb",
@@ -225,6 +227,7 @@ const EXECUTABLE_SCREENSHOT_AUTOMATION_FILES = new Set([
 
 const REVIEWED_WORKFLOW_FILES = [
   ".github/workflows/apns-incident-disposition.yml",
+  ".github/workflows/app-store-release.yml",
   ".github/workflows/app-store-review.yml",
   ".github/workflows/apple-platform-screenshots.yml",
   ".github/workflows/apple-platforms.yml",
@@ -1580,6 +1583,7 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
     contractFiles.iosWorkflow,
     contractFiles.platformWorkflow,
     contractFiles.screenshotReleaseWorkflow,
+    ".github/workflows/app-store-release.yml",
     ".github/workflows/app-store-review.yml",
     ".github/workflows/xcode-cloud-signing-inspect.yml",
   ]);
@@ -1705,6 +1709,7 @@ function verifyWorkflowDirectoryPolicy(workflowFiles) {
   }
   const expectedCredentialWorkflowPaths = [
     ".github/workflows/apns-incident-disposition.yml",
+    ".github/workflows/app-store-release.yml",
     ".github/workflows/app-store-review.yml",
     ".github/workflows/apple-platforms.yml",
     ".github/workflows/cloudflare-staging.yml",

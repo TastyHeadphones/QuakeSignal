@@ -467,6 +467,8 @@ async function writeFixture(options = {}) {
     ".github/scripts/verify-apple-screenshot-release-set.rb",
     ".github/scripts/verify-apple-screenshot-release-set.test.rb",
     ".github/scripts/assign-testflight-groups.mjs",
+    ".github/scripts/release-app-store-if-approved.mjs",
+    ".github/scripts/release-app-store-if-approved.test.mjs",
     ".github/scripts/submit-app-store-review.mjs",
     ".github/scripts/verify-store-assets.rb",
     ".github/scripts/verify-store-assets.test.rb",
