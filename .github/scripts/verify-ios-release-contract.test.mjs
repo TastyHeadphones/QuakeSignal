@@ -510,7 +510,7 @@ test("the checked-in public Release contract is coherent", async () => {
   assert.deepEqual(verified.appIdentityRoutes, reviewedAppIdentityRoutes);
   assert.equal(
     verified.appAttestPolicyFingerprint,
-    "sha256:W_dhPZUqnrNPZmHT5r5DuZQosBQ5Ezb_8T5oXUFVXZI",
+    "sha256:iKt3u23cAwumwWnpzrqV19PIuxWCU9O1WLxz8kbIdWg",
   );
 });
 
