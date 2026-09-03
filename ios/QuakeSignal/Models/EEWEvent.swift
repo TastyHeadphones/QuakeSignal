@@ -101,12 +101,13 @@ extension EEWEvent {
     func distanceKm(from coordinate: CLLocationCoordinate2D) -> Double? {
         guard let eventCoordinate = self.coordinate,
               CLLocationCoordinate2DIsValid(coordinate) else { return nil }
-        let eventLocation = CLLocation(
-            latitude: eventCoordinate.latitude,
-            longitude: eventCoordinate.longitude
+        return ChinaCoordinateTransform.alertDistanceKm(
+            userLatitude: coordinate.latitude,
+            userLongitude: coordinate.longitude,
+            eventLatitude: eventCoordinate.latitude,
+            eventLongitude: eventCoordinate.longitude,
+            eventSourceId: sourceId
         )
-        let fromLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        return eventLocation.distance(from: fromLocation) / 1000.0
     }
 
     /// 8-point compass direction from `coordinate` to this event's epicenter, e.g. "NW".

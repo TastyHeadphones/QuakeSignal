@@ -5,7 +5,7 @@ import { config } from "./config.js";
 import type { DeviceRecord, DeviceRegistrationInput, EventRevision, NormalizedEvent } from "./types/domain.js";
 import type { WolfxSourceId } from "./types/wolfx.js";
 import { createLogger } from "./logger.js";
-import { haversineDistanceKm } from "./util/geo.js";
+import { eventMatchesDeviceLocation } from "./util/geo.js";
 import { isQuietHours } from "./util/time.js";
 import { normalizedAlertSound, reconcileEventRevision } from "./push/policy.js";
 
@@ -214,8 +214,14 @@ export function listDevicesForSource(sourceId: WolfxSourceId, event: DistanceFil
       event.latitude == null ||
       event.longitude == null
     ) return false;
-    const distance = haversineDistanceKm(d.latitude, d.longitude, event.latitude, event.longitude);
-    return distance <= d.radiusKm;
+    return eventMatchesDeviceLocation({
+      userLatitude: d.latitude,
+      userLongitude: d.longitude,
+      eventLatitude: event.latitude,
+      eventLongitude: event.longitude,
+      eventSourceId: sourceId,
+      radiusKm: d.radiusKm,
+    });
   });
 }
 

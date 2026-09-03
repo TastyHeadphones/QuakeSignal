@@ -8077,6 +8077,69 @@ test("shipped normalize-to-notify path maps Wolfx EEW and USGS/EMSC/GeoNet catal
   assert.equal(cencPayload.aps["interruption-level"], "critical");
 });
 
+test("China GCJ-02 transfer makes CENC events match WGS-84 city coordinates", async () => {
+  const {
+    eventMatchesDeviceLocation,
+    gcj02ToWgs84,
+    isChinaDomesticSource,
+    isInsideChina,
+    wgs84ToGcj02,
+  } = await workerModule();
+  const beijingWgs = { latitude: 39.9042, longitude: 116.4074 };
+  assert.equal(isInsideChina(beijingWgs.latitude, beijingWgs.longitude), true);
+  assert.equal(isInsideChina(35.681, 139.767), false);
+  assert.equal(isChinaDomesticSource("cenc_eew"), true);
+  assert.equal(isChinaDomesticSource("jma_eew"), false);
+
+  const gcj = wgs84ToGcj02(beijingWgs.latitude, beijingWgs.longitude);
+  const offsetKm = Math.hypot(
+    (gcj.latitude - beijingWgs.latitude) * 111,
+    (gcj.longitude - beijingWgs.longitude) * 85,
+  );
+  assert.ok(offsetKm > 0.2);
+  assert.ok(offsetKm < 1.5);
+
+  const roundTrip = gcj02ToWgs84(gcj.latitude, gcj.longitude);
+  assert.ok(Math.abs(roundTrip.latitude - beijingWgs.latitude) < 0.01);
+  assert.ok(Math.abs(roundTrip.longitude - beijingWgs.longitude) < 0.01);
+
+  assert.equal(
+    eventMatchesDeviceLocation({
+      userLatitude: beijingWgs.latitude,
+      userLongitude: beijingWgs.longitude,
+      eventLatitude: gcj.latitude,
+      eventLongitude: gcj.longitude,
+      eventSourceId: "cenc_eew",
+      radiusKm: 0.2,
+    }),
+    true,
+    "CENC GCJ-02 epicenter must match a WGS-84 Beijing city pin after transfer",
+  );
+  assert.equal(
+    eventMatchesDeviceLocation({
+      userLatitude: beijingWgs.latitude,
+      userLongitude: beijingWgs.longitude,
+      eventLatitude: gcj.latitude,
+      eventLongitude: gcj.longitude,
+      eventSourceId: "usgs_eqlist",
+      radiusKm: 0.2,
+    }),
+    false,
+    "the same numbers on a WGS-84 catalog must not silently borrow the China transfer",
+  );
+  assert.equal(
+    eventMatchesDeviceLocation({
+      userLatitude: 35.681,
+      userLongitude: 139.767,
+      eventLatitude: 35.681,
+      eventLongitude: 139.767,
+      eventSourceId: "jma_eew",
+      radiusKm: 0.01,
+    }),
+    true,
+  );
+});
+
 test("accepts only exact alert-sound registration identifiers and defaults old clients to system", async () => {
   const {
     APNS_RELAY_DISABLED_SOURCES,

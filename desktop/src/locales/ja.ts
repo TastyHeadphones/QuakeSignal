@@ -59,6 +59,9 @@ export const ja: Record<LocaleKey, string> = {
   "settings.source.cq_eew": "中国・重慶市",
   "settings.source.cenc_eqlist": "中国（CENC 地震情報）",
   "settings.source.jma_eqlist": "日本（気象庁 地震情報）",
+  "settings.source.usgs_eqlist": "USGS（公開カタログ）",
+  "settings.source.emsc_eqlist": "EMSC（公開カタログ）",
+  "settings.source.geonet_eqlist": "GeoNet NZ（公開カタログ）",
 
   "settings.section.threshold": "最小マグニチュード",
   "settings.threshold.hint": "このマグニチュード以上の地震のみ通知します。",
@@ -82,7 +85,7 @@ export const ja: Record<LocaleKey, string> = {
   "settings.launchAtLogin.detail": "サインイン時に自動で監視を開始します。",
 
   "settings.section.about": "このアプリについて",
-  "settings.about.dataSource": "地震データは Wolfx Open API 経由で提供されており、気象庁（JMA）および中国の地震ネットワーク（CENC・四川・福建・重慶）の情報を集約しています。",
+  "settings.about.dataSource": "デスクトップは公開地震APIのみに接続します。Wolfx Open API（気象庁および中国 CENC/四川/福建/重慶）と USGS・EMSC・GeoNet です。QuakeSignal の Cloudflare バックエンドは使いません。",
   "disclaimer.notOfficial": "QuakeSignal は独立したアプリであり、気象庁・CENC・その他の政府機関とは一切関係ありません。実際の地震の際は必ず公式の情報に従ってください。",
   "settings.about.repo": "GitHub でソースコードを見る",
   "settings.save": "保存",

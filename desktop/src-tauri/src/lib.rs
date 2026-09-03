@@ -1,9 +1,11 @@
 mod alarm;
 mod alert_window;
+mod catalog;
 mod commands;
 mod db;
 mod domain;
 mod filter;
+mod geo;
 mod normalize;
 mod notify;
 mod pipeline;
@@ -96,6 +98,11 @@ pub fn run() {
                     SourceId::ALL
                         .into_iter()
                         .map(|source| (source.as_str().to_string(), false))
+                        .chain(
+                            catalog::CATALOG_SOURCE_IDS
+                                .into_iter()
+                                .map(|source| (source.to_string(), false)),
+                        )
                         .collect(),
                 ),
                 alert_window_lifecycle: Mutex::new(()),
@@ -104,6 +111,7 @@ pub fn run() {
 
             tray::setup(&handle)?;
             wolfx_client::spawn_all(handle.clone());
+            catalog::spawn_all(handle.clone());
 
             if let Some(main) = app.get_webview_window("main") {
                 let main_clone = main.clone();

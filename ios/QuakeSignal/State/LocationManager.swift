@@ -329,11 +329,12 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
                 self.stopUsingSubscriptionLocation()
                 return
             }
-            self.currentLocation = coordinate
+            let wgs84 = ChinaCoordinateTransform.deviceGPSToWgs84(coordinate)
+            self.currentLocation = wgs84
             self.currentLocationPurpose = purpose
             self.isRequestingLocation = false
             self.lastRequestFailed = false
-            self.scheduleLocationExpiration(for: coordinate, timestamp: timestamp)
+            self.scheduleLocationExpiration(for: wgs84, timestamp: timestamp)
         }
     }
 

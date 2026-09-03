@@ -40,6 +40,13 @@ export {
   normalizeJmaEew,
   normalizeScFjEew,
 };
+export {
+  eventMatchesDeviceLocation,
+  gcj02ToWgs84,
+  isChinaDomesticSource,
+  isInsideChina,
+  wgs84ToGcj02,
+};
 import {
   isHeartbeat,
   isPong,
@@ -51,6 +58,13 @@ import {
   type WolfxEqlistMessage,
   type WolfxSourceId,
 } from "../../src/types/wolfx";
+import {
+  eventMatchesDeviceLocation,
+  gcj02ToWgs84,
+  isChinaDomesticSource,
+  isInsideChina,
+  wgs84ToGcj02,
+} from "../../src/util/geo";
 import {
   APP_ATTEST_CHALLENGE_ID_HEADER,
   APP_ATTEST_CHALLENGE_TTL_MS,
@@ -3463,23 +3477,6 @@ function isValidSources(value: unknown): value is WolfxSourceId[] {
   );
 }
 
-function haversineDistanceKm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
-  const radians = (degrees: number) => (degrees * Math.PI) / 180;
-  const dLat = radians(lat2 - lat1);
-  const dLon = radians(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(radians(lat1)) *
-      Math.cos(radians(lat2)) *
-      Math.sin(dLon / 2) ** 2;
-  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 function isQuietHours(offsetMinutes: number): boolean {
   const local = new Date(Date.now() + offsetMinutes * 60_000);
   const hour = local.getUTCHours();
@@ -3512,14 +3509,14 @@ function shouldNotify(
   ) {
     return false;
   }
-  return (
-    haversineDistanceKm(
-      device.latitude,
-      device.longitude,
-      event.latitude,
-      event.longitude,
-    ) <= device.radiusKm
-  );
+  return eventMatchesDeviceLocation({
+    userLatitude: device.latitude,
+    userLongitude: device.longitude,
+    eventLatitude: event.latitude,
+    eventLongitude: event.longitude,
+    eventSourceId: event.sourceId,
+    radiusKm: device.radiusKm,
+  });
 }
 
 function base64URL(bytes: Uint8Array): string {
