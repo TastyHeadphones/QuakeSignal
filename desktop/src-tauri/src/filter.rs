@@ -1,20 +1,14 @@
 use crate::domain::{EventKind, NormalizedEvent, NotifyReason};
+use crate::geo;
 use crate::settings::Settings;
 use chrono::{DateTime, Local, Timelike, Utc};
 
-const EARTH_RADIUS_KM: f64 = 6371.0;
 pub(crate) const MAX_ACTIVE_WARNING_AGE_SECONDS: i64 = 10 * 60;
 const MAX_FUTURE_CLOCK_SKEW_SECONDS: i64 = 60;
 
 /// Mirrors backend/src/util/geo.ts::haversineDistanceKm exactly.
 pub fn haversine_distance_km(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
-    let to_rad = |deg: f64| deg * std::f64::consts::PI / 180.0;
-    let d_lat = to_rad(lat2 - lat1);
-    let d_lon = to_rad(lon2 - lon1);
-    let a = (d_lat / 2.0).sin().powi(2)
-        + to_rad(lat1).cos() * to_rad(lat2).cos() * (d_lon / 2.0).sin().powi(2);
-    let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
-    EARTH_RADIUS_KM * c
+    geo::haversine_distance_km(lat1, lon1, lat2, lon2)
 }
 
 /// Mirrors backend/src/util/time.ts::isQuietHours: true if the local time at
@@ -189,7 +183,14 @@ pub fn passes_user_filters(event: &NormalizedEvent, settings: &Settings) -> bool
         };
         match (event.latitude, event.longitude) {
             (Some(lat), Some(lon)) => {
-                if haversine_distance_km(user_lat, user_lon, lat, lon) > radius_km {
+                if !geo::event_matches_device_location(
+                    user_lat,
+                    user_lon,
+                    lat,
+                    lon,
+                    &event.source_id,
+                    radius_km,
+                ) {
                     return false;
                 }
             }
@@ -316,5 +317,26 @@ mod tests {
 
         warning.report_time_utc = Some((now + chrono::Duration::seconds(61)).to_rfc3339());
         assert!(!is_fresh_active_warning_at(&warning, now));
+    }
+
+    #[test]
+    fn china_cenc_warning_matches_wgs84_city_after_gps_transfer() {
+        let user_lat = 39.9042;
+        let user_lon = 116.4074;
+        let (event_lat, event_lon) = crate::geo::wgs84_to_gcj02(user_lat, user_lon);
+        let mut warning = event(1, false, false);
+        warning.source_id = "cenc_eew".to_string();
+        warning.id = "cenc_eew:beijing".to_string();
+        warning.latitude = Some(event_lat);
+        warning.longitude = Some(event_lon);
+        let mut settings = Settings::default();
+        settings.sources = vec!["cenc_eew".to_string()];
+        settings.latitude = Some(user_lat);
+        settings.longitude = Some(user_lon);
+        settings.radius_km = Some(0.2);
+        assert!(passes_user_filters(&warning, &settings));
+        warning.source_id = "usgs_eqlist".to_string();
+        settings.sources = vec!["usgs_eqlist".to_string()];
+        assert!(!passes_user_filters(&warning, &settings));
     }
 }

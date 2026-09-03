@@ -51,7 +51,13 @@ export interface Settings {
 }
 
 export const EEW_SOURCE_IDS = ["jma_eew", "sc_eew", "cenc_eew", "fj_eew", "cq_eew"] as const;
-export const REPORT_SOURCE_IDS = ["cenc_eqlist", "jma_eqlist"] as const;
+export const REPORT_SOURCE_IDS = [
+  "cenc_eqlist",
+  "jma_eqlist",
+  "usgs_eqlist",
+  "emsc_eqlist",
+  "geonet_eqlist",
+] as const;
 export const ALL_SOURCE_IDS = [...EEW_SOURCE_IDS, ...REPORT_SOURCE_IDS];
 
 export interface QuakeEventPayload {

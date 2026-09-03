@@ -57,6 +57,9 @@ export const en = {
   "settings.source.cq_eew": "Chongqing, China",
   "settings.source.cenc_eqlist": "China (CENC bulletins)",
   "settings.source.jma_eqlist": "Japan (JMA bulletins)",
+  "settings.source.usgs_eqlist": "USGS (open catalog)",
+  "settings.source.emsc_eqlist": "EMSC (open catalog)",
+  "settings.source.geonet_eqlist": "GeoNet NZ (open catalog)",
 
   "settings.section.threshold": "Minimum Magnitude",
   "settings.threshold.hint": "Only notify for quakes at or above this magnitude.",
@@ -80,7 +83,7 @@ export const en = {
   "settings.launchAtLogin.detail": "Start monitoring automatically when you sign in.",
 
   "settings.section.about": "About",
-  "settings.about.dataSource": "Earthquake data is provided by the Wolfx Open API, aggregating Japan's Meteorological Agency (JMA) and China's national and regional earthquake networks (CENC, Sichuan, Fujian, Chongqing).",
+  "settings.about.dataSource": "Desktop talks only to public earthquake APIs: Wolfx Open API (JMA and China CENC/Sichuan/Fujian/Chongqing), plus USGS, EMSC, and GeoNet catalogs. It does not use the QuakeSignal Cloudflare backend.",
   "disclaimer.notOfficial": "QuakeSignal is an independent app and is not affiliated with JMA, CENC, or any government agency. Always follow official guidance during an actual earthquake.",
   "settings.about.repo": "View source on GitHub",
   "settings.save": "Save",

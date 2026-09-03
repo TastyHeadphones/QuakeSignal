@@ -59,6 +59,9 @@ export const zhHans: Record<LocaleKey, string> = {
   "settings.source.cq_eew": "中国·重庆",
   "settings.source.cenc_eqlist": "中国（CENC 地震速报）",
   "settings.source.jma_eqlist": "日本（气象厅地震信息）",
+  "settings.source.usgs_eqlist": "USGS（公开目录）",
+  "settings.source.emsc_eqlist": "EMSC（公开目录）",
+  "settings.source.geonet_eqlist": "GeoNet 新西兰（公开目录）",
 
   "settings.section.threshold": "最小震级",
   "settings.threshold.hint": "只提醒达到或超过此震级的地震。",
@@ -82,7 +85,7 @@ export const zhHans: Record<LocaleKey, string> = {
   "settings.launchAtLogin.detail": "登录系统后自动开始监测。",
 
   "settings.section.about": "关于",
-  "settings.about.dataSource": "地震数据来自 Wolfx Open API，聚合了日本气象厅（JMA）和中国地震台网（CENC、四川、福建、重庆）的信息。",
+  "settings.about.dataSource": "桌面端只连接公开地震接口：Wolfx Open API（日本气象厅与中国 CENC/四川/福建/重庆），以及 USGS、EMSC、GeoNet 目录。不使用 QuakeSignal 的 Cloudflare 后端。",
   "disclaimer.notOfficial": "QuakeSignal 是一个独立开发的应用，与气象厅、CENC 或任何政府机构均无关联。发生地震时请始终以官方发布的信息为准。",
   "settings.about.repo": "在 GitHub 上查看源代码",
   "settings.save": "保存",

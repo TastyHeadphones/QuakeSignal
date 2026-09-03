@@ -23,6 +23,83 @@ final class CoarseCoordinateTests: XCTestCase {
         XCTAssertNil(CoarseCoordinate(CLLocationCoordinate2D(latitude: 0, longitude: 181)))
     }
 
+    func testTokyoIsNotTreatedAsChinaGCJ02() {
+        XCTAssertFalse(ChinaCoordinateTransform.isInsideChina(latitude: 35.681, longitude: 139.767))
+        let gps = ChinaCoordinateTransform.deviceGPSToWgs84(
+            CLLocationCoordinate2D(latitude: 35.681, longitude: 139.767)
+        )
+        XCTAssertEqual(gps.latitude, 35.681, accuracy: 0.000_000_1)
+        XCTAssertEqual(gps.longitude, 139.767, accuracy: 0.000_000_1)
+    }
+
+    func testBeijingDeviceGPSIsConvertedFromGCJ02ToWGS84() {
+        let wgs = CLLocationCoordinate2D(latitude: 39.9042, longitude: 116.4074)
+        let gcj = ChinaCoordinateTransform.wgs84ToGcj02(latitude: wgs.latitude, longitude: wgs.longitude)
+        let recovered = ChinaCoordinateTransform.deviceGPSToWgs84(gcj)
+        XCTAssertGreaterThan(
+            CLLocation(latitude: wgs.latitude, longitude: wgs.longitude)
+                .distance(from: CLLocation(latitude: gcj.latitude, longitude: gcj.longitude)),
+            200
+        )
+        XCTAssertLessThan(
+            CLLocation(latitude: recovered.latitude, longitude: recovered.longitude)
+                .distance(from: CLLocation(latitude: wgs.latitude, longitude: wgs.longitude)),
+            200
+        )
+    }
+
+    func testCENCEventMatchesWGS84CityAfterChinaTransfer() throws {
+        let city = CLLocationCoordinate2D(latitude: 39.9042, longitude: 116.4074)
+        let gcj = ChinaCoordinateTransform.wgs84ToGcj02(latitude: city.latitude, longitude: city.longitude)
+        var chinaEvent = event(latitude: gcj.latitude, longitude: gcj.longitude)
+        chinaEvent = EEWEvent(
+            id: "cenc_eew:beijing",
+            sourceId: "cenc_eew",
+            eventId: "beijing",
+            serial: 1,
+            kind: "eew",
+            originTimeUtc: chinaEvent.originTimeUtc,
+            reportTimeUtc: chinaEvent.reportTimeUtc,
+            hypocenter: "Beijing",
+            latitude: gcj.latitude,
+            longitude: gcj.longitude,
+            magnitude: 5.0,
+            depth: 10,
+            maxIntensity: "5",
+            isWarn: true,
+            isFinal: false,
+            isCancel: false,
+            isTraining: false,
+            tsunami: nil
+        )
+        let distance = try XCTUnwrap(chinaEvent.distanceKm(from: city))
+        XCTAssertLessThan(distance, 0.2)
+
+        var usgsEvent = chinaEvent
+        usgsEvent = EEWEvent(
+            id: "usgs_eqlist:beijing",
+            sourceId: "usgs_eqlist",
+            eventId: "beijing",
+            serial: 1,
+            kind: "report",
+            originTimeUtc: chinaEvent.originTimeUtc,
+            reportTimeUtc: chinaEvent.reportTimeUtc,
+            hypocenter: "Beijing",
+            latitude: gcj.latitude,
+            longitude: gcj.longitude,
+            magnitude: 5.0,
+            depth: 10,
+            maxIntensity: nil,
+            isWarn: false,
+            isFinal: true,
+            isCancel: false,
+            isTraining: false,
+            tsunami: nil
+        )
+        let usgsDistance = try XCTUnwrap(usgsEvent.distanceKm(from: city))
+        XCTAssertGreaterThan(usgsDistance, 0.2)
+    }
+
     func testEventCoordinateRejectsNonFiniteAndOutOfRangeValues() throws {
         XCTAssertEqual(
             try XCTUnwrap(event(latitude: 90, longitude: 180).coordinate).latitude,
