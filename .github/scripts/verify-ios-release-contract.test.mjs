@@ -132,7 +132,7 @@ const executableScreenshotAutomationFiles = new Set([
 ]);
 
 function fixtureFiles({
-  buildNumber = "23",
+  buildNumber = "24",
   projectFileVersions = [buildNumber, buildNumber, buildNumber],
   infoBundleVersion = "$(CURRENT_PROJECT_VERSION)",
   allowedVersions = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24",
@@ -290,7 +290,7 @@ async function fixtureWorkflow({
     workflow = workflow.replace(from, to);
   };
 
-  if (workflowDefault !== "23") {
+  if (workflowDefault !== "24") {
     replaceOnce(
       '        default: "24"\n        type: string\n',
       `        default: "${workflowDefault}"\n        type: string\n`,
@@ -328,9 +328,9 @@ async function fixtureWorkflow({
   return workflow;
 }
 
-async function fixturePlatformWorkflow({ workflowDefault = "23" } = {}) {
+async function fixturePlatformWorkflow({ workflowDefault = "24" } = {}) {
   let workflow = await readFile(join(repositoryRoot, ".github/workflows/apple-platforms.yml"), "utf8");
-  if (workflowDefault !== "23") {
+  if (workflowDefault !== "24") {
     const from = '        default: "24"\n        type: string\n';
     if (!workflow.includes(from)) throw new Error("fixture could not locate native platform build_number default");
     workflow = workflow.replace(from, `        default: "${workflowDefault}"\n        type: string\n`);
@@ -1352,10 +1352,10 @@ test("fails closed on source/version drift", async (t) => {
     );
   });
   await expectFailure(t, {
-    buildNumber: "23",
-    allowedVersions: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23",
+    buildNumber: "24",
+    allowedVersions: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24",
     workflowDefault: "7",
-  }, /build_number default 7 does not match ios\/project\.yml 23/i);
+  }, /build_number default 7 does not match ios\/project\.yml 24/i);
 });
 
 test("fails closed when the remote smoke changes origin or executable command", async (t) => {
@@ -2080,8 +2080,8 @@ test("fails closed when iOS loses its embedded Watch profile contract", async (t
 test("fails closed when the native target, bundle, or embedding matrix drifts", async (t) => {
   const mutations = [
     (contents) => contents.replace(
-      "    CURRENT_PROJECT_VERSION: \"23\"\n",
-      "    CURRENT_PROJECT_VERSION: \"23\"\n    TARGETED_DEVICE_FAMILY: \"1,2\"\n",
+      "    CURRENT_PROJECT_VERSION: \"24\"\n",
+      "    CURRENT_PROJECT_VERSION: \"24\"\n    TARGETED_DEVICE_FAMILY: \"1,2\"\n",
     ),
     (contents) => contents.replace(
       "        PRODUCT_BUNDLE_IDENTIFIER: com.quakesignal.app.watchkitapp\n",
