@@ -256,6 +256,76 @@ final class PushRegistrationLifecycleTests: XCTestCase {
         XCTAssertEqual(defaults.stringArray(forKey: "settings.sources"), ["jma_eew"])
     }
 
+    func testCurrentLocationRegistrationIncludesFiftyKmRadiusAndMagnitude() throws {
+        XCTAssertTrue(AppSettings.radiusTiersKm.contains(50))
+        XCTAssertTrue(AppSettings.magnitudeTiers.contains(4))
+
+        let tokyo = CLLocationCoordinate2D(latitude: 35.681236, longitude: 139.767125)
+        let request = try XCTUnwrap(
+            PushRegistrationPayloadBuilder.makeRequest(
+                token: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                environment: "production",
+                locale: "en",
+                sources: ["jma_eew", "cenc_eew"],
+                minMagnitude: 4,
+                cityName: nil,
+                location: tokyo,
+                radiusKm: 50,
+                includeTestAlerts: false,
+                utcOffsetMinutes: 540,
+                notifyAtNight: true,
+                alertSound: .system
+            )
+        )
+        XCTAssertEqual(request.radiusKm, 50)
+        XCTAssertEqual(request.minMagnitude, 4)
+        XCTAssertEqual(request.latitude, 35.7, accuracy: 0.000_001)
+        XCTAssertEqual(request.longitude, 139.8, accuracy: 0.000_001)
+        XCTAssertEqual(request.sources, ["jma_eew", "cenc_eew"])
+
+        let data = try JSONEncoder().encode(request)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(object["radiusKm"] as? Double, 50)
+        XCTAssertEqual(object["minMagnitude"] as? Double, 4)
+        XCTAssertNotNil(object["latitude"])
+        XCTAssertNotNil(object["longitude"])
+    }
+
+    func testCurrentLocationRegistrationFailsClosedWithoutAFix() {
+        XCTAssertNil(
+            PushRegistrationPayloadBuilder.makeRequest(
+                token: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                environment: "production",
+                locale: "en",
+                sources: ["jma_eew"],
+                minMagnitude: 3,
+                cityName: nil,
+                location: nil,
+                radiusKm: 50,
+                includeTestAlerts: false,
+                utcOffsetMinutes: 0,
+                notifyAtNight: true,
+                alertSound: .system
+            )
+        )
+        XCTAssertNil(
+            PushRegistrationPayloadBuilder.makeRequest(
+                token: "token",
+                environment: "production",
+                locale: "en",
+                sources: ["jma_eew"],
+                minMagnitude: 3,
+                cityName: nil,
+                location: CLLocationCoordinate2D(latitude: 91, longitude: 0),
+                radiusKm: 50,
+                includeTestAlerts: false,
+                utcOffsetMinutes: 0,
+                notifyAtNight: true,
+                alertSound: .system
+            )
+        )
+    }
+
     func testMissingLocationRegistrationErrorIsActionable() {
         XCTAssertEqual(
             PushRegistrationPreparationError.locationRequired.errorDescription,

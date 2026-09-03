@@ -341,7 +341,20 @@ final class QuakeStore {
         // subscription. Onboarding permits location to be skipped, and a GPS
         // fix can arrive after APNs, so keep this state retryable until either
         // the selected-city fallback or a valid coarse GPS coordinate exists.
-        guard let coordinate = effectiveCoordinate.flatMap(CoarseCoordinate.init) else {
+        guard let request = PushRegistrationPayloadBuilder.makeRequest(
+            token: token,
+            environment: AppEnvironment.isDebugBuild ? "sandbox" : "production",
+            locale: Locale.current.identifier,
+            sources: Array(settings.enabledSources),
+            minMagnitude: settings.minMagnitude,
+            cityName: settings.selectedCity?.localizedName,
+            location: effectiveCoordinate,
+            radiusKm: settings.radiusKm,
+            includeTestAlerts: settings.includeTestAlerts,
+            utcOffsetMinutes: TimeZone.current.secondsFromGMT() / 60,
+            notifyAtNight: settings.notifyAtNight,
+            alertSound: settings.alertSound
+        ) else {
             let locationRequestInFlight = settings.useCurrentLocation &&
                 LocationManager.shared.isRequestingLocation
             let shouldDelete = MissingLocationRegistrationPolicy.shouldDeleteServerRegistration(
@@ -371,21 +384,6 @@ final class QuakeStore {
         // protected registration, so an optimistic UI state can never claim
         // that background alerts are configured when they are not.
         settings.pushRegistrationState = .registering
-        let request = DeviceRegistrationRequest(
-            token: token,
-            environment: AppEnvironment.isDebugBuild ? "sandbox" : "production",
-            locale: Locale.current.identifier,
-            sources: Array(settings.enabledSources),
-            minMagnitude: settings.minMagnitude,
-            cityName: settings.selectedCity?.localizedName,
-            latitude: coordinate.latitude,
-            longitude: coordinate.longitude,
-            radiusKm: settings.radiusKm,
-            includeTestAlerts: settings.includeTestAlerts,
-            utcOffsetMinutes: TimeZone.current.secondsFromGMT() / 60,
-            notifyAtNight: settings.notifyAtNight,
-            alertSound: settings.alertSound
-        )
         do {
             try await api.registerDevice(request)
             // A removal may have completed while this request was in flight.

@@ -1,4 +1,42 @@
+import CoreLocation
 import Foundation
+
+/// Builds the exact APNs-registration body the Worker validates. Current
+/// location is coarsened first; missing GPS/city never becomes a nationwide
+/// subscription.
+enum PushRegistrationPayloadBuilder {
+    static func makeRequest(
+        token: String,
+        environment: String,
+        locale: String,
+        sources: [String],
+        minMagnitude: Double,
+        cityName: String?,
+        location: CLLocationCoordinate2D?,
+        radiusKm: Double,
+        includeTestAlerts: Bool,
+        utcOffsetMinutes: Int,
+        notifyAtNight: Bool,
+        alertSound: AlertSoundPreference
+    ) -> DeviceRegistrationRequest? {
+        guard let coarse = location.flatMap(CoarseCoordinate.init) else { return nil }
+        return DeviceRegistrationRequest(
+            token: token,
+            environment: environment,
+            locale: locale,
+            sources: sources,
+            minMagnitude: minMagnitude,
+            cityName: cityName,
+            latitude: coarse.latitude,
+            longitude: coarse.longitude,
+            radiusKm: radiusKm,
+            includeTestAlerts: includeTestAlerts,
+            utcOffsetMinutes: utcOffsetMinutes,
+            notifyAtNight: notifyAtNight,
+            alertSound: alertSound
+        )
+    }
+}
 
 struct DeviceRegistrationRequest: Encodable {
     let token: String

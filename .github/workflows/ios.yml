@@ -56,7 +56,7 @@ on:
       build_number:
         description: Exact pre-approved CFBundleVersion from ios/project.yml and the Worker App Attest allow-list
         required: false
-        default: "23"
+        default: "24"
         type: string
       source_commit:
         description: Exact 40-character lowercase protected-main commit to sign
@@ -585,7 +585,7 @@ jobs:
             --archive "$RUNNER_TEMP/QuakeSignal.xcarchive" \
             --exported "${IPA_PATH:?IPA_PATH is not set after export}" \
             --build-number "$BUILD_NUMBER" \
-            --marketing-version 1.2 \
+            --marketing-version 1.3 \
             --team-id 5TT564H883 \
             --archive-signing strict-distribution \
             --host-profile-name "$IOS_PROFILE_NAME" \
@@ -638,7 +638,7 @@ jobs:
             --apple-id "$APP_STORE_CONNECT_APPLE_ID"
             --bundle-id "$IOS_BUNDLE_IDENTIFIER"
             --bundle-version "$BUILD_NUMBER"
-            --bundle-short-version-string 1.2
+            --bundle-short-version-string 1.3
             --api-key "$APP_STORE_CONNECT_KEY_ID"
             --api-issuer "$APP_STORE_CONNECT_ISSUER"
             --output-format json
@@ -650,7 +650,7 @@ jobs:
         if: ${{ inputs.upload_to_testflight && !inputs.archive_only }}
         env:
           BUILD_NUMBER: ${{ inputs.build_number }}
-          MARKETING_VERSION: "1.2"
+          MARKETING_VERSION: "1.3"
           APP_STORE_CONNECT_APPLE_ID: "6800642443"
           APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
           APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}
@@ -680,7 +680,7 @@ jobs:
           ATTESTATION_PATH="$attestation_root/signed-release-attestation.json" \
             /usr/bin/ruby -rjson -rtime -e '
               build = Integer(ENV.fetch("BUILD_NUMBER"), 10)
-              abort "signed release attestation requires build 23" unless build == 23
+              abort "signed release attestation requires build 24" unless build == 24
               sha256 = ENV.fetch("IPA_SHA256")
               abort "signed release attestation requires a valid IPA SHA-256" unless sha256.match?(/\A[0-9a-f]{64}\z/)
               attestation = {
@@ -757,7 +757,7 @@ jobs:
       - name: Add TestFlight build to all tester groups
         env:
           BUILD_NUMBER: ${{ inputs.build_number }}
-          MARKETING_VERSION: "1.2"
+          MARKETING_VERSION: "1.3"
           APP_STORE_CONNECT_APPLE_ID: "6800642443"
           APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
           APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_API_KEY_ID }}

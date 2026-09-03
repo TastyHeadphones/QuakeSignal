@@ -471,7 +471,7 @@ const IOS_SIGNED_ARTIFACT_COMMAND = [
   "  --archive \"$RUNNER_TEMP/QuakeSignal.xcarchive\" \\",
   "  --exported \"${IPA_PATH:?IPA_PATH is not set after export}\" \\",
   "  --build-number \"$BUILD_NUMBER\" \\",
-  "  --marketing-version 1.2 \\",
+  "  --marketing-version 1.3 \\",
   "  --team-id 5TT564H883 \\",
   "  --archive-signing strict-distribution \\",
   "  --host-profile-name \"$IOS_PROFILE_NAME\" \\",
@@ -515,7 +515,7 @@ const IOS_UPLOAD_COMMAND = [
   "  --apple-id \"$APP_STORE_CONNECT_APPLE_ID\"",
   "  --bundle-id \"$IOS_BUNDLE_IDENTIFIER\"",
   "  --bundle-version \"$BUILD_NUMBER\"",
-  "  --bundle-short-version-string 1.2",
+  "  --bundle-short-version-string 1.3",
   "  --api-key \"$APP_STORE_CONNECT_KEY_ID\"",
   "  --api-issuer \"$APP_STORE_CONNECT_ISSUER\"",
   "  --output-format json",
@@ -531,7 +531,7 @@ const PLATFORM_SIGNED_ARTIFACT_COMMAND = [
   "  --archive \"$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY.xcarchive\"",
   "  --exported \"${APPLE_ARTIFACT_PATH:?APPLE_ARTIFACT_PATH is not set after export}\"",
   "  --build-number \"$BUILD_NUMBER\"",
-  "  --marketing-version 1.2",
+  "  --marketing-version 1.3",
   "  --team-id 5TT564H883",
   "  --archive-signing strict-distribution",
   "  --host-profile-name \"$PLATFORM_PROFILE_NAME\"",
@@ -624,8 +624,8 @@ function verifyAppleProject(projectSource) {
   const project = parseEffectiveYAML(projectSource, "XcodeGen project", "ios/project.yml");
   rejectForbiddenProjectKeys(project);
   const projectSettings = record(record(project.settings, "XcodeGen project settings").base, "XcodeGen project base settings");
-  if (String(projectSettings.MARKETING_VERSION) !== "1.2") {
-    fail("ios/project.yml MARKETING_VERSION must be exactly 1.2 for this coordinated release.");
+  if (String(projectSettings.MARKETING_VERSION) !== "1.3") {
+    fail("ios/project.yml MARKETING_VERSION must be exactly 1.3 for this coordinated release.");
   }
   if (Object.hasOwn(projectSettings, "TARGETED_DEVICE_FAMILY")) {
     fail("TARGETED_DEVICE_FAMILY must be target-scoped for the native Apple platform matrix.");
@@ -2300,7 +2300,7 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
     '--apple-id "$APP_STORE_CONNECT_APPLE_ID"',
     '--bundle-id "$PLATFORM_BUNDLE_IDENTIFIER"',
     '--bundle-version "$BUILD_NUMBER"',
-    '--bundle-short-version-string 1.2',
+    '--bundle-short-version-string 1.3',
     'xcrun altool --validate-app "$APPLE_ARTIFACT_PATH" "${upload_arguments[@]}"',
     'xcrun altool --upload-package "$APPLE_ARTIFACT_PATH" "${upload_arguments[@]}"',
   ], "native platform App Store Connect upload step.run");
@@ -2942,10 +2942,10 @@ export async function verifyIOSReleaseContract({
   const xcodeCloudReleaseHooksFingerprint = verifyXcodeCloudReleaseHooks(releaseHooks);
   verifyXcodeCloudGuardConstants(releaseHooks, {
     BUILD_NUMBER: buildNumber,
-    MARKETING_VERSION: "1.2",
+    MARKETING_VERSION: "1.3",
     TEAM_ID: "5TT564H883",
     RELEASE_REF: "refs/heads/main",
-    RELEASE_WORKFLOW: `QuakeSignal 1.2 (${buildNumber}) Native Release`,
+    RELEASE_WORKFLOW: `QuakeSignal 1.3 (${buildNumber}) Native Release`,
     PRODUCT_NAME: "QuakeSignal",
     WORKER_ORIGIN: APPROVED_WORKER_ORIGIN,
     APP_ATTEST_FINGERPRINT: policyFingerprint,

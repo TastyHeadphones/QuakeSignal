@@ -135,7 +135,7 @@ function fixtureFiles({
   buildNumber = "23",
   projectFileVersions = [buildNumber, buildNumber, buildNumber],
   infoBundleVersion = "$(CURRENT_PROJECT_VERSION)",
-  allowedVersions = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23",
+  allowedVersions = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24",
   workflowDefault = buildNumber,
   archiveConfiguration = "Release",
   remoteOrigin = "${{ vars.CLOUDFLARE_WORKER_URL }}",
@@ -163,7 +163,7 @@ function fixtureFiles({
     visionOS: "1.0"
 settings:
   base:
-    MARKETING_VERSION: "1.2"
+    MARKETING_VERSION: "1.3"
     CURRENT_PROJECT_VERSION: "${buildNumber}"
 targets:
   QuakeSignal:
@@ -279,7 +279,7 @@ env:
 }
 
 async function fixtureWorkflow({
-  workflowDefault = "23",
+  workflowDefault = "24",
   remoteOrigin = "${{ vars.CLOUDFLARE_WORKER_URL }}",
   remoteRunPrefix = "",
   archiveConfiguration = "Release",
@@ -292,7 +292,7 @@ async function fixtureWorkflow({
 
   if (workflowDefault !== "23") {
     replaceOnce(
-      '        default: "23"\n        type: string\n',
+      '        default: "24"\n        type: string\n',
       `        default: "${workflowDefault}"\n        type: string\n`,
       "build_number default",
     );
@@ -331,7 +331,7 @@ async function fixtureWorkflow({
 async function fixturePlatformWorkflow({ workflowDefault = "23" } = {}) {
   let workflow = await readFile(join(repositoryRoot, ".github/workflows/apple-platforms.yml"), "utf8");
   if (workflowDefault !== "23") {
-    const from = '        default: "23"\n        type: string\n';
+    const from = '        default: "24"\n        type: string\n';
     if (!workflow.includes(from)) throw new Error("fixture could not locate native platform build_number default");
     workflow = workflow.replace(from, `        default: "${workflowDefault}"\n        type: string\n`);
   }
@@ -342,27 +342,27 @@ async function writeFixture(options = {}) {
   const tempRoot = process.env.QUAKESIGNAL_TEST_TEMP_ROOT || tmpdir();
   const root = await mkdtemp(join(tempRoot, "quakesignal-ios-release-contract-"));
   const files = fixtureFiles(options);
-  const buildNumber = options.buildNumber ?? "23";
+  const buildNumber = options.buildNumber ?? "24";
   let project = await readFile(join(repositoryRoot, "ios/project.yml"), "utf8");
-  if (buildNumber !== "23") {
+  if (buildNumber !== "24") {
     project = project.replace(
-      '    CURRENT_PROJECT_VERSION: "23"\n',
+      '    CURRENT_PROJECT_VERSION: "24"\n',
       `    CURRENT_PROJECT_VERSION: "${buildNumber}"\n`,
     );
   }
   files["ios/project.yml"] = project;
-  const allowedVersions = options.allowedVersions ?? "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23";
+  const allowedVersions = options.allowedVersions ?? "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24";
   const workerConfigSuffix = options.workerConfigSuffix ?? "";
   const workerConfig = await readFile(join(repositoryRoot, "backend/cloudflare/wrangler.jsonc"), "utf8");
   files["backend/cloudflare/wrangler.jsonc"] = workerConfig.replace(
-    '"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23"',
+    '"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24"',
     `"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "${allowedVersions}"`,
   ) + workerConfigSuffix;
   const projectFileVersions = options.projectFileVersions ?? [buildNumber, buildNumber, buildNumber];
   let projectFileIndex = 0;
   files["ios/QuakeSignal.xcodeproj/project.pbxproj"] = (
     await readFile(join(repositoryRoot, "ios/QuakeSignal.xcodeproj/project.pbxproj"), "utf8")
-  ).replace(/CURRENT_PROJECT_VERSION = 23;/g, () => {
+  ).replace(/CURRENT_PROJECT_VERSION = 24;/g, () => {
     const version = projectFileVersions[projectFileIndex++];
     if (version === undefined) throw new Error("fixture projectFileVersions must contain three entries");
     return `CURRENT_PROJECT_VERSION = ${version};`;
@@ -507,8 +507,8 @@ async function expectFailure(t, options, expression) {
 
 test("the checked-in public Release contract is coherent", async () => {
   const verified = await verifyIOSReleaseContract({ root: repositoryRoot });
-  assert.equal(verified.buildNumber, "23");
-  assert.deepEqual(verified.allowedBundleVersions, ["1", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "2", "20", "21", "22", "23", "3", "4", "5", "6", "7", "8", "9"]);
+  assert.equal(verified.buildNumber, "24");
+  assert.deepEqual(verified.allowedBundleVersions, ["1", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "2", "20", "21", "22", "23", "24", "3", "4", "5", "6", "7", "8", "9"]);
   assert.deepEqual(verified.appIdentityRoutes, reviewedAppIdentityRoutes);
   assert.equal(
     verified.appAttestPolicyFingerprint,
@@ -1284,13 +1284,13 @@ test("fails closed on Worker dependency graph deletion, drift, or substitution",
 
 test("a future build is rejected until the Xcode Cloud guard is coordinated", async (t) => {
   await withFixture(t, {
-    buildNumber: "24",
-    allowedVersions: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24",
-    workflowDefault: "24",
+    buildNumber: "25",
+    allowedVersions: "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25",
+    workflowDefault: "25",
   }, async (root) => {
     await assert.rejects(
       verifyIOSReleaseContract({ root }),
-      /Xcode Cloud guard BUILD_NUMBER must match 24 \(received 23\)/i,
+      /Xcode Cloud guard BUILD_NUMBER must match 25 \(received 24\)/i,
     );
   });
 });
@@ -1544,7 +1544,7 @@ test("fails closed when iOS IPA export, digest binding, or App Store coordinates
       '--bundle-version 7',
     ],
     [
-      "--bundle-short-version-string 1.2",
+      "--bundle-short-version-string 1.3",
       "--bundle-short-version-string 1.0",
     ],
     [
@@ -1848,10 +1848,10 @@ test("fails closed when Worker validation omits the historical APNs incident gua
 });
 
 test("fails closed when a JSONC comment impersonates the Worker allow-list", async (t) => {
-  await withFixture(t, { workerConfigSuffix: "\n// \"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS\": \"1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23\"" }, async (root) => {
+  await withFixture(t, { workerConfigSuffix: "\n// \"APP_ATTEST_ALLOWED_BUNDLE_VERSIONS\": \"1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24\"" }, async (root) => {
     const path = join(root, "backend/cloudflare/wrangler.jsonc");
     const contents = await readFile(path, "utf8");
-    await writeFile(path, contents.replace('    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23",\n', ""), "utf8");
+    await writeFile(path, contents.replace('    "APP_ATTEST_ALLOWED_BUNDLE_VERSIONS": "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24",\n', ""), "utf8");
     await assert.rejects(verifyIOSReleaseContract({ root }), /must be defined exactly once outside comments/i);
   });
 });

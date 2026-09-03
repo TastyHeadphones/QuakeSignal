@@ -66,6 +66,30 @@ final class AlertPolicyTests: XCTestCase {
         ))
     }
 
+    func testFiftyKmCurrentLocationFilterAcceptsNearbyAndRejectsFarAndWeakQuakes() {
+        let osaka = CLLocationCoordinate2D(latitude: 34.6937, longitude: 135.5023)
+        let nearby = makeEvent(reportDate: now, isWarn: true)
+        XCTAssertEqual(
+            reason(for: nearby, preferences: preferences(coordinate: osaka, radiusKm: 50)),
+            .new
+        )
+        XCTAssertNil(reason(
+            for: nearby,
+            preferences: preferences(minimumMagnitude: 6, coordinate: osaka, radiusKm: 50)
+        ))
+        XCTAssertNil(reason(
+            for: nearby,
+            preferences: preferences(
+                coordinate: CLLocationCoordinate2D(latitude: 35.681, longitude: 139.767),
+                radiusKm: 50
+            )
+        ))
+        XCTAssertNil(reason(
+            for: nearby,
+            preferences: preferences(coordinate: nil, radiusKm: 50)
+        ))
+    }
+
     func testInformationalTerminalAndStaleFramesNeverMasqueradeAsEmergency() {
         let matching = preferences()
         XCTAssertNil(reason(for: makeEvent(reportDate: now, isWarn: false), preferences: matching))

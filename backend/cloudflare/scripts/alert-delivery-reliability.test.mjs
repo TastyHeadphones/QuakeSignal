@@ -8140,6 +8140,90 @@ test("China GCJ-02 transfer makes CENC events match WGS-84 city coordinates", as
   );
 });
 
+test("current-location 50 km and magnitude filters drive shipped shouldNotify", async () => {
+  const { shouldNotify, normalizeJmaEew, wgs84ToGcj02 } = await workerModule();
+  const tokyo = { latitude: 35.681, longitude: 139.767 };
+  const device = {
+    token: "a".repeat(64),
+    environment: "production",
+    locale: "en",
+    sources: ["jma_eew", "cenc_eew"],
+    minMagnitude: 4,
+    criticalAlertsEnabled: false,
+    alertSound: "system",
+    cityName: null,
+    latitude: tokyo.latitude,
+    longitude: tokyo.longitude,
+    radiusKm: 50,
+    includeTestAlerts: false,
+    utcOffsetMinutes: 540,
+    notifyAtNight: true,
+    createdAt: "2026-09-04T00:00:00.000Z",
+    updatedAt: "2026-09-04T00:00:00.000Z",
+  };
+  const nearby = normalizeJmaEew({
+    Title: "Earthquake Early Warning",
+    CodeType: "E",
+    Issue: { Source: "JMA", Status: "Warning" },
+    EventID: "20260904120000",
+    Serial: 1,
+    AnnouncedTime: "2026/09/04 21:00:00",
+    OriginTime: "2026/09/04 21:00:00",
+    Hypocenter: "Tokyo Bay",
+    Latitude: 35.70,
+    Longitude: 139.80,
+    Magunitude: 5.0,
+    Depth: 10,
+    MaxIntensity: "5-",
+    Accuracy: { Epicenter: "1", Depth: "1", Magnitude: "1" },
+    MaxIntChange: { String: "0", Reason: "" },
+    WarnArea: [],
+    isSea: false,
+    isTraining: false,
+    isAssumption: false,
+    isWarn: true,
+    isFinal: false,
+    isCancel: false,
+    OriginalText: "warning",
+  });
+  assert.equal(shouldNotify(device, nearby, "new"), true, "inside 50 km at M5 must notify");
+
+  const far = { ...nearby, latitude: 36.4, longitude: 140.5, id: "jma_eew:far" };
+  assert.equal(shouldNotify(device, far, "new"), false, "outside 50 km must not notify");
+
+  const weak = { ...nearby, magnitude: 3.5, id: "jma_eew:weak" };
+  assert.equal(shouldNotify(device, weak, "new"), false, "below chosen magnitude must not notify");
+
+  const missingLocation = { ...device, latitude: null, longitude: null, radiusKm: null };
+  assert.equal(
+    shouldNotify(missingLocation, nearby, "new"),
+    false,
+    "registration without location+radius must not nationwide-notify",
+  );
+
+  const beijing = { latitude: 39.9042, longitude: 116.4074 };
+  const chinaGps = wgs84ToGcj02(beijing.latitude, beijing.longitude);
+  const chinaDevice = {
+    ...device,
+    sources: ["cenc_eew"],
+    latitude: beijing.latitude,
+    longitude: beijing.longitude,
+    radiusKm: 50,
+  };
+  const chinaEvent = {
+    ...nearby,
+    id: "cenc_eew:beijing",
+    sourceId: "cenc_eew",
+    latitude: chinaGps.latitude,
+    longitude: chinaGps.longitude,
+  };
+  assert.equal(
+    shouldNotify(chinaDevice, chinaEvent, "new"),
+    true,
+    "China CENC GCJ-02 epicenter must notify a WGS-84 current-location pin inside 50 km",
+  );
+});
+
 test("accepts only exact alert-sound registration identifiers and defaults old clients to system", async () => {
   const {
     APNS_RELAY_DISABLED_SOURCES,

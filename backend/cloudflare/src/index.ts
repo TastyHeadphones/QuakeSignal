@@ -47,6 +47,7 @@ export {
   isInsideChina,
   wgs84ToGcj02,
 };
+
 import {
   isHeartbeat,
   isPong,
@@ -3483,7 +3484,7 @@ function isQuietHours(offsetMinutes: number): boolean {
   return hour >= 22 || hour < 7;
 }
 
-function shouldNotify(
+export function shouldNotify(
   device: DeviceRecord,
   event: NormalizedEvent,
   reason: NotifyReason,
