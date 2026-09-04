@@ -17,8 +17,8 @@ configs:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "1.2"
-    CURRENT_PROJECT_VERSION: "23"
+    MARKETING_VERSION: "1.3"
+    CURRENT_PROJECT_VERSION: "24"
 targets:
   QuakeSignal:
     type: application

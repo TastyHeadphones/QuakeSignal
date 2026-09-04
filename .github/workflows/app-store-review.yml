@@ -6,7 +6,7 @@ on:
       build_number:
         description: Exact coordinated CFBundleVersion from ios/project.yml
         required: false
-        default: "23"
+        default: "24"
         type: string
       source_commit:
         description: Exact 40-character lowercase protected-main commit whose listing copy is submitted
@@ -69,7 +69,7 @@ jobs:
       - name: Submit App Store Review for selected platforms
         env:
           BUILD_NUMBER: ${{ inputs.build_number }}
-          MARKETING_VERSION: "1.2"
+          MARKETING_VERSION: "1.3"
           SOURCE_COMMIT: ${{ inputs.source_commit }}
           PLATFORMS: ${{ inputs.platforms }}
           APP_STORE_CONNECT_APPLE_ID: "6800642443"

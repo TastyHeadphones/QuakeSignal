@@ -6,7 +6,7 @@ on:
       build_number:
         description: Exact coordinated CFBundleVersion from ios/project.yml
         required: false
-        default: "23"
+        default: "24"
         type: string
       source_commit:
         description: Exact 40-character lowercase protected-main commit to release

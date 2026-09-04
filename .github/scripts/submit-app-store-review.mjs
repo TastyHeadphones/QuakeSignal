@@ -128,7 +128,7 @@ function localeFolder(locale) {
 }
 
 function whatsNewPath(locale) {
-  return `ios/AppStore/${localeFolder(locale)}/whats_new_v1.2.txt`;
+  return `ios/AppStore/${localeFolder(locale)}/whats_new_v1.3.txt`;
 }
 
 function markdownSection(markdown, heading) {

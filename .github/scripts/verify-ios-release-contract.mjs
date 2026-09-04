@@ -418,23 +418,23 @@ const CLOUDFLARE_DEPLOY_PRODUCTION_HEADER = {
 // alongside its tests; an unreviewed sibling job, extra post-smoke step, or
 // edited signing/upload action fails before release automation can use
 // credentials.
-const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:NL3R2NlIzXatDDcOY2DHGcvhk2csAvYvNwprfmj1cIw";
-const WORKFLOW_JOBS_FINGERPRINT = "sha256:KUDgfwcIXwHEbkO2cjKBPkbpFL8ekp7CIXqpN8xReRY";
-const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:O7IXRBlNBOeVL3O4nda-ORB9eyNne0QS8qinIwHd4Cw";
-const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:kM7-G7cj23_Clmvs6VWADpvgrbr4lOgbcK5_J4x3w18";
+const TESTFLIGHT_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:CSrJMnn1Y6IZv8qwHCn3_Hut7wvs1cDrRQyYOWJU-Qc";
+const WORKFLOW_JOBS_FINGERPRINT = "sha256:LEG0T1mI_MqySSIY_M6SkAhW_O2MzJyd-QJtRxEePDg";
+const PLATFORM_POST_SMOKE_SEQUENCE_FINGERPRINT = "sha256:jHmECkUx3AOMD4bCTqMQstqalpd42wdhHWNYtK3vqQ4";
+const PLATFORM_WORKFLOW_JOBS_FINGERPRINT = "sha256:N1SQ97soSc806CTTGtB08sTl1iX9WOtq3Hs7po2Wowg";
 const SCREENSHOT_WORKFLOW_JOBS_FINGERPRINT = "sha256:eZXAGoApcqbQaWSpzr4Mt6WBRlPNDwEf6SwYXXYlTME";
 const SCREENSHOT_RELEASE_WORKFLOW_JOBS_FINGERPRINT = "sha256:dEPzJS5uvYmQZI9d6CpECUvzkOhjfj_ydwiWqrj3ZQM";
 const CLOUDFLARE_WORKFLOW_JOBS_FINGERPRINT = "sha256:0idTHVYpJvePMjlGG8MEeN-OmNBwPZ0iwCkeIaFMVR0";
-const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:KU4sjFEKMUPM9p3ZkAkcSJ-YqAv8OnycV4zIBoh6vVw";
+const XCODE_CLOUD_RELEASE_HOOKS_FINGERPRINT = "sha256:9T9LXzKffI2OMzJTxba_5Ie796nQnQjSyr6PZwrpM1k";
 const XCODE_SCHEMES_FINGERPRINT = "sha256:d1cqEp5M_rdKeYqcsAGXC45NKBHJLieE7oLLChhMCqo";
-const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:-FrQ_DAQVpyxeO3D0bzBObHJhxpqysEeDDmiMDypVOg";
-const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:o9LT70Dw5lipPN_iNx3w_rznyxJoRjZORJv2P1noxTI";
+const PLATFORM_CAPABILITIES_FINGERPRINT = "sha256:yygtCCwZVDiyh31qwnqc_t9aHl7Vfy3B4VAq8DxiNHM";
+const RELEASE_CRITICAL_HELPERS_FINGERPRINT = "sha256:oWcWjAsH9ZWaWpKTNU9Cgwwx8vuWhhe1GPPgdZMgGeo";
 const SCREENSHOT_AUTOMATION_HELPERS_FINGERPRINT = "sha256:jW4JzW6f1y2Ku66tQU-j36SF3beYFVGEzxbwEdUoq18";
 const WORKER_DEPENDENCY_GRAPH_FINGERPRINT = "sha256:uS9cfNUI8Mc1v2znTTE-Loc4GQnRVJycb0fI8PAl9SE";
-const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:mS1FLhZdMzjQZnvMpNuNKOgia9DunwFvMpAHWSb7aWI";
-const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:hRhXk7mEWdfdiT6S6ofewAmGe0_c8wiO-cLoPngLmxE";
-const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:BwGa59CmWJjogSchgnhea5d_UROyocX0WRYiq91IAAs";
-const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:s-69xEDTTy5mtqRKOr8XsbrrKLSuvBt4HQoghRkjIrU";
+const WORKER_DEPLOYMENT_CONFIG_FINGERPRINT = "sha256:aVNdtpAd4NkCoQMhDZweTdM0RMvZpegkgrAwryrFVCY";
+const CREDENTIAL_WORKFLOWS_FINGERPRINT = "sha256:Myn_6pJz8h3EbWNAfm87zNETC43ehSCWstfgGl70gak";
+const WORKFLOW_DIRECTORY_FINGERPRINT = "sha256:CmsSjD23HSqFQPiW_TuNgipqeOqYD3IXUc4XDdec2v0";
+const WORKFLOW_DIRECTORY_SOURCE_FINGERPRINT = "sha256:k1In6UoWsaD9QeX19XcBAeUadvXiqJF6_fxg26Wf7SU";
 const MAC_CATALYST_SCREENSHOT_PLAN_FINGERPRINT = "sha256:RnWenLvputtku5X6DOfdXrJflYePVPa0uaTthrBGxwI";
 
 const PRE_SIGNING_COMMAND = "node .github/scripts/verify-ios-release-contract.mjs --build-number \"$BUILD_NUMBER\"";
@@ -471,7 +471,7 @@ const IOS_SIGNED_ARTIFACT_COMMAND = [
   "  --archive \"$RUNNER_TEMP/QuakeSignal.xcarchive\" \\",
   "  --exported \"${IPA_PATH:?IPA_PATH is not set after export}\" \\",
   "  --build-number \"$BUILD_NUMBER\" \\",
-  "  --marketing-version 1.2 \\",
+  "  --marketing-version 1.3 \\",
   "  --team-id 5TT564H883 \\",
   "  --archive-signing strict-distribution \\",
   "  --host-profile-name \"$IOS_PROFILE_NAME\" \\",
@@ -515,7 +515,7 @@ const IOS_UPLOAD_COMMAND = [
   "  --apple-id \"$APP_STORE_CONNECT_APPLE_ID\"",
   "  --bundle-id \"$IOS_BUNDLE_IDENTIFIER\"",
   "  --bundle-version \"$BUILD_NUMBER\"",
-  "  --bundle-short-version-string 1.2",
+  "  --bundle-short-version-string 1.3",
   "  --api-key \"$APP_STORE_CONNECT_KEY_ID\"",
   "  --api-issuer \"$APP_STORE_CONNECT_ISSUER\"",
   "  --output-format json",
@@ -531,7 +531,7 @@ const PLATFORM_SIGNED_ARTIFACT_COMMAND = [
   "  --archive \"$RUNNER_TEMP/QuakeSignal-$PLATFORM_KEY.xcarchive\"",
   "  --exported \"${APPLE_ARTIFACT_PATH:?APPLE_ARTIFACT_PATH is not set after export}\"",
   "  --build-number \"$BUILD_NUMBER\"",
-  "  --marketing-version 1.2",
+  "  --marketing-version 1.3",
   "  --team-id 5TT564H883",
   "  --archive-signing strict-distribution",
   "  --host-profile-name \"$PLATFORM_PROFILE_NAME\"",
@@ -624,8 +624,8 @@ function verifyAppleProject(projectSource) {
   const project = parseEffectiveYAML(projectSource, "XcodeGen project", "ios/project.yml");
   rejectForbiddenProjectKeys(project);
   const projectSettings = record(record(project.settings, "XcodeGen project settings").base, "XcodeGen project base settings");
-  if (String(projectSettings.MARKETING_VERSION) !== "1.2") {
-    fail("ios/project.yml MARKETING_VERSION must be exactly 1.2 for this coordinated release.");
+  if (String(projectSettings.MARKETING_VERSION) !== "1.3") {
+    fail("ios/project.yml MARKETING_VERSION must be exactly 1.3 for this coordinated release.");
   }
   if (Object.hasOwn(projectSettings, "TARGETED_DEVICE_FAMILY")) {
     fail("TARGETED_DEVICE_FAMILY must be target-scoped for the native Apple platform matrix.");
@@ -2300,7 +2300,7 @@ function verifyPlatformArchiveWorkflow(workflowSource, buildNumber) {
     '--apple-id "$APP_STORE_CONNECT_APPLE_ID"',
     '--bundle-id "$PLATFORM_BUNDLE_IDENTIFIER"',
     '--bundle-version "$BUILD_NUMBER"',
-    '--bundle-short-version-string 1.2',
+    '--bundle-short-version-string 1.3',
     'xcrun altool --validate-app "$APPLE_ARTIFACT_PATH" "${upload_arguments[@]}"',
     'xcrun altool --upload-package "$APPLE_ARTIFACT_PATH" "${upload_arguments[@]}"',
   ], "native platform App Store Connect upload step.run");
@@ -2942,10 +2942,10 @@ export async function verifyIOSReleaseContract({
   const xcodeCloudReleaseHooksFingerprint = verifyXcodeCloudReleaseHooks(releaseHooks);
   verifyXcodeCloudGuardConstants(releaseHooks, {
     BUILD_NUMBER: buildNumber,
-    MARKETING_VERSION: "1.2",
+    MARKETING_VERSION: "1.3",
     TEAM_ID: "5TT564H883",
     RELEASE_REF: "refs/heads/main",
-    RELEASE_WORKFLOW: `QuakeSignal 1.2 (${buildNumber}) Native Release`,
+    RELEASE_WORKFLOW: `QuakeSignal 1.3 (${buildNumber}) Native Release`,
     PRODUCT_NAME: "QuakeSignal",
     WORKER_ORIGIN: APPROVED_WORKER_ORIGIN,
     APP_ATTEST_FINGERPRINT: policyFingerprint,
